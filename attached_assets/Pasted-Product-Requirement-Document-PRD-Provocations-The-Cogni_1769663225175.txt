@@ -1,0 +1,48 @@
+Product Requirement Document (PRD): "Provocations" – The Cognitive Musculature Tool
+Project Goal: To transition from AI as an "assistant" (outsourced reason) to AI as a "tool for thought" that challenges the user, enhances critical thinking, and protects human agency.
+
+--------------------------------------------------------------------------------
+1. Problem Statement
+Current AI assistants create an "outsourced reason" workflow where knowledge workers become "professional validators of a robot’s opinions". This leads to a hive mind effect (boring, repetitive ideas), reduced critical thinking, and diminished memory of the work produced.
+2. Target User
+Knowledge workers (Clara-type personas) who need to analyze complex data, industry reports, or meeting transcripts to produce original, high-stakes proposals.
+
+--------------------------------------------------------------------------------
+3. User Flow & Functional Requirements
+Phase 1: Initial Input ("Paste Text" Form)
+• Requirement: The entry point is a clean "Paste Text" form where the user provides the raw materials of their craft.
+• Input Types: Meeting transcripts, internal reports, industry documents, or raw notes.
+• Objective: To load the workspace with source documents that serve as the foundation for "material engagement".
+Phase 2: Source Analysis (Lenses)
+• Requirement: The system shall generate "Lenses"—customizable micro-representations of the pasted text.
+• Features:
+    ◦ Users can select specific lenses (e.g., "Consumer’s Lens") to emphasize information relevant to their current task.
+    ◦ Section-by-section summaries that are task-specific rather than generic.
+Phase 3: Deep Reading & "Provocations"
+• Requirement: As the user reads the source, the system provides "Provocations"—AI-generated commentary and critiques.
+• Types of Provocations:
+    ◦ Opportunities: Highlighting potential areas for business growth or innovation.
+    ◦ Fallacies/Counterarguments: Identifying logical gaps in the user’s thinking or the source text.
+    ◦ Alternatives: Suggesting lateral moves or different perspectives.
+• User Action: Provocations are strategic prompts; the user must intentionally decide whether to address, highlight, or ignore them.
+Phase 4: Manual Outline Construction
+• Requirement: A side pane for a manually built outline.
+• Feature: The user sketches the flow of the argument at a high level. While AI can help generate a paragraph from a heading, the structure remains rooted in the user’s "cognitively effortful" judgments.
+Phase 5: Refinement (Dimensions)
+• Requirement: Tools for rapid testing of text versions.
+• Features:
+    ◦ Resizing Paragraphs: Ability to drag/resize a paragraph to change its length dynamically.
+    ◦ Dimension Toggling: Selecting customizable tones (e.g., "Inspirational" vs. "Practical") to preview alternatives.
+
+--------------------------------------------------------------------------------
+4. Design Principles (The "Non-Negotiables")
+• No Chat Box: The interface must avoid a chat-centric design. Assistance should be "silent and appropriate," acting as a computer tool rather than an "ersatz human".
+• Productive Resistance: The tool must not always be "right" or "helpful" in the traditional sense; it is successful if it forces the user to make a confident decision to reject a suggestion.
+• Preservation of Material Engagement: The software must ensure the user remains the primary author by requiring them to read relevant portions and construct the argument themselves.
+5. Success Metrics
+• Metacognitive Engagement: Evidence that the user is actively critiquing and iterating on their own thinking process.
+• Memory Retention: Users should demonstrate a higher recall of the final document compared to standard AI-drafted reports.
+• Idea Diversity: A wider range of creative outputs compared to generic AI-assisted hive-mind workflows.
+
+--------------------------------------------------------------------------------
+Closing Vision: This tool asks the user: "Would you rather have a tool that thinks for you, or a tool that makes you think?"
