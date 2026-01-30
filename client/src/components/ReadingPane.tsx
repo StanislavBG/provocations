@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { BookOpen, Eye, Download, Pencil, Check } from "lucide-react";
 import type { LensType } from "@shared/schema";
 
 const lensLabels: Record<LensType, string> = {
@@ -16,12 +19,39 @@ interface ReadingPaneProps {
   text: string;
   activeLens: LensType | null;
   lensSummary?: string;
+  onTextChange?: (text: string) => void;
 }
 
-export function ReadingPane({ text, activeLens, lensSummary }: ReadingPaneProps) {
+export function ReadingPane({ text, activeLens, lensSummary, onTextChange }: ReadingPaneProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState(text);
+  
   const paragraphs = text.split(/\n\n+/).filter(Boolean);
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const readingTime = Math.ceil(wordCount / 200);
+
+  const handleEditToggle = () => {
+    if (isEditing) {
+      // Save changes
+      onTextChange?.(editedText);
+    } else {
+      // Start editing
+      setEditedText(text);
+    }
+    setIsEditing(!isEditing);
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `document-${new Date().toISOString().split("T")[0]}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="h-full flex flex-col bg-card">
@@ -31,6 +61,24 @@ export function ReadingPane({ text, activeLens, lensSummary }: ReadingPaneProps)
         <div className="flex items-center gap-2 ml-auto">
           <Badge variant="outline">{wordCount.toLocaleString()} words</Badge>
           <Badge variant="secondary">{readingTime} min read</Badge>
+          <Button
+            data-testid="button-edit-document"
+            variant={isEditing ? "default" : "ghost"}
+            size="icon"
+            onClick={handleEditToggle}
+            title={isEditing ? "Save changes" : "Edit document"}
+          >
+            {isEditing ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+          </Button>
+          <Button
+            data-testid="button-download-document"
+            variant="ghost"
+            size="icon"
+            onClick={handleDownload}
+            title="Download document"
+          >
+            <Download className="w-4 h-4" />
+          </Button>
         </div>
       </div>
       
@@ -46,21 +94,33 @@ export function ReadingPane({ text, activeLens, lensSummary }: ReadingPaneProps)
         </div>
       )}
       
-      <ScrollArea className="flex-1 custom-scrollbar">
-        <div className="p-6 max-w-3xl mx-auto">
-          <article className="prose-reading font-serif text-base leading-[1.8]">
-            {paragraphs.map((paragraph, index) => (
-              <p 
-                key={index} 
-                className="mb-6 text-foreground/90"
-                data-testid={`paragraph-${index}`}
-              >
-                {paragraph}
-              </p>
-            ))}
-          </article>
+      {isEditing ? (
+        <div className="flex-1 p-4 overflow-hidden">
+          <Textarea
+            data-testid="textarea-edit-document"
+            value={editedText}
+            onChange={(e) => setEditedText(e.target.value)}
+            className="h-full w-full resize-none font-serif text-base leading-[1.8]"
+            placeholder="Edit your document here..."
+          />
         </div>
-      </ScrollArea>
+      ) : (
+        <ScrollArea className="flex-1 custom-scrollbar">
+          <div className="p-6 max-w-3xl mx-auto">
+            <article className="prose-reading font-serif text-base leading-[1.8]">
+              {paragraphs.map((paragraph, index) => (
+                <p 
+                  key={index} 
+                  className="mb-6 text-foreground/90"
+                  data-testid={`paragraph-${index}`}
+                >
+                  {paragraph}
+                </p>
+              ))}
+            </article>
+          </div>
+        </ScrollArea>
+      )}
     </div>
   );
 }

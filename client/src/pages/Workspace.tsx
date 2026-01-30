@@ -213,6 +213,12 @@ export default function Workspace() {
     setRefinedPreview(null);
   }, []);
 
+  const handleDocumentTextChange = useCallback((newText: string) => {
+    if (document) {
+      setDocument({ ...document, rawText: newText });
+    }
+  }, [document]);
+
   const activeLensSummary = lenses?.find((l) => l.type === activeLens)?.summary;
   const hasOutlineContent = outline?.some((item) => item.content) ?? false;
 
@@ -273,6 +279,7 @@ export default function Workspace() {
               text={document?.rawText || ""}
               activeLens={activeLens}
               lensSummary={activeLensSummary}
+              onTextChange={handleDocumentTextChange}
             />
           </ResizablePanel>
           
