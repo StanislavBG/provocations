@@ -18,13 +18,6 @@ export function TextInputForm({ onSubmit, isLoading }: TextInputFormProps) {
     }
   };
 
-  const exampleTexts = [
-    "Meeting transcript or notes",
-    "Industry report or analysis",
-    "Internal document or memo",
-    "Research findings or data",
-  ];
-
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-3xl space-y-8">
@@ -87,20 +80,6 @@ export function TextInputForm({ onSubmit, isLoading }: TextInputFormProps) {
             </div>
           </CardContent>
         </Card>
-
-        <div className="text-center space-y-3">
-          <p className="text-sm text-muted-foreground">What can you analyze?</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {exampleTexts.map((example) => (
-              <span
-                key={example}
-                className="inline-flex items-center px-3 py-1.5 rounded-md bg-muted text-sm text-muted-foreground"
-              >
-                {example}
-              </span>
-            ))}
-          </div>
-        </div>
 
         <div className="text-center pt-4">
           <p className="text-xs text-muted-foreground italic max-w-md mx-auto">
