@@ -29,28 +29,120 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
   
   const paragraphs = text.split(/\n\n+/).filter(Boolean);
   
+  // Normalize text for matching - handle punctuation and whitespace variations
+  const normalizeForMatch = (text: string): string => {
+    return text
+      .toLowerCase()
+      .replace(/[""'']/g, '"')  // Normalize smart quotes
+      .replace(/\s+/g, ' ')     // Normalize whitespace
+      .trim();
+  };
+
+  // Function to find the best matching substring for highlighting
+  const findBestMatch = (paragraph: string, excerpt: string): { start: number; end: number } | null => {
+    const normalizedParagraph = normalizeForMatch(paragraph);
+    // Clean up excerpt - remove surrounding quotes and normalize
+    let normalizedExcerpt = normalizeForMatch(excerpt).replace(/^["']|["']$/g, '');
+    
+    // Try exact match first
+    const exactIndex = normalizedParagraph.indexOf(normalizedExcerpt);
+    if (exactIndex !== -1) {
+      return { start: exactIndex, end: exactIndex + normalizedExcerpt.length };
+    }
+    
+    // Handle AI-truncated excerpts with "..." or "…"
+    if (normalizedExcerpt.includes('...') || normalizedExcerpt.includes('…')) {
+      const parts = normalizedExcerpt.split(/\.{3}|…/).map(p => p.trim()).filter(p => p.length > 5);
+      if (parts.length >= 2) {
+        // Find start of first part and end of last part
+        const startPart = parts[0];
+        const endPart = parts[parts.length - 1];
+        const startIdx = normalizedParagraph.indexOf(startPart);
+        if (startIdx !== -1) {
+          const endIdx = normalizedParagraph.indexOf(endPart, startIdx);
+          if (endIdx !== -1) {
+            return { start: startIdx, end: endIdx + endPart.length };
+          }
+        }
+      } else if (parts.length === 1 && parts[0].length > 10) {
+        // Just one part - find it
+        const partIdx = normalizedParagraph.indexOf(parts[0]);
+        if (partIdx !== -1) {
+          return { start: partIdx, end: partIdx + parts[0].length };
+        }
+      }
+    }
+    
+    // Try matching a significant substring (first 40 chars) to handle truncated excerpts
+    if (normalizedExcerpt.length > 30) {
+      const shortExcerpt = normalizedExcerpt.slice(0, 40).replace(/\.{3}|….*$/, '').trim();
+      if (shortExcerpt.length > 15) {
+        const shortIndex = normalizedParagraph.indexOf(shortExcerpt);
+        if (shortIndex !== -1) {
+          // Try to find the ending phrase from the excerpt
+          const endWords = normalizedExcerpt.split(/\s+/).slice(-4).join(' ').replace(/^\.{3}|…/, '').trim();
+          if (endWords.length > 10) {
+            const endIdx = normalizedParagraph.indexOf(endWords, shortIndex);
+            if (endIdx !== -1) {
+              return { start: shortIndex, end: endIdx + endWords.length };
+            }
+          }
+          // Fallback: find sentence boundary
+          const restOfParagraph = normalizedParagraph.slice(shortIndex);
+          const sentenceEnd = restOfParagraph.search(/[.!?](\s|$)/);
+          if (sentenceEnd !== -1) {
+            return { start: shortIndex, end: shortIndex + sentenceEnd + 1 };
+          }
+        }
+      }
+    }
+    
+    // Try to find a contiguous sequence of words from the excerpt
+    const excerptWords = normalizedExcerpt.split(/\s+/).filter(w => w.length > 3 && !w.includes('.'));
+    if (excerptWords.length >= 3) {
+      // Look for first 3-4 consecutive words as a phrase
+      const phraseToFind = excerptWords.slice(0, 4).join(" ");
+      const phraseIndex = normalizedParagraph.indexOf(phraseToFind);
+      if (phraseIndex !== -1) {
+        // Expand to find a reasonable end point using last words
+        const endPhrase = excerptWords.slice(-3).join(" ");
+        const endIndex = normalizedParagraph.indexOf(endPhrase, phraseIndex);
+        if (endIndex !== -1) {
+          return { start: phraseIndex, end: endIndex + endPhrase.length };
+        }
+        // Fallback: highlight from start phrase to sentence end
+        const remaining = normalizedParagraph.slice(phraseIndex);
+        const boundary = remaining.search(/[.!?](\s|$)/);
+        if (boundary !== -1) {
+          return { start: phraseIndex, end: phraseIndex + boundary + 1 };
+        }
+      }
+    }
+    
+    return null;
+  };
+
   // Function to highlight matching text within a paragraph
   const highlightMatchingText = (paragraph: string): React.ReactNode => {
     if (!highlightText || highlightText.length < 10) {
       return paragraph;
     }
     
-    // Normalize whitespace for comparison
-    const normalizedHighlight = highlightText.trim().toLowerCase();
-    const normalizedParagraph = paragraph.toLowerCase();
+    const match = findBestMatch(paragraph, highlightText);
     
-    // Check if this paragraph contains any significant portion of the highlight text
-    // We use a fuzzy match approach - check if key words appear
-    const highlightWords = normalizedHighlight.split(/\s+/).filter(w => w.length > 4);
-    const matchingWords = highlightWords.filter(word => normalizedParagraph.includes(word));
-    const matchRatio = highlightWords.length > 0 ? matchingWords.length / highlightWords.length : 0;
-    
-    // If more than 40% of significant words match, highlight the whole paragraph
-    if (matchRatio > 0.4) {
+    if (match) {
+      const before = paragraph.slice(0, match.start);
+      const highlighted = paragraph.slice(match.start, match.end);
+      const after = paragraph.slice(match.end);
+      
       return (
-        <span className="bg-primary/20 dark:bg-primary/30 px-1 py-0.5 rounded transition-colors duration-300">
-          {paragraph}
-        </span>
+        <>
+          {before}
+          <span className="bg-primary/25 dark:bg-primary/40 px-0.5 rounded transition-colors duration-300">
+            {highlighted}
+          </span>
+          {after}
+        </>
       );
     }
     
