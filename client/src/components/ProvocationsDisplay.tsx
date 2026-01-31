@@ -47,6 +47,7 @@ interface ProvocationsDisplayProps {
   provocations: Provocation[];
   onUpdateStatus: (id: string, status: Provocation["status"]) => void;
   onVoiceResponse?: (provocationId: string, transcript: string, provocationContext: string) => void;
+  onHoverProvocation?: (provocationId: string | null) => void;
   isLoading?: boolean;
   isMerging?: boolean;
 }
@@ -55,11 +56,13 @@ function ProvocationCard({
   provocation, 
   onUpdateStatus,
   onVoiceResponse,
+  onHover,
   isMerging
 }: { 
   provocation: Provocation; 
   onUpdateStatus: (status: Provocation["status"]) => void;
   onVoiceResponse?: (transcript: string, context: string) => void;
+  onHover?: (isHovered: boolean) => void;
   isMerging?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -78,6 +81,8 @@ function ProvocationCard({
     <Card 
       data-testid={`provocation-${provocation.id}`}
       className={`transition-all ${statusStyles[provocation.status]}`}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
     >
       <CardHeader className="p-4 pb-2">
         <CardTitle className="flex items-start gap-2 text-base">
@@ -198,7 +203,7 @@ function ProvocationCard({
   );
 }
 
-export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, isLoading, isMerging }: ProvocationsDisplayProps) {
+export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onHoverProvocation, isLoading, isMerging }: ProvocationsDisplayProps) {
   const [filter, setFilter] = useState<ProvocationType | "all">("all");
   
   const safeProvocations = provocations ?? [];
@@ -295,6 +300,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
               provocation={provocation}
               onUpdateStatus={(status) => onUpdateStatus(provocation.id, status)}
               onVoiceResponse={(transcript, context) => onVoiceResponse?.(provocation.id, transcript, context)}
+              onHover={(isHovered) => onHoverProvocation?.(isHovered ? provocation.id : null)}
               isMerging={isMerging}
             />
           ))}

@@ -52,6 +52,12 @@ export default function Workspace() {
   const [isRecordingBlank, setIsRecordingBlank] = useState(false);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [showDiffView, setShowDiffView] = useState(false);
+  const [hoveredProvocationId, setHoveredProvocationId] = useState<string | null>(null);
+  
+  // Get the source excerpt of the currently hovered provocation
+  const hoveredProvocationContext = hoveredProvocationId 
+    ? provocations.find(p => p.id === hoveredProvocationId)?.sourceExcerpt 
+    : undefined;
 
   const analyzeMutation = useMutation({
     mutationFn: async (text: string) => {
@@ -440,6 +446,7 @@ export default function Workspace() {
                 activeLens={activeLens}
                 lensSummary={activeLensSummary}
                 onTextChange={handleDocumentTextChange}
+                highlightText={hoveredProvocationContext}
               />
             )}
           </ResizablePanel>
@@ -491,6 +498,7 @@ export default function Workspace() {
                     provocations={provocations}
                     onUpdateStatus={handleUpdateProvocationStatus}
                     onVoiceResponse={handleVoiceResponse}
+                    onHoverProvocation={setHoveredProvocationId}
                     isLoading={analyzeMutation.isPending}
                     isMerging={mergeMutation.isPending}
                   />

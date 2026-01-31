@@ -20,13 +20,42 @@ interface ReadingPaneProps {
   activeLens: LensType | null;
   lensSummary?: string;
   onTextChange?: (text: string) => void;
+  highlightText?: string;
 }
 
-export function ReadingPane({ text, activeLens, lensSummary, onTextChange }: ReadingPaneProps) {
+export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText }: ReadingPaneProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(text);
   
   const paragraphs = text.split(/\n\n+/).filter(Boolean);
+  
+  // Function to highlight matching text within a paragraph
+  const highlightMatchingText = (paragraph: string): React.ReactNode => {
+    if (!highlightText || highlightText.length < 10) {
+      return paragraph;
+    }
+    
+    // Normalize whitespace for comparison
+    const normalizedHighlight = highlightText.trim().toLowerCase();
+    const normalizedParagraph = paragraph.toLowerCase();
+    
+    // Check if this paragraph contains any significant portion of the highlight text
+    // We use a fuzzy match approach - check if key words appear
+    const highlightWords = normalizedHighlight.split(/\s+/).filter(w => w.length > 4);
+    const matchingWords = highlightWords.filter(word => normalizedParagraph.includes(word));
+    const matchRatio = highlightWords.length > 0 ? matchingWords.length / highlightWords.length : 0;
+    
+    // If more than 40% of significant words match, highlight the whole paragraph
+    if (matchRatio > 0.4) {
+      return (
+        <span className="bg-primary/20 dark:bg-primary/30 px-1 py-0.5 rounded transition-colors duration-300">
+          {paragraph}
+        </span>
+      );
+    }
+    
+    return paragraph;
+  };
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const readingTime = Math.ceil(wordCount / 200);
 
@@ -114,7 +143,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange }: Rea
                   className="mb-6 text-foreground/90"
                   data-testid={`paragraph-${index}`}
                 >
-                  {paragraph}
+                  {highlightMatchingText(paragraph)}
                 </p>
               ))}
             </article>
