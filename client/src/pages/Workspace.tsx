@@ -311,6 +311,17 @@ export default function Workspace() {
     setShowDiffView(prev => !prev);
   }, []);
 
+  // Handle voice merge from text selection in ReadingPane
+  const handleSelectionVoiceMerge = useCallback((selectedText: string, transcript: string) => {
+    if (!document || !transcript.trim()) return;
+    
+    mergeMutation.mutate({
+      originalText: document.rawText,
+      userFeedback: transcript,
+      provocationContext: `User selected the following text for improvement: "${selectedText}"`
+    });
+  }, [document, mergeMutation]);
+
   const activeLensSummary = lenses?.find((l) => l.type === activeLens)?.summary;
   const hasOutlineContent = outline?.some((item) => item.content) ?? false;
   const canShowDiff = versions.length >= 2;
@@ -447,6 +458,8 @@ export default function Workspace() {
                 lensSummary={activeLensSummary}
                 onTextChange={handleDocumentTextChange}
                 highlightText={hoveredProvocationContext}
+                onVoiceMerge={handleSelectionVoiceMerge}
+                isMerging={mergeMutation.isPending}
               />
             )}
           </ResizablePanel>

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { BookOpen, Eye, Download, Pencil, Check } from "lucide-react";
+import { BookOpen, Eye, Download, Pencil, Check, Mic, Square } from "lucide-react";
 import type { LensType } from "@shared/schema";
 
 const lensLabels: Record<LensType, string> = {
@@ -21,13 +21,154 @@ interface ReadingPaneProps {
   lensSummary?: string;
   onTextChange?: (text: string) => void;
   highlightText?: string;
+  onVoiceMerge?: (selectedText: string, transcript: string) => void;
+  isMerging?: boolean;
 }
 
-export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText }: ReadingPaneProps) {
+export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText, onVoiceMerge, isMerging }: ReadingPaneProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(text);
+  const [selectedText, setSelectedText] = useState("");
+  const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const articleRef = useRef<HTMLElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef("");
   
   const paragraphs = text.split(/\n\n+/).filter(Boolean);
+
+  // Handle text selection using document event
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !articleRef.current) {
+        return;
+      }
+      
+      // Check if selection is within our article
+      const anchorNode = selection.anchorNode;
+      if (!anchorNode || !articleRef.current.contains(anchorNode)) {
+        return;
+      }
+      
+      const text = selection.toString().trim();
+      if (text.length < 5) {
+        return;
+      }
+      
+      // Get position relative to the article container
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const articleRect = articleRef.current.getBoundingClientRect();
+      
+      // Position button at top-right of selection, clamped to visible area
+      const x = Math.min(Math.max(10, rect.right - articleRect.left), articleRect.width - 50);
+      const y = Math.max(10, rect.top - articleRect.top - 45);
+      
+      setSelectedText(text);
+      setSelectionPosition({ x, y });
+    };
+
+    const handleMouseUp = () => {
+      // Small delay to let selection complete
+      setTimeout(handleSelectionChange, 10);
+    };
+
+    // Also listen for selectionchange to hide mic when selection is cleared
+    const handleSelectionClear = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        // Selection was cleared - hide the mic
+        setSelectedText("");
+        setSelectionPosition(null);
+      }
+    };
+
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('selectionchange', handleSelectionClear);
+    
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('selectionchange', handleSelectionClear);
+    };
+  }, []);
+
+  // Clear selection when clicking elsewhere (only if no active selection)
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    // Don't clear if clicking the voice button
+    if (target.closest('[data-voice-button]')) {
+      return;
+    }
+    // Don't clear if there's an active text selection
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) {
+      return;
+    }
+    // Clear the floating mic state
+    setSelectedText("");
+    setSelectionPosition(null);
+  }, []);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+      if (finalTranscript) {
+        transcriptRef.current += finalTranscript + " ";
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      const transcript = transcriptRef.current.trim();
+      if (transcript && selectedText && onVoiceMerge) {
+        onVoiceMerge(selectedText, transcript);
+      }
+      transcriptRef.current = "";
+      setIsRecording(false);
+      setSelectedText("");
+      setSelectionPosition(null);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      recognition.abort();
+    };
+  }, [selectedText, onVoiceMerge]);
+
+  const toggleRecording = useCallback(() => {
+    if (!recognitionRef.current) return;
+    
+    if (isRecording) {
+      recognitionRef.current.stop();
+    } else {
+      transcriptRef.current = "";
+      try {
+        recognitionRef.current.start();
+        setIsRecording(true);
+      } catch (error) {
+        console.error("Failed to start recording:", error);
+      }
+    }
+  }, [isRecording]);
   
   // Normalize text for matching - handle punctuation and whitespace variations
   const normalizeForMatch = (text: string): string => {
@@ -227,8 +368,11 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
         </div>
       ) : (
         <ScrollArea className="flex-1 custom-scrollbar">
-          <div className="p-6 max-w-3xl mx-auto">
-            <article className="prose-reading font-serif text-base leading-[1.8]">
+          <div className="p-6 max-w-3xl mx-auto" onClick={handleClick}>
+            <article 
+              ref={articleRef}
+              className="prose-reading font-serif text-base leading-[1.8] relative"
+            >
               {paragraphs.map((paragraph, index) => (
                 <p 
                   key={index} 
@@ -238,6 +382,34 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
                   {highlightMatchingText(paragraph)}
                 </p>
               ))}
+              
+              {/* Floating microphone button on text selection */}
+              {selectedText && selectionPosition && !isEditing && (
+                <div
+                  data-voice-button
+                  className="absolute z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"
+                  style={{
+                    left: `${Math.max(0, selectionPosition.x - 20)}px`,
+                    top: `${Math.max(0, selectionPosition.y)}px`,
+                  }}
+                >
+                  <Button
+                    data-testid="button-selection-voice"
+                    size="icon"
+                    variant={isRecording ? "destructive" : "default"}
+                    onClick={toggleRecording}
+                    disabled={isMerging}
+                    className={`shadow-lg ${isRecording ? "animate-pulse" : ""}`}
+                    title={isRecording ? "Stop recording" : "Speak to add feedback about this text"}
+                  >
+                    {isRecording ? (
+                      <Square className="w-4 h-4" />
+                    ) : (
+                      <Mic className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+              )}
             </article>
           </div>
         </ScrollArea>

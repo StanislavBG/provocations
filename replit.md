@@ -4,7 +4,8 @@
 Provocations is a cognitive enhancement tool designed to challenge users and enhance critical thinking rather than acting as a traditional AI assistant. The core philosophy: "Would you rather have a tool that thinks for you, or a tool that makes you think?"
 
 ## Recent Changes
-- January 31, 2026: Added hover highlighting - mousing over a provocation highlights the relevant text in the document
+- January 31, 2026: Added text selection voice merge - select text in document and a floating mic button appears for voice feedback integration
+- January 31, 2026: Improved hover highlighting to pinpoint specific text excerpts (not whole paragraphs)
 - January 31, 2026: Added voice-driven document enhancement features:
   - Test button with sample text for quick testing
   - Blank Document flow with voice-first entry (large microphone interface)
