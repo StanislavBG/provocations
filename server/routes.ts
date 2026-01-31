@@ -265,13 +265,16 @@ Output only the refined text, maintaining any section headings if present.`
 
   // Merge user feedback into document
   app.post("/api/merge", async (req, res) => {
+    console.log("[MERGE] Received merge request");
     try {
       const parsed = mergeTextRequestSchema.safeParse(req.body);
       if (!parsed.success) {
+        console.log("[MERGE] Validation failed:", parsed.error.errors);
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
       const { originalText, userFeedback, provocationContext } = parsed.data;
+      console.log("[MERGE] Processing feedback:", userFeedback?.substring(0, 100), "context:", provocationContext?.substring(0, 100));
 
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
@@ -309,6 +312,7 @@ Please merge the feedback intelligently throughout the document where relevant.`
       });
 
       const mergedText = response.choices[0]?.message?.content || originalText;
+      console.log("[MERGE] Success - returning merged text of length:", mergedText.length);
       res.json({ mergedText: mergedText.trim() });
     } catch (error) {
       console.error("Merge error:", error);

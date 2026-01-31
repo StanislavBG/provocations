@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Square } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface VoiceRecorderProps {
   onTranscript: (text: string) => void;
@@ -46,6 +47,7 @@ export function VoiceRecorder({
   variant = "ghost",
   className = ""
 }: VoiceRecorderProps) {
+  const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -85,6 +87,24 @@ export function VoiceRecorder({
       console.error("Speech recognition error:", event.error);
       setIsRecording(false);
       onRecordingChange?.(false);
+      if (event.error === 'not-allowed') {
+        toast({
+          title: "Microphone Access Required",
+          description: "Please allow microphone access in your browser to use voice input.",
+          variant: "destructive",
+        });
+      } else if (event.error === 'no-speech') {
+        toast({
+          title: "No Speech Detected",
+          description: "Please speak into your microphone and try again.",
+        });
+      } else {
+        toast({
+          title: "Voice Recording Error",
+          description: "Speech recognition failed. Please try again.",
+          variant: "destructive",
+        });
+      }
     };
 
     recognition.onend = () => {
@@ -101,7 +121,7 @@ export function VoiceRecorder({
     return () => {
       recognition.abort();
     };
-  }, [onTranscript, onRecordingChange]);
+  }, [onTranscript, onRecordingChange, toast]);
 
   const startRecording = useCallback(() => {
     if (!recognitionRef.current) return;
@@ -170,6 +190,7 @@ export function LargeVoiceRecorder({
   isRecording: boolean;
   onToggleRecording: () => void;
 }) {
+  const { toast } = useToast();
   const [isSupported, setIsSupported] = useState(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const transcriptRef = useRef("");
@@ -203,6 +224,18 @@ export function LargeVoiceRecorder({
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error("Speech recognition error:", event.error);
+      if (event.error === 'not-allowed') {
+        toast({
+          title: "Microphone Access Required",
+          description: "Please allow microphone access in your browser to use voice input.",
+          variant: "destructive",
+        });
+      } else if (event.error === 'no-speech') {
+        toast({
+          title: "No Speech Detected",
+          description: "Please speak into your microphone and try again.",
+        });
+      }
     };
 
     recognition.onend = () => {
@@ -217,7 +250,7 @@ export function LargeVoiceRecorder({
     return () => {
       recognition.abort();
     };
-  }, [onTranscript]);
+  }, [onTranscript, toast]);
 
   useEffect(() => {
     if (!recognitionRef.current) return;

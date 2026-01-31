@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { BookOpen, Eye, Download, Pencil, Check, Mic, Square } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { LensType } from "@shared/schema";
 
 const lensLabels: Record<LensType, string> = {
@@ -26,6 +27,7 @@ interface ReadingPaneProps {
 }
 
 export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText, onVoiceMerge, isMerging }: ReadingPaneProps) {
+  const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(text);
   const [selectedText, setSelectedText] = useState("");
@@ -132,8 +134,26 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       }
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: any) => {
       setIsRecording(false);
+      if (event.error === 'not-allowed') {
+        toast({
+          title: "Microphone Access Required",
+          description: "Please allow microphone access in your browser to use voice input.",
+          variant: "destructive",
+        });
+      } else if (event.error === 'no-speech') {
+        toast({
+          title: "No Speech Detected",
+          description: "Please speak into your microphone and try again.",
+        });
+      } else {
+        toast({
+          title: "Voice Recording Error",
+          description: "Speech recognition failed. Please try again.",
+          variant: "destructive",
+        });
+      }
     };
 
     recognition.onend = () => {
@@ -152,7 +172,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     return () => {
       recognition.abort();
     };
-  }, [selectedText, onVoiceMerge]);
+  }, [selectedText, onVoiceMerge, toast]);
 
   const toggleRecording = useCallback(() => {
     if (!recognitionRef.current) return;
