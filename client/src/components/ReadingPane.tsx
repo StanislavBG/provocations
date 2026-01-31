@@ -24,9 +24,10 @@ interface ReadingPaneProps {
   highlightText?: string;
   onVoiceMerge?: (selectedText: string, transcript: string) => void;
   isMerging?: boolean;
+  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
 }
 
-export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText, onVoiceMerge, isMerging }: ReadingPaneProps) {
+export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate }: ReadingPaneProps) {
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(text);
@@ -124,18 +125,29 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
 
     recognition.onresult = (event: any) => {
       let finalTranscript = "";
+      let interimTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
           finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
         }
       }
       if (finalTranscript) {
         transcriptRef.current += finalTranscript + " ";
       }
+      const displayTranscript = transcriptRef.current + interimTranscript;
+      if (onTranscriptUpdate) {
+        onTranscriptUpdate(displayTranscript, true);
+      }
     };
 
     recognition.onerror = (event: any) => {
       setIsRecording(false);
+      // Hide overlay on error
+      if (onTranscriptUpdate) {
+        onTranscriptUpdate("", false);
+      }
       if (event.error === 'not-allowed') {
         toast({
           title: "Microphone Access Required",
@@ -161,6 +173,9 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       if (transcript && selectedText && onVoiceMerge) {
         onVoiceMerge(selectedText, transcript);
       }
+      if (onTranscriptUpdate) {
+        onTranscriptUpdate(transcript, false);
+      }
       transcriptRef.current = "";
       setIsRecording(false);
       setSelectedText("");
@@ -172,7 +187,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     return () => {
       recognition.abort();
     };
-  }, [selectedText, onVoiceMerge, toast]);
+  }, [selectedText, onVoiceMerge, toast, onTranscriptUpdate]);
 
   const toggleRecording = useCallback(() => {
     if (!recognitionRef.current) return;
@@ -181,14 +196,22 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       recognitionRef.current.stop();
     } else {
       transcriptRef.current = "";
+      // Show the overlay immediately before starting (optimistic UI)
+      if (onTranscriptUpdate) {
+        onTranscriptUpdate("", true);
+      }
       try {
         recognitionRef.current.start();
         setIsRecording(true);
       } catch (error) {
         console.error("Failed to start recording:", error);
+        // Hide overlay on failure
+        if (onTranscriptUpdate) {
+          onTranscriptUpdate("", false);
+        }
       }
     }
-  }, [isRecording]);
+  }, [isRecording, onTranscriptUpdate]);
   
   // Normalize text for matching - handle punctuation and whitespace variations
   const normalizeForMatch = (text: string): string => {

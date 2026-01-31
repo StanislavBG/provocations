@@ -9,6 +9,7 @@ import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
 import { DimensionsToolbar } from "@/components/DimensionsToolbar";
 import { DiffView } from "@/components/DiffView";
+import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { LargeVoiceRecorder } from "@/components/VoiceRecorder";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,12 @@ export default function Workspace() {
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [showDiffView, setShowDiffView] = useState(false);
   const [hoveredProvocationId, setHoveredProvocationId] = useState<string | null>(null);
+  
+  // Transcript overlay state
+  const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(false);
+  const [rawTranscript, setRawTranscript] = useState("");
+  const [transcriptSummary, setTranscriptSummary] = useState("");
+  const [isRecordingFromMain, setIsRecordingFromMain] = useState(false);
   
   // Get the source excerpt of the currently hovered provocation
   const hoveredProvocationContext = hoveredProvocationId 
@@ -112,6 +119,12 @@ export default function Workspace() {
         setVersions(prev => [...prev, newVersion]);
         setDocument({ ...document, rawText: data.mergedText });
         
+        // Update the transcript summary with a description based on the context
+        const contextInfo = variables.provocationContext 
+          ? variables.provocationContext.replace('User selected the following text for improvement: ', 'Selected text: ')
+          : 'General feedback';
+        setTranscriptSummary(`Merged successfully!\n\n${contextInfo}\n\nYour feedback: "${variables.userFeedback}"\n\nThe document has been updated with your suggestions.`);
+        
         toast({
           title: "Feedback Integrated",
           description: "Your response has been merged into the document.",
@@ -119,6 +132,7 @@ export default function Workspace() {
       }
     },
     onError: (error) => {
+      setTranscriptSummary(`Merge failed: ${error instanceof Error ? error.message : "Something went wrong"}. Please try again.`);
       toast({
         title: "Merge Failed",
         description: error instanceof Error ? error.message : "Something went wrong",
@@ -322,6 +336,22 @@ export default function Workspace() {
     });
   }, [document, mergeMutation]);
 
+  const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
+    setRawTranscript(transcript);
+    setIsRecordingFromMain(isRecording);
+    if (isRecording && !showTranscriptOverlay) {
+      setShowTranscriptOverlay(true);
+      setTranscriptSummary("");
+    }
+  }, [showTranscriptOverlay]);
+
+  const handleCloseTranscriptOverlay = useCallback(() => {
+    setShowTranscriptOverlay(false);
+    setRawTranscript("");
+    setTranscriptSummary("");
+    setIsRecordingFromMain(false);
+  }, []);
+
   const activeLensSummary = lenses?.find((l) => l.type === activeLens)?.summary;
   const hasOutlineContent = outline?.some((item) => item.content) ?? false;
   const canShowDiff = versions.length >= 2;
@@ -460,6 +490,7 @@ export default function Workspace() {
                 highlightText={hoveredProvocationContext}
                 onVoiceMerge={handleSelectionVoiceMerge}
                 isMerging={mergeMutation.isPending}
+                onTranscriptUpdate={handleTranscriptUpdate}
               />
             )}
           </ResizablePanel>
@@ -467,7 +498,15 @@ export default function Workspace() {
           <ResizableHandle withHandle />
           
           <ResizablePanel defaultSize={35} minSize={25}>
-            <div className="h-full flex flex-col">
+            <div className="h-full flex flex-col relative">
+              <TranscriptOverlay
+                isVisible={showTranscriptOverlay}
+                isRecording={isRecordingFromMain}
+                rawTranscript={rawTranscript}
+                summary={transcriptSummary}
+                isSummarizing={mergeMutation.isPending}
+                onClose={handleCloseTranscriptOverlay}
+              />
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
                 <TabsList className="w-full justify-start rounded-none border-b px-4 h-auto py-0 bg-transparent">
                   <TabsTrigger 
