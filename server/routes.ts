@@ -7,6 +7,7 @@ import {
   expandOutlineRequestSchema,
   refineTextRequestSchema,
   mergeTextRequestSchema,
+  editTextRequestSchema,
   lensTypes,
   provocationType,
   type LensType,
@@ -317,6 +318,63 @@ Please merge the feedback intelligently throughout the document where relevant.`
     } catch (error) {
       console.error("Merge error:", error);
       res.status(500).json({ error: "Failed to merge feedback" });
+    }
+  });
+
+  // Edit selected text based on user instruction
+  app.post("/api/edit-text", async (req, res) => {
+    console.log("[EDIT-TEXT] Received edit request");
+    try {
+      const parsed = editTextRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        console.log("[EDIT-TEXT] Validation failed:", parsed.error.errors);
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { instruction, selectedText, fullDocument } = parsed.data;
+      console.log("[EDIT-TEXT] Processing instruction:", instruction.substring(0, 100));
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 2048,
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert editor helping modify a specific portion of a document based on user instructions.
+
+You will receive:
+1. A user instruction describing how to modify the text
+2. The specific text that needs to be modified (the selection)
+3. The full document for context
+
+Your task:
+- Apply the user's instruction ONLY to the selected text
+- Use the full document context to make informed decisions about tone, style, and content
+- Return ONLY the modified version of the selected text
+- Preserve the general structure unless the instruction requires changing it
+- Be precise - return only what should replace the selected text, nothing more
+
+Output only the modified text. No explanations, no markdown, no quotes around the text.`
+          },
+          {
+            role: "user",
+            content: `INSTRUCTION: ${instruction}
+
+SELECTED TEXT TO MODIFY:
+${selectedText}
+
+FULL DOCUMENT (for context):
+${fullDocument}`
+          }
+        ],
+      });
+
+      const modifiedText = response.choices[0]?.message?.content || selectedText;
+      console.log("[EDIT-TEXT] Success - returning modified text of length:", modifiedText.length);
+      res.json({ modifiedText: modifiedText.trim() });
+    } catch (error) {
+      console.error("Edit-text error:", error);
+      res.status(500).json({ error: "Failed to edit text" });
     }
   });
 

@@ -105,6 +105,14 @@ export const mergeTextRequestSchema = z.object({
 
 export type MergeTextRequest = z.infer<typeof mergeTextRequestSchema>;
 
+export const editTextRequestSchema = z.object({
+  instruction: z.string().min(1, "Instruction is required"),
+  selectedText: z.string().min(1, "Selected text is required"),
+  fullDocument: z.string().min(1, "Full document is required"),
+});
+
+export type EditTextRequest = z.infer<typeof editTextRequestSchema>;
+
 export interface DocumentVersion {
   id: string;
   text: string;

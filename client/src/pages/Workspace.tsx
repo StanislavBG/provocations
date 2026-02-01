@@ -295,6 +295,21 @@ export default function Workspace() {
     }
   }, [document]);
 
+  // Handle text edit from pencil icon prompt
+  const handleTextEdit = useCallback((newText: string) => {
+    if (document) {
+      // Create a new version for the edit
+      const newVersion: DocumentVersion = {
+        id: `v-${Date.now()}`,
+        text: newText,
+        timestamp: Date.now(),
+        description: "After text edit"
+      };
+      setVersions(prev => [...prev, newVersion]);
+      setDocument({ ...document, rawText: newText });
+    }
+  }, [document]);
+
   const handleBlankDocument = useCallback(() => {
     setPhase("blank-document");
   }, []);
@@ -491,6 +506,7 @@ export default function Workspace() {
                 onVoiceMerge={handleSelectionVoiceMerge}
                 isMerging={mergeMutation.isPending}
                 onTranscriptUpdate={handleTranscriptUpdate}
+                onTextEdit={handleTextEdit}
               />
             )}
           </ResizablePanel>

@@ -3,8 +3,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { BookOpen, Eye, Download, Pencil, Check, Mic, Square } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { BookOpen, Eye, Download, Pencil, Check, Mic, Square, Send, X, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { LensType } from "@shared/schema";
 
 const lensLabels: Record<LensType, string> = {
@@ -25,18 +27,29 @@ interface ReadingPaneProps {
   onVoiceMerge?: (selectedText: string, transcript: string) => void;
   isMerging?: boolean;
   onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
+  onTextEdit?: (newText: string) => void;
 }
 
-export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate }: ReadingPaneProps) {
+export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit }: ReadingPaneProps) {
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(text);
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [showPromptInput, setShowPromptInput] = useState(false);
+  const [promptText, setPromptText] = useState("");
+  const [isProcessingEdit, setIsProcessingEdit] = useState(false);
   const articleRef = useRef<HTMLElement>(null);
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef("");
+  const promptInputRef = useRef<HTMLInputElement>(null);
+  const isRecordingRef = useRef(false);
+  const showPromptInputRef = useRef(false);
+  
+  // Keep refs in sync with state for use in event handlers
+  isRecordingRef.current = isRecording;
+  showPromptInputRef.current = showPromptInput;
   
   const paragraphs = text.split(/\n\n+/).filter(Boolean);
 
@@ -79,9 +92,13 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
 
     // Also listen for selectionchange to hide mic when selection is cleared
     const handleSelectionClear = () => {
+      // Don't clear if we're recording or showing the prompt input
+      if (isRecordingRef.current || showPromptInputRef.current) {
+        return;
+      }
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
-        // Selection was cleared - hide the mic
+        // Selection was cleared - hide the toolbar
         setSelectedText("");
         setSelectionPosition(null);
       }
@@ -99,8 +116,12 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
   // Clear selection when clicking elsewhere (only if no active selection)
   const handleClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    // Don't clear if clicking the voice button
-    if (target.closest('[data-voice-button]')) {
+    // Don't clear if clicking the selection toolbar
+    if (target.closest('[data-selection-toolbar]')) {
+      return;
+    }
+    // Don't clear if we're recording or showing the prompt input
+    if (isRecording || showPromptInput) {
       return;
     }
     // Don't clear if there's an active text selection
@@ -108,10 +129,10 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     if (selection && !selection.isCollapsed) {
       return;
     }
-    // Clear the floating mic state
+    // Clear the floating toolbar state
     setSelectedText("");
     setSelectionPosition(null);
-  }, []);
+  }, [isRecording, showPromptInput]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -212,6 +233,81 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       }
     }
   }, [isRecording, onTranscriptUpdate]);
+
+  // Handle pencil mousedown to show prompt input immediately (before selectionchange fires)
+  const handlePencilMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent selection collapse
+    e.stopPropagation();
+    setShowPromptInput(true);
+    showPromptInputRef.current = true; // Update ref immediately
+    setPromptText("");
+    // Focus the input after a short delay to allow render
+    setTimeout(() => {
+      promptInputRef.current?.focus();
+    }, 50);
+  }, []);
+
+  // Handle closing the prompt input
+  const handleClosePrompt = useCallback(() => {
+    setShowPromptInput(false);
+    setPromptText("");
+  }, []);
+
+  // Handle submitting the text edit instruction
+  const handleSubmitEdit = useCallback(async () => {
+    if (!promptText.trim() || !selectedText) return;
+    
+    setIsProcessingEdit(true);
+    try {
+      const response = await apiRequest("POST", "/api/edit-text", {
+        instruction: promptText.trim(),
+        selectedText: selectedText,
+        fullDocument: text,
+      });
+      
+      const data = await response.json();
+      
+      if (data.modifiedText) {
+        // Replace the selected text in the document with the modified text
+        const newText = text.replace(selectedText, data.modifiedText);
+        
+        if (onTextEdit) {
+          onTextEdit(newText);
+        }
+        
+        toast({
+          title: "Text Updated",
+          description: "Your selected text has been modified based on your instruction.",
+        });
+        
+        // Clear selection and prompt
+        setShowPromptInput(false);
+        setPromptText("");
+        setSelectedText("");
+        setSelectionPosition(null);
+        window.getSelection()?.removeAllRanges();
+      }
+    } catch (error) {
+      console.error("Edit text error:", error);
+      toast({
+        title: "Edit Failed",
+        description: "Could not modify the selected text. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingEdit(false);
+    }
+  }, [promptText, selectedText, text, onTextEdit, toast]);
+
+  // Handle Enter key in prompt input
+  const handlePromptKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmitEdit();
+    } else if (e.key === "Escape") {
+      handleClosePrompt();
+    }
+  }, [handleSubmitEdit, handleClosePrompt]);
   
   // Normalize text for matching - handle punctuation and whitespace variations
   const normalizeForMatch = (text: string): string => {
@@ -426,31 +522,87 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
                 </p>
               ))}
               
-              {/* Floating microphone button on text selection */}
+              {/* Floating toolbar on text selection */}
               {selectedText && selectionPosition && !isEditing && (
                 <div
-                  data-voice-button
+                  data-selection-toolbar
                   className="absolute z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"
                   style={{
-                    left: `${Math.max(0, selectionPosition.x - 20)}px`,
+                    left: `${Math.max(0, selectionPosition.x - 50)}px`,
                     top: `${Math.max(0, selectionPosition.y)}px`,
                   }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Button
-                    data-testid="button-selection-voice"
-                    size="icon"
-                    variant={isRecording ? "destructive" : "default"}
-                    onClick={toggleRecording}
-                    disabled={isMerging}
-                    className={`shadow-lg ${isRecording ? "animate-pulse" : ""}`}
-                    title={isRecording ? "Stop recording" : "Speak to add feedback about this text"}
-                  >
-                    {isRecording ? (
-                      <Square className="w-4 h-4" />
-                    ) : (
-                      <Mic className="w-4 h-4" />
-                    )}
-                  </Button>
+                  {showPromptInput ? (
+                    <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
+                      <Input
+                        ref={promptInputRef}
+                        data-testid="input-edit-instruction"
+                        value={promptText}
+                        onChange={(e) => setPromptText(e.target.value)}
+                        onKeyDown={handlePromptKeyDown}
+                        placeholder="How to modify this text..."
+                        className="min-w-[200px] h-8 text-sm"
+                        disabled={isProcessingEdit}
+                      />
+                      <Button
+                        data-testid="button-submit-edit"
+                        size="icon"
+                        variant="default"
+                        onClick={handleSubmitEdit}
+                        disabled={!promptText.trim() || isProcessingEdit}
+                        className="h-8 w-8"
+                        title="Apply modification"
+                      >
+                        {isProcessingEdit ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        data-testid="button-close-edit"
+                        size="icon"
+                        variant="ghost"
+                        onClick={handleClosePrompt}
+                        disabled={isProcessingEdit}
+                        className="h-8 w-8"
+                        title="Cancel"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        data-testid="button-selection-voice"
+                        size="icon"
+                        variant={isRecording ? "destructive" : "default"}
+                        onClick={toggleRecording}
+                        disabled={isMerging || isProcessingEdit}
+                        className={`shadow-lg ${isRecording ? "animate-pulse" : ""}`}
+                        title={isRecording ? "Stop recording" : "Speak to add feedback about this text"}
+                      >
+                        {isRecording ? (
+                          <Square className="w-4 h-4" />
+                        ) : (
+                          <Mic className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        data-testid="button-selection-edit"
+                        size="icon"
+                        variant="secondary"
+                        onMouseDown={handlePencilMouseDown}
+                        disabled={isMerging || isProcessingEdit || isRecording}
+                        className="shadow-lg"
+                        title="Type instruction to modify this text"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </article>
