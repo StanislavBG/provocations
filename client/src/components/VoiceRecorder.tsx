@@ -40,8 +40,8 @@ interface SpeechRecognition extends EventTarget {
   onstart: (() => void) | null;
 }
 
-export function VoiceRecorder({ 
-  onTranscript, 
+export function VoiceRecorder({
+  onTranscript,
   onRecordingChange,
   size = "icon",
   variant = "ghost",
@@ -52,7 +52,22 @@ export function VoiceRecorder({
   const [isSupported, setIsSupported] = useState(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const transcriptRef = useRef("");
+  const isRecordingRef = useRef(false);
 
+  // Store callbacks in refs to avoid re-initializing recognition
+  const onTranscriptRef = useRef(onTranscript);
+  const onRecordingChangeRef = useRef(onRecordingChange);
+
+  // Keep refs in sync with props
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
+
+  useEffect(() => {
+    onRecordingChangeRef.current = onRecordingChange;
+  }, [onRecordingChange]);
+
+  // Initialize speech recognition only once
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -67,14 +82,11 @@ export function VoiceRecorder({
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = "";
-      let interimTranscript = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
           finalTranscript += result[0].transcript;
-        } else {
-          interimTranscript += result[0].transcript;
         }
       }
 
@@ -85,8 +97,9 @@ export function VoiceRecorder({
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error("Speech recognition error:", event.error);
+      isRecordingRef.current = false;
       setIsRecording(false);
-      onRecordingChange?.(false);
+      onRecordingChangeRef.current?.(false);
       if (event.error === 'not-allowed') {
         toast({
           title: "Microphone Access Required",
@@ -98,7 +111,7 @@ export function VoiceRecorder({
           title: "No Speech Detected",
           description: "Please speak into your microphone and try again.",
         });
-      } else {
+      } else if (event.error !== 'aborted') {
         toast({
           title: "Voice Recording Error",
           description: "Speech recognition failed. Please try again.",
@@ -109,11 +122,12 @@ export function VoiceRecorder({
 
     recognition.onend = () => {
       if (transcriptRef.current.trim()) {
-        onTranscript(transcriptRef.current.trim());
+        onTranscriptRef.current(transcriptRef.current.trim());
       }
       transcriptRef.current = "";
+      isRecordingRef.current = false;
       setIsRecording(false);
-      onRecordingChange?.(false);
+      onRecordingChangeRef.current?.(false);
     };
 
     recognitionRef.current = recognition;
@@ -121,32 +135,36 @@ export function VoiceRecorder({
     return () => {
       recognition.abort();
     };
-  }, [onTranscript, onRecordingChange, toast]);
+  }, [toast]); // Only toast is needed - callbacks use refs
 
   const startRecording = useCallback(() => {
-    if (!recognitionRef.current) return;
+    if (!recognitionRef.current || isRecordingRef.current) return;
     transcriptRef.current = "";
     try {
       recognitionRef.current.start();
+      isRecordingRef.current = true;
       setIsRecording(true);
-      onRecordingChange?.(true);
+      onRecordingChangeRef.current?.(true);
     } catch (error) {
       console.error("Failed to start recording:", error);
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      onRecordingChangeRef.current?.(false);
     }
-  }, [onRecordingChange]);
+  }, []);
 
   const stopRecording = useCallback(() => {
-    if (!recognitionRef.current) return;
+    if (!recognitionRef.current || !isRecordingRef.current) return;
     recognitionRef.current.stop();
   }, []);
 
   const toggleRecording = useCallback(() => {
-    if (isRecording) {
+    if (isRecordingRef.current) {
       stopRecording();
     } else {
       startRecording();
     }
-  }, [isRecording, startRecording, stopRecording]);
+  }, [startRecording, stopRecording]);
 
   if (!isSupported) {
     return (
@@ -181,11 +199,11 @@ export function VoiceRecorder({
   );
 }
 
-export function LargeVoiceRecorder({ 
+export function LargeVoiceRecorder({
   onTranscript,
   isRecording,
   onToggleRecording
-}: { 
+}: {
   onTranscript: (text: string) => void;
   isRecording: boolean;
   onToggleRecording: () => void;
@@ -194,7 +212,15 @@ export function LargeVoiceRecorder({
   const [isSupported, setIsSupported] = useState(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const transcriptRef = useRef("");
+  const isActiveRef = useRef(false);
 
+  // Store callback in ref to avoid re-initializing recognition
+  const onTranscriptRef = useRef(onTranscript);
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
+
+  // Initialize speech recognition only once
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -206,6 +232,10 @@ export function LargeVoiceRecorder({
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+
+    recognition.onstart = () => {
+      isActiveRef.current = true;
+    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = "";
@@ -224,6 +254,7 @@ export function LargeVoiceRecorder({
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error("Speech recognition error:", event.error);
+      isActiveRef.current = false;
       if (event.error === 'not-allowed') {
         toast({
           title: "Microphone Access Required",
@@ -239,8 +270,9 @@ export function LargeVoiceRecorder({
     };
 
     recognition.onend = () => {
+      isActiveRef.current = false;
       if (transcriptRef.current.trim()) {
-        onTranscript(transcriptRef.current.trim());
+        onTranscriptRef.current(transcriptRef.current.trim());
       }
       transcriptRef.current = "";
     };
@@ -250,19 +282,20 @@ export function LargeVoiceRecorder({
     return () => {
       recognition.abort();
     };
-  }, [onTranscript, toast]);
+  }, [toast]);
 
+  // Handle external isRecording state changes
   useEffect(() => {
     if (!recognitionRef.current) return;
-    
-    if (isRecording) {
+
+    if (isRecording && !isActiveRef.current) {
       transcriptRef.current = "";
       try {
         recognitionRef.current.start();
       } catch (error) {
         console.error("Failed to start recording:", error);
       }
-    } else {
+    } else if (!isRecording && isActiveRef.current) {
       recognitionRef.current.stop();
     }
   }, [isRecording]);

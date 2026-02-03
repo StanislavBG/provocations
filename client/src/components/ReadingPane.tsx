@@ -36,6 +36,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
   const [editedText, setEditedText] = useState(text);
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [promptText, setPromptText] = useState("");
@@ -53,6 +54,17 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
   
   const paragraphs = text.split(/\n\n+/).filter(Boolean);
 
+  // Helper to find text offset in the full document text
+  const findSelectionOffset = useCallback((selectedStr: string): { start: number; end: number } | null => {
+    // Find all occurrences and return the first one
+    // This is a simple approach - for more accuracy, we could track the paragraph index
+    const index = text.indexOf(selectedStr);
+    if (index !== -1) {
+      return { start: index, end: index + selectedStr.length };
+    }
+    return null;
+  }, [text]);
+
   // Handle text selection using document event
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -60,29 +72,33 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       if (!selection || selection.isCollapsed || !articleRef.current) {
         return;
       }
-      
+
       // Check if selection is within our article
       const anchorNode = selection.anchorNode;
       if (!anchorNode || !articleRef.current.contains(anchorNode)) {
         return;
       }
-      
-      const text = selection.toString().trim();
-      if (text.length < 5) {
+
+      const selectedStr = selection.toString().trim();
+      if (selectedStr.length < 5) {
         return;
       }
-      
+
       // Get position relative to the article container
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       const articleRect = articleRef.current.getBoundingClientRect();
-      
+
       // Position button at top-right of selection, clamped to visible area
       const x = Math.min(Math.max(10, rect.right - articleRect.left), articleRect.width - 50);
       const y = Math.max(10, rect.top - articleRect.top - 45);
-      
-      setSelectedText(text);
+
+      setSelectedText(selectedStr);
       setSelectionPosition({ x, y });
+
+      // Track the text offset for accurate replacement
+      const offset = findSelectionOffset(selectedStr);
+      setSelectionRange(offset);
     };
 
     const handleMouseUp = () => {
@@ -101,6 +117,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
         // Selection was cleared - hide the toolbar
         setSelectedText("");
         setSelectionPosition(null);
+        setSelectionRange(null);
       }
     };
 
@@ -132,9 +149,27 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     // Clear the floating toolbar state
     setSelectedText("");
     setSelectionPosition(null);
+    setSelectionRange(null);
   }, [isRecording, showPromptInput]);
 
-  // Initialize speech recognition
+  // Store callbacks in refs to avoid re-initializing recognition
+  const onVoiceMergeRef = useRef(onVoiceMerge);
+  const onTranscriptUpdateRef = useRef(onTranscriptUpdate);
+  const selectedTextRef = useRef(selectedText);
+
+  useEffect(() => {
+    onVoiceMergeRef.current = onVoiceMerge;
+  }, [onVoiceMerge]);
+
+  useEffect(() => {
+    onTranscriptUpdateRef.current = onTranscriptUpdate;
+  }, [onTranscriptUpdate]);
+
+  useEffect(() => {
+    selectedTextRef.current = selectedText;
+  }, [selectedText]);
+
+  // Initialize speech recognition only once
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -158,17 +193,13 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
         transcriptRef.current += finalTranscript + " ";
       }
       const displayTranscript = transcriptRef.current + interimTranscript;
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate(displayTranscript, true);
-      }
+      onTranscriptUpdateRef.current?.(displayTranscript, true);
     };
 
     recognition.onerror = (event: any) => {
+      isRecordingRef.current = false;
       setIsRecording(false);
-      // Hide overlay on error
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate("", false);
-      }
+      onTranscriptUpdateRef.current?.("", false);
       if (event.error === 'not-allowed') {
         toast({
           title: "Microphone Access Required",
@@ -180,7 +211,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
           title: "No Speech Detected",
           description: "Please speak into your microphone and try again.",
         });
-      } else {
+      } else if (event.error !== 'aborted') {
         toast({
           title: "Voice Recording Error",
           description: "Speech recognition failed. Please try again.",
@@ -191,16 +222,17 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
 
     recognition.onend = () => {
       const transcript = transcriptRef.current.trim();
-      if (transcript && selectedText && onVoiceMerge) {
-        onVoiceMerge(selectedText, transcript);
+      const currentSelectedText = selectedTextRef.current;
+      if (transcript && currentSelectedText && onVoiceMergeRef.current) {
+        onVoiceMergeRef.current(currentSelectedText, transcript);
       }
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate(transcript, false);
-      }
+      onTranscriptUpdateRef.current?.(transcript, false);
       transcriptRef.current = "";
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSelectedText("");
       setSelectionPosition(null);
+      setSelectionRange(null);
     };
 
     recognitionRef.current = recognition;
@@ -208,31 +240,30 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     return () => {
       recognition.abort();
     };
-  }, [selectedText, onVoiceMerge, toast, onTranscriptUpdate]);
+  }, [toast]); // Only toast needed - callbacks use refs
 
   const toggleRecording = useCallback(() => {
     if (!recognitionRef.current) return;
-    
-    if (isRecording) {
+
+    if (isRecordingRef.current) {
       recognitionRef.current.stop();
     } else {
       transcriptRef.current = "";
       // Show the overlay immediately before starting (optimistic UI)
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate("", true);
-      }
+      onTranscriptUpdateRef.current?.("", true);
       try {
         recognitionRef.current.start();
+        isRecordingRef.current = true;
         setIsRecording(true);
       } catch (error) {
         console.error("Failed to start recording:", error);
         // Hide overlay on failure
-        if (onTranscriptUpdate) {
-          onTranscriptUpdate("", false);
-        }
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        onTranscriptUpdateRef.current?.("", false);
       }
     }
-  }, [isRecording, onTranscriptUpdate]);
+  }, []);
 
   // Handle pencil mousedown to show prompt input immediately (before selectionchange fires)
   const handlePencilMouseDown = useCallback((e: React.MouseEvent) => {
@@ -269,8 +300,16 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       
       if (data.modifiedText) {
         // Replace the selected text in the document with the modified text
-        const newText = text.replace(selectedText, data.modifiedText);
-        
+        // Use selectionRange for accurate replacement if available
+        let newText: string;
+        if (selectionRange) {
+          // Precise replacement using character offsets
+          newText = text.slice(0, selectionRange.start) + data.modifiedText + text.slice(selectionRange.end);
+        } else {
+          // Fallback to simple replace (only first occurrence)
+          newText = text.replace(selectedText, data.modifiedText);
+        }
+
         if (onTextEdit) {
           onTextEdit(newText);
         }
@@ -285,6 +324,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
         setPromptText("");
         setSelectedText("");
         setSelectionPosition(null);
+        setSelectionRange(null);
         window.getSelection()?.removeAllRanges();
       }
     } catch (error) {
