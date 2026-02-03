@@ -138,7 +138,11 @@ function ProvocationCard({
                 <div>
                   <VoiceRecorder
                     onTranscript={(transcript) => {
-                      onVoiceResponse?.(transcript, `${provocation.title}: ${provocation.content}`);
+                      // Include sourceExcerpt for better context in merge
+                      const context = provocation.sourceExcerpt
+                        ? `Provocation: ${provocation.title}\nDetails: ${provocation.content}\nRelevant document excerpt: "${provocation.sourceExcerpt}"`
+                        : `Provocation: ${provocation.title}\nDetails: ${provocation.content}`;
+                      onVoiceResponse?.(transcript, context);
                     }}
                     size="sm"
                     variant="outline"

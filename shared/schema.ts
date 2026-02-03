@@ -101,6 +101,8 @@ export const mergeTextRequestSchema = z.object({
   originalText: z.string().min(1, "Original text is required"),
   userFeedback: z.string().min(1, "User feedback is required"),
   provocationContext: z.string().optional(),
+  selectedText: z.string().optional(), // The specific text the user selected for feedback
+  activeLens: z.enum(["consumer", "executive", "technical", "financial", "strategic", "skeptic"]).optional(),
 });
 
 export type MergeTextRequest = z.infer<typeof mergeTextRequestSchema>;
@@ -120,11 +122,12 @@ export interface DocumentVersion {
   description: string;
 }
 
-// Legacy exports for compatibility with template
-export const users = {} as any;
-export const insertUserSchema = z.object({
-  username: z.string(),
-  password: z.string(),
-});
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = { id: string; username: string; password: string };
+// Workspace state for context provider
+export interface WorkspaceState {
+  document: Document | null;
+  lenses: Lens[];
+  activeLens: LensType | null;
+  provocations: Provocation[];
+  outline: OutlineItem[];
+  currentPhase: "input" | "blank-document" | "workspace";
+}

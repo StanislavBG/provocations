@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { LensesPanel } from "@/components/LensesPanel";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
@@ -69,7 +70,12 @@ export default function Workspace() {
   const analyzeMutation = useMutation({
     mutationFn: async (text: string) => {
       const response = await apiRequest("POST", "/api/analyze", { text });
-      return await response.json() as { document: Document; lenses: Lens[]; provocations: Provocation[] };
+      return await response.json() as {
+        document: Document;
+        lenses: Lens[];
+        provocations: Provocation[];
+        warnings?: Array<{ type: string; message: string }>;
+      };
     },
     onSuccess: (data) => {
       const lensesData = data.lenses ?? [];
@@ -78,16 +84,26 @@ export default function Workspace() {
       setLenses(lensesData);
       setProvocations(provocationsData);
       setPhase("workspace");
-      
+
       // Create initial version
       const initialVersion: DocumentVersion = {
-        id: `v-${Date.now()}`,
+        id: generateId("v"),
         text: data.document.rawText,
         timestamp: Date.now(),
         description: "Original document"
       };
       setVersions([initialVersion]);
-      
+
+      // Show truncation warning if applicable
+      if (data.warnings?.some(w => w.type === "text_truncated")) {
+        const warning = data.warnings.find(w => w.type === "text_truncated");
+        toast({
+          title: "Text Truncated for Analysis",
+          description: warning?.message || "Some text was truncated during analysis.",
+          variant: "default",
+        });
+      }
+
       toast({
         title: "Analysis Complete",
         description: `Generated ${lensesData.length} lenses and ${provocationsData.length} provocations.`,
@@ -103,15 +119,27 @@ export default function Workspace() {
   });
 
   const mergeMutation = useMutation({
-    mutationFn: async ({ originalText, userFeedback, provocationContext }: { originalText: string; userFeedback: string; provocationContext?: string }) => {
-      const response = await apiRequest("POST", "/api/merge", { originalText, userFeedback, provocationContext });
+    mutationFn: async ({ originalText, userFeedback, provocationContext, selectedText, activeLens }: {
+      originalText: string;
+      userFeedback: string;
+      provocationContext?: string;
+      selectedText?: string;
+      activeLens?: string;
+    }) => {
+      const response = await apiRequest("POST", "/api/merge", {
+        originalText,
+        userFeedback,
+        provocationContext,
+        selectedText,
+        activeLens,
+      });
       return await response.json() as { mergedText: string };
     },
     onSuccess: (data, variables) => {
       if (document) {
         // Save current version before updating
         const newVersion: DocumentVersion = {
-          id: `v-${Date.now()}`,
+          id: generateId("v"),
           text: data.mergedText,
           timestamp: Date.now(),
           description: "After voice feedback"
@@ -300,7 +328,7 @@ export default function Workspace() {
     if (document) {
       // Create a new version for the edit
       const newVersion: DocumentVersion = {
-        id: `v-${Date.now()}`,
+        id: generateId("v"),
         text: newText,
         timestamp: Date.now(),
         description: "After text edit"
@@ -323,18 +351,19 @@ export default function Workspace() {
 
   const handleVoiceResponse = useCallback((provocationId: string, transcript: string, provocationContext: string) => {
     if (!document || !transcript.trim()) return;
-    
+
     mergeMutation.mutate({
       originalText: document.rawText,
       userFeedback: transcript,
-      provocationContext
+      provocationContext,
+      activeLens: activeLens || undefined,
     });
-    
+
     // Mark the provocation as addressed
     setProvocations((prev) =>
       prev.map((p) => (p.id === provocationId ? { ...p, status: "addressed" as const } : p))
     );
-  }, [document, mergeMutation]);
+  }, [document, mergeMutation, activeLens]);
 
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
@@ -343,13 +372,15 @@ export default function Workspace() {
   // Handle voice merge from text selection in ReadingPane
   const handleSelectionVoiceMerge = useCallback((selectedText: string, transcript: string) => {
     if (!document || !transcript.trim()) return;
-    
+
     mergeMutation.mutate({
       originalText: document.rawText,
       userFeedback: transcript,
-      provocationContext: `User selected the following text for improvement: "${selectedText}"`
+      provocationContext: `User selected the following text for improvement`,
+      selectedText: selectedText,
+      activeLens: activeLens || undefined,
     });
-  }, [document, mergeMutation]);
+  }, [document, mergeMutation, activeLens]);
 
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
     setRawTranscript(transcript);

@@ -49,13 +49,23 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { text } = parsed.data;
-      
-      // Create document
+      const { text, selectedLenses } = parsed.data;
+
+      // Check if text will be truncated for analysis
+      const MAX_ANALYSIS_LENGTH = 8000;
+      const wasTextTruncated = text.length > MAX_ANALYSIS_LENGTH;
+      const analysisText = text.slice(0, MAX_ANALYSIS_LENGTH);
+
+      // Create document (stores full text)
       const document = await storage.createDocument(text);
 
+      // Use selected lenses or default to all
+      const lensesToGenerate = selectedLenses && selectedLenses.length > 0
+        ? selectedLenses
+        : lensTypes;
+
       // Generate lenses in parallel
-      const lensPromises = lensTypes.map(async (lensType): Promise<Lens> => {
+      const lensPromises = lensesToGenerate.map(async (lensType): Promise<Lens> => {
         try {
           const response = await openai.chat.completions.create({
             model: "gpt-5.2",
@@ -64,7 +74,7 @@ export async function registerRoutes(
               {
                 role: "system",
                 content: `You are an analytical assistant helping users understand text through specific lenses. ${lensPrompts[lensType]}
-                
+
 Respond with a JSON object containing:
 - title: A brief title for this lens analysis (max 50 chars)
 - summary: A 2-3 sentence summary from this perspective
@@ -74,7 +84,7 @@ Output only valid JSON, no markdown.`
               },
               {
                 role: "user",
-                content: `Analyze this text through the ${lensType} lens:\n\n${text.slice(0, 8000)}`
+                content: `Analyze this text through the ${lensType} lens:\n\n${analysisText}`
               }
             ],
             response_format: { type: "json_object" },
@@ -130,7 +140,7 @@ Output only valid JSON, no markdown.`
               },
               {
                 role: "user",
-                content: `Generate ${provType} provocations for this text:\n\n${text.slice(0, 8000)}`
+                content: `Generate ${provType} provocations for this text:\n\n${analysisText}`
               }
             ],
             response_format: { type: "json_object" },
@@ -173,10 +183,19 @@ Output only valid JSON, no markdown.`
 
       const provocations = provocationArrays.flat();
 
-      res.json({ document, lenses, provocations });
+      res.json({
+        document,
+        lenses,
+        provocations,
+        warnings: wasTextTruncated ? [{
+          type: "text_truncated",
+          message: `Your text (${text.length.toLocaleString()} characters) was truncated to ${MAX_ANALYSIS_LENGTH.toLocaleString()} characters for analysis. The full document is preserved.`
+        }] : undefined
+      });
     } catch (error) {
       console.error("Analysis error:", error);
-      res.status(500).json({ error: "Failed to analyze text" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to analyze text", details: errorMessage });
     }
   });
 
@@ -214,7 +233,8 @@ Output only the paragraph text, no headings or labels.`
       res.json({ content: content.trim() });
     } catch (error) {
       console.error("Expand error:", error);
-      res.status(500).json({ error: "Failed to expand heading" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to expand heading", details: errorMessage });
     }
   });
 
@@ -260,7 +280,8 @@ Output only the refined text, maintaining any section headings if present.`
       res.json({ refined: refined.trim() });
     } catch (error) {
       console.error("Refine error:", error);
-      res.status(500).json({ error: "Failed to refine text" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to refine text", details: errorMessage });
     }
   });
 
@@ -274,8 +295,28 @@ Output only the refined text, maintaining any section headings if present.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { originalText, userFeedback, provocationContext } = parsed.data;
+      const { originalText, userFeedback, provocationContext, selectedText, activeLens } = parsed.data;
       console.log("[MERGE] Processing feedback:", userFeedback?.substring(0, 100), "context:", provocationContext?.substring(0, 100));
+
+      // Build context-aware system prompt
+      let contextInfo = "";
+      if (provocationContext) {
+        contextInfo += `\n\nCONTEXT: The user was responding to this provocation:\n${provocationContext}`;
+      }
+      if (selectedText) {
+        contextInfo += `\n\nFOCUS AREA: The user selected this specific text for improvement:\n"${selectedText}"`;
+      }
+      if (activeLens) {
+        const lensDescriptions: Record<string, string> = {
+          consumer: "end-user/customer perspective",
+          executive: "strategic leadership perspective",
+          technical: "technical implementation perspective",
+          financial: "cost/ROI perspective",
+          strategic: "competitive positioning perspective",
+          skeptic: "critical/skeptical perspective",
+        };
+        contextInfo += `\n\nPERSPECTIVE: The user is viewing through the ${activeLens} lens (${lensDescriptions[activeLens]}).`;
+      }
 
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
@@ -283,19 +324,18 @@ Output only the refined text, maintaining any section headings if present.`
         messages: [
           {
             role: "system",
-            content: `You are an expert editor helping integrate user feedback into a document. 
+            content: `You are an expert editor helping integrate user feedback into a document.
 
 The user has been reviewing their document and responding to critical thinking provocations. They've provided verbal feedback that should be intelligently merged into their original document.
 
 Your task:
 1. Understand the user's feedback and insights
-2. Identify where in the original document these insights are relevant
-3. Intelligently integrate the feedback THROUGHOUT the document where appropriate
+2. ${selectedText ? "Focus primarily on the selected text area, but consider if feedback applies elsewhere too" : "Identify where in the original document these insights are relevant"}
+3. Intelligently integrate the feedback where appropriate
 4. Maintain the document's original structure and voice
 5. Don't just append - weave the new insights naturally into the existing text
-6. Mark significant additions or changes with subtle improvements, not wholesale rewrites
-
-${provocationContext ? `The feedback was in response to this provocation: "${provocationContext}"` : ""}
+6. Make targeted improvements, not wholesale rewrites
+${contextInfo}
 
 Output only the merged document text, no explanations or metadata.`
           },
@@ -306,8 +346,9 @@ ${originalText}
 
 USER'S FEEDBACK TO INTEGRATE:
 ${userFeedback}
+${selectedText ? `\nTARGET SECTION (user selected this text):\n"${selectedText}"` : ""}
 
-Please merge the feedback intelligently throughout the document where relevant.`
+Please merge the feedback intelligently into the document${selectedText ? ", focusing on the selected section" : ""}.`
           }
         ],
       });
@@ -317,7 +358,8 @@ Please merge the feedback intelligently throughout the document where relevant.`
       res.json({ mergedText: mergedText.trim() });
     } catch (error) {
       console.error("Merge error:", error);
-      res.status(500).json({ error: "Failed to merge feedback" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to merge feedback", details: errorMessage });
     }
   });
 
@@ -374,7 +416,8 @@ ${fullDocument}`
       res.json({ modifiedText: modifiedText.trim() });
     } catch (error) {
       console.error("Edit-text error:", error);
-      res.status(500).json({ error: "Failed to edit text" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to edit text", details: errorMessage });
     }
   });
 
