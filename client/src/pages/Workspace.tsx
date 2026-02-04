@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -9,7 +9,6 @@ import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
 import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
 import { DimensionsToolbar } from "@/components/DimensionsToolbar";
-import { DiffView } from "@/components/DiffView";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { LargeVoiceRecorder } from "@/components/VoiceRecorder";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -17,6 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Lazy load heavy components
+const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
 import {
   Sparkles,
   RotateCcw,
@@ -26,7 +29,8 @@ import {
   GitCompare,
   Target,
   BookCopy,
-  X
+  X,
+  Lightbulb
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -40,7 +44,8 @@ import type {
   DocumentVersion,
   WriteRequest,
   WriteResponse,
-  ReferenceDocument
+  ReferenceDocument,
+  EditHistoryEntry
 } from "@shared/schema";
 
 type AppPhase = "input" | "blank-document" | "workspace";
@@ -72,6 +77,12 @@ export default function Workspace() {
   const [rawTranscript, setRawTranscript] = useState("");
   const [transcriptSummary, setTranscriptSummary] = useState("");
   const [isRecordingFromMain, setIsRecordingFromMain] = useState(false);
+
+  // Edit history for coherent iteration
+  const [editHistory, setEditHistory] = useState<EditHistoryEntry[]>([]);
+
+  // Suggestions from last write response
+  const [lastSuggestions, setLastSuggestions] = useState<string[]>([]);
   
   // Get the source excerpt of the currently hovered provocation
   const hoveredProvocationContext = hoveredProvocationId 
@@ -133,12 +144,13 @@ export default function Workspace() {
   });
 
   const writeMutation = useMutation({
-    mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments"> & { description?: string }) => {
+    mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        editHistory: editHistory.length > 0 ? editHistory : undefined,
         ...request,
       });
       return await response.json() as WriteResponse;
@@ -155,8 +167,35 @@ export default function Workspace() {
         setVersions(prev => [...prev, newVersion]);
         setDocument({ ...document, rawText: data.document });
 
-        // Update the transcript summary
-        setTranscriptSummary(data.summary || "Document updated successfully.");
+        // Track this edit in history for coherent iteration
+        const historyEntry: EditHistoryEntry = {
+          instruction: variables.instruction,
+          instructionType: data.instructionType || "general",
+          summary: data.summary || "Document updated",
+          timestamp: Date.now(),
+        };
+        setEditHistory(prev => [...prev.slice(-9), historyEntry]); // Keep last 10
+
+        // Store suggestions for potential display
+        if (data.suggestions && data.suggestions.length > 0) {
+          setLastSuggestions(data.suggestions);
+        } else {
+          setLastSuggestions([]);
+        }
+
+        // Build detailed transcript summary with changes
+        let summaryText = data.summary || "Document updated successfully.";
+        if (data.changes && data.changes.length > 0) {
+          const changesList = data.changes.map(c => {
+            const loc = c.location ? ` (${c.location})` : "";
+            return `• ${c.type}: ${c.description}${loc}`;
+          }).join("\n");
+          summaryText += `\n\nChanges:\n${changesList}`;
+        }
+        if (data.suggestions && data.suggestions.length > 0) {
+          summaryText += `\n\nSuggestions:\n${data.suggestions.map(s => `→ ${s}`).join("\n")}`;
+        }
+        setTranscriptSummary(summaryText);
 
         toast({
           title: "Document Updated",
@@ -338,6 +377,8 @@ export default function Workspace() {
     setVersions([]);
     setShowDiffView(false);
     setIsRecordingBlank(false);
+    setEditHistory([]);
+    setLastSuggestions([]);
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -595,6 +636,41 @@ export default function Workspace() {
           <span>Integrating your feedback into the document...</span>
         </div>
       )}
+
+      {/* Suggestions bar - shows after a write when AI has suggestions */}
+      {!writeMutation.isPending && lastSuggestions.length > 0 && (
+        <div className="bg-amber-500/10 border-b px-4 py-2 flex items-center gap-3 text-sm">
+          <Lightbulb className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="text-muted-foreground shrink-0">Suggestions:</span>
+          <div className="flex items-center gap-2 overflow-x-auto">
+            {lastSuggestions.map((suggestion, idx) => (
+              <Button
+                key={idx}
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2 whitespace-nowrap hover:bg-amber-500/20"
+                onClick={() => {
+                  writeMutation.mutate({
+                    instruction: suggestion,
+                    description: suggestion,
+                  });
+                  setLastSuggestions([]);
+                }}
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 ml-auto shrink-0"
+            onClick={() => setLastSuggestions([])}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
       
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal">
@@ -611,10 +687,19 @@ export default function Workspace() {
           
           <ResizablePanel defaultSize={45} minSize={30}>
             {showDiffView && previousVersion && currentVersion ? (
-              <DiffView
-                previousVersion={previousVersion}
-                currentVersion={currentVersion}
-              />
+              <Suspense fallback={
+                <div className="h-full flex flex-col p-4 space-y-4">
+                  <Skeleton className="h-8 w-48" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-5/6" />
+                </div>
+              }>
+                <DiffView
+                  previousVersion={previousVersion}
+                  currentVersion={currentVersion}
+                />
+              </Suspense>
             ) : (
               <ReadingPane
                 text={document?.rawText || ""}

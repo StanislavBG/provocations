@@ -1,6 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import ReactMarkdown from "react-markdown";
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Lazy load ReactMarkdown (heavy dependency)
+const ReactMarkdown = lazy(() => import("react-markdown"));
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -422,34 +425,44 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
               ref={articleRef}
               className="prose prose-slate dark:prose-invert prose-headings:font-serif prose-headings:text-foreground prose-p:text-foreground/90 prose-p:leading-[1.8] prose-li:text-foreground/90 prose-strong:text-foreground prose-em:text-foreground/80 max-w-none font-serif text-base relative"
             >
-              <ReactMarkdown
-                components={{
-                  p: ({ children }) => <p className="mb-6 leading-[1.8]">{children}</p>,
-                  h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-8">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-xl font-bold mb-3 mt-6">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4">{children}</h3>,
-                  ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-1">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-1">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-4">
-                      {children}
-                    </blockquote>
-                  ),
-                  code: ({ children }) => (
-                    <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">
-                      {children}
-                    </code>
-                  ),
-                  pre: ({ children }) => (
-                    <pre className="bg-muted p-4 rounded-lg overflow-x-auto my-4 font-mono text-sm">
-                      {children}
-                    </pre>
-                  ),
-                }}
-              >
-                {text}
-              </ReactMarkdown>
+              <Suspense fallback={
+                <div className="space-y-4">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              }>
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-6 leading-[1.8]">{children}</p>,
+                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-8">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-xl font-bold mb-3 mt-6">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4">{children}</h3>,
+                    ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-1">{children}</ul>,
+                    ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-1">{children}</ol>,
+                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-4">
+                        {children}
+                      </blockquote>
+                    ),
+                    code: ({ children }) => (
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">
+                        {children}
+                      </code>
+                    ),
+                    pre: ({ children }) => (
+                      <pre className="bg-muted p-4 rounded-lg overflow-x-auto my-4 font-mono text-sm">
+                        {children}
+                      </pre>
+                    ),
+                  }}
+                >
+                  {text}
+                </ReactMarkdown>
+              </Suspense>
               
               {/* Floating toolbar on text selection */}
               {selectedText && selectionPosition && !isEditing && (

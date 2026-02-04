@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState, ReferenceDocument } from "@shared/schema";
+import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState, ReferenceDocument, EditHistoryEntry } from "@shared/schema";
 
 interface WorkspaceContextType {
   state: WorkspaceState;
@@ -8,6 +8,8 @@ interface WorkspaceContextType {
   setReferenceDocuments: (docs: ReferenceDocument[]) => void;
   addReferenceDocument: (doc: ReferenceDocument) => void;
   removeReferenceDocument: (id: string) => void;
+  addEditHistoryEntry: (entry: EditHistoryEntry) => void;
+  clearEditHistory: () => void;
   setLenses: (lenses: Lens[]) => void;
   setActiveLens: (lens: LensType | null) => void;
   setProvocations: (provocations: Provocation[]) => void;
@@ -25,6 +27,7 @@ const initialState: WorkspaceState = {
   document: null,
   objective: "",
   referenceDocuments: [],
+  editHistory: [],
   lenses: [],
   activeLens: null,
   provocations: [],
@@ -61,6 +64,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ...prev,
       referenceDocuments: prev.referenceDocuments.filter((d) => d.id !== id),
     }));
+  }, []);
+
+  const addEditHistoryEntry = useCallback((entry: EditHistoryEntry) => {
+    setState((prev) => ({
+      ...prev,
+      // Keep last 10 entries to avoid context bloat
+      editHistory: [...prev.editHistory.slice(-9), entry],
+    }));
+  }, []);
+
+  const clearEditHistory = useCallback(() => {
+    setState((prev) => ({ ...prev, editHistory: [] }));
   }, []);
 
   const setLenses = useCallback((lenses: Lens[]) => {
@@ -132,6 +147,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setReferenceDocuments,
         addReferenceDocument,
         removeReferenceDocument,
+        addEditHistoryEntry,
+        clearEditHistory,
         setLenses,
         setActiveLens,
         setProvocations,
