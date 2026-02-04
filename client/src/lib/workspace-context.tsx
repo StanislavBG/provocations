@@ -1,10 +1,13 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState } from "@shared/schema";
+import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState, ReferenceDocument } from "@shared/schema";
 
 interface WorkspaceContextType {
   state: WorkspaceState;
   setDocument: (doc: Document | null) => void;
   setObjective: (objective: string) => void;
+  setReferenceDocuments: (docs: ReferenceDocument[]) => void;
+  addReferenceDocument: (doc: ReferenceDocument) => void;
+  removeReferenceDocument: (id: string) => void;
   setLenses: (lenses: Lens[]) => void;
   setActiveLens: (lens: LensType | null) => void;
   setProvocations: (provocations: Provocation[]) => void;
@@ -21,6 +24,7 @@ interface WorkspaceContextType {
 const initialState: WorkspaceState = {
   document: null,
   objective: "",
+  referenceDocuments: [],
   lenses: [],
   activeLens: null,
   provocations: [],
@@ -39,6 +43,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const setObjective = useCallback((objective: string) => {
     setState((prev) => ({ ...prev, objective }));
+  }, []);
+
+  const setReferenceDocuments = useCallback((referenceDocuments: ReferenceDocument[]) => {
+    setState((prev) => ({ ...prev, referenceDocuments }));
+  }, []);
+
+  const addReferenceDocument = useCallback((doc: ReferenceDocument) => {
+    setState((prev) => ({
+      ...prev,
+      referenceDocuments: [...prev.referenceDocuments, doc],
+    }));
+  }, []);
+
+  const removeReferenceDocument = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      referenceDocuments: prev.referenceDocuments.filter((d) => d.id !== id),
+    }));
   }, []);
 
   const setLenses = useCallback((lenses: Lens[]) => {
@@ -107,6 +129,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         state,
         setDocument,
         setObjective,
+        setReferenceDocuments,
+        addReferenceDocument,
+        removeReferenceDocument,
         setLenses,
         setActiveLens,
         setProvocations,

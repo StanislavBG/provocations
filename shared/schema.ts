@@ -73,10 +73,21 @@ export const documentSchema = z.object({
 
 export type Document = z.infer<typeof documentSchema>;
 
+// Reference document types (style guides, templates, prior examples)
+export const referenceDocumentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  content: z.string(),
+  type: z.enum(["style", "template", "example"]),
+});
+
+export type ReferenceDocument = z.infer<typeof referenceDocumentSchema>;
+
 // API request schemas - used by both frontend and backend
 export const analyzeTextRequestSchema = z.object({
   text: z.string().min(1, "Text is required"),
   selectedLenses: z.array(z.enum(lensTypes)).optional(),
+  referenceDocuments: z.array(referenceDocumentSchema).optional(),
 });
 
 export type AnalyzeTextRequest = z.infer<typeof analyzeTextRequestSchema>;
@@ -107,6 +118,9 @@ export const writeRequestSchema = z.object({
   // Style (optional)
   tone: z.enum(toneOptions).optional(),
   targetLength: z.enum(["shorter", "same", "longer"]).optional(),
+
+  // Reference documents for style inference
+  referenceDocuments: z.array(referenceDocumentSchema).optional(),
 });
 
 export type WriteRequest = z.infer<typeof writeRequestSchema>;
@@ -129,6 +143,7 @@ export interface DocumentVersion {
 export interface WorkspaceState {
   document: Document | null;
   objective: string;
+  referenceDocuments: ReferenceDocument[];
   lenses: Lens[];
   activeLens: LensType | null;
   provocations: Provocation[];
