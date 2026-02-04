@@ -73,45 +73,102 @@ export const documentSchema = z.object({
 
 export type Document = z.infer<typeof documentSchema>;
 
+// Reference document types (style guides, templates, prior examples)
+export const referenceDocumentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  content: z.string(),
+  type: z.enum(["style", "template", "example"]),
+});
+
+export type ReferenceDocument = z.infer<typeof referenceDocumentSchema>;
+
 // API request schemas - used by both frontend and backend
 export const analyzeTextRequestSchema = z.object({
   text: z.string().min(1, "Text is required"),
   selectedLenses: z.array(z.enum(lensTypes)).optional(),
+  referenceDocuments: z.array(referenceDocumentSchema).optional(),
 });
 
 export type AnalyzeTextRequest = z.infer<typeof analyzeTextRequestSchema>;
 
-export const expandOutlineRequestSchema = z.object({
-  heading: z.string().min(1, "Heading is required"),
-  context: z.string().optional(),
-  tone: z.enum(toneOptions).optional().default("practical"),
+// Unified write request - single interface to the AI writer
+export const provocationContextSchema = z.object({
+  type: z.enum(provocationType),
+  title: z.string(),
+  content: z.string(),
+  sourceExcerpt: z.string(),
 });
 
-export type ExpandOutlineRequest = z.infer<typeof expandOutlineRequestSchema>;
+// Instruction types for classification-based writing strategies
+export const instructionTypes = [
+  "expand",      // Add detail, examples, elaboration
+  "condense",    // Remove redundancy, tighten prose
+  "restructure", // Reorder sections, add headings
+  "clarify",     // Simplify language, add transitions
+  "style",       // Change voice, formality level
+  "correct",     // Fix errors, improve accuracy
+  "general",     // General improvement
+] as const;
 
-export const refineTextRequestSchema = z.object({
-  text: z.string().min(1, "Text is required"),
-  tone: z.enum(toneOptions),
-  targetLength: z.enum(["shorter", "same", "longer"]),
+export type InstructionType = typeof instructionTypes[number];
+
+// Edit history entry for tracking iterations
+export const editHistoryEntrySchema = z.object({
+  instruction: z.string(),
+  instructionType: z.enum(instructionTypes),
+  summary: z.string(),
+  timestamp: z.number(),
 });
 
-export type RefineTextRequest = z.infer<typeof refineTextRequestSchema>;
+export type EditHistoryEntry = z.infer<typeof editHistoryEntrySchema>;
 
-export const mergeTextRequestSchema = z.object({
-  originalText: z.string().min(1, "Original text is required"),
-  userFeedback: z.string().min(1, "User feedback is required"),
-  provocationContext: z.string().optional(),
-});
+export const writeRequestSchema = z.object({
+  // Foundation (always required)
+  document: z.string().min(1, "Document is required"),
+  objective: z.string().min(1, "Objective is required"),
 
-export type MergeTextRequest = z.infer<typeof mergeTextRequestSchema>;
+  // Focus (optional - what part of document)
+  selectedText: z.string().optional(),
 
-export const editTextRequestSchema = z.object({
+  // Intent (required - what user wants)
   instruction: z.string().min(1, "Instruction is required"),
-  selectedText: z.string().min(1, "Selected text is required"),
-  fullDocument: z.string().min(1, "Full document is required"),
+
+  // Context (optional - additional grounding)
+  provocation: provocationContextSchema.optional(),
+  activeLens: z.enum(lensTypes).optional(),
+
+  // Style (optional)
+  tone: z.enum(toneOptions).optional(),
+  targetLength: z.enum(["shorter", "same", "longer"]).optional(),
+
+  // Reference documents for style inference
+  referenceDocuments: z.array(referenceDocumentSchema).optional(),
+
+  // Edit history for coherent iteration
+  editHistory: z.array(editHistoryEntrySchema).optional(),
 });
 
-export type EditTextRequest = z.infer<typeof editTextRequestSchema>;
+export type WriteRequest = z.infer<typeof writeRequestSchema>;
+
+// Change tracking for structured output
+export const changeEntrySchema = z.object({
+  type: z.enum(["added", "modified", "removed", "restructured"]),
+  description: z.string(),
+  location: z.string().optional(),
+});
+
+export type ChangeEntry = z.infer<typeof changeEntrySchema>;
+
+export const writeResponseSchema = z.object({
+  document: z.string(),
+  summary: z.string().optional(),
+  instructionType: z.enum(instructionTypes).optional(),
+  changes: z.array(changeEntrySchema).optional(),
+  suggestions: z.array(z.string()).optional(),
+});
+
+export type WriteResponse = z.infer<typeof writeResponseSchema>;
 
 export interface DocumentVersion {
   id: string;
@@ -120,11 +177,15 @@ export interface DocumentVersion {
   description: string;
 }
 
-// Legacy exports for compatibility with template
-export const users = {} as any;
-export const insertUserSchema = z.object({
-  username: z.string(),
-  password: z.string(),
-});
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = { id: string; username: string; password: string };
+// Workspace state for context provider
+export interface WorkspaceState {
+  document: Document | null;
+  objective: string;
+  referenceDocuments: ReferenceDocument[];
+  editHistory: EditHistoryEntry[];
+  lenses: Lens[];
+  activeLens: LensType | null;
+  provocations: Provocation[];
+  outline: OutlineItem[];
+  currentPhase: "input" | "blank-document" | "workspace";
+}

@@ -1,5 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Lazy load ReactMarkdown (heavy dependency)
+const ReactMarkdown = lazy(() => import("react-markdown"));
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +40,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
   const [editedText, setEditedText] = useState(text);
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [promptText, setPromptText] = useState("");
@@ -50,8 +55,17 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
   // Keep refs in sync with state for use in event handlers
   isRecordingRef.current = isRecording;
   showPromptInputRef.current = showPromptInput;
-  
-  const paragraphs = text.split(/\n\n+/).filter(Boolean);
+
+  // Helper to find text offset in the full document text
+  const findSelectionOffset = useCallback((selectedStr: string): { start: number; end: number } | null => {
+    // Find all occurrences and return the first one
+    // This is a simple approach - for more accuracy, we could track the paragraph index
+    const index = text.indexOf(selectedStr);
+    if (index !== -1) {
+      return { start: index, end: index + selectedStr.length };
+    }
+    return null;
+  }, [text]);
 
   // Handle text selection using document event
   useEffect(() => {
@@ -60,29 +74,33 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       if (!selection || selection.isCollapsed || !articleRef.current) {
         return;
       }
-      
+
       // Check if selection is within our article
       const anchorNode = selection.anchorNode;
       if (!anchorNode || !articleRef.current.contains(anchorNode)) {
         return;
       }
-      
-      const text = selection.toString().trim();
-      if (text.length < 5) {
+
+      const selectedStr = selection.toString().trim();
+      if (selectedStr.length < 5) {
         return;
       }
-      
+
       // Get position relative to the article container
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       const articleRect = articleRef.current.getBoundingClientRect();
-      
+
       // Position button at top-right of selection, clamped to visible area
       const x = Math.min(Math.max(10, rect.right - articleRect.left), articleRect.width - 50);
       const y = Math.max(10, rect.top - articleRect.top - 45);
-      
-      setSelectedText(text);
+
+      setSelectedText(selectedStr);
       setSelectionPosition({ x, y });
+
+      // Track the text offset for accurate replacement
+      const offset = findSelectionOffset(selectedStr);
+      setSelectionRange(offset);
     };
 
     const handleMouseUp = () => {
@@ -101,6 +119,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
         // Selection was cleared - hide the toolbar
         setSelectedText("");
         setSelectionPosition(null);
+        setSelectionRange(null);
       }
     };
 
@@ -132,9 +151,27 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     // Clear the floating toolbar state
     setSelectedText("");
     setSelectionPosition(null);
+    setSelectionRange(null);
   }, [isRecording, showPromptInput]);
 
-  // Initialize speech recognition
+  // Store callbacks in refs to avoid re-initializing recognition
+  const onVoiceMergeRef = useRef(onVoiceMerge);
+  const onTranscriptUpdateRef = useRef(onTranscriptUpdate);
+  const selectedTextRef = useRef(selectedText);
+
+  useEffect(() => {
+    onVoiceMergeRef.current = onVoiceMerge;
+  }, [onVoiceMerge]);
+
+  useEffect(() => {
+    onTranscriptUpdateRef.current = onTranscriptUpdate;
+  }, [onTranscriptUpdate]);
+
+  useEffect(() => {
+    selectedTextRef.current = selectedText;
+  }, [selectedText]);
+
+  // Initialize speech recognition only once
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -158,17 +195,13 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
         transcriptRef.current += finalTranscript + " ";
       }
       const displayTranscript = transcriptRef.current + interimTranscript;
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate(displayTranscript, true);
-      }
+      onTranscriptUpdateRef.current?.(displayTranscript, true);
     };
 
     recognition.onerror = (event: any) => {
+      isRecordingRef.current = false;
       setIsRecording(false);
-      // Hide overlay on error
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate("", false);
-      }
+      onTranscriptUpdateRef.current?.("", false);
       if (event.error === 'not-allowed') {
         toast({
           title: "Microphone Access Required",
@@ -180,7 +213,7 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
           title: "No Speech Detected",
           description: "Please speak into your microphone and try again.",
         });
-      } else {
+      } else if (event.error !== 'aborted') {
         toast({
           title: "Voice Recording Error",
           description: "Speech recognition failed. Please try again.",
@@ -191,16 +224,17 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
 
     recognition.onend = () => {
       const transcript = transcriptRef.current.trim();
-      if (transcript && selectedText && onVoiceMerge) {
-        onVoiceMerge(selectedText, transcript);
+      const currentSelectedText = selectedTextRef.current;
+      if (transcript && currentSelectedText && onVoiceMergeRef.current) {
+        onVoiceMergeRef.current(currentSelectedText, transcript);
       }
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate(transcript, false);
-      }
+      onTranscriptUpdateRef.current?.(transcript, false);
       transcriptRef.current = "";
+      isRecordingRef.current = false;
       setIsRecording(false);
       setSelectedText("");
       setSelectionPosition(null);
+      setSelectionRange(null);
     };
 
     recognitionRef.current = recognition;
@@ -208,31 +242,30 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     return () => {
       recognition.abort();
     };
-  }, [selectedText, onVoiceMerge, toast, onTranscriptUpdate]);
+  }, [toast]); // Only toast needed - callbacks use refs
 
   const toggleRecording = useCallback(() => {
     if (!recognitionRef.current) return;
-    
-    if (isRecording) {
+
+    if (isRecordingRef.current) {
       recognitionRef.current.stop();
     } else {
       transcriptRef.current = "";
       // Show the overlay immediately before starting (optimistic UI)
-      if (onTranscriptUpdate) {
-        onTranscriptUpdate("", true);
-      }
+      onTranscriptUpdateRef.current?.("", true);
       try {
         recognitionRef.current.start();
+        isRecordingRef.current = true;
         setIsRecording(true);
       } catch (error) {
         console.error("Failed to start recording:", error);
         // Hide overlay on failure
-        if (onTranscriptUpdate) {
-          onTranscriptUpdate("", false);
-        }
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        onTranscriptUpdateRef.current?.("", false);
       }
     }
-  }, [isRecording, onTranscriptUpdate]);
+  }, []);
 
   // Handle pencil mousedown to show prompt input immediately (before selectionchange fires)
   const handlePencilMouseDown = useCallback((e: React.MouseEvent) => {
@@ -256,35 +289,34 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
   // Handle submitting the text edit instruction
   const handleSubmitEdit = useCallback(async () => {
     if (!promptText.trim() || !selectedText) return;
-    
+
     setIsProcessingEdit(true);
     try {
-      const response = await apiRequest("POST", "/api/edit-text", {
+      const response = await apiRequest("POST", "/api/write", {
+        document: text,
+        objective: "Edit the document according to the user's instruction",
         instruction: promptText.trim(),
         selectedText: selectedText,
-        fullDocument: text,
       });
-      
+
       const data = await response.json();
-      
-      if (data.modifiedText) {
-        // Replace the selected text in the document with the modified text
-        const newText = text.replace(selectedText, data.modifiedText);
-        
+
+      if (data.document) {
         if (onTextEdit) {
-          onTextEdit(newText);
+          onTextEdit(data.document);
         }
-        
+
         toast({
           title: "Text Updated",
-          description: "Your selected text has been modified based on your instruction.",
+          description: data.summary || "Your selected text has been modified.",
         });
-        
+
         // Clear selection and prompt
         setShowPromptInput(false);
         setPromptText("");
         setSelectedText("");
         setSelectionPosition(null);
+        setSelectionRange(null);
         window.getSelection()?.removeAllRanges();
       }
     } catch (error) {
@@ -309,125 +341,6 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     }
   }, [handleSubmitEdit, handleClosePrompt]);
   
-  // Normalize text for matching - handle punctuation and whitespace variations
-  const normalizeForMatch = (text: string): string => {
-    return text
-      .toLowerCase()
-      .replace(/[""'']/g, '"')  // Normalize smart quotes
-      .replace(/\s+/g, ' ')     // Normalize whitespace
-      .trim();
-  };
-
-  // Function to find the best matching substring for highlighting
-  const findBestMatch = (paragraph: string, excerpt: string): { start: number; end: number } | null => {
-    const normalizedParagraph = normalizeForMatch(paragraph);
-    // Clean up excerpt - remove surrounding quotes and normalize
-    let normalizedExcerpt = normalizeForMatch(excerpt).replace(/^["']|["']$/g, '');
-    
-    // Try exact match first
-    const exactIndex = normalizedParagraph.indexOf(normalizedExcerpt);
-    if (exactIndex !== -1) {
-      return { start: exactIndex, end: exactIndex + normalizedExcerpt.length };
-    }
-    
-    // Handle AI-truncated excerpts with "..." or "…"
-    if (normalizedExcerpt.includes('...') || normalizedExcerpt.includes('…')) {
-      const parts = normalizedExcerpt.split(/\.{3}|…/).map(p => p.trim()).filter(p => p.length > 5);
-      if (parts.length >= 2) {
-        // Find start of first part and end of last part
-        const startPart = parts[0];
-        const endPart = parts[parts.length - 1];
-        const startIdx = normalizedParagraph.indexOf(startPart);
-        if (startIdx !== -1) {
-          const endIdx = normalizedParagraph.indexOf(endPart, startIdx);
-          if (endIdx !== -1) {
-            return { start: startIdx, end: endIdx + endPart.length };
-          }
-        }
-      } else if (parts.length === 1 && parts[0].length > 10) {
-        // Just one part - find it
-        const partIdx = normalizedParagraph.indexOf(parts[0]);
-        if (partIdx !== -1) {
-          return { start: partIdx, end: partIdx + parts[0].length };
-        }
-      }
-    }
-    
-    // Try matching a significant substring (first 40 chars) to handle truncated excerpts
-    if (normalizedExcerpt.length > 30) {
-      const shortExcerpt = normalizedExcerpt.slice(0, 40).replace(/\.{3}|….*$/, '').trim();
-      if (shortExcerpt.length > 15) {
-        const shortIndex = normalizedParagraph.indexOf(shortExcerpt);
-        if (shortIndex !== -1) {
-          // Try to find the ending phrase from the excerpt
-          const endWords = normalizedExcerpt.split(/\s+/).slice(-4).join(' ').replace(/^\.{3}|…/, '').trim();
-          if (endWords.length > 10) {
-            const endIdx = normalizedParagraph.indexOf(endWords, shortIndex);
-            if (endIdx !== -1) {
-              return { start: shortIndex, end: endIdx + endWords.length };
-            }
-          }
-          // Fallback: find sentence boundary
-          const restOfParagraph = normalizedParagraph.slice(shortIndex);
-          const sentenceEnd = restOfParagraph.search(/[.!?](\s|$)/);
-          if (sentenceEnd !== -1) {
-            return { start: shortIndex, end: shortIndex + sentenceEnd + 1 };
-          }
-        }
-      }
-    }
-    
-    // Try to find a contiguous sequence of words from the excerpt
-    const excerptWords = normalizedExcerpt.split(/\s+/).filter(w => w.length > 3 && !w.includes('.'));
-    if (excerptWords.length >= 3) {
-      // Look for first 3-4 consecutive words as a phrase
-      const phraseToFind = excerptWords.slice(0, 4).join(" ");
-      const phraseIndex = normalizedParagraph.indexOf(phraseToFind);
-      if (phraseIndex !== -1) {
-        // Expand to find a reasonable end point using last words
-        const endPhrase = excerptWords.slice(-3).join(" ");
-        const endIndex = normalizedParagraph.indexOf(endPhrase, phraseIndex);
-        if (endIndex !== -1) {
-          return { start: phraseIndex, end: endIndex + endPhrase.length };
-        }
-        // Fallback: highlight from start phrase to sentence end
-        const remaining = normalizedParagraph.slice(phraseIndex);
-        const boundary = remaining.search(/[.!?](\s|$)/);
-        if (boundary !== -1) {
-          return { start: phraseIndex, end: phraseIndex + boundary + 1 };
-        }
-      }
-    }
-    
-    return null;
-  };
-
-  // Function to highlight matching text within a paragraph
-  const highlightMatchingText = (paragraph: string): React.ReactNode => {
-    if (!highlightText || highlightText.length < 10) {
-      return paragraph;
-    }
-    
-    const match = findBestMatch(paragraph, highlightText);
-    
-    if (match) {
-      const before = paragraph.slice(0, match.start);
-      const highlighted = paragraph.slice(match.start, match.end);
-      const after = paragraph.slice(match.end);
-      
-      return (
-        <>
-          {before}
-          <span className="bg-primary/25 dark:bg-primary/40 px-0.5 rounded transition-colors duration-300">
-            {highlighted}
-          </span>
-          {after}
-        </>
-      );
-    }
-    
-    return paragraph;
-  };
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const readingTime = Math.ceil(wordCount / 200);
 
@@ -508,19 +421,48 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
       ) : (
         <ScrollArea className="flex-1 custom-scrollbar">
           <div className="p-6 max-w-3xl mx-auto" onClick={handleClick}>
-            <article 
+            <article
               ref={articleRef}
-              className="prose-reading font-serif text-base leading-[1.8] relative"
+              className="prose prose-slate dark:prose-invert prose-headings:font-serif prose-headings:text-foreground prose-p:text-foreground/90 prose-p:leading-[1.8] prose-li:text-foreground/90 prose-strong:text-foreground prose-em:text-foreground/80 max-w-none font-serif text-base relative"
             >
-              {paragraphs.map((paragraph, index) => (
-                <p 
-                  key={index} 
-                  className="mb-6 text-foreground/90"
-                  data-testid={`paragraph-${index}`}
+              <Suspense fallback={
+                <div className="space-y-4">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              }>
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-6 leading-[1.8]">{children}</p>,
+                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-8">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-xl font-bold mb-3 mt-6">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4">{children}</h3>,
+                    ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-1">{children}</ul>,
+                    ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-1">{children}</ol>,
+                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-4">
+                        {children}
+                      </blockquote>
+                    ),
+                    code: ({ children }) => (
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">
+                        {children}
+                      </code>
+                    ),
+                    pre: ({ children }) => (
+                      <pre className="bg-muted p-4 rounded-lg overflow-x-auto my-4 font-mono text-sm">
+                        {children}
+                      </pre>
+                    ),
+                  }}
                 >
-                  {highlightMatchingText(paragraph)}
-                </p>
-              ))}
+                  {text}
+                </ReactMarkdown>
+              </Suspense>
               
               {/* Floating toolbar on text selection */}
               {selectedText && selectionPosition && !isEditing && (

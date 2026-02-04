@@ -1,9 +1,15 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState } from "@shared/schema";
+import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState, ReferenceDocument, EditHistoryEntry } from "@shared/schema";
 
 interface WorkspaceContextType {
   state: WorkspaceState;
   setDocument: (doc: Document | null) => void;
+  setObjective: (objective: string) => void;
+  setReferenceDocuments: (docs: ReferenceDocument[]) => void;
+  addReferenceDocument: (doc: ReferenceDocument) => void;
+  removeReferenceDocument: (id: string) => void;
+  addEditHistoryEntry: (entry: EditHistoryEntry) => void;
+  clearEditHistory: () => void;
   setLenses: (lenses: Lens[]) => void;
   setActiveLens: (lens: LensType | null) => void;
   setProvocations: (provocations: Provocation[]) => void;
@@ -19,6 +25,9 @@ interface WorkspaceContextType {
 
 const initialState: WorkspaceState = {
   document: null,
+  objective: "",
+  referenceDocuments: [],
+  editHistory: [],
   lenses: [],
   activeLens: null,
   provocations: [],
@@ -33,6 +42,40 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const setDocument = useCallback((doc: Document | null) => {
     setState((prev) => ({ ...prev, document: doc }));
+  }, []);
+
+  const setObjective = useCallback((objective: string) => {
+    setState((prev) => ({ ...prev, objective }));
+  }, []);
+
+  const setReferenceDocuments = useCallback((referenceDocuments: ReferenceDocument[]) => {
+    setState((prev) => ({ ...prev, referenceDocuments }));
+  }, []);
+
+  const addReferenceDocument = useCallback((doc: ReferenceDocument) => {
+    setState((prev) => ({
+      ...prev,
+      referenceDocuments: [...prev.referenceDocuments, doc],
+    }));
+  }, []);
+
+  const removeReferenceDocument = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      referenceDocuments: prev.referenceDocuments.filter((d) => d.id !== id),
+    }));
+  }, []);
+
+  const addEditHistoryEntry = useCallback((entry: EditHistoryEntry) => {
+    setState((prev) => ({
+      ...prev,
+      // Keep last 10 entries to avoid context bloat
+      editHistory: [...prev.editHistory.slice(-9), entry],
+    }));
+  }, []);
+
+  const clearEditHistory = useCallback(() => {
+    setState((prev) => ({ ...prev, editHistory: [] }));
   }, []);
 
   const setLenses = useCallback((lenses: Lens[]) => {
@@ -100,6 +143,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         setDocument,
+        setObjective,
+        setReferenceDocuments,
+        addReferenceDocument,
+        removeReferenceDocument,
+        addEditHistoryEntry,
+        clearEditHistory,
         setLenses,
         setActiveLens,
         setProvocations,

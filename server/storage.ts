@@ -3,7 +3,6 @@ import type { Document } from "@shared/schema";
 
 export interface IStorage {
   createDocument(rawText: string): Promise<Document>;
-  getDocument(id: string): Promise<Document | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -18,10 +17,6 @@ export class MemStorage implements IStorage {
     const document: Document = { id, rawText };
     this.documents.set(id, document);
     return document;
-  }
-
-  async getDocument(id: string): Promise<Document | undefined> {
-    return this.documents.get(id);
   }
 }
 
