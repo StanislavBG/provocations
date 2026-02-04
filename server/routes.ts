@@ -287,16 +287,13 @@ Output only the refined text, maintaining any section headings if present.`
 
   // Merge user feedback into document
   app.post("/api/merge", async (req, res) => {
-    console.log("[MERGE] Received merge request");
     try {
       const parsed = mergeTextRequestSchema.safeParse(req.body);
       if (!parsed.success) {
-        console.log("[MERGE] Validation failed:", parsed.error.errors);
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
       const { originalText, userFeedback, provocationContext, selectedText, activeLens } = parsed.data;
-      console.log("[MERGE] Processing feedback:", userFeedback?.substring(0, 100), "context:", provocationContext?.substring(0, 100));
 
       // Build context-aware system prompt
       let contextInfo = "";
@@ -354,7 +351,6 @@ Please merge the feedback intelligently into the document${selectedText ? ", foc
       });
 
       const mergedText = response.choices[0]?.message?.content || originalText;
-      console.log("[MERGE] Success - returning merged text of length:", mergedText.length);
       res.json({ mergedText: mergedText.trim() });
     } catch (error) {
       console.error("Merge error:", error);
@@ -365,16 +361,13 @@ Please merge the feedback intelligently into the document${selectedText ? ", foc
 
   // Edit selected text based on user instruction
   app.post("/api/edit-text", async (req, res) => {
-    console.log("[EDIT-TEXT] Received edit request");
     try {
       const parsed = editTextRequestSchema.safeParse(req.body);
       if (!parsed.success) {
-        console.log("[EDIT-TEXT] Validation failed:", parsed.error.errors);
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
       const { instruction, selectedText, fullDocument } = parsed.data;
-      console.log("[EDIT-TEXT] Processing instruction:", instruction.substring(0, 100));
 
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
@@ -412,7 +405,6 @@ ${fullDocument}`
       });
 
       const modifiedText = response.choices[0]?.message?.content || selectedText;
-      console.log("[EDIT-TEXT] Success - returning modified text of length:", modifiedText.length);
       res.json({ modifiedText: modifiedText.trim() });
     } catch (error) {
       console.error("Edit-text error:", error);
