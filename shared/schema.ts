@@ -100,6 +100,29 @@ export const provocationContextSchema = z.object({
   sourceExcerpt: z.string(),
 });
 
+// Instruction types for classification-based writing strategies
+export const instructionTypes = [
+  "expand",      // Add detail, examples, elaboration
+  "condense",    // Remove redundancy, tighten prose
+  "restructure", // Reorder sections, add headings
+  "clarify",     // Simplify language, add transitions
+  "style",       // Change voice, formality level
+  "correct",     // Fix errors, improve accuracy
+  "general",     // General improvement
+] as const;
+
+export type InstructionType = typeof instructionTypes[number];
+
+// Edit history entry for tracking iterations
+export const editHistoryEntrySchema = z.object({
+  instruction: z.string(),
+  instructionType: z.enum(instructionTypes),
+  summary: z.string(),
+  timestamp: z.number(),
+});
+
+export type EditHistoryEntry = z.infer<typeof editHistoryEntrySchema>;
+
 export const writeRequestSchema = z.object({
   // Foundation (always required)
   document: z.string().min(1, "Document is required"),
@@ -121,13 +144,28 @@ export const writeRequestSchema = z.object({
 
   // Reference documents for style inference
   referenceDocuments: z.array(referenceDocumentSchema).optional(),
+
+  // Edit history for coherent iteration
+  editHistory: z.array(editHistoryEntrySchema).optional(),
 });
 
 export type WriteRequest = z.infer<typeof writeRequestSchema>;
 
+// Change tracking for structured output
+export const changeEntrySchema = z.object({
+  type: z.enum(["added", "modified", "removed", "restructured"]),
+  description: z.string(),
+  location: z.string().optional(),
+});
+
+export type ChangeEntry = z.infer<typeof changeEntrySchema>;
+
 export const writeResponseSchema = z.object({
   document: z.string(),
   summary: z.string().optional(),
+  instructionType: z.enum(instructionTypes).optional(),
+  changes: z.array(changeEntrySchema).optional(),
+  suggestions: z.array(z.string()).optional(),
 });
 
 export type WriteResponse = z.infer<typeof writeResponseSchema>;
@@ -144,6 +182,7 @@ export interface WorkspaceState {
   document: Document | null;
   objective: string;
   referenceDocuments: ReferenceDocument[];
+  editHistory: EditHistoryEntry[];
   lenses: Lens[];
   activeLens: LensType | null;
   provocations: Provocation[];
