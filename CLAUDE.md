@@ -2,9 +2,17 @@
 
 ## Project Overview
 
-**Provocations** is an AI-powered cognitive enhancement tool designed to challenge users and strengthen critical thinking. Rather than acting as a traditional AI assistant, it serves as "cognitive musculature" that generates multiple perspectives (lenses) and thought-provoking challenges (provocations) on input text.
+**Provocations** is an AI-augmented document workspace where users iteratively shape ideas into polished documents through voice, text, and thought-provoking AI interactions.
+
+Think of it as a **smarter Google Docs** — the document is the output, and the AI helps you create and refine it through:
+- **Multiple perspectives** (lenses) that challenge your thinking
+- **Provocations** that push you to address gaps, fallacies, and alternatives
+- **Voice input** for natural ideation and feedback
+- **Iterative shaping** where each interaction evolves the document
 
 **Core Philosophy**: "Would you rather have a tool that thinks for you, or a tool that makes you think?"
+
+The AI doesn't write for you — it provokes deeper thinking so *you* write better.
 
 ## Quick Commands
 
@@ -54,8 +62,7 @@ provocations/
 ├── server/
 │   ├── index.ts             # Express app setup
 │   ├── routes.ts            # Core API endpoints
-│   ├── storage.ts           # In-memory document storage
-│   └── replit_integrations/ # Chat, audio, image APIs
+│   └── storage.ts           # In-memory document storage
 ├── shared/
 │   ├── schema.ts            # Zod schemas & types
 │   └── models/chat.ts       # Drizzle ORM models
@@ -68,88 +75,116 @@ Configured in `tsconfig.json`:
 - `@/*` → `./client/src/*`
 - `@shared/*` → `./shared/*`
 
+## Core Workflow
+
+### The Iterative Loop
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│   START WITH IDEAS ──► AI ANALYZES ──► PROVOCATIONS        │
+│         ▲                                    │              │
+│         │                                    ▼              │
+│    DOCUMENT EVOLVES ◄── USER RESPONDS (voice/text)         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+1. **Input** — Start with rough ideas, notes, or existing material
+2. **Analyze** — AI generates lenses (perspectives) and provocations (challenges)
+3. **Respond** — Use voice or text to address provocations
+4. **Merge** — AI intelligently weaves your responses into the document
+5. **Iterate** — Repeat until the document fully captures your thinking
+
+### Key Insight
+
+The document is not static input to be critiqued — it's a **living artifact** that grows through dialogue between you and the AI. Each provocation is an invitation to think deeper; each response shapes the final output.
+
 ## API Endpoints
 
-### Core Analysis
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/analyze` | POST | Generate lenses & provocations from text |
-| `/api/expand` | POST | AI-expand outline headings |
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/analyze` | POST | Generate lenses & provocations from current document |
+| `/api/expand` | POST | AI-expand outline headings into paragraphs |
 | `/api/refine` | POST | Adjust tone & length of text |
-| `/api/merge` | POST | Merge voice feedback into document |
+| `/api/merge` | POST | Integrate voice/text feedback into document |
 | `/api/edit-text` | POST | Edit selected text with instructions |
 
-### Request/Response Schemas
+### Request Schemas
 
-All API schemas are defined in `shared/schema.ts` and validated with Zod on both frontend and backend.
+All schemas defined in `shared/schema.ts` with Zod validation.
 
-**Analyze Request**:
 ```typescript
+// Analyze - generate perspectives and challenges
 { text: string, selectedLenses?: LensType[] }
-```
 
-**Expand Request**:
-```typescript
+// Expand - develop outline into content
 { heading: string, context?: string, tone?: ToneOption }
-```
 
-**Refine Request**:
-```typescript
+// Refine - adjust style
 { text: string, tone: ToneOption, targetLength: "shorter" | "same" | "longer" }
-```
 
-**Merge Request**:
-```typescript
-{ originalText: string, userFeedback: string, provocationContext?: string }
-```
+// Merge - integrate feedback (supports voice context)
+{ originalText: string, userFeedback: string, provocationContext?: string, selectedText?: string, activeLens?: LensType }
 
-**Edit Text Request**:
-```typescript
+// Edit - modify selection
 { instruction: string, selectedText: string, fullDocument: string }
 ```
 
 ## Domain Concepts
 
-### Lens Types (6 perspectives)
-- `consumer` - End-user/customer viewpoint
-- `executive` - Strategic leadership view
-- `technical` - Implementation constraints
-- `financial` - Cost/ROI analysis
-- `strategic` - Competitive positioning
-- `skeptic` - Critical assumptions challenge
+### Lenses (6 Perspectives)
+Different viewpoints to examine your document:
+- `consumer` — End-user/customer viewpoint
+- `executive` — Strategic leadership view
+- `technical` — Implementation constraints
+- `financial` — Cost/ROI analysis
+- `strategic` — Competitive positioning
+- `skeptic` — Critical assumptions challenge
 
-### Provocation Types (3 categories)
-- `opportunity` - Growth/innovation gaps
-- `fallacy` - Logical errors & weak arguments
-- `alternative` - Different perspectives
+### Provocations (3 Categories)
+Challenges that push your thinking:
+- `opportunity` — Growth/innovation gaps you might be missing
+- `fallacy` — Logical errors, weak arguments, unsupported claims
+- `alternative` — Different approaches or perspectives to consider
 
 ### Tone Options
+Voice for the final document:
 - `inspirational`, `practical`, `analytical`, `persuasive`, `cautious`
 
 ## Key Components
 
-### Workspace.tsx (Main Orchestrator)
-Central component managing all app state and phases:
+### Workspace.tsx (Orchestrator)
+Central hub managing:
 - **Phases**: `input` → `blank-document` → `workspace`
-- **State**: documents, lenses, provocations, outline, versions
-- **Versioning**: Full document history with diff comparison
+- **State**: document, lenses, provocations, outline, versions
+- **Versioning**: Full history with diff comparison
 
 ### ReadingPane.tsx
-Displays document with:
+The document canvas:
 - Editable mode (pencil toggle)
-- Text selection for voice/edit actions
+- Text selection → voice/edit actions
 - Download functionality
 
 ### ProvocationsDisplay.tsx
-Shows AI-generated challenges with:
-- Voice recording on cards
-- Status tracking (pending, addressed, rejected, highlighted)
+Challenge cards that drive iteration:
+- Voice recording on each card
+- Status: pending, addressed, rejected, highlighted
+- Context passed to merge for intelligent integration
 
 ### VoiceRecorder.tsx
-Web Speech API integration for:
-- Voice feedback recording
-- Auto-transcription
-- Document merge functionality
+Natural input via speech:
+- Web Speech API transcription
+- Auto-merge into document
+- Works on provocations and text selections
+
+## Design Principles
+
+1. **Document-Centric** — The document is the product, not a chat log
+2. **Productive Resistance** — AI challenges, doesn't just assist
+3. **User as Author** — You write; AI provokes better writing
+4. **Voice-First Feedback** — Speaking is faster than typing for ideation
+5. **Iterative Shaping** — Documents evolve through multiple passes
 
 ## Design System
 
@@ -157,15 +192,12 @@ Web Speech API integration for:
 - **Primary**: Warm amber (#B35C1E)
 - **Accent**: Thoughtful blue (200°, 60%, 45%)
 - **Aesthetic**: Aged paper/ink, intellectual warmth
-- **Mode**: Dark mode supported (class-based)
+- **Mode**: Dark mode supported
 
 ### Fonts
 - **Body**: Source Serif 4
 - **Headings**: Libre Baskerville
 - **Code**: JetBrains Mono
-
-### Components
-47 shadcn/ui components available in `client/src/components/ui/`
 
 ## Environment Variables
 
@@ -175,35 +207,17 @@ Web Speech API integration for:
 | `AI_INTEGRATIONS_OPENAI_BASE_URL` | OpenAI API base URL |
 | `DATABASE_URL` | PostgreSQL connection string |
 
-## Key Design Principles
-
-1. **No Chat Box**: Interface avoids chat-centric design
-2. **Productive Resistance**: Tool challenges rather than assists blindly
-3. **Material Engagement**: User remains primary author
-4. **Session-based**: No persistent document storage (in-memory only)
-
-## User Flow
-
-1. **Input Phase** - Paste source material (transcripts, reports, notes)
-2. **Analysis Phase** - View generated lenses and provocations
-3. **Reading Phase** - Deep reading with lens-filtered perspective
-4. **Outline Phase** - Build argument structure manually
-5. **Refinement Phase** - Adjust tone and length of content
-
 ## Development Notes
 
-### Adding New Components
-Use shadcn/ui CLI or manually add to `client/src/components/ui/`
-
-### Adding New API Routes
+### Adding API Routes
 1. Define Zod schema in `shared/schema.ts`
 2. Add endpoint in `server/routes.ts`
-3. Use schema validation with `safeParse()`
+3. Use `safeParse()` for validation
 
 ### State Management
 - Local state in Workspace.tsx for app-wide concerns
 - React Query for server state caching
-- No Redux/Zustand - keep it simple
+- No Redux/Zustand — keep it simple
 
 ### Error Handling
 - Zod validation on all API inputs
@@ -215,5 +229,5 @@ Use shadcn/ui CLI or manually add to `client/src/components/ui/`
 - Testing framework (Jest/Vitest)
 - CI/CD pipeline
 - Structured logging
-- Authentication integration (Passport configured but unused)
 - Document persistence to database
+- Starting from blank (currently requires input text)
