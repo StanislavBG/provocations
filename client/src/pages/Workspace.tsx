@@ -10,7 +10,7 @@ import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
 import { DimensionsToolbar } from "@/components/DimensionsToolbar";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
-import { LargeVoiceRecorder } from "@/components/VoiceRecorder";
+import { VoiceRecorder, LargeVoiceRecorder } from "@/components/VoiceRecorder";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +83,10 @@ export default function Workspace() {
 
   // Suggestions from last write response
   const [lastSuggestions, setLastSuggestions] = useState<string[]>([]);
+
+  // Voice input for objective (no writer call, direct update)
+  const [isRecordingObjective, setIsRecordingObjective] = useState(false);
+  const [objectiveInterimTranscript, setObjectiveInterimTranscript] = useState("");
   
   // Get the source excerpt of the currently hovered provocation
   const hoveredProvocationContext = hoveredProvocationId 
@@ -576,10 +580,22 @@ export default function Workspace() {
           <span className="text-sm text-muted-foreground shrink-0">Objective:</span>
           <Input
             data-testid="input-objective-header"
-            value={objective}
+            value={isRecordingObjective ? objectiveInterimTranscript || objective : objective}
             onChange={(e) => setObjective(e.target.value)}
             placeholder="What are you creating?"
-            className="h-7 text-sm bg-transparent border-none shadow-none focus-visible:ring-0 px-1 flex-1"
+            className={`h-7 text-sm bg-transparent border-none shadow-none focus-visible:ring-0 px-1 flex-1 ${isRecordingObjective ? "text-primary" : ""}`}
+            readOnly={isRecordingObjective}
+          />
+          <VoiceRecorder
+            onTranscript={(text) => {
+              setObjective(text);
+              setObjectiveInterimTranscript("");
+            }}
+            onInterimTranscript={setObjectiveInterimTranscript}
+            onRecordingChange={setIsRecordingObjective}
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0"
           />
 
           {/* Reference documents indicator */}

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown } from "lucide-react";
 import { generateId } from "@/lib/utils";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import type { ReferenceDocument } from "@shared/schema";
 
 const TEST_SAMPLE_TEXT = `By 2027, the labor market is expected to reach a critical "implementation plateau" where the novelty of AI shifts into deep organizational integration. Analysts from Gartner and the World Economic Forum suggest that while roughly 83 million jobs may be displaced globally, the emergence of 69 million new roles will offset much of this loss, centering the year on workforce transformation rather than total depletion. The most significant shift will be the rise of "Agentic AI," with 50% of companies expected to deploy autonomous AI agents that handle routine cognitive tasks like scheduling, basic coding, and data synthesis. This transition will likely hollow out entry-level white-collar positions—often called the "white-collar bloodbath"—forcing a massive "reskilling revolution" where 44% of core worker skills must be updated. While technical roles in AI ethics and data oversight will boom, the highest market value will ironically return to "AI-free" human skills: critical thinking, complex empathy, and high-stakes judgment in fields like healthcare and law.`;
@@ -27,6 +28,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [newRefName, setNewRefName] = useState("");
   const [newRefContent, setNewRefContent] = useState("");
   const [newRefType, setNewRefType] = useState<ReferenceDocument["type"]>("example");
+
+  // Voice input state
+  const [isRecordingObjective, setIsRecordingObjective] = useState(false);
+  const [objectiveInterim, setObjectiveInterim] = useState("");
+  const [isRecordingText, setIsRecordingText] = useState(false);
+  const [textInterim, setTextInterim] = useState("");
 
   const handleAddReference = () => {
     if (newRefName.trim() && newRefContent.trim()) {
@@ -89,14 +96,30 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="objective" className="text-sm font-medium">Document Objective</Label>
-              <Input
-                id="objective"
-                data-testid="input-objective"
-                placeholder="e.g., Create a persuasive investor pitch, Write a technical design doc, Draft a team communication..."
-                className="text-base"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="objective"
+                  data-testid="input-objective"
+                  placeholder="e.g., Create a persuasive investor pitch, Write a technical design doc, Draft a team communication..."
+                  className={`text-base flex-1 ${isRecordingObjective ? "border-primary text-primary" : ""}`}
+                  value={isRecordingObjective ? objectiveInterim || objective : objective}
+                  onChange={(e) => setObjective(e.target.value)}
+                  readOnly={isRecordingObjective}
+                />
+                <VoiceRecorder
+                  onTranscript={(text) => {
+                    setObjective(text);
+                    setObjectiveInterim("");
+                  }}
+                  onInterimTranscript={setObjectiveInterim}
+                  onRecordingChange={setIsRecordingObjective}
+                  size="default"
+                  variant={isRecordingObjective ? "destructive" : "outline"}
+                />
+              </div>
+              {isRecordingObjective && (
+                <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -167,12 +190,24 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                       </SelectContent>
                     </Select>
                   </div>
-                  <Textarea
-                    placeholder="Paste the reference content here..."
-                    value={newRefContent}
-                    onChange={(e) => setNewRefContent(e.target.value)}
-                    className="min-h-[100px] text-sm"
-                  />
+                  <div className="relative">
+                    <Textarea
+                      placeholder="Paste the reference content here..."
+                      value={newRefContent}
+                      onChange={(e) => setNewRefContent(e.target.value)}
+                      className="min-h-[100px] text-sm pr-10"
+                    />
+                    <div className="absolute top-2 right-2">
+                      <VoiceRecorder
+                        onTranscript={(transcript) => {
+                          setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
+                        }}
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                      />
+                    </div>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -200,13 +235,35 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Textarea
-              data-testid="input-source-text"
-              placeholder="Paste your text here... The more context you provide, the more incisive the provocations will be."
-              className="min-h-[220px] text-base resize-none leading-relaxed font-serif"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
+            <div className="relative">
+              <Textarea
+                data-testid="input-source-text"
+                placeholder="Paste your text here... The more context you provide, the more incisive the provocations will be."
+                className={`min-h-[220px] text-base resize-none leading-relaxed font-serif pr-12 ${isRecordingText ? "border-primary" : ""}`}
+                value={isRecordingText ? textInterim || text : text}
+                onChange={(e) => setText(e.target.value)}
+                readOnly={isRecordingText}
+              />
+              <div className="absolute top-2 right-2">
+                <VoiceRecorder
+                  onTranscript={(transcript) => {
+                    setText((prev) => prev ? prev + " " + transcript : transcript);
+                    setTextInterim("");
+                  }}
+                  onInterimTranscript={(interim) => setTextInterim(text ? text + " " + interim : interim)}
+                  onRecordingChange={setIsRecordingText}
+                  size="icon"
+                  variant={isRecordingText ? "destructive" : "ghost"}
+                />
+              </div>
+              {isRecordingText && (
+                <div className="absolute bottom-2 left-2 right-12">
+                  <p className="text-xs text-primary animate-pulse bg-background/80 px-2 py-1 rounded">
+                    Listening... speak your source material
+                  </p>
+                </div>
+              )}
+            </div>
             
             <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
               <div className="text-sm text-muted-foreground">
