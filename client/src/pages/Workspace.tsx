@@ -14,24 +14,28 @@ import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { LargeVoiceRecorder } from "@/components/VoiceRecorder";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { 
-  Sparkles, 
-  RotateCcw, 
+import {
+  Sparkles,
+  RotateCcw,
   MessageSquareWarning,
   ListTree,
   Settings2,
-  GitCompare
+  GitCompare,
+  Target
 } from "lucide-react";
-import type { 
-  Document, 
-  Lens, 
-  Provocation, 
-  OutlineItem, 
-  LensType, 
+import type {
+  Document,
+  Lens,
+  Provocation,
+  OutlineItem,
+  LensType,
   ToneOption,
-  DocumentVersion
+  DocumentVersion,
+  WriteRequest,
+  WriteResponse
 } from "@shared/schema";
 
 type AppPhase = "input" | "blank-document" | "workspace";
@@ -41,6 +45,7 @@ export default function Workspace() {
   
   const [phase, setPhase] = useState<AppPhase>("input");
   const [document, setDocument] = useState<Document | null>(null);
+  const [objective, setObjective] = useState<string>("");
   const [lenses, setLenses] = useState<Lens[]>([]);
   const [activeLens, setActiveLens] = useState<LensType | null>(null);
   const [provocations, setProvocations] = useState<Provocation[]>([]);
@@ -118,51 +123,41 @@ export default function Workspace() {
     },
   });
 
-  const mergeMutation = useMutation({
-    mutationFn: async ({ originalText, userFeedback, provocationContext, selectedText, activeLens }: {
-      originalText: string;
-      userFeedback: string;
-      provocationContext?: string;
-      selectedText?: string;
-      activeLens?: string;
-    }) => {
-      const response = await apiRequest("POST", "/api/merge", {
-        originalText,
-        userFeedback,
-        provocationContext,
-        selectedText,
-        activeLens,
+  const writeMutation = useMutation({
+    mutationFn: async (request: Omit<WriteRequest, "document" | "objective"> & { description?: string }) => {
+      if (!document) throw new Error("No document to write to");
+      const response = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        ...request,
       });
-      return await response.json() as { mergedText: string };
+      return await response.json() as WriteResponse;
     },
     onSuccess: (data, variables) => {
       if (document) {
         // Save current version before updating
         const newVersion: DocumentVersion = {
           id: generateId("v"),
-          text: data.mergedText,
+          text: data.document,
           timestamp: Date.now(),
-          description: "After voice feedback"
+          description: variables.description || data.summary || "Document updated"
         };
         setVersions(prev => [...prev, newVersion]);
-        setDocument({ ...document, rawText: data.mergedText });
-        
-        // Update the transcript summary with a description based on the context
-        const contextInfo = variables.provocationContext 
-          ? variables.provocationContext.replace('User selected the following text for improvement: ', 'Selected text: ')
-          : 'General feedback';
-        setTranscriptSummary(`Merged successfully!\n\n${contextInfo}\n\nYour feedback: "${variables.userFeedback}"\n\nThe document has been updated with your suggestions.`);
-        
+        setDocument({ ...document, rawText: data.document });
+
+        // Update the transcript summary
+        setTranscriptSummary(data.summary || "Document updated successfully.");
+
         toast({
-          title: "Feedback Integrated",
-          description: "Your response has been merged into the document.",
+          title: "Document Updated",
+          description: data.summary || "Your changes have been applied.",
         });
       }
     },
     onError: (error) => {
-      setTranscriptSummary(`Merge failed: ${error instanceof Error ? error.message : "Something went wrong"}. Please try again.`);
+      setTranscriptSummary(`Update failed: ${error instanceof Error ? error.message : "Something went wrong"}. Please try again.`);
       toast({
-        title: "Merge Failed",
+        title: "Update Failed",
         description: error instanceof Error ? error.message : "Something went wrong",
         variant: "destructive",
       });
@@ -170,13 +165,16 @@ export default function Workspace() {
   });
 
   const expandMutation = useMutation({
-    mutationFn: async ({ heading, context }: { heading: string; context?: string }) => {
-      const response = await apiRequest("POST", "/api/expand", { 
-        heading, 
-        context: context || document?.rawText,
-        tone: selectedTone 
+    mutationFn: async ({ heading }: { heading: string }) => {
+      if (!document) throw new Error("No document context");
+      const response = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        instruction: `Expand the section "${heading}" into well-developed paragraphs. Focus on this heading specifically.`,
+        tone: selectedTone,
       });
-      return await response.json() as { content: string };
+      const result = await response.json() as WriteResponse;
+      return { content: result.document };
     },
     onError: (error) => {
       toast({
@@ -189,8 +187,15 @@ export default function Workspace() {
 
   const refineMutation = useMutation({
     mutationFn: async ({ text, tone, length }: { text: string; tone: ToneOption; length: "shorter" | "same" | "longer" }) => {
-      const response = await apiRequest("POST", "/api/refine", { text, tone, targetLength: length });
-      return await response.json() as { refined: string };
+      const response = await apiRequest("POST", "/api/write", {
+        document: text,
+        objective,
+        instruction: "Refine the document according to the specified tone and length preferences.",
+        tone,
+        targetLength: length,
+      });
+      const result = await response.json() as WriteResponse;
+      return { refined: result.document };
     },
     onSuccess: (data) => {
       setRefinedPreview(data.refined);
@@ -204,7 +209,10 @@ export default function Workspace() {
     },
   });
 
-  const handleAnalyze = useCallback((text: string) => {
+  const handleAnalyze = useCallback((text: string, docObjective?: string) => {
+    if (docObjective) {
+      setObjective(docObjective);
+    }
     analyzeMutation.mutate(text);
   }, [analyzeMutation]);
 
@@ -307,6 +315,7 @@ export default function Workspace() {
   const handleReset = useCallback(() => {
     setPhase("input");
     setDocument(null);
+    setObjective("");
     setLenses([]);
     setActiveLens(null);
     setProvocations([]);
@@ -344,26 +353,33 @@ export default function Workspace() {
 
   const handleBlankDocumentTranscript = useCallback((transcript: string) => {
     if (transcript.trim()) {
+      // Set a default objective for voice-started documents
+      setObjective("Create a compelling document from spoken ideas");
       // Trigger analysis with transcribed text
       analyzeMutation.mutate(transcript);
     }
   }, [analyzeMutation]);
 
-  const handleVoiceResponse = useCallback((provocationId: string, transcript: string, provocationContext: string) => {
+  const handleVoiceResponse = useCallback((provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
     if (!document || !transcript.trim()) return;
 
-    mergeMutation.mutate({
-      originalText: document.rawText,
-      userFeedback: transcript,
-      provocationContext,
+    writeMutation.mutate({
+      instruction: transcript,
+      provocation: {
+        type: provocationData.type as "opportunity" | "fallacy" | "alternative",
+        title: provocationData.title,
+        content: provocationData.content,
+        sourceExcerpt: provocationData.sourceExcerpt,
+      },
       activeLens: activeLens || undefined,
+      description: `Addressed provocation: ${provocationData.title}`,
     });
 
     // Mark the provocation as addressed
     setProvocations((prev) =>
       prev.map((p) => (p.id === provocationId ? { ...p, status: "addressed" as const } : p))
     );
-  }, [document, mergeMutation, activeLens]);
+  }, [document, writeMutation, activeLens]);
 
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
@@ -373,14 +389,13 @@ export default function Workspace() {
   const handleSelectionVoiceMerge = useCallback((selectedText: string, transcript: string) => {
     if (!document || !transcript.trim()) return;
 
-    mergeMutation.mutate({
-      originalText: document.rawText,
-      userFeedback: transcript,
-      provocationContext: `User selected the following text for improvement`,
-      selectedText: selectedText,
+    writeMutation.mutate({
+      instruction: transcript,
+      selectedText,
       activeLens: activeLens || undefined,
+      description: "Voice edit on selection",
     });
-  }, [document, mergeMutation, activeLens]);
+  }, [document, writeMutation, activeLens]);
 
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
     setRawTranscript(transcript);
@@ -466,42 +481,55 @@ export default function Workspace() {
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="flex items-center justify-between gap-4 px-4 py-3 border-b bg-card flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+      <header className="border-b bg-card">
+        <div className="flex items-center justify-between gap-4 px-4 py-2 flex-wrap">
+          <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-primary" />
             <h1 className="font-semibold text-lg">Provocations</h1>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {canShowDiff && (
+
+          <div className="flex items-center gap-2">
+            {canShowDiff && (
+              <Button
+                data-testid="button-versions"
+                variant={showDiffView ? "default" : "outline"}
+                size="sm"
+                onClick={toggleDiffView}
+                className="gap-1.5"
+              >
+                <GitCompare className="w-4 h-4" />
+                Versions ({versions.length})
+              </Button>
+            )}
             <Button
-              data-testid="button-versions"
-              variant={showDiffView ? "default" : "outline"}
+              data-testid="button-reset"
+              variant="ghost"
               size="sm"
-              onClick={toggleDiffView}
+              onClick={handleReset}
               className="gap-1.5"
             >
-              <GitCompare className="w-4 h-4" />
-              Versions ({versions.length})
+              <RotateCcw className="w-4 h-4" />
+              New
             </Button>
-          )}
-          <Button
-            data-testid="button-reset"
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            className="gap-1.5"
-          >
-            <RotateCcw className="w-4 h-4" />
-            New Analysis
-          </Button>
-          <ThemeToggle />
+            <ThemeToggle />
+          </div>
+        </div>
+
+        {/* Objective bar */}
+        <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/30">
+          <Target className="w-4 h-4 text-primary shrink-0" />
+          <span className="text-sm text-muted-foreground shrink-0">Objective:</span>
+          <Input
+            data-testid="input-objective-header"
+            value={objective}
+            onChange={(e) => setObjective(e.target.value)}
+            placeholder="What are you creating?"
+            className="h-7 text-sm bg-transparent border-none shadow-none focus-visible:ring-0 px-1"
+          />
         </div>
       </header>
       
-      {mergeMutation.isPending && (
+      {writeMutation.isPending && (
         <div className="bg-primary/10 border-b px-4 py-2 flex items-center gap-2 text-sm">
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <span>Integrating your feedback into the document...</span>
@@ -535,7 +563,7 @@ export default function Workspace() {
                 onTextChange={handleDocumentTextChange}
                 highlightText={hoveredProvocationContext}
                 onVoiceMerge={handleSelectionVoiceMerge}
-                isMerging={mergeMutation.isPending}
+                isMerging={writeMutation.isPending}
                 onTranscriptUpdate={handleTranscriptUpdate}
                 onTextEdit={handleTextEdit}
               />
@@ -551,7 +579,7 @@ export default function Workspace() {
                 isRecording={isRecordingFromMain}
                 rawTranscript={rawTranscript}
                 summary={transcriptSummary}
-                isSummarizing={mergeMutation.isPending}
+                isSummarizing={writeMutation.isPending}
                 onClose={handleCloseTranscriptOverlay}
               />
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
@@ -599,7 +627,7 @@ export default function Workspace() {
                     onVoiceResponse={handleVoiceResponse}
                     onHoverProvocation={setHoveredProvocationId}
                     isLoading={analyzeMutation.isPending}
-                    isMerging={mergeMutation.isPending}
+                    isMerging={writeMutation.isPending}
                   />
                 </TabsContent>
                 

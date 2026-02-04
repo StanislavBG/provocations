@@ -2,12 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import OpenAI from "openai";
-import { 
-  analyzeTextRequestSchema, 
-  expandOutlineRequestSchema,
-  refineTextRequestSchema,
-  mergeTextRequestSchema,
-  editTextRequestSchema,
+import {
+  analyzeTextRequestSchema,
+  writeRequestSchema,
   lensTypes,
   provocationType,
   type LensType,
@@ -199,217 +196,113 @@ Output only valid JSON, no markdown.`
     }
   });
 
-  // Expand a heading into content - uses shared schema
-  app.post("/api/expand", async (req, res) => {
+  // Unified write endpoint - single interface to the AI writer
+  app.post("/api/write", async (req, res) => {
     try {
-      const parsed = expandOutlineRequestSchema.safeParse(req.body);
+      const parsed = writeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { heading, context, tone } = parsed.data;
+      const {
+        document,
+        objective,
+        selectedText,
+        instruction,
+        provocation,
+        activeLens,
+        tone,
+        targetLength
+      } = parsed.data;
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        max_completion_tokens: 1024,
-        messages: [
-          {
-            role: "system",
-            content: `You are a writing assistant helping users develop their arguments. Your tone should be ${tone}. 
-            
-Write a focused paragraph (100-200 words) that develops the given heading into substantive content. 
-Use the provided context to inform your writing, but create original, well-structured prose.
-Do not use bullet points or lists. Write in flowing paragraphs.
-Output only the paragraph text, no headings or labels.`
-          },
-          {
-            role: "user",
-            content: `Heading: ${heading}\n\nContext from source material:\n${context?.slice(0, 4000) || "No context provided"}`
-          }
-        ],
-      });
+      // Build context sections
+      const contextParts: string[] = [];
 
-      const content = response.choices[0]?.message?.content || "";
-      res.json({ content: content.trim() });
-    } catch (error) {
-      console.error("Expand error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to expand heading", details: errorMessage });
-    }
-  });
-
-  // Refine text with tone and length adjustments - uses shared schema
-  app.post("/api/refine", async (req, res) => {
-    try {
-      const parsed = refineTextRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { text, tone, targetLength } = parsed.data;
-
-      const lengthInstruction = {
-        shorter: "Condense the text to approximately 60-70% of its current length while preserving key points.",
-        same: "Keep approximately the same length while refining the language.",
-        longer: "Expand the text to approximately 130-150% of its current length with more detail and examples.",
-      }[targetLength];
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        max_completion_tokens: 2048,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert editor helping refine written content. 
-
-Apply these adjustments:
-- Tone: Make the writing more ${tone}
-- Length: ${lengthInstruction}
-
-Preserve the overall structure and key arguments. Improve clarity and flow.
-Output only the refined text, maintaining any section headings if present.`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-      });
-
-      const refined = response.choices[0]?.message?.content || text;
-      res.json({ refined: refined.trim() });
-    } catch (error) {
-      console.error("Refine error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to refine text", details: errorMessage });
-    }
-  });
-
-  // Merge user feedback into document
-  app.post("/api/merge", async (req, res) => {
-    try {
-      const parsed = mergeTextRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { originalText, userFeedback, provocationContext, selectedText, activeLens } = parsed.data;
-
-      // Build context-aware system prompt
-      let contextInfo = "";
-      if (provocationContext) {
-        contextInfo += `\n\nCONTEXT: The user was responding to this provocation:\n${provocationContext}`;
-      }
-      if (selectedText) {
-        contextInfo += `\n\nFOCUS AREA: The user selected this specific text for improvement:\n"${selectedText}"`;
-      }
       if (activeLens) {
-        const lensDescriptions: Record<string, string> = {
-          consumer: "end-user/customer perspective",
-          executive: "strategic leadership perspective",
-          technical: "technical implementation perspective",
-          financial: "cost/ROI perspective",
-          strategic: "competitive positioning perspective",
-          skeptic: "critical/skeptical perspective",
+        const lensDescriptions: Record<LensType, string> = {
+          consumer: "end-user/customer perspective - focusing on user needs and experience",
+          executive: "strategic leadership perspective - focusing on business impact",
+          technical: "technical implementation perspective - focusing on feasibility",
+          financial: "financial perspective - focusing on costs and ROI",
+          strategic: "competitive positioning perspective - focusing on market advantage",
+          skeptic: "critical perspective - questioning assumptions and risks",
         };
-        contextInfo += `\n\nPERSPECTIVE: The user is viewing through the ${activeLens} lens (${lensDescriptions[activeLens]}).`;
+        contextParts.push(`PERSPECTIVE: Apply the ${activeLens} lens (${lensDescriptions[activeLens]})`);
       }
+
+      if (provocation) {
+        contextParts.push(`PROVOCATION BEING ADDRESSED:
+Type: ${provocation.type}
+Challenge: ${provocation.title}
+Details: ${provocation.content}
+Relevant excerpt: "${provocation.sourceExcerpt}"`);
+      }
+
+      if (tone) {
+        contextParts.push(`TONE: Write in a ${tone} voice`);
+      }
+
+      if (targetLength) {
+        const lengthInstructions = {
+          shorter: "Make it more concise (60-70% of current length)",
+          same: "Maintain similar length",
+          longer: "Expand with more detail (130-150% of current length)",
+        };
+        contextParts.push(`LENGTH: ${lengthInstructions[targetLength]}`);
+      }
+
+      const contextSection = contextParts.length > 0
+        ? `\n\nADDITIONAL CONTEXT:\n${contextParts.join("\n\n")}`
+        : "";
+
+      const focusInstruction = selectedText
+        ? `The user has selected specific text to focus on. Apply the instruction primarily to this selection, but ensure it integrates well with the rest of the document.`
+        : `Apply the instruction to improve the document holistically.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
-        max_completion_tokens: 4096,
+        max_completion_tokens: 8192,
         messages: [
           {
             role: "system",
-            content: `You are an expert editor helping integrate user feedback into a document.
+            content: `You are an expert document editor helping a user iteratively shape their document.
 
-The user has been reviewing their document and responding to critical thinking provocations. They've provided verbal feedback that should be intelligently merged into their original document.
+DOCUMENT OBJECTIVE: ${objective}
 
-Your task:
-1. Understand the user's feedback and insights
-2. ${selectedText ? "Focus primarily on the selected text area, but consider if feedback applies elsewhere too" : "Identify where in the original document these insights are relevant"}
-3. Intelligently integrate the feedback where appropriate
-4. Maintain the document's original structure and voice
-5. Don't just append - weave the new insights naturally into the existing text
-6. Make targeted improvements, not wholesale rewrites
-${contextInfo}
+Your role is to evolve the document based on the user's instruction while always keeping the objective in mind. The document should get better with each iteration - clearer, more compelling, better structured.
 
-Output only the merged document text, no explanations or metadata.`
+Guidelines:
+1. ${focusInstruction}
+2. Preserve the document's voice and structure unless explicitly asked to change it
+3. Make targeted improvements, not wholesale rewrites
+4. The output should be the complete evolved document (not just the changed parts)
+5. Use markdown formatting for structure (headers, lists, emphasis) where appropriate
+${contextSection}
+
+Output only the evolved document text. No explanations or meta-commentary.`
           },
           {
             role: "user",
-            content: `ORIGINAL DOCUMENT:
-${originalText}
+            content: `CURRENT DOCUMENT:
+${document}
+${selectedText ? `\nSELECTED TEXT (focus area):\n"${selectedText}"` : ""}
 
-USER'S FEEDBACK TO INTEGRATE:
-${userFeedback}
-${selectedText ? `\nTARGET SECTION (user selected this text):\n"${selectedText}"` : ""}
+INSTRUCTION: ${instruction}
 
-Please merge the feedback intelligently into the document${selectedText ? ", focusing on the selected section" : ""}.`
+Please evolve the document according to this instruction.`
           }
         ],
       });
 
-      const mergedText = response.choices[0]?.message?.content || originalText;
-      res.json({ mergedText: mergedText.trim() });
-    } catch (error) {
-      console.error("Merge error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to merge feedback", details: errorMessage });
-    }
-  });
-
-  // Edit selected text based on user instruction
-  app.post("/api/edit-text", async (req, res) => {
-    try {
-      const parsed = editTextRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { instruction, selectedText, fullDocument } = parsed.data;
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        max_completion_tokens: 2048,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert editor helping modify a specific portion of a document based on user instructions.
-
-You will receive:
-1. A user instruction describing how to modify the text
-2. The specific text that needs to be modified (the selection)
-3. The full document for context
-
-Your task:
-- Apply the user's instruction ONLY to the selected text
-- Use the full document context to make informed decisions about tone, style, and content
-- Return ONLY the modified version of the selected text
-- Preserve the general structure unless the instruction requires changing it
-- Be precise - return only what should replace the selected text, nothing more
-
-Output only the modified text. No explanations, no markdown, no quotes around the text.`
-          },
-          {
-            role: "user",
-            content: `INSTRUCTION: ${instruction}
-
-SELECTED TEXT TO MODIFY:
-${selectedText}
-
-FULL DOCUMENT (for context):
-${fullDocument}`
-          }
-        ],
+      const evolvedDocument = response.choices[0]?.message?.content || document;
+      res.json({
+        document: evolvedDocument.trim(),
+        summary: `Applied: ${instruction.slice(0, 100)}${instruction.length > 100 ? "..." : ""}`
       });
-
-      const modifiedText = response.choices[0]?.message?.content || selectedText;
-      res.json({ modifiedText: modifiedText.trim() });
     } catch (error) {
-      console.error("Edit-text error:", error);
+      console.error("Write error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to edit text", details: errorMessage });
+      res.status(500).json({ error: "Failed to evolve document", details: errorMessage });
     }
   });
 

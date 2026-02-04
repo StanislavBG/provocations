@@ -4,6 +4,7 @@ import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState
 interface WorkspaceContextType {
   state: WorkspaceState;
   setDocument: (doc: Document | null) => void;
+  setObjective: (objective: string) => void;
   setLenses: (lenses: Lens[]) => void;
   setActiveLens: (lens: LensType | null) => void;
   setProvocations: (provocations: Provocation[]) => void;
@@ -19,6 +20,7 @@ interface WorkspaceContextType {
 
 const initialState: WorkspaceState = {
   document: null,
+  objective: "",
   lenses: [],
   activeLens: null,
   provocations: [],
@@ -33,6 +35,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const setDocument = useCallback((doc: Document | null) => {
     setState((prev) => ({ ...prev, document: doc }));
+  }, []);
+
+  const setObjective = useCallback((objective: string) => {
+    setState((prev) => ({ ...prev, objective }));
   }, []);
 
   const setLenses = useCallback((lenses: Lens[]) => {
@@ -100,6 +106,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         setDocument,
+        setObjective,
         setLenses,
         setActiveLens,
         setProvocations,

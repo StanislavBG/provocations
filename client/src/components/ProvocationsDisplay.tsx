@@ -46,22 +46,22 @@ const provocationLabels: Record<ProvocationType, string> = {
 interface ProvocationsDisplayProps {
   provocations: Provocation[];
   onUpdateStatus: (id: string, status: Provocation["status"]) => void;
-  onVoiceResponse?: (provocationId: string, transcript: string, provocationContext: string) => void;
+  onVoiceResponse?: (provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onHoverProvocation?: (provocationId: string | null) => void;
   isLoading?: boolean;
   isMerging?: boolean;
 }
 
-function ProvocationCard({ 
-  provocation, 
+function ProvocationCard({
+  provocation,
   onUpdateStatus,
   onVoiceResponse,
   onHover,
   isMerging
-}: { 
-  provocation: Provocation; 
+}: {
+  provocation: Provocation;
   onUpdateStatus: (status: Provocation["status"]) => void;
-  onVoiceResponse?: (transcript: string, context: string) => void;
+  onVoiceResponse?: (transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onHover?: (isHovered: boolean) => void;
   isMerging?: boolean;
 }) {
@@ -138,11 +138,12 @@ function ProvocationCard({
                 <div>
                   <VoiceRecorder
                     onTranscript={(transcript) => {
-                      // Include sourceExcerpt for better context in merge
-                      const context = provocation.sourceExcerpt
-                        ? `Provocation: ${provocation.title}\nDetails: ${provocation.content}\nRelevant document excerpt: "${provocation.sourceExcerpt}"`
-                        : `Provocation: ${provocation.title}\nDetails: ${provocation.content}`;
-                      onVoiceResponse?.(transcript, context);
+                      onVoiceResponse?.(transcript, {
+                        type: provocation.type,
+                        title: provocation.title,
+                        content: provocation.content,
+                        sourceExcerpt: provocation.sourceExcerpt,
+                      });
                     }}
                     size="sm"
                     variant="outline"
@@ -303,7 +304,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
               key={provocation.id}
               provocation={provocation}
               onUpdateStatus={(status) => onUpdateStatus(provocation.id, status)}
-              onVoiceResponse={(transcript, context) => onVoiceResponse?.(provocation.id, transcript, context)}
+              onVoiceResponse={(transcript, provocationData) => onVoiceResponse?.(provocation.id, transcript, provocationData)}
               onHover={(isHovered) => onHoverProvocation?.(isHovered ? provocation.id : null)}
               isMerging={isMerging}
             />

@@ -81,39 +81,42 @@ export const analyzeTextRequestSchema = z.object({
 
 export type AnalyzeTextRequest = z.infer<typeof analyzeTextRequestSchema>;
 
-export const expandOutlineRequestSchema = z.object({
-  heading: z.string().min(1, "Heading is required"),
-  context: z.string().optional(),
-  tone: z.enum(toneOptions).optional().default("practical"),
+// Unified write request - single interface to the AI writer
+export const provocationContextSchema = z.object({
+  type: z.enum(provocationType),
+  title: z.string(),
+  content: z.string(),
+  sourceExcerpt: z.string(),
 });
 
-export type ExpandOutlineRequest = z.infer<typeof expandOutlineRequestSchema>;
+export const writeRequestSchema = z.object({
+  // Foundation (always required)
+  document: z.string().min(1, "Document is required"),
+  objective: z.string().min(1, "Objective is required"),
 
-export const refineTextRequestSchema = z.object({
-  text: z.string().min(1, "Text is required"),
-  tone: z.enum(toneOptions),
-  targetLength: z.enum(["shorter", "same", "longer"]),
-});
+  // Focus (optional - what part of document)
+  selectedText: z.string().optional(),
 
-export type RefineTextRequest = z.infer<typeof refineTextRequestSchema>;
-
-export const mergeTextRequestSchema = z.object({
-  originalText: z.string().min(1, "Original text is required"),
-  userFeedback: z.string().min(1, "User feedback is required"),
-  provocationContext: z.string().optional(),
-  selectedText: z.string().optional(), // The specific text the user selected for feedback
-  activeLens: z.enum(["consumer", "executive", "technical", "financial", "strategic", "skeptic"]).optional(),
-});
-
-export type MergeTextRequest = z.infer<typeof mergeTextRequestSchema>;
-
-export const editTextRequestSchema = z.object({
+  // Intent (required - what user wants)
   instruction: z.string().min(1, "Instruction is required"),
-  selectedText: z.string().min(1, "Selected text is required"),
-  fullDocument: z.string().min(1, "Full document is required"),
+
+  // Context (optional - additional grounding)
+  provocation: provocationContextSchema.optional(),
+  activeLens: z.enum(lensTypes).optional(),
+
+  // Style (optional)
+  tone: z.enum(toneOptions).optional(),
+  targetLength: z.enum(["shorter", "same", "longer"]).optional(),
 });
 
-export type EditTextRequest = z.infer<typeof editTextRequestSchema>;
+export type WriteRequest = z.infer<typeof writeRequestSchema>;
+
+export const writeResponseSchema = z.object({
+  document: z.string(),
+  summary: z.string().optional(),
+});
+
+export type WriteResponse = z.infer<typeof writeResponseSchema>;
 
 export interface DocumentVersion {
   id: string;
@@ -125,6 +128,7 @@ export interface DocumentVersion {
 // Workspace state for context provider
 export interface WorkspaceState {
   document: Document | null;
+  objective: string;
   lenses: Lens[];
   activeLens: LensType | null;
   provocations: Provocation[];
