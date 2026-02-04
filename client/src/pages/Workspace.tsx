@@ -24,8 +24,12 @@ import {
   ListTree,
   Settings2,
   GitCompare,
-  Target
+  Target,
+  BookCopy,
+  X
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
   Document,
   Lens,
@@ -35,7 +39,8 @@ import type {
   ToneOption,
   DocumentVersion,
   WriteRequest,
-  WriteResponse
+  WriteResponse,
+  ReferenceDocument
 } from "@shared/schema";
 
 type AppPhase = "input" | "blank-document" | "workspace";
@@ -46,6 +51,7 @@ export default function Workspace() {
   const [phase, setPhase] = useState<AppPhase>("input");
   const [document, setDocument] = useState<Document | null>(null);
   const [objective, setObjective] = useState<string>("");
+  const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
   const [lenses, setLenses] = useState<Lens[]>([]);
   const [activeLens, setActiveLens] = useState<LensType | null>(null);
   const [provocations, setProvocations] = useState<Provocation[]>([]);
@@ -73,8 +79,11 @@ export default function Workspace() {
     : undefined;
 
   const analyzeMutation = useMutation({
-    mutationFn: async (text: string) => {
-      const response = await apiRequest("POST", "/api/analyze", { text });
+    mutationFn: async ({ text, referenceDocuments }: { text: string; referenceDocuments?: ReferenceDocument[] }) => {
+      const response = await apiRequest("POST", "/api/analyze", {
+        text,
+        referenceDocuments,
+      });
       return await response.json() as {
         document: Document;
         lenses: Lens[];
@@ -124,11 +133,12 @@ export default function Workspace() {
   });
 
   const writeMutation = useMutation({
-    mutationFn: async (request: Omit<WriteRequest, "document" | "objective"> & { description?: string }) => {
+    mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         ...request,
       });
       return await response.json() as WriteResponse;
@@ -209,11 +219,14 @@ export default function Workspace() {
     },
   });
 
-  const handleAnalyze = useCallback((text: string, docObjective?: string) => {
+  const handleAnalyze = useCallback((text: string, docObjective?: string, refs?: ReferenceDocument[]) => {
     if (docObjective) {
       setObjective(docObjective);
     }
-    analyzeMutation.mutate(text);
+    if (refs) {
+      setReferenceDocuments(refs);
+    }
+    analyzeMutation.mutate({ text, referenceDocuments: refs });
   }, [analyzeMutation]);
 
   const handleUpdateProvocationStatus = useCallback((id: string, status: Provocation["status"]) => {
@@ -316,6 +329,7 @@ export default function Workspace() {
     setPhase("input");
     setDocument(null);
     setObjective("");
+    setReferenceDocuments([]);
     setLenses([]);
     setActiveLens(null);
     setProvocations([]);
@@ -356,7 +370,7 @@ export default function Workspace() {
       // Set a default objective for voice-started documents
       setObjective("Create a compelling document from spoken ideas");
       // Trigger analysis with transcribed text
-      analyzeMutation.mutate(transcript);
+      analyzeMutation.mutate({ text: transcript });
     }
   }, [analyzeMutation]);
 
@@ -524,8 +538,54 @@ export default function Workspace() {
             value={objective}
             onChange={(e) => setObjective(e.target.value)}
             placeholder="What are you creating?"
-            className="h-7 text-sm bg-transparent border-none shadow-none focus-visible:ring-0 px-1"
+            className="h-7 text-sm bg-transparent border-none shadow-none focus-visible:ring-0 px-1 flex-1"
           />
+
+          {/* Reference documents indicator */}
+          {referenceDocuments.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5 shrink-0">
+                  <BookCopy className="w-4 h-4" />
+                  <Badge variant="secondary" className="text-xs">{referenceDocuments.length}</Badge>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <BookCopy className="w-4 h-4" />
+                    Reference Documents
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    These guide style and inform completeness checks.
+                  </p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {referenceDocuments.map((doc) => (
+                      <div key={doc.id} className="flex items-start gap-2 p-2 rounded border bg-muted/30">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-sm truncate">{doc.name}</span>
+                            <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {doc.content.slice(0, 100)}...
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 shrink-0"
+                          onClick={() => setReferenceDocuments(prev => prev.filter(d => d.id !== doc.id))}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
       </header>
       

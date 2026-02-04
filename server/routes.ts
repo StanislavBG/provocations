@@ -10,7 +10,8 @@ import {
   type LensType,
   type ProvocationType,
   type Lens,
-  type Provocation
+  type Provocation,
+  type ReferenceDocument
 } from "@shared/schema";
 
 const openai = new OpenAI({
@@ -46,12 +47,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { text, selectedLenses } = parsed.data;
+      const { text, selectedLenses, referenceDocuments } = parsed.data;
 
       // Check if text will be truncated for analysis
       const MAX_ANALYSIS_LENGTH = 8000;
       const wasTextTruncated = text.length > MAX_ANALYSIS_LENGTH;
       const analysisText = text.slice(0, MAX_ANALYSIS_LENGTH);
+
+      // Prepare reference document summary for prompts
+      const refDocSummary = referenceDocuments && referenceDocuments.length > 0
+        ? referenceDocuments.map(d => `[${d.type.toUpperCase()}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`).join("\n\n")
+        : null;
 
       // Create document (stores full text)
       const document = await storage.createDocument(text);
@@ -119,13 +125,18 @@ Output only valid JSON, no markdown.`
       // Generate provocations in parallel
       const provocationPromises = provocationType.map(async (provType): Promise<Provocation[]> => {
         try {
+          // Add reference document context for more targeted provocations
+          const refContext = refDocSummary
+            ? `\n\nThe user has provided reference documents (style guides, templates, or examples) that represent their target quality and completeness:\n\n${refDocSummary}\n\nCompare the source text against these references to identify gaps, missing elements, or style mismatches.`
+            : "";
+
           const response = await openai.chat.completions.create({
             model: "gpt-5.2",
             max_completion_tokens: 2048,
             messages: [
               {
                 role: "system",
-                content: `You are a critical thinking partner. Your job is to challenge the user's assumptions and push their thinking deeper. ${provocationPrompts[provType]}
+                content: `You are a critical thinking partner. Your job is to challenge the user's assumptions and push their thinking deeper. ${provocationPrompts[provType]}${refContext}
 
 Generate 2-3 provocations. For each, provide:
 - title: A punchy headline for the provocation (max 60 chars)
@@ -212,11 +223,27 @@ Output only valid JSON, no markdown.`
         provocation,
         activeLens,
         tone,
-        targetLength
+        targetLength,
+        referenceDocuments
       } = parsed.data;
 
       // Build context sections
       const contextParts: string[] = [];
+
+      // Add reference document context for style inference
+      if (referenceDocuments && referenceDocuments.length > 0) {
+        const refSummaries = referenceDocuments.map(d => {
+          const typeLabel = d.type === "style" ? "STYLE GUIDE"
+            : d.type === "template" ? "TEMPLATE"
+            : "EXAMPLE";
+          return `[${typeLabel}: ${d.name}]\n${d.content.slice(0, 1000)}${d.content.length > 1000 ? "..." : ""}`;
+        }).join("\n\n---\n\n");
+
+        contextParts.push(`REFERENCE DOCUMENTS (use these to guide tone, style, and structure):
+${refSummaries}
+
+Analyze the style, structure, and voice of these references. Match the target document's quality, formatting patterns, and professional standards where appropriate.`);
+      }
 
       if (activeLens) {
         const lensDescriptions: Record<LensType, string> = {
