@@ -26,9 +26,5 @@
         "runFunction": "onDocsHomepage"
       }
     }
-  },
-  "webapp": {
-    "executeAs": "USER_ACCESSING",
-    "access": "DOMAIN"
   }
 }
