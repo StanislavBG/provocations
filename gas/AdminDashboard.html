@@ -1,0 +1,221 @@
+<!--
+  AdminDashboard.html — Admin stats dashboard showing user counts,
+  feature usage, access summaries, feedback overview, and error summary.
+  All data is anonymous (no PII exposed).
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Salesforce Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 0; margin: 0; color: #181818; background: #f4f6f9; }
+    .container { padding: 16px; max-height: 100vh; overflow-y: auto; }
+    h2 { font-size: 16px; color: #0176d3; margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
+    h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #706e6b; margin: 0 0 10px; }
+
+    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+
+    /* KPI row */
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .kpi { text-align: center; padding: 12px 8px; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; }
+    .kpi-value { font-size: 24px; font-weight: 700; color: #0176d3; }
+    .kpi-label { font-size: 10px; color: #706e6b; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
+    .kpi-accent { border-color: #0176d3; border-width: 2px; }
+    .kpi-value.success { color: #2e844a; }
+    .kpi-value.warning { color: #fe9339; }
+    .kpi-value.error { color: #c23934; }
+
+    /* Feature table */
+    .feature-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .feature-table th { text-align: left; padding: 6px 8px; color: #706e6b; font-weight: 600; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #e5e5e5; }
+    .feature-table td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; }
+    .feature-bar { display: inline-block; height: 8px; border-radius: 4px; background: #0176d3; min-width: 4px; vertical-align: middle; margin-right: 6px; }
+
+    /* Error contexts */
+    .ctx-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid #f8f8f8; }
+    .ctx-count { font-weight: 700; color: #c23934; }
+
+    /* Feedback summary */
+    .fb-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; border-bottom: 1px solid #f8f8f8; }
+    .fb-count { font-weight: 700; color: #0176d3; }
+
+    .empty { text-align: center; color: #706e6b; padding: 16px; font-size: 12px; }
+    .footer-actions { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e5e5; }
+    .btn { padding: 6px 14px; font-size: 12px; font-weight: 600; border: 1px solid #d8dde6; border-radius: 4px; cursor: pointer; font-family: inherit; }
+    .btn-brand { background: #0176d3; color: #fff; border-color: #0176d3; }
+    .btn-brand:hover { background: #014486; }
+    .btn-neutral { background: #fff; color: #0176d3; }
+    .btn-neutral:hover { background: #f3f3f3; }
+    .refresh-note { font-size: 10px; color: #706e6b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>&#x1F4CA; Admin Dashboard</h2>
+
+    <!-- Users KPI -->
+    <div class="kpi-row" id="user-kpis">
+      <div class="kpi"><div class="kpi-value">-</div><div class="kpi-label">Loading...</div></div>
+    </div>
+
+    <!-- Access KPI -->
+    <div class="kpi-row" id="access-kpis"></div>
+
+    <!-- Feature Usage -->
+    <div class="card">
+      <h3>Feature Usage</h3>
+      <div id="feature-table"><div class="empty">Loading...</div></div>
+    </div>
+
+    <!-- Feedback Summary -->
+    <div class="card">
+      <h3>Feedback Summary</h3>
+      <div id="feedback-summary"><div class="empty">Loading...</div></div>
+    </div>
+
+    <!-- Error Summary -->
+    <div class="card">
+      <h3>Error Summary</h3>
+      <div id="error-summary"><div class="empty">Loading...</div></div>
+    </div>
+
+    <div class="footer-actions">
+      <span class="refresh-note">Data refreshed at load time. <button class="btn btn-neutral" onclick="loadAll()" style="padding:3px 8px;font-size:11px">Refresh</button></span>
+      <button class="btn btn-neutral" onclick="google.script.host.close()">Close</button>
+    </div>
+  </div>
+
+  <script>
+    loadAll();
+
+    function loadAll() {
+      google.script.run.withSuccessHandler(renderStats).withFailureHandler(showError).getAdminStats();
+      google.script.run.withSuccessHandler(renderFeedback).withFailureHandler(function(){}).getFeedbackStats();
+      google.script.run.withSuccessHandler(renderErrors).withFailureHandler(function(){}).getErrorSummary();
+    }
+
+    function renderStats(data) {
+      // User KPIs
+      var u = data.users || {};
+      document.getElementById('user-kpis').innerHTML =
+        kpi(u.total, 'Total Users', 'kpi-accent') +
+        kpi(u.active, 'Active', '', 'success') +
+        kpi(u.revoked, 'Revoked', '', 'error') +
+        kpi(u.neverLoggedIn, 'Never Used', '', 'warning') +
+        kpi(u.admins, 'Admins') +
+        kpi(u.regularUsers, 'Users');
+
+      // Access KPIs
+      var a = data.accessSummary || {};
+      document.getElementById('access-kpis').innerHTML =
+        kpi(a.last7days, '7-Day Sessions') +
+        kpi(a.uniqueUsers, 'Unique Users') +
+        kpi(a.authorized, 'Authorized') +
+        kpi(a.denied, 'Denied', '', 'error');
+
+      // Feature table
+      var features = data.features || [];
+      if (features.length === 0) {
+        document.getElementById('feature-table').innerHTML = '<div class="empty">No usage data yet.</div>';
+        return;
+      }
+
+      var maxCount = features[0].count || 1;
+      var html = '<table class="feature-table"><thead><tr><th>Feature</th><th>Usage</th><th>Count</th><th>Last Used</th></tr></thead><tbody>';
+
+      features.forEach(function(f) {
+        var barWidth = Math.max(4, Math.round((f.count / maxCount) * 120));
+        var last = f.lastUsed ? timeSince(new Date(f.lastUsed)) : '-';
+        html += '<tr>' +
+          '<td>' + formatFeature(f.feature) + '</td>' +
+          '<td><span class="feature-bar" style="width:' + barWidth + 'px"></span></td>' +
+          '<td><strong>' + f.count + '</strong></td>' +
+          '<td>' + last + '</td>' +
+          '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('feature-table').innerHTML = html;
+    }
+
+    function renderFeedback(stats) {
+      if (!stats || stats.total === 0) {
+        document.getElementById('feedback-summary').innerHTML = '<div class="empty">No feedback yet.</div>';
+        return;
+      }
+
+      var html = '<div style="margin-bottom:8px"><strong>' + stats.total + '</strong> total feedback items</div>';
+
+      html += '<div style="margin-bottom:8px">';
+      var statusOrder = ['new', 'in_progress', 'backlog', 'fixed', 'closed', 'wont_fix'];
+      statusOrder.forEach(function(s) {
+        if (stats.byStatus[s]) {
+          html += '<div class="fb-row"><span>' + formatStatus(s) + '</span><span class="fb-count">' + stats.byStatus[s] + '</span></div>';
+        }
+      });
+      html += '</div>';
+
+      html += '<div>';
+      var typeOrder = ['bug', 'feature_request', 'improvement', 'question', 'general'];
+      typeOrder.forEach(function(t) {
+        if (stats.byType[t]) {
+          html += '<div class="fb-row"><span>' + formatType(t) + '</span><span class="fb-count">' + stats.byType[t] + '</span></div>';
+        }
+      });
+      html += '</div>';
+
+      document.getElementById('feedback-summary').innerHTML = html;
+    }
+
+    function renderErrors(data) {
+      if (!data || data.total === 0) {
+        document.getElementById('error-summary').innerHTML = '<div class="empty">No errors logged.</div>';
+        return;
+      }
+
+      var html =
+        '<div style="margin-bottom:8px">' +
+          '<strong>' + data.total + '</strong> total errors &middot; ' +
+          '<span style="color:#c23934;font-weight:700">' + data.last24h + '</span> in last 24h' +
+        '</div>';
+
+      var contexts = data.byContext || {};
+      var sorted = Object.keys(contexts).sort(function(a, b) { return contexts[b] - contexts[a]; });
+      sorted.forEach(function(ctx) {
+        html += '<div class="ctx-row"><span>' + escapeHtml(ctx) + '</span><span class="ctx-count">' + contexts[ctx] + '</span></div>';
+      });
+
+      document.getElementById('error-summary').innerHTML = html;
+    }
+
+    function kpi(value, label, extraClass, valueClass) {
+      return '<div class="kpi ' + (extraClass || '') + '">' +
+        '<div class="kpi-value ' + (valueClass || '') + '">' + (value !== undefined ? value : '-') + '</div>' +
+        '<div class="kpi-label">' + label + '</div></div>';
+    }
+
+    function formatFeature(f) { return (f || '').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); }); }
+    function formatType(t) { return (t || '').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); }); }
+    function formatStatus(s) { return (s || '').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); }); }
+
+    function timeSince(date) {
+      var s = Math.floor((new Date() - date) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86400) + 'd ago';
+    }
+
+    function showError(err) {
+      document.getElementById('user-kpis').innerHTML =
+        '<div class="empty" style="grid-column:1/-1">' + escapeHtml(err.message) + '</div>';
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

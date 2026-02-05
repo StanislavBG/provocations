@@ -1,0 +1,338 @@
+<!--
+  FeedbackManager.html — Admin feedback management interface.
+  Search, filter, view details, update status/type, add comments,
+  and email the user with a response.
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Salesforce Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 0; margin: 0; color: #181818; background: #f4f6f9; }
+    .container { padding: 16px; }
+    h2 { font-size: 16px; color: #0176d3; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .stat-bar { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .stat { font-size: 11px; color: #706e6b; }
+    .stat strong { font-size: 16px; color: #181818; display: block; }
+
+    /* Filters */
+    .filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .filters input, .filters select { padding: 6px 10px; font-size: 12px; border: 1px solid #d8dde6; border-radius: 4px; font-family: inherit; }
+    .filters input { flex: 1; min-width: 140px; }
+    .filters select { min-width: 110px; }
+    .filters input:focus, .filters select:focus { outline: none; border-color: #0176d3; box-shadow: 0 0 0 2px rgba(1,118,211,0.2); }
+
+    /* Table */
+    .fb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .fb-table th { text-align: left; padding: 6px 8px; color: #706e6b; font-weight: 600; border-bottom: 2px solid #e5e5e5; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .fb-table td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+    .fb-table tr:hover td { background: #f3f3f3; }
+    .badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px; text-transform: uppercase; white-space: nowrap; }
+    .badge-bug { color: #c23934; background: #fce4e4; }
+    .badge-feature_request { color: #0176d3; background: #eef4ff; }
+    .badge-improvement { color: #2e844a; background: #e6f6ec; }
+    .badge-question { color: #fe9339; background: #fff3e0; }
+    .badge-general { color: #706e6b; background: #f0f0f0; }
+    .badge-new { color: #0176d3; background: #eef4ff; }
+    .badge-in_progress { color: #fe9339; background: #fff3e0; }
+    .badge-backlog { color: #706e6b; background: #f0f0f0; }
+    .badge-fixed { color: #2e844a; background: #e6f6ec; }
+    .badge-closed { color: #444; background: #e5e5e5; }
+    .badge-wont_fix { color: #c23934; background: #fce4e4; }
+    .empty { text-align: center; padding: 24px; color: #706e6b; }
+    .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11px; color: #706e6b; }
+
+    /* Detail panel (overlay) */
+    .detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); display: none; z-index: 50; }
+    .detail-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: #fff; box-shadow: -4px 0 16px rgba(0,0,0,0.15); overflow-y: auto; z-index: 51; padding: 20px; display: none; }
+    .detail-panel h3 { font-size: 14px; margin: 0 0 4px; }
+    .detail-meta { font-size: 11px; color: #706e6b; margin-bottom: 12px; }
+    .detail-section { margin-bottom: 14px; }
+    .detail-section label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; color: #444; margin-bottom: 4px; }
+    .detail-body { background: #f4f6f9; padding: 10px; border-radius: 6px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+    .detail-section select, .detail-section textarea { width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #d8dde6; border-radius: 4px; font-family: inherit; box-sizing: border-box; }
+    .detail-section textarea { min-height: 80px; resize: vertical; }
+    .detail-section select:focus, .detail-section textarea:focus { outline: none; border-color: #0176d3; box-shadow: 0 0 0 2px rgba(1,118,211,0.2); }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .btn { padding: 6px 14px; font-size: 12px; font-weight: 600; border: 1px solid #d8dde6; border-radius: 4px; cursor: pointer; font-family: inherit; }
+    .btn-brand { background: #0176d3; color: #fff; border-color: #0176d3; }
+    .btn-brand:hover { background: #014486; }
+    .btn-success { background: #2e844a; color: #fff; border-color: #2e844a; }
+    .btn-success:hover { background: #1d6b38; }
+    .btn-neutral { background: #fff; color: #0176d3; }
+    .btn-neutral:hover { background: #f3f3f3; }
+    .email-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e5e5e5; }
+    .toast { position: fixed; bottom: 16px; left: 16px; right: 16px; padding: 10px 14px; border-radius: 6px; font-size: 12px; color: #fff; z-index: 100; }
+    .toast-success { background: #2e844a; }
+    .toast-error { background: #c23934; }
+    .close-btn { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 20px; color: #706e6b; cursor: pointer; }
+    .close-btn:hover { color: #181818; }
+    .footer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e5e5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Feedback Manager</h2>
+
+    <!-- Stats summary -->
+    <div class="stat-bar" id="stat-bar"></div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <input type="text" id="filter-search" placeholder="Search title/body..." oninput="debounceLoad()" />
+      <select id="filter-type" onchange="loadFeedback()">
+        <option value="">All Types</option>
+        <option value="bug">Bug</option>
+        <option value="feature_request">Feature Request</option>
+        <option value="improvement">Improvement</option>
+        <option value="question">Question</option>
+        <option value="general">General</option>
+      </select>
+      <select id="filter-status" onchange="loadFeedback()">
+        <option value="">All Statuses</option>
+        <option value="new">New</option>
+        <option value="in_progress">In Progress</option>
+        <option value="backlog">Backlog</option>
+        <option value="fixed">Fixed</option>
+        <option value="closed">Closed</option>
+        <option value="wont_fix">Won't Fix</option>
+      </select>
+    </div>
+
+    <!-- Table -->
+    <div id="table-container">
+      <div class="empty">Loading...</div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer-actions">
+      <button class="btn btn-neutral" onclick="google.script.host.close()">Close</button>
+    </div>
+  </div>
+
+  <!-- Detail Side Panel -->
+  <div class="detail-overlay" id="detail-overlay" onclick="closeDetail()"></div>
+  <div class="detail-panel" id="detail-panel">
+    <button class="close-btn" onclick="closeDetail()">&times;</button>
+    <div id="detail-content"></div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script>
+    var allFeedback = [];
+    var currentItem = null;
+    var searchTimer = null;
+
+    // Init: load stats + feedback
+    loadStats();
+    loadFeedback();
+
+    function loadStats() {
+      google.script.run
+        .withSuccessHandler(function(stats) {
+          var bar = document.getElementById('stat-bar');
+          var s = stats.byStatus || {};
+          bar.innerHTML =
+            '<div class="stat"><strong>' + stats.total + '</strong>Total</div>' +
+            '<div class="stat"><strong>' + (s['new'] || 0) + '</strong>New</div>' +
+            '<div class="stat"><strong>' + (s['in_progress'] || 0) + '</strong>In Progress</div>' +
+            '<div class="stat"><strong>' + (s['backlog'] || 0) + '</strong>Backlog</div>' +
+            '<div class="stat"><strong>' + (s['fixed'] || 0) + '</strong>Fixed</div>' +
+            '<div class="stat"><strong>' + (s['closed'] || 0) + '</strong>Closed</div>';
+        })
+        .withFailureHandler(function() {})
+        .getFeedbackStats();
+    }
+
+    function debounceLoad() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadFeedback, 300);
+    }
+
+    function loadFeedback() {
+      var filters = {
+        search: document.getElementById('filter-search').value.trim(),
+        type: document.getElementById('filter-type').value,
+        status: document.getElementById('filter-status').value,
+        limit: 200
+      };
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          allFeedback = result.items || [];
+          renderTable(allFeedback, result.totalCount);
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('table-container').innerHTML =
+            '<div class="empty">' + escapeHtml(err.message) + '</div>';
+        })
+        .listAllFeedback(filters);
+    }
+
+    function renderTable(items, totalCount) {
+      var container = document.getElementById('table-container');
+      if (items.length === 0) {
+        container.innerHTML = '<div class="empty">No feedback items match your filters.</div>';
+        return;
+      }
+
+      var html = '<table class="fb-table"><thead><tr>' +
+        '<th>Type</th><th>Title</th><th>Status</th><th>User</th><th>Date</th>' +
+        '</tr></thead><tbody>';
+
+      items.forEach(function(item, idx) {
+        var date = item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '';
+        var user = (item.userEmail || '').split('@')[0]; // show only local part
+        html += '<tr onclick="openDetail(' + idx + ')">' +
+          '<td><span class="badge badge-' + item.type + '">' + formatType(item.type) + '</span></td>' +
+          '<td>' + escapeHtml(item.title) + '</td>' +
+          '<td><span class="badge badge-' + item.status + '">' + formatStatus(item.status) + '</span></td>' +
+          '<td title="' + escapeHtml(item.userEmail) + '">' + escapeHtml(user) + '</td>' +
+          '<td>' + date + '</td>' +
+          '</tr>';
+      });
+
+      html += '</tbody></table>';
+      html += '<div class="pagination"><span>Showing ' + items.length + ' of ' + totalCount + '</span></div>';
+      container.innerHTML = html;
+    }
+
+    function openDetail(idx) {
+      currentItem = allFeedback[idx];
+      if (!currentItem) return;
+
+      var date = currentItem.timestamp ? new Date(currentItem.timestamp).toLocaleString() : '';
+      var updatedDate = currentItem.updatedAt ? new Date(currentItem.updatedAt).toLocaleString() : '';
+
+      var html =
+        '<h3>' + escapeHtml(currentItem.title) + '</h3>' +
+        '<div class="detail-meta">' +
+          '<span class="badge badge-' + currentItem.type + '">' + formatType(currentItem.type) + '</span> &nbsp;' +
+          '<span class="badge badge-' + currentItem.status + '">' + formatStatus(currentItem.status) + '</span><br>' +
+          'From: ' + escapeHtml(currentItem.userEmail) + ' &middot; ' + date +
+          (updatedDate ? '<br>Last updated: ' + updatedDate + ' by ' + escapeHtml(currentItem.updatedBy || '') : '') +
+        '</div>' +
+
+        '<div class="detail-section">' +
+          '<label>Description</label>' +
+          '<div class="detail-body">' + escapeHtml(currentItem.body) + '</div>' +
+        '</div>' +
+
+        '<div class="detail-section">' +
+          '<label>Type</label>' +
+          '<select id="detail-type">' +
+            typeOptions(currentItem.type) +
+          '</select>' +
+        '</div>' +
+
+        '<div class="detail-section">' +
+          '<label>Status</label>' +
+          '<select id="detail-status">' +
+            statusOptions(currentItem.status) +
+          '</select>' +
+        '</div>' +
+
+        '<div class="detail-section">' +
+          '<label>Admin Comments</label>' +
+          '<textarea id="detail-comments" placeholder="Internal notes...">' + escapeHtml(currentItem.adminComments) + '</textarea>' +
+        '</div>' +
+
+        '<div class="btn-row">' +
+          '<button class="btn btn-brand" onclick="saveDetail()">Save Changes</button>' +
+        '</div>' +
+
+        '<div class="email-section">' +
+          '<label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;color:#444;margin-bottom:4px;display:block">Email Response to User</label>' +
+          '<textarea id="detail-email" placeholder="Type a message to send to ' + escapeHtml(currentItem.userEmail) + '..." rows="3" style="width:100%;padding:6px 10px;font-size:12px;border:1px solid #d8dde6;border-radius:4px;font-family:inherit;box-sizing:border-box;resize:vertical"></textarea>' +
+          '<div class="btn-row" style="margin-top:8px">' +
+            '<button class="btn btn-success" onclick="emailUser()">Send Email Response</button>' +
+          '</div>' +
+        '</div>';
+
+      document.getElementById('detail-content').innerHTML = html;
+      document.getElementById('detail-panel').style.display = 'block';
+      document.getElementById('detail-overlay').style.display = 'block';
+    }
+
+    function closeDetail() {
+      document.getElementById('detail-panel').style.display = 'none';
+      document.getElementById('detail-overlay').style.display = 'none';
+      currentItem = null;
+    }
+
+    function saveDetail() {
+      if (!currentItem) return;
+
+      var updates = {
+        type: document.getElementById('detail-type').value,
+        status: document.getElementById('detail-status').value,
+        adminComments: document.getElementById('detail-comments').value
+      };
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            showToast('Saved', 'success');
+            loadFeedback();
+            loadStats();
+          } else {
+            showToast(result.message, 'error');
+          }
+        })
+        .withFailureHandler(function(err) { showToast(err.message, 'error'); })
+        .updateFeedback(currentItem.id, updates);
+    }
+
+    function emailUser() {
+      if (!currentItem) return;
+      var msg = document.getElementById('detail-email').value.trim();
+      if (!msg) { showToast('Enter a message first.', 'error'); return; }
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            showToast(result.message, 'success');
+            document.getElementById('detail-email').value = '';
+            loadFeedback();
+          } else {
+            showToast(result.message, 'error');
+          }
+        })
+        .withFailureHandler(function(err) { showToast(err.message, 'error'); })
+        .sendFeedbackResponse(currentItem.id, msg);
+    }
+
+    function typeOptions(selected) {
+      var types = ['bug', 'feature_request', 'improvement', 'question', 'general'];
+      return types.map(function(t) {
+        return '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + formatType(t) + '</option>';
+      }).join('');
+    }
+
+    function statusOptions(selected) {
+      var statuses = ['new', 'in_progress', 'backlog', 'fixed', 'closed', 'wont_fix'];
+      return statuses.map(function(s) {
+        return '<option value="' + s + '"' + (s === selected ? ' selected' : '') + '>' + formatStatus(s) + '</option>';
+      }).join('');
+    }
+
+    function formatType(t) { return (t || 'general').replace(/_/g, ' '); }
+    function formatStatus(s) { return (s || 'new').replace(/_/g, ' '); }
+
+    function showToast(msg, type) {
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(function() { el.remove(); }, 3000);
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

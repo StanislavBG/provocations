@@ -1,0 +1,247 @@
+<!--
+  LogViewer.html — Admin log viewer with search, filter, detail, and CSV export.
+  Reads from AccessLog and ErrorLog tabs in the admin config sheet.
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Salesforce Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 0; margin: 0; color: #181818; background: #f4f6f9; }
+    .container { padding: 16px; }
+    h2 { font-size: 16px; color: #0176d3; margin: 0 0 12px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid #e5e5e5; margin-bottom: 12px; }
+    .tab { padding: 8px 16px; font-size: 12px; font-weight: 600; font-family: inherit; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: #706e6b; cursor: pointer; text-transform: uppercase; letter-spacing: 0.3px; }
+    .tab:hover { color: #181818; }
+    .tab.active { color: #0176d3; border-bottom-color: #0176d3; }
+
+    /* Filters */
+    .filters { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .filters input, .filters select { padding: 6px 10px; font-size: 12px; border: 1px solid #d8dde6; border-radius: 4px; font-family: inherit; }
+    .filters input { flex: 1; min-width: 120px; }
+    .filters input:focus, .filters select:focus { outline: none; border-color: #0176d3; box-shadow: 0 0 0 2px rgba(1,118,211,0.2); }
+
+    /* Table */
+    .log-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .log-table th { text-align: left; padding: 5px 6px; color: #706e6b; font-weight: 600; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #e5e5e5; letter-spacing: 0.3px; }
+    .log-table td { padding: 5px 6px; border-bottom: 1px solid #f0f0f0; cursor: pointer; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-table tr:hover td { background: #f3f3f3; }
+    .badge-yes { color: #2e844a; font-weight: 700; }
+    .badge-no { color: #c23934; font-weight: 700; }
+
+    .empty { text-align: center; padding: 20px; color: #706e6b; font-size: 12px; }
+    .count { font-size: 11px; color: #706e6b; margin-bottom: 8px; }
+
+    /* Detail modal */
+    .detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); display: none; z-index: 50; }
+    .detail-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); padding: 20px; width: 400px; max-width: 90%; max-height: 70vh; overflow-y: auto; z-index: 51; display: none; }
+    .detail-box h3 { font-size: 14px; margin: 0 0 12px; color: #0176d3; }
+    .detail-row { margin-bottom: 8px; }
+    .detail-row label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; color: #706e6b; display: block; margin-bottom: 2px; }
+    .detail-row .value { font-size: 12px; background: #f4f6f9; padding: 6px 8px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
+    .close-btn { position: absolute; top: 10px; right: 14px; background: none; border: none; font-size: 20px; color: #706e6b; cursor: pointer; }
+    .close-btn:hover { color: #181818; }
+
+    /* Footer */
+    .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e5e5; }
+    .btn { padding: 6px 14px; font-size: 12px; font-weight: 600; border: 1px solid #d8dde6; border-radius: 4px; cursor: pointer; font-family: inherit; }
+    .btn-brand { background: #0176d3; color: #fff; border-color: #0176d3; }
+    .btn-brand:hover { background: #014486; }
+    .btn-success { background: #2e844a; color: #fff; border-color: #2e844a; }
+    .btn-success:hover { background: #1d6b38; }
+    .btn-neutral { background: #fff; color: #0176d3; }
+    .btn-neutral:hover { background: #f3f3f3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Log Viewer</h2>
+
+    <!-- Tabs: Access Log | Error Log -->
+    <div class="tabs">
+      <button class="tab active" id="tab-access" onclick="switchLog('access')">Access Log</button>
+      <button class="tab" id="tab-error" onclick="switchLog('error')">Error Log</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <input type="text" id="filter-search" placeholder="Search..." oninput="filterLogs()" />
+      <select id="filter-col" onchange="filterLogs()">
+        <option value="">All Columns</option>
+      </select>
+    </div>
+
+    <div class="count" id="count-label"></div>
+
+    <!-- Table -->
+    <div id="table-container" style="max-height:360px;overflow-y:auto">
+      <div class="empty">Loading...</div>
+    </div>
+
+    <div class="footer">
+      <button class="btn btn-success" onclick="exportCSV()">Export CSV</button>
+      <button class="btn btn-neutral" onclick="google.script.host.close()">Close</button>
+    </div>
+  </div>
+
+  <!-- Detail popup -->
+  <div class="detail-overlay" id="detail-overlay" onclick="closeDetail()"></div>
+  <div class="detail-box" id="detail-box">
+    <button class="close-btn" onclick="closeDetail()">&times;</button>
+    <h3 id="detail-title">Log Entry</h3>
+    <div id="detail-rows"></div>
+  </div>
+
+  <script>
+    var activeLog = 'access';
+    var allRows = [];
+    var filteredRows = [];
+    var headers = [];
+
+    loadLogs();
+
+    function switchLog(type) {
+      activeLog = type;
+      document.getElementById('tab-access').classList.toggle('active', type === 'access');
+      document.getElementById('tab-error').classList.toggle('active', type === 'error');
+      document.getElementById('filter-search').value = '';
+      loadLogs();
+    }
+
+    function loadLogs() {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          headers = result.headers || [];
+          allRows = result.rows || [];
+          updateFilterOptions();
+          filterLogs();
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('table-container').innerHTML =
+            '<div class="empty">' + escapeHtml(err.message) + '</div>';
+        })
+        .getLogData(activeLog);
+    }
+
+    function updateFilterOptions() {
+      var select = document.getElementById('filter-col');
+      select.innerHTML = '<option value="">All Columns</option>';
+      headers.forEach(function(h, idx) {
+        select.innerHTML += '<option value="' + idx + '">' + escapeHtml(h) + '</option>';
+      });
+    }
+
+    function filterLogs() {
+      var search = document.getElementById('filter-search').value.toLowerCase();
+      var colFilter = document.getElementById('filter-col').value;
+
+      filteredRows = allRows.filter(function(row) {
+        if (!search) return true;
+        if (colFilter !== '') {
+          var idx = parseInt(colFilter, 10);
+          return String(row[idx] || '').toLowerCase().indexOf(search) !== -1;
+        }
+        return row.some(function(cell) {
+          return String(cell || '').toLowerCase().indexOf(search) !== -1;
+        });
+      });
+
+      renderTable();
+    }
+
+    function renderTable() {
+      var container = document.getElementById('table-container');
+      document.getElementById('count-label').textContent =
+        filteredRows.length + ' of ' + allRows.length + ' entries';
+
+      if (filteredRows.length === 0) {
+        container.innerHTML = '<div class="empty">No log entries match your filters.</div>';
+        return;
+      }
+
+      var html = '<table class="log-table"><thead><tr>';
+      headers.forEach(function(h) { html += '<th>' + escapeHtml(h) + '</th>'; });
+      html += '</tr></thead><tbody>';
+
+      // Show most recent first (reversed)
+      var display = filteredRows.slice().reverse().slice(0, 500);
+      display.forEach(function(row, displayIdx) {
+        var realIdx = filteredRows.length - 1 - displayIdx;
+        html += '<tr onclick="showDetail(' + realIdx + ')">';
+        row.forEach(function(cell, colIdx) {
+          var val = String(cell || '');
+          // Colorize authorized column
+          if (headers[colIdx] === 'authorized') {
+            var cls = val === 'yes' ? 'badge-yes' : 'badge-no';
+            html += '<td><span class="' + cls + '">' + escapeHtml(val) + '</span></td>';
+          } else {
+            html += '<td title="' + escapeHtml(val) + '">' + escapeHtml(val.length > 40 ? val.substring(0, 40) + '...' : val) + '</td>';
+          }
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      if (filteredRows.length > 500) {
+        html += '<div class="empty">Showing first 500 of ' + filteredRows.length + ' entries. Use filters to narrow.</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function showDetail(idx) {
+      var row = filteredRows[idx];
+      if (!row) return;
+
+      document.getElementById('detail-title').textContent =
+        activeLog === 'access' ? 'Access Log Entry' : 'Error Log Entry';
+
+      var html = '';
+      headers.forEach(function(h, i) {
+        html += '<div class="detail-row">' +
+          '<label>' + escapeHtml(h) + '</label>' +
+          '<div class="value">' + escapeHtml(String(row[i] || '')) + '</div>' +
+          '</div>';
+      });
+
+      document.getElementById('detail-rows').innerHTML = html;
+      document.getElementById('detail-box').style.display = 'block';
+      document.getElementById('detail-overlay').style.display = 'block';
+    }
+
+    function closeDetail() {
+      document.getElementById('detail-box').style.display = 'none';
+      document.getElementById('detail-overlay').style.display = 'none';
+    }
+
+    function exportCSV() {
+      if (filteredRows.length === 0) return;
+
+      var csv = headers.map(csvEscape).join(',') + '\n';
+      filteredRows.forEach(function(row) {
+        csv += row.map(function(cell) { return csvEscape(String(cell || '')); }).join(',') + '\n';
+      });
+
+      var blob = new Blob([csv], { type: 'text/csv' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'annotationapp_' + activeLog + '_log_' + new Date().toISOString().split('T')[0] + '.csv';
+      a.click();
+    }
+
+    function csvEscape(str) {
+      if (str.indexOf(',') !== -1 || str.indexOf('"') !== -1 || str.indexOf('\n') !== -1) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

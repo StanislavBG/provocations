@@ -22,6 +22,7 @@
  */
 function analyzeText(request) {
   enforceAccess();
+  trackUsage('analyze');
 
   if (!request || !request.text || typeof request.text !== 'string') {
     throw new Error('Text is required for analysis');

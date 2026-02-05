@@ -29,12 +29,22 @@ function onOpen() {
     }
   }
 
-  ui.createMenu('AnnotationApp')
+  var menu = ui.createMenu('AnnotationApp')
     .addItem('Open Workspace', 'showSidebar')
     .addItem('Import from Drive', 'showDrivePicker')
+    .addItem('Send Feedback', 'showFeedback')
     .addSeparator()
-    .addItem('Settings', 'showSettings')
-    .addItem('Admin Panel', 'showAdminPanel')
+    .addItem('Settings', 'showSettings');
+
+  // Admin submenu — shown to all but enforced server-side
+  menu.addSeparator()
+    .addSubMenu(ui.createMenu('Admin')
+      .addItem('Run Setup / Migrate', 'runSetup')
+      .addItem('User Management', 'showAdminPanel')
+      .addItem('Dashboard', 'showAdminDashboard')
+      .addItem('Feedback Manager', 'showFeedbackManager')
+      .addItem('Log Viewer', 'showLogViewer')
+    )
     .addItem('About', 'showAbout')
     .addToUi();
 }
@@ -124,7 +134,7 @@ function showSettings() {
  * Opens the admin panel dialog.
  */
 function showAdminPanel() {
-  enforceAccess();
+  enforceAdmin();
 
   var html = HtmlService.createTemplateFromFile('AdminPanel')
     .evaluate()
@@ -135,6 +145,78 @@ function showAdminPanel() {
     DocumentApp.getUi().showModalDialog(html, 'AnnotationApp Admin');
   } catch (e) {
     SpreadsheetApp.getUi().showModalDialog(html, 'AnnotationApp Admin');
+  }
+}
+
+/**
+ * Opens the feedback submission dialog.
+ */
+function showFeedback() {
+  enforceAccess();
+
+  var html = HtmlService.createTemplateFromFile('FeedbackModal')
+    .evaluate()
+    .setWidth(480)
+    .setHeight(520);
+
+  showDialog_(html, 'Send Feedback');
+}
+
+/**
+ * Opens the admin dashboard.
+ */
+function showAdminDashboard() {
+  enforceAdmin();
+
+  var html = HtmlService.createTemplateFromFile('AdminDashboard')
+    .evaluate()
+    .setWidth(580)
+    .setHeight(560);
+
+  showDialog_(html, 'Admin Dashboard');
+}
+
+/**
+ * Opens the feedback manager (admin-only).
+ */
+function showFeedbackManager() {
+  enforceAdmin();
+
+  var html = HtmlService.createTemplateFromFile('FeedbackManager')
+    .evaluate()
+    .setWidth(680)
+    .setHeight(560);
+
+  showDialog_(html, 'Feedback Manager');
+}
+
+/**
+ * Opens the log viewer (admin-only).
+ */
+function showLogViewer() {
+  enforceAdmin();
+
+  var html = HtmlService.createTemplateFromFile('LogViewer')
+    .evaluate()
+    .setWidth(650)
+    .setHeight(520);
+
+  showDialog_(html, 'Log Viewer');
+}
+
+/**
+ * Helper to show a modal dialog in either Docs or Sheets.
+ * @private
+ */
+function showDialog_(html, title) {
+  try {
+    DocumentApp.getUi().showModalDialog(html, title);
+  } catch (e) {
+    try {
+      SpreadsheetApp.getUi().showModalDialog(html, title);
+    } catch (e2) {
+      Logger.log('Cannot show dialog outside Docs/Sheets');
+    }
   }
 }
 
@@ -211,6 +293,35 @@ function getConfigState() {
     model: config.model,
     useVertexAi: config.useVertexAi,
     vertexProject: config.vertexProject ? '(configured)' : null,
-    vertexLocation: config.vertexLocation || null
+    vertexLocation: config.vertexLocation || null,
+    userRole: getUserRole(),
+    userEmail: Session.getActiveUser().getEmail()
+  };
+}
+
+// ============================================================
+// Log Data Retrieval (for LogViewer)
+// ============================================================
+
+/**
+ * Get log data for the LogViewer. Admin-only.
+ *
+ * @param {string} logType - 'access' or 'error'
+ * @return {Object} { headers: string[], rows: any[][] }
+ */
+function getLogData(logType) {
+  enforceAdmin();
+
+  var adminSheet = getAdminSheet_();
+  if (!adminSheet) return { headers: [], rows: [] };
+
+  var sheetName = logType === 'error' ? SHEET_ERROR_LOG : SHEET_ACCESS_LOG;
+  var sheet = adminSheet.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() <= 1) return { headers: [], rows: [] };
+
+  var data = sheet.getDataRange().getValues();
+  return {
+    headers: data[0].map(function(h) { return String(h); }),
+    rows: data.slice(1)
   };
 }

@@ -361,6 +361,7 @@ function applyProvocationResponse(provId, transcript) {
 function dismissProvocation(provId) {
   state.provocations = state.provocations.filter(function(p) { return p.id !== provId; });
   renderProvocations();
+  google.script.run.trackUsage('provocation_dismiss');
 }
 
 // ============================================================
@@ -636,5 +637,13 @@ function escapeHtml(str) {
 
 function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ============================================================
+// Feedback Pill
+// ============================================================
+
+function openFeedback() {
+  google.script.run.showFeedback();
 }
 </script>

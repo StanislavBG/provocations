@@ -76,18 +76,29 @@
         return;
       }
 
-      var html = '<table><thead><tr><th>Email</th><th>Status</th><th>Last Access</th><th></th></tr></thead><tbody>';
+      var html = '<table><thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Last Access</th><th></th></tr></thead><tbody>';
       users.forEach(function(u) {
         var statusClass = u.status === 'active' ? 'status-active' : 'status-revoked';
         var lastAccess = u.lastAccess && u.lastAccess !== 'never'
           ? new Date(u.lastAccess).toLocaleDateString()
           : 'Never';
+        var roleLabel = u.role === 'admin'
+          ? '<span style="color:#0176d3;font-weight:600">admin</span>'
+          : '<span style="color:#706e6b">user</span>';
         html += '<tr>' +
           '<td>' + escapeHtml(u.email) + '</td>' +
+          '<td>' + roleLabel + '</td>' +
           '<td><span class="' + statusClass + '">' + u.status + '</span></td>' +
           '<td>' + lastAccess + '</td>' +
-          '<td>';
+          '<td style="white-space:nowrap">';
         if (u.status === 'active') {
+          if (u.role !== 'admin') {
+            html += '<button class="btn btn-neutral" style="padding:3px 6px;font-size:10px;margin-right:2px" ' +
+              'onclick="setRole(\'' + escapeHtml(u.email) + '\', \'admin\')" title="Promote to admin">&#x2B06;</button>';
+          } else {
+            html += '<button class="btn btn-neutral" style="padding:3px 6px;font-size:10px;margin-right:2px" ' +
+              'onclick="setRole(\'' + escapeHtml(u.email) + '\', \'user\')" title="Demote to user">&#x2B07;</button>';
+          }
           html += '<button class="btn btn-destructive" style="padding:4px 8px;font-size:11px" ' +
             'onclick="revoke(\'' + escapeHtml(u.email) + '\')">Revoke</button>';
         } else {
@@ -135,6 +146,19 @@
         .withSuccessHandler(function() { loadUsers(); showToast('Reactivated', 'success'); })
         .withFailureHandler(function(err) { showToast(err.message, 'error'); })
         .inviteUser(email);
+    }
+
+    function setRole(email, role) {
+      var action = role === 'admin' ? 'promote to admin' : 'demote to user';
+      if (!confirm('Are you sure you want to ' + action + ': ' + email + '?')) return;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) { loadUsers(); showToast(result.message, 'success'); }
+          else { showToast(result.message, 'error'); }
+        })
+        .withFailureHandler(function(err) { showToast(err.message, 'error'); })
+        .setUserRole(email, role);
     }
 
     function showToast(msg, type) {

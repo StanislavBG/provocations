@@ -29,6 +29,7 @@
  */
 function writeDocument(request) {
   enforceAccess();
+  trackUsage('write');
 
   if (!request || !request.document || !request.instruction) {
     throw new Error('Document and instruction are required');
@@ -256,6 +257,7 @@ function analyzeChanges_(original, evolved, instruction) {
  */
 function summarizeIntent(transcript, context) {
   enforceAccess();
+  trackUsage('voice_input');
 
   if (!transcript || typeof transcript !== 'string') {
     throw new Error('Transcript is required');

@@ -188,6 +188,7 @@ function getAdminSheet_() {
  * @return {Object} { success, inviteToken, message }
  */
 function inviteUser(targetEmail) {
+  enforceAdmin();
   var access = enforceAccess();
   targetEmail = targetEmail.trim().toLowerCase();
 
@@ -199,24 +200,9 @@ function inviteUser(targetEmail) {
     };
   }
 
-  // Check if admin
   var adminSheet = getAdminSheet_();
   if (!adminSheet) {
-    throw new Error('Admin sheet not configured. Run setupAdmin() first.');
-  }
-
-  var configSheet = adminSheet.getSheetByName(SHEET_APP_CONFIG);
-  var configData = configSheet.getDataRange().getValues();
-  var adminEmail = '';
-  for (var i = 1; i < configData.length; i++) {
-    if (configData[i][0] === 'admin_email') {
-      adminEmail = configData[i][1];
-      break;
-    }
-  }
-
-  if (access.email !== adminEmail) {
-    return { success: false, message: 'Only the admin can invite users.' };
+    throw new Error('Admin sheet not configured. Run Setup first.');
   }
 
   // Check if already invited
@@ -242,7 +228,7 @@ function inviteUser(targetEmail) {
     }
   }
 
-  // Create invite
+  // Create invite — default role is 'user'
   var token = generateInviteToken_(targetEmail);
   usersSheet.appendRow([
     targetEmail,
@@ -250,7 +236,8 @@ function inviteUser(targetEmail) {
     'active',
     '',
     access.email,
-    new Date().toISOString()
+    new Date().toISOString(),
+    'user'
   ]);
 
   return {
@@ -277,7 +264,7 @@ function inviteUsers(emails) {
  * @return {Object} { success, message }
  */
 function revokeUser(targetEmail) {
-  var access = enforceAccess();
+  enforceAdmin();
   targetEmail = targetEmail.trim().toLowerCase();
 
   var adminSheet = getAdminSheet_();
@@ -301,7 +288,7 @@ function revokeUser(targetEmail) {
  * @return {Object[]}
  */
 function listInvitedUsers() {
-  enforceAccess();
+  enforceAdmin();
 
   var adminSheet = getAdminSheet_();
   if (!adminSheet) return [];
@@ -310,6 +297,8 @@ function listInvitedUsers() {
   if (!usersSheet) return [];
 
   var data = usersSheet.getDataRange().getValues();
+  var headers = data[0];
+  var roleIdx = headers.indexOf('role');
   var users = [];
 
   for (var i = 1; i < data.length; i++) {
@@ -319,7 +308,8 @@ function listInvitedUsers() {
         status: data[i][2] || 'active',
         lastAccess: data[i][3] || 'never',
         invitedBy: data[i][4] || '',
-        invitedAt: data[i][5] || ''
+        invitedAt: data[i][5] || '',
+        role: roleIdx !== -1 ? (data[i][roleIdx] || 'user') : 'user'
       });
     }
   }
@@ -377,6 +367,88 @@ function validateInviteToken(email, token) {
   }
 
   return false;
+}
+
+// ============================================================
+// Role-Based Permissions
+// ============================================================
+
+/**
+ * Check if the current user has the admin role.
+ * Admins are marked with role='admin' in the InvitedUsers sheet.
+ *
+ * @return {boolean}
+ */
+function isAdmin() {
+  var email = Session.getActiveUser().getEmail().toLowerCase();
+  var adminSheet = getAdminSheet_();
+  if (!adminSheet) return false;
+
+  var usersSheet = adminSheet.getSheetByName(SHEET_INVITED_USERS);
+  if (!usersSheet) return false;
+
+  var headers = usersSheet.getRange(1, 1, 1, usersSheet.getLastColumn()).getValues()[0];
+  var roleIdx = headers.indexOf('role');
+  if (roleIdx === -1) return false;
+
+  var data = usersSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] && data[i][0].toString().toLowerCase() === email) {
+      return data[i][roleIdx] === 'admin';
+    }
+  }
+  return false;
+}
+
+/**
+ * Enforce admin-only access. Throws if the current user is not an admin.
+ */
+function enforceAdmin() {
+  enforceAccess();
+  if (!isAdmin()) {
+    throw new Error('This action requires administrator privileges.');
+  }
+}
+
+/**
+ * Get the current user's role.
+ * @return {string} 'admin' or 'user'
+ */
+function getUserRole() {
+  return isAdmin() ? 'admin' : 'user';
+}
+
+/**
+ * Set a user's role.  Admin-only.
+ * @param {string} targetEmail
+ * @param {string} role - 'admin' or 'user'
+ * @return {Object} { success, message }
+ */
+function setUserRole(targetEmail, role) {
+  enforceAdmin();
+  targetEmail = targetEmail.trim().toLowerCase();
+
+  if (role !== 'admin' && role !== 'user') {
+    return { success: false, message: 'Role must be "admin" or "user".' };
+  }
+
+  var adminSheet = getAdminSheet_();
+  if (!adminSheet) throw new Error('Admin sheet not configured.');
+
+  var usersSheet = adminSheet.getSheetByName(SHEET_INVITED_USERS);
+  var headers = usersSheet.getRange(1, 1, 1, usersSheet.getLastColumn()).getValues()[0];
+  var roleIdx = headers.indexOf('role');
+  if (roleIdx === -1) throw new Error('Role column missing. Run Setup first.');
+
+  var data = usersSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] && data[i][0].toString().toLowerCase() === targetEmail) {
+      usersSheet.getRange(i + 1, roleIdx + 1).setValue(role);
+      return { success: true, message: 'Set ' + targetEmail + ' to role: ' + role };
+    }
+  }
+
+  return { success: false, message: 'User not found: ' + targetEmail };
 }
 
 // ============================================================

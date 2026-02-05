@@ -1,0 +1,188 @@
+<!--
+  FeedbackModal.html — User-facing feedback submission dialog.
+  Opened from the persistent pill button in the sidebar footer.
+  SLDS-styled to match the rest of the app.
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Salesforce Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 0; margin: 0; color: #181818; background: #f4f6f9; }
+    .modal-container { padding: 20px; }
+    h2 { font-size: 16px; color: #0176d3; margin: 0 0 4px; }
+    .subtitle { font-size: 12px; color: #706e6b; margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 11px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+    input, textarea, select { width: 100%; padding: 8px 12px; font-family: inherit; font-size: 13px; border: 1px solid #d8dde6; border-radius: 4px; background: #fff; color: #181818; box-sizing: border-box; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #0176d3; box-shadow: 0 0 0 2px rgba(1,118,211,0.2); }
+    textarea { resize: vertical; min-height: 100px; }
+    select { appearance: auto; cursor: pointer; }
+    .type-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .type-pill { padding: 5px 14px; font-size: 12px; font-weight: 600; border: 1px solid #d8dde6; border-radius: 16px; background: #fff; color: #706e6b; cursor: pointer; transition: all 0.12s; font-family: inherit; }
+    .type-pill:hover { border-color: #0176d3; color: #0176d3; background: #eef4ff; }
+    .type-pill.selected { background: #0176d3; color: #fff; border-color: #0176d3; }
+    .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .btn { padding: 8px 20px; font-size: 13px; font-weight: 600; border: 1px solid #d8dde6; border-radius: 4px; cursor: pointer; font-family: inherit; }
+    .btn-brand { background: #0176d3; color: #fff; border-color: #0176d3; }
+    .btn-brand:hover { background: #014486; }
+    .btn-brand:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-neutral { background: #fff; color: #0176d3; }
+    .btn-neutral:hover { background: #f3f3f3; }
+    .status-msg { padding: 10px; border-radius: 4px; font-size: 12px; margin-top: 12px; display: none; }
+    .status-msg.success { display: block; background: #e6f6ec; color: #2e844a; }
+    .status-msg.error { display: block; background: #fce4e4; color: #c23934; }
+    /* My feedback history */
+    .history-section { margin-top: 20px; border-top: 1px solid #e5e5e5; padding-top: 12px; }
+    .history-item { padding: 8px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+    .history-item:last-child { border-bottom: none; }
+    .history-meta { display: flex; justify-content: space-between; margin-bottom: 2px; }
+    .history-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; padding: 1px 6px; border-radius: 8px; }
+    .history-type.bug { color: #c23934; background: #fce4e4; }
+    .history-type.feature_request { color: #0176d3; background: #eef4ff; }
+    .history-type.improvement { color: #2e844a; background: #e6f6ec; }
+    .history-type.question { color: #fe9339; background: #fff3e0; }
+    .history-type.general { color: #706e6b; background: #f0f0f0; }
+    .history-status { font-size: 10px; font-weight: 600; color: #706e6b; }
+    .history-title { font-weight: 600; }
+    .admin-reply { margin-top: 4px; padding: 6px 8px; background: #eef4ff; border-radius: 4px; font-size: 11px; color: #444; }
+    h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #444; margin-bottom: 8px; }
+    .empty { text-align: center; padding: 12px; color: #706e6b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="modal-container">
+    <h2>Send Feedback</h2>
+    <div class="subtitle">Help us improve AnnotationApp. Bug reports, ideas, and questions are all welcome.</div>
+
+    <div class="form-group">
+      <label>Type</label>
+      <div class="type-pills">
+        <button class="type-pill selected" data-type="general" onclick="selectType(this)">General</button>
+        <button class="type-pill" data-type="bug" onclick="selectType(this)">Bug</button>
+        <button class="type-pill" data-type="feature_request" onclick="selectType(this)">Feature Request</button>
+        <button class="type-pill" data-type="improvement" onclick="selectType(this)">Improvement</button>
+        <button class="type-pill" data-type="question" onclick="selectType(this)">Question</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="fb-title" placeholder="Brief summary of your feedback" maxlength="200" />
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="fb-body" placeholder="Describe in detail. For bugs, include steps to reproduce." rows="5"></textarea>
+    </div>
+
+    <div id="status-msg" class="status-msg"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-neutral" onclick="google.script.host.close()">Cancel</button>
+      <button class="btn btn-brand" id="submit-btn" onclick="submit()">Submit Feedback</button>
+    </div>
+
+    <!-- My previous feedback -->
+    <div id="history-section" class="history-section" style="display:none">
+      <h3>My Previous Feedback</h3>
+      <div id="history-list"></div>
+    </div>
+  </div>
+
+  <script>
+    var selectedType = 'general';
+
+    // Load previous feedback
+    google.script.run
+      .withSuccessHandler(renderHistory)
+      .withFailureHandler(function() {})
+      .getMyFeedback();
+
+    function selectType(el) {
+      document.querySelectorAll('.type-pill').forEach(function(p) { p.classList.remove('selected'); });
+      el.classList.add('selected');
+      selectedType = el.dataset.type;
+    }
+
+    function submit() {
+      var title = document.getElementById('fb-title').value.trim();
+      var body = document.getElementById('fb-body').value.trim();
+
+      if (!title) { showStatus('Please enter a title.', 'error'); return; }
+      if (!body) { showStatus('Please enter a description.', 'error'); return; }
+
+      document.getElementById('submit-btn').disabled = true;
+      document.getElementById('submit-btn').textContent = 'Submitting...';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            showStatus(result.message, 'success');
+            document.getElementById('fb-title').value = '';
+            document.getElementById('fb-body').value = '';
+            document.getElementById('submit-btn').disabled = false;
+            document.getElementById('submit-btn').textContent = 'Submit Feedback';
+            // Refresh history
+            google.script.run.withSuccessHandler(renderHistory).getMyFeedback();
+          } else {
+            showStatus(result.message, 'error');
+            document.getElementById('submit-btn').disabled = false;
+            document.getElementById('submit-btn').textContent = 'Submit Feedback';
+          }
+        })
+        .withFailureHandler(function(err) {
+          showStatus('Error: ' + err.message, 'error');
+          document.getElementById('submit-btn').disabled = false;
+          document.getElementById('submit-btn').textContent = 'Submit Feedback';
+        })
+        .submitFeedback({ type: selectedType, title: title, body: body });
+    }
+
+    function showStatus(msg, type) {
+      var el = document.getElementById('status-msg');
+      el.textContent = msg;
+      el.className = 'status-msg ' + type;
+    }
+
+    function renderHistory(items) {
+      var section = document.getElementById('history-section');
+      var list = document.getElementById('history-list');
+
+      if (!items || items.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+      var html = '';
+
+      items.forEach(function(item) {
+        var date = item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '';
+        html += '<div class="history-item">' +
+          '<div class="history-meta">' +
+            '<span class="history-type ' + item.type + '">' + formatType(item.type) + '</span>' +
+            '<span class="history-status">' + item.status + ' &middot; ' + date + '</span>' +
+          '</div>' +
+          '<div class="history-title">' + escapeHtml(item.title) + '</div>';
+        if (item.adminComments) {
+          html += '<div class="admin-reply"><strong>Admin:</strong> ' + escapeHtml(item.adminComments) + '</div>';
+        }
+        html += '</div>';
+      });
+
+      list.innerHTML = html;
+    }
+
+    function formatType(t) {
+      return (t || 'general').replace(/_/g, ' ');
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

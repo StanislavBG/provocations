@@ -9,15 +9,16 @@
     "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/userinfo.email"
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/gmail.send"
   ],
   "addOns": {
     "common": {
-      "name": "Provocations",
+      "name": "AnnotationApp",
       "logoUrl": "https://www.gstatic.com/images/branding/product/1x/apps_script_48dp.png",
       "layoutProperties": {
-        "primaryColor": "#B35C1E",
-        "secondaryColor": "#1a5276"
+        "primaryColor": "#0176d3",
+        "secondaryColor": "#014486"
       }
     },
     "docs": {

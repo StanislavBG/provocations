@@ -94,6 +94,7 @@ function getOrCreateSubfolder_(parent, name) {
  */
 function saveAudioFile(base64Data, mimeType, filename) {
   enforceAccess();
+  trackUsage('save_audio');
   var folders = getOrCreateAppFolders();
 
   var decoded = Utilities.base64Decode(base64Data);
@@ -128,6 +129,7 @@ function saveAudioFile(base64Data, mimeType, filename) {
  */
 function saveTranscript(transcript, title, metadata) {
   enforceAccess();
+  trackUsage('save_transcript');
   var folders = getOrCreateAppFolders();
 
   var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HH-mm-ss');
@@ -167,6 +169,7 @@ function saveTranscript(transcript, title, metadata) {
  */
 function saveDocumentToDrive(text, title, objective) {
   enforceAccess();
+  trackUsage('save_to_drive');
   var folders = getOrCreateAppFolders();
 
   var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HH-mm');

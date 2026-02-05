@@ -546,4 +546,30 @@
     font-size: 12px;
     color: var(--color-text-secondary);
   }
+
+  /* ---- Feedback Pill (always visible bottom-right) ---- */
+
+  .feedback-pill {
+    position: fixed;
+    bottom: 40px;
+    right: 12px;
+    padding: 6px 14px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-inverse);
+    background: var(--brand-primary);
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    box-shadow: var(--shadow-elevated);
+    z-index: 900;
+    transition: background 0.15s, transform 0.1s;
+    letter-spacing: 0.2px;
+  }
+
+  .feedback-pill:hover {
+    background: var(--brand-primary-dark);
+    transform: translateY(-1px);
+  }
 </style>
