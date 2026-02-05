@@ -5,9 +5,10 @@ import { useToast } from "@/hooks/use-toast";
 
 interface VoiceRecorderProps {
   onTranscript: (text: string) => void;
+  onInterimTranscript?: (text: string) => void;
   onRecordingChange?: (isRecording: boolean) => void;
   size?: "sm" | "default" | "lg" | "icon";
-  variant?: "default" | "ghost" | "outline" | "secondary";
+  variant?: "default" | "ghost" | "outline" | "secondary" | "destructive";
   className?: string;
 }
 
@@ -42,6 +43,7 @@ interface SpeechRecognition extends EventTarget {
 
 export function VoiceRecorder({
   onTranscript,
+  onInterimTranscript,
   onRecordingChange,
   size = "icon",
   variant = "ghost",
@@ -56,12 +58,17 @@ export function VoiceRecorder({
 
   // Store callbacks in refs to avoid re-initializing recognition
   const onTranscriptRef = useRef(onTranscript);
+  const onInterimTranscriptRef = useRef(onInterimTranscript);
   const onRecordingChangeRef = useRef(onRecordingChange);
 
   // Keep refs in sync with props
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
   }, [onTranscript]);
+
+  useEffect(() => {
+    onInterimTranscriptRef.current = onInterimTranscript;
+  }, [onInterimTranscript]);
 
   useEffect(() => {
     onRecordingChangeRef.current = onRecordingChange;
@@ -82,16 +89,25 @@ export function VoiceRecorder({
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = "";
+      let interimTranscript = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
           finalTranscript += result[0].transcript;
+        } else {
+          interimTranscript += result[0].transcript;
         }
       }
 
       if (finalTranscript) {
         transcriptRef.current += finalTranscript + " ";
+      }
+
+      // Send real-time transcript updates (final + interim)
+      const fullTranscript = transcriptRef.current + interimTranscript;
+      if (fullTranscript && onInterimTranscriptRef.current) {
+        onInterimTranscriptRef.current(fullTranscript);
       }
     };
 
