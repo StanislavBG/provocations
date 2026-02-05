@@ -621,5 +621,59 @@ Output only the evolved document. No explanations.`
     }
   });
 
+  // Summarize voice transcript into clear intent
+  app.post("/api/summarize-intent", async (req, res) => {
+    try {
+      const { transcript, context } = req.body;
+
+      if (!transcript || typeof transcript !== "string") {
+        return res.status(400).json({ error: "Transcript is required" });
+      }
+
+      const contextLabel = context === "objective"
+        ? "document objective/goal"
+        : context === "source"
+        ? "source material for a document"
+        : "general content";
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert at extracting clear intent from spoken transcripts. The user has spoken a ${contextLabel}. Your job is to:
+
+1. Clean up speech artifacts (um, uh, repeated words, false starts)
+2. Extract the core intent/meaning
+3. Present it as a clear, concise statement
+
+For objectives: Output a single clear sentence describing what they want to create.
+For source material: Clean up and organize the spoken content into readable paragraphs.
+
+Be faithful to their intent - don't add information they didn't mention.`
+          },
+          {
+            role: "user",
+            content: `Raw transcript:\n\n${transcript}`
+          }
+        ],
+        max_tokens: context === "source" ? 4000 : 500,
+        temperature: 0.3,
+      });
+
+      const summary = response.choices[0]?.message?.content?.trim() || transcript;
+
+      res.json({
+        summary,
+        originalLength: transcript.length,
+        summaryLength: summary.length,
+      });
+    } catch (error) {
+      console.error("Summarize intent error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to summarize", details: errorMessage });
+    }
+  });
+
   return httpServer;
 }
