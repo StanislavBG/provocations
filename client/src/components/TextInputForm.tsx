@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown } from "lucide-react";
+import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
+import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { generateId } from "@/lib/utils";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { apiRequest } from "@/lib/queryClient";
 import type { ReferenceDocument } from "@shared/schema";
 
 const TEST_SAMPLE_TEXT = `By 2027, the labor market is expected to reach a critical "implementation plateau" where the novelty of AI shifts into deep organizational integration. Analysts from Gartner and the World Economic Forum suggest that while roughly 83 million jobs may be displaced globally, the emergence of 69 million new roles will offset much of this loss, centering the year on workforce transformation rather than total depletion. The most significant shift will be the rise of "Agentic AI," with 50% of companies expected to deploy autonomous AI agents that handle routine cognitive tasks like scheduling, basic coding, and data synthesis. This transition will likely hollow out entry-level white-collar positions—often called the "white-collar bloodbath"—forcing a massive "reskilling revolution" where 44% of core worker skills must be updated. While technical roles in AI ethics and data oversight will boom, the highest market value will ironically return to "AI-free" human skills: critical thinking, complex empathy, and high-stakes judgment in fields like healthcare and law.`;
@@ -34,6 +35,16 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [objectiveInterim, setObjectiveInterim] = useState("");
   const [isRecordingText, setIsRecordingText] = useState(false);
   const [textInterim, setTextInterim] = useState("");
+
+  // Raw transcript storage for "show original"
+  const [objectiveRawTranscript, setObjectiveRawTranscript] = useState<string | null>(null);
+  const [textRawTranscript, setTextRawTranscript] = useState<string | null>(null);
+  const [showObjectiveRaw, setShowObjectiveRaw] = useState(false);
+  const [showTextRaw, setShowTextRaw] = useState(false);
+
+  // Summarization state
+  const [isSummarizingObjective, setIsSummarizingObjective] = useState(false);
+  const [isSummarizingText, setIsSummarizingText] = useState(false);
 
   const handleAddReference = () => {
     if (newRefName.trim() && newRefContent.trim()) {
@@ -68,6 +79,90 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     onBlankDocument?.();
   };
 
+  // Handle objective voice transcript
+  const handleObjectiveVoiceComplete = (transcript: string) => {
+    setObjective(transcript);
+    setObjectiveInterim("");
+    // Store raw transcript for potential "show original"
+    if (transcript.length > 50) {
+      setObjectiveRawTranscript(transcript);
+    }
+  };
+
+  // Handle source text voice transcript
+  const handleTextVoiceComplete = (transcript: string) => {
+    const newText = text ? text + " " + transcript : transcript;
+    setText(newText);
+    setTextInterim("");
+    // Store raw transcript (append to existing if any)
+    if (transcript.length > 100) {
+      setTextRawTranscript((prev) => prev ? prev + " " + transcript : transcript);
+    }
+  };
+
+  // Summarize objective transcript
+  const handleSummarizeObjective = async () => {
+    if (!objective.trim()) return;
+    setIsSummarizingObjective(true);
+    try {
+      const response = await apiRequest("POST", "/api/summarize-intent", {
+        transcript: objective,
+        context: "objective",
+      });
+      const data = await response.json();
+      if (data.summary) {
+        // Store original before replacing
+        if (!objectiveRawTranscript) {
+          setObjectiveRawTranscript(objective);
+        }
+        setObjective(data.summary);
+      }
+    } catch (error) {
+      console.error("Failed to summarize objective:", error);
+    } finally {
+      setIsSummarizingObjective(false);
+    }
+  };
+
+  // Summarize source text transcript
+  const handleSummarizeText = async () => {
+    if (!text.trim()) return;
+    setIsSummarizingText(true);
+    try {
+      const response = await apiRequest("POST", "/api/summarize-intent", {
+        transcript: text,
+        context: "source",
+      });
+      const data = await response.json();
+      if (data.summary) {
+        // Store original before replacing
+        if (!textRawTranscript) {
+          setTextRawTranscript(text);
+        }
+        setText(data.summary);
+      }
+    } catch (error) {
+      console.error("Failed to summarize text:", error);
+    } finally {
+      setIsSummarizingText(false);
+    }
+  };
+
+  // Restore original transcript
+  const handleRestoreObjective = () => {
+    if (objectiveRawTranscript) {
+      setObjective(objectiveRawTranscript);
+      setShowObjectiveRaw(false);
+    }
+  };
+
+  const handleRestoreText = () => {
+    if (textRawTranscript) {
+      setText(textRawTranscript);
+      setShowTextRaw(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-3xl space-y-8">
@@ -93,11 +188,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               Define the objective for your document. This guides all AI assistance.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="objective" className="text-sm font-medium">Document Objective</Label>
               <div className="flex gap-2">
-                <Input
+                <AutoExpandTextarea
                   id="objective"
                   data-testid="input-objective"
                   placeholder="e.g., Create a persuasive investor pitch, Write a technical design doc, Draft a team communication..."
@@ -105,12 +200,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   value={isRecordingObjective ? objectiveInterim || objective : objective}
                   onChange={(e) => setObjective(e.target.value)}
                   readOnly={isRecordingObjective}
+                  minRows={1}
+                  maxRows={6}
                 />
                 <VoiceRecorder
-                  onTranscript={(text) => {
-                    setObjective(text);
-                    setObjectiveInterim("");
-                  }}
+                  onTranscript={handleObjectiveVoiceComplete}
                   onInterimTranscript={setObjectiveInterim}
                   onRecordingChange={setIsRecordingObjective}
                   size="default"
@@ -119,6 +213,69 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               </div>
               {isRecordingObjective && (
                 <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
+              )}
+
+              {/* Summarize and show original controls for objective */}
+              {objective.length > 50 && !isRecordingObjective && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSummarizeObjective}
+                    disabled={isSummarizingObjective}
+                    className="gap-1.5 text-xs h-7"
+                  >
+                    {isSummarizingObjective ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Summarizing...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-3 h-3" />
+                        Clean up / Summarize
+                      </>
+                    )}
+                  </Button>
+                  {objectiveRawTranscript && objectiveRawTranscript !== objective && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
+                      className="gap-1.5 text-xs h-7"
+                    >
+                      {showObjectiveRaw ? (
+                        <>
+                          <EyeOff className="w-3 h-3" />
+                          Hide original
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3 h-3" />
+                          Show original
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {objectiveRawTranscript && objectiveRawTranscript !== objective && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRestoreObjective}
+                      className="gap-1.5 text-xs h-7"
+                    >
+                      Restore original
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Show original transcript */}
+              {showObjectiveRaw && objectiveRawTranscript && (
+                <div className="p-3 rounded-lg bg-muted/50 border text-sm">
+                  <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
+                </div>
               )}
             </div>
           </CardContent>
@@ -191,11 +348,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     </Select>
                   </div>
                   <div className="relative">
-                    <Textarea
+                    <AutoExpandTextarea
                       placeholder="Paste the reference content here..."
                       value={newRefContent}
                       onChange={(e) => setNewRefContent(e.target.value)}
-                      className="min-h-[100px] text-sm pr-10"
+                      className="text-sm pr-10"
+                      minRows={3}
+                      maxRows={15}
                     />
                     <div className="absolute top-2 right-2">
                       <VoiceRecorder
@@ -236,20 +395,19 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="relative">
-              <Textarea
+              <AutoExpandTextarea
                 data-testid="input-source-text"
-                placeholder="Paste your text here... The more context you provide, the more incisive the provocations will be."
-                className={`min-h-[220px] text-base resize-none leading-relaxed font-serif pr-12 ${isRecordingText ? "border-primary" : ""}`}
+                placeholder="Paste your text here, or use the microphone to speak for up to 10 minutes. The more context you provide, the more incisive the provocations will be."
+                className={`text-base leading-relaxed font-serif pr-12 ${isRecordingText ? "border-primary" : ""}`}
                 value={isRecordingText ? textInterim || text : text}
                 onChange={(e) => setText(e.target.value)}
                 readOnly={isRecordingText}
+                minRows={8}
+                maxRows={30}
               />
               <div className="absolute top-2 right-2">
                 <VoiceRecorder
-                  onTranscript={(transcript) => {
-                    setText((prev) => prev ? prev + " " + transcript : transcript);
-                    setTextInterim("");
-                  }}
+                  onTranscript={handleTextVoiceComplete}
                   onInterimTranscript={(interim) => setTextInterim(text ? text + " " + interim : interim)}
                   onRecordingChange={setIsRecordingText}
                   size="icon"
@@ -259,16 +417,79 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               {isRecordingText && (
                 <div className="absolute bottom-2 left-2 right-12">
                   <p className="text-xs text-primary animate-pulse bg-background/80 px-2 py-1 rounded">
-                    Listening... speak your source material
+                    Listening... speak your source material (up to 10 min)
                   </p>
                 </div>
               )}
             </div>
-            
+
+            {/* Summarize and show original controls for source text */}
+            {text.length > 200 && !isRecordingText && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSummarizeText}
+                  disabled={isSummarizingText}
+                  className="gap-1.5 text-xs h-7"
+                >
+                  {isSummarizingText ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Cleaning up...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3 h-3" />
+                      Clean up transcript
+                    </>
+                  )}
+                </Button>
+                {textRawTranscript && textRawTranscript !== text && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTextRaw(!showTextRaw)}
+                      className="gap-1.5 text-xs h-7"
+                    >
+                      {showTextRaw ? (
+                        <>
+                          <EyeOff className="w-3 h-3" />
+                          Hide original
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3 h-3" />
+                          Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRestoreText}
+                      className="gap-1.5 text-xs h-7"
+                    >
+                      Restore original
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Show original transcript */}
+            {showTextRaw && textRawTranscript && (
+              <div className="p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
+                <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
+                <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
               <div className="text-sm text-muted-foreground">
                 {text.length > 0 && (
-                  <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
+                  <span data-testid="text-char-count">{text.length.toLocaleString()} characters (~{Math.ceil(text.split(/\s+/).length / 150)} min read)</span>
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
