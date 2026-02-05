@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; padding: 16px; color: #333; }
+    h2 { font-size: 16px; margin-bottom: 16px; color: #B35C1E; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px; }
+    input, select { width: 100%; padding: 8px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; }
+    input:focus, select:focus { outline: none; border-color: #B35C1E; }
+    .help { font-size: 11px; color: #999; margin-top: 2px; }
+    .btn { padding: 8px 20px; font-size: 13px; border: none; border-radius: 4px; cursor: pointer; }
+    .btn-primary { background: #B35C1E; color: white; }
+    .btn-primary:hover { background: #8A4515; }
+    .btn-cancel { background: #eee; color: #666; margin-right: 8px; }
+    .actions { margin-top: 20px; text-align: right; }
+    .divider { border-top: 1px solid #eee; margin: 16px 0; }
+    .toggle-row { display: flex; align-items: center; gap: 8px; }
+    .toggle-row input[type="checkbox"] { width: auto; }
+  </style>
+</head>
+<body>
+  <h2>Provocations Settings</h2>
+
+  <div class="form-group">
+    <label>Gemini Model</label>
+    <select id="model">
+      <option value="gemini-2.0-flash">Gemini 2.0 Flash (fast, good)</option>
+      <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (fastest)</option>
+      <option value="gemini-2.5-flash">Gemini 2.5 Flash (best)</option>
+      <option value="gemini-2.5-pro">Gemini 2.5 Pro (highest quality)</option>
+    </select>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="form-group">
+    <div class="toggle-row">
+      <input type="checkbox" id="use-vertex" onchange="toggleVertexFields()">
+      <label style="margin:0;display:inline" for="use-vertex">Use Vertex AI (enterprise)</label>
+    </div>
+    <div class="help">Use your organization's Vertex AI endpoint instead of an API key.</div>
+  </div>
+
+  <div id="vertex-fields" style="display:none">
+    <div class="form-group">
+      <label>GCP Project ID</label>
+      <input type="text" id="vertex-project" placeholder="my-gcp-project-123">
+    </div>
+    <div class="form-group">
+      <label>Vertex AI Location</label>
+      <input type="text" id="vertex-location" placeholder="us-central1" value="us-central1">
+    </div>
+    <div class="help">Auth uses the running user's Google OAuth token — no API key needed.</div>
+  </div>
+
+  <div id="apikey-fields">
+    <div class="form-group">
+      <label>Gemini API Key</label>
+      <input type="password" id="api-key" placeholder="Enter your API key">
+      <div class="help">From Google AI Studio. Not needed if using Vertex AI.</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-cancel" onclick="google.script.host.close()">Cancel</button>
+    <button class="btn btn-primary" onclick="save()">Save</button>
+  </div>
+
+  <script>
+    // Load current settings
+    google.script.run
+      .withSuccessHandler(function(config) {
+        document.getElementById('model').value = config.model || 'gemini-2.0-flash';
+        document.getElementById('use-vertex').checked = config.useVertexAi;
+        if (config.vertexProject) {
+          document.getElementById('vertex-project').value = config.vertexProject;
+        }
+        if (config.vertexLocation) {
+          document.getElementById('vertex-location').value = config.vertexLocation;
+        }
+        toggleVertexFields();
+      })
+      .getConfigState();
+
+    function toggleVertexFields() {
+      var useVertex = document.getElementById('use-vertex').checked;
+      document.getElementById('vertex-fields').style.display = useVertex ? 'block' : 'none';
+      document.getElementById('apikey-fields').style.display = useVertex ? 'none' : 'block';
+    }
+
+    function save() {
+      var settings = {
+        model: document.getElementById('model').value,
+        useVertexAi: document.getElementById('use-vertex').checked
+      };
+
+      if (settings.useVertexAi) {
+        settings.vertexProject = document.getElementById('vertex-project').value;
+        settings.vertexLocation = document.getElementById('vertex-location').value;
+      } else {
+        var apiKey = document.getElementById('api-key').value;
+        if (apiKey) {
+          settings.geminiApiKey = apiKey;
+        }
+      }
+
+      google.script.run
+        .withSuccessHandler(function() {
+          google.script.host.close();
+        })
+        .withFailureHandler(function(err) {
+          alert('Save failed: ' + err.message);
+        })
+        .saveConfig(settings);
+    }
+  </script>
+</body>
+</html>

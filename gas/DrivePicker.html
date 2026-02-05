@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; padding: 16px; color: #333; }
+    h2 { font-size: 16px; margin-bottom: 12px; color: #B35C1E; }
+    .search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+    .search-bar input {
+      flex: 1; padding: 8px 12px; font-size: 13px;
+      border: 1px solid #ddd; border-radius: 4px;
+    }
+    .search-bar input:focus { outline: none; border-color: #B35C1E; }
+    .search-bar button {
+      padding: 8px 16px; font-size: 13px; background: #B35C1E;
+      color: white; border: none; border-radius: 4px; cursor: pointer;
+    }
+    .file-list { max-height: 280px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px; }
+    .file-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-bottom: 1px solid #f0f0f0;
+      cursor: pointer; transition: background 0.1s;
+    }
+    .file-item:hover { background: #faf8f5; }
+    .file-icon { font-size: 20px; width: 28px; text-align: center; }
+    .file-info { flex: 1; }
+    .file-name { font-size: 13px; font-weight: 500; }
+    .file-date { font-size: 11px; color: #999; }
+    .loading { text-align: center; padding: 24px; color: #999; }
+    .empty { text-align: center; padding: 24px; color: #999; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h2>Select a Document</h2>
+
+  <div class="search-bar">
+    <input type="text" id="search-query" placeholder="Search your Drive..."
+      onkeydown="if(event.key==='Enter')searchFiles()">
+    <button onclick="searchFiles()">Search</button>
+  </div>
+
+  <div id="file-list" class="file-list">
+    <div class="loading">Loading recent documents...</div>
+  </div>
+
+  <script>
+    var MIME_ICONS = {
+      'application/vnd.google-apps.document': '\uD83D\uDCC4',
+      'text/plain': '\uD83D\uDCDD',
+      'text/markdown': '\uD83D\uDCDD',
+      'application/pdf': '\uD83D\uDCC3',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '\uD83D\uDCC1'
+    };
+
+    // Load recent files on open
+    google.script.run
+      .withSuccessHandler(renderFiles)
+      .withFailureHandler(function(err) {
+        document.getElementById('file-list').innerHTML =
+          '<div class="empty">Error: ' + err.message + '</div>';
+      })
+      .searchDriveFiles('', 20);
+
+    function searchFiles() {
+      var query = document.getElementById('search-query').value;
+      document.getElementById('file-list').innerHTML = '<div class="loading">Searching...</div>';
+
+      google.script.run
+        .withSuccessHandler(renderFiles)
+        .withFailureHandler(function(err) {
+          document.getElementById('file-list').innerHTML =
+            '<div class="empty">Search failed: ' + err.message + '</div>';
+        })
+        .searchDriveFiles(query, 20);
+    }
+
+    function renderFiles(files) {
+      var container = document.getElementById('file-list');
+
+      if (!files || files.length === 0) {
+        container.innerHTML = '<div class="empty">No documents found.</div>';
+        return;
+      }
+
+      var html = '';
+      files.forEach(function(f) {
+        var icon = MIME_ICONS[f.mimeType] || '\uD83D\uDCC4';
+        var date = new Date(f.lastUpdated).toLocaleDateString();
+        html += '<div class="file-item" onclick="selectFile(\'' + f.id + '\')">' +
+          '<div class="file-icon">' + icon + '</div>' +
+          '<div class="file-info">' +
+            '<div class="file-name">' + escapeHtml(f.name) + '</div>' +
+            '<div class="file-date">Updated ' + date + '</div>' +
+          '</div>' +
+        '</div>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    function selectFile(fileId) {
+      document.getElementById('file-list').innerHTML = '<div class="loading">Loading file...</div>';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          // Pass the content back to the sidebar
+          google.script.host.close();
+          // The sidebar will pick this up via a callback
+          google.script.run.setTempFileContent(result);
+        })
+        .withFailureHandler(function(err) {
+          alert('Failed to load file: ' + err.message);
+          // Reload file list
+          searchFiles();
+        })
+        .readDriveFile(fileId);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

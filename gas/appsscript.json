@@ -1,0 +1,33 @@
+{
+  "timeZone": "America/New_York",
+  "dependencies": {},
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ],
+  "addOns": {
+    "common": {
+      "name": "Provocations",
+      "logoUrl": "https://www.gstatic.com/images/branding/product/1x/apps_script_48dp.png",
+      "layoutProperties": {
+        "primaryColor": "#B35C1E",
+        "secondaryColor": "#1a5276"
+      }
+    },
+    "docs": {
+      "homepageTrigger": {
+        "runFunction": "onDocsHomepage"
+      }
+    }
+  },
+  "webapp": {
+    "executeAs": "USER_ACCESSING",
+    "access": "DOMAIN"
+  }
+}

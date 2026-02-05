@@ -1,0 +1,758 @@
+<script>
+/**
+ * SidebarJS — Client-side logic for the Provocations sidebar.
+ *
+ * Replaces: React components, React Query, Workspace.tsx orchestration.
+ * Communication: google.script.run → server-side .gs functions
+ */
+
+// ============================================================
+// State
+// ============================================================
+
+var state = {
+  phase: 'input',           // 'input' | 'loading' | 'workspace'
+  document: null,            // { id, text, objective }
+  lenses: [],
+  provocations: [],
+  activeLens: null,
+  versions: [],
+  editHistory: [],
+  lastSuggestions: [],
+  activeTab: 'document',    // 'document' | 'provocations' | 'lenses' | 'versions'
+  isLoading: false,
+  loadingMessage: '',
+
+  // Voice
+  recognition: null,
+  isRecording: false,
+  interimTranscript: '',
+  activeProvocationId: null  // Which provocation is being voice-responded to
+};
+
+// ============================================================
+// Initialization
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Initialize speech recognition
+  initVoiceRecognition();
+
+  // Check configuration
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.hasApiKey) {
+        showToast('Please configure your Gemini API key in Settings.', 'info');
+      }
+      // Try to load current Google Doc content
+      tryLoadCurrentDoc();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Initialization error: ' + err.message, 'error');
+    })
+    .getConfigState();
+});
+
+/**
+ * Try to load content from the currently open Google Doc.
+ */
+function tryLoadCurrentDoc() {
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result && result.content && result.content.trim()) {
+        document.getElementById('input-text').value = result.content;
+        document.getElementById('input-source-label').textContent =
+          'Loaded from: ' + result.name;
+      }
+    })
+    .withFailureHandler(function() {
+      // Not in a Google Doc context, that's fine
+    })
+    .getCurrentDocContent();
+}
+
+// ============================================================
+// Phase: Input
+// ============================================================
+
+/**
+ * Start analysis of the input text.
+ */
+function startAnalysis() {
+  var text = document.getElementById('input-text').value.trim();
+  var objective = document.getElementById('input-objective').value.trim();
+
+  if (!text) {
+    showToast('Please enter some text to analyze.', 'error');
+    return;
+  }
+
+  state.document = { text: text, objective: objective || 'Create a compelling document' };
+
+  setPhase('loading');
+  setLoading(true, 'Analyzing through multiple lenses...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      state.document.id = result.documentId;
+      state.lenses = result.lenses || [];
+      state.provocations = result.provocations || [];
+      state.versions = [{ text: text, description: 'Initial document', timestamp: Date.now() }];
+
+      if (result.warnings) {
+        result.warnings.forEach(function(w) { showToast(w.message, 'info'); });
+      }
+
+      setLoading(false);
+      setPhase('workspace');
+      switchTab('document');
+    })
+    .withFailureHandler(function(err) {
+      setLoading(false);
+      setPhase('input');
+      showToast('Analysis failed: ' + err.message, 'error');
+    })
+    .analyzeText({ text: text });
+}
+
+/**
+ * Load a file from Google Drive.
+ */
+function loadFromDrive() {
+  google.script.run.showDrivePicker();
+}
+
+/**
+ * Called from DrivePicker dialog when a file is selected.
+ */
+function onDriveFileSelected(fileId) {
+  setLoading(true, 'Loading file from Drive...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      setLoading(false);
+      document.getElementById('input-text').value = result.content;
+      document.getElementById('input-source-label').textContent =
+        'Loaded from Drive: ' + result.name;
+    })
+    .withFailureHandler(function(err) {
+      setLoading(false);
+      showToast('Failed to load file: ' + err.message, 'error');
+    })
+    .readDriveFile(fileId);
+}
+
+// ============================================================
+// Phase: Workspace
+// ============================================================
+
+/**
+ * Switch between tabs.
+ */
+function switchTab(tabName) {
+  state.activeTab = tabName;
+
+  // Update tab buttons
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === tabName);
+  });
+
+  // Update tab panels
+  var panels = document.querySelectorAll('.tab-panel');
+  panels.forEach(function(p) {
+    p.classList.toggle('active', p.id === 'panel-' + tabName);
+  });
+
+  // Render tab content
+  if (tabName === 'document') renderDocument();
+  if (tabName === 'provocations') renderProvocations();
+  if (tabName === 'lenses') renderLenses();
+  if (tabName === 'versions') renderVersions();
+}
+
+// ============================================================
+// Document Tab
+// ============================================================
+
+function renderDocument() {
+  var container = document.getElementById('document-content');
+  if (!state.document) return;
+
+  container.innerHTML =
+    '<div class="form-group">' +
+      '<label>Objective</label>' +
+      '<input type="text" id="doc-objective" value="' + escapeHtml(state.document.objective || '') + '" ' +
+        'placeholder="What is this document for?" />' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<div class="flex-between mb-2">' +
+        '<label style="margin:0">Document</label>' +
+        '<div class="flex gap-2">' +
+          '<button class="btn-icon" onclick="voiceAppend()" title="Dictate">' +
+            '<span id="doc-voice-icon">&#x1F3A4;</span>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+      '<textarea id="doc-text" class="document-area" rows="12">' +
+        escapeHtml(state.document.text) +
+      '</textarea>' +
+      '<div id="doc-interim" class="interim-transcript hidden"></div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Instruction</label>' +
+      '<div class="flex gap-2">' +
+        '<input type="text" id="doc-instruction" placeholder="e.g., Expand the introduction, Make it more concise..." ' +
+          'onkeydown="if(event.key===\'Enter\')applyInstruction()" />' +
+        '<button class="btn btn-primary btn-sm" onclick="applyInstruction()">Apply</button>' +
+      '</div>' +
+    '</div>' +
+    renderSuggestions() +
+    '<div class="flex gap-2 mt-2">' +
+      '<button class="btn btn-sm" onclick="reanalyze()">Re-analyze</button>' +
+      '<button class="btn btn-sm" onclick="writeToDoc()">Write to Doc</button>' +
+    '</div>';
+}
+
+function renderSuggestions() {
+  if (!state.lastSuggestions || state.lastSuggestions.length === 0) return '';
+
+  var html = '<div class="card mt-2"><div class="card-header"><span class="card-title">Suggestions</span></div><div class="card-body">';
+  state.lastSuggestions.forEach(function(s) {
+    html += '<div style="margin-bottom:4px;cursor:pointer;color:var(--accent)" ' +
+      'onclick="document.getElementById(\'doc-instruction\').value=\'' + escapeHtml(s).replace(/'/g, "\\'") + '\'">' +
+      '&rarr; ' + escapeHtml(s) + '</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+/**
+ * Apply an instruction to the document.
+ */
+function applyInstruction() {
+  var instruction = document.getElementById('doc-instruction').value.trim();
+  if (!instruction) {
+    showToast('Enter an instruction first.', 'error');
+    return;
+  }
+
+  var docText = document.getElementById('doc-text').value;
+  var objective = document.getElementById('doc-objective').value || state.document.objective;
+
+  // Get selected text if any
+  var textarea = document.getElementById('doc-text');
+  var selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd) || undefined;
+
+  setLoading(true, 'Evolving document...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      state.document.text = result.document;
+      state.document.objective = objective;
+      state.versions.push({
+        text: result.document,
+        description: result.summary || instruction,
+        timestamp: Date.now()
+      });
+      state.editHistory.push({
+        instruction: instruction,
+        instructionType: result.instructionType || 'general',
+        summary: result.summary || 'Updated',
+        timestamp: Date.now()
+      });
+      state.lastSuggestions = result.suggestions || [];
+
+      setLoading(false);
+      renderDocument();
+      document.getElementById('doc-instruction').value = '';
+      showToast(result.summary || 'Document updated', 'success');
+    })
+    .withFailureHandler(function(err) {
+      setLoading(false);
+      showToast('Update failed: ' + err.message, 'error');
+    })
+    .writeDocument({
+      document: docText,
+      objective: objective,
+      instruction: instruction,
+      selectedText: selectedText,
+      activeLens: state.activeLens,
+      editHistory: state.editHistory.slice(-10)
+    });
+}
+
+/**
+ * Re-analyze the current document.
+ */
+function reanalyze() {
+  var text = document.getElementById('doc-text').value;
+  setLoading(true, 'Re-analyzing...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      state.lenses = result.lenses || [];
+      state.provocations = result.provocations || [];
+      setLoading(false);
+      showToast('Analysis updated with ' + state.provocations.length + ' provocations', 'success');
+      switchTab('provocations');
+    })
+    .withFailureHandler(function(err) {
+      setLoading(false);
+      showToast('Re-analysis failed: ' + err.message, 'error');
+    })
+    .analyzeText({ text: text });
+}
+
+/**
+ * Write evolved document back to the open Google Doc.
+ */
+function writeToDoc() {
+  var text = document.getElementById('doc-text').value;
+  setLoading(true, 'Writing to document...');
+
+  google.script.run
+    .withSuccessHandler(function() {
+      setLoading(false);
+      showToast('Document updated!', 'success');
+    })
+    .withFailureHandler(function(err) {
+      setLoading(false);
+      showToast('Write failed: ' + err.message, 'error');
+    })
+    .updateCurrentDoc(text);
+}
+
+// ============================================================
+// Provocations Tab
+// ============================================================
+
+function renderProvocations() {
+  var container = document.getElementById('provocations-content');
+  if (state.provocations.length === 0) {
+    container.innerHTML = '<p class="text-muted text-center mt-3">No provocations yet. Analyze a document first.</p>';
+    return;
+  }
+
+  var html = '<div class="lens-chips mb-3">' +
+    '<button class="lens-chip' + (!state.activeLens ? ' active' : '') + '" onclick="setActiveLens(null)">All</button>';
+
+  PROVOCATION_TYPES.forEach(function(t) {
+    var count = state.provocations.filter(function(p) { return p.type === t; }).length;
+    html += '<button class="lens-chip' + (state.activeLens === t ? ' active' : '') +
+      '" onclick="setActiveLens(\'' + t + '\')">' + capitalize(t) + ' (' + count + ')</button>';
+  });
+  html += '</div>';
+
+  var filtered = state.provocations;
+  if (state.activeLens && PROVOCATION_TYPES.indexOf(state.activeLens) !== -1) {
+    filtered = filtered.filter(function(p) { return p.type === state.activeLens; });
+  }
+
+  filtered.forEach(function(p) {
+    var isAddressed = p.status === 'addressed';
+    html += '<div class="card provocation-card' + (isAddressed ? ' addressed' : '') +
+      '" data-type="' + p.type + '" id="prov-' + p.id + '">' +
+      '<div class="card-header">' +
+        '<span class="provocation-type ' + p.type + '">' + p.type + '</span>' +
+        '<button class="voice-btn' + (state.isRecording && state.activeProvocationId === p.id ? ' recording' : '') +
+          '" onclick="voiceRespondToProvocation(\'' + p.id + '\')" title="Respond with voice">' +
+          (state.isRecording && state.activeProvocationId === p.id ? '&#x25A0;' : '&#x1F3A4;') +
+        '</button>' +
+      '</div>' +
+      '<div class="card-title">' + escapeHtml(p.title) + '</div>' +
+      '<div class="card-body mt-2">' + escapeHtml(p.content) + '</div>' +
+      (p.sourceExcerpt ? '<div class="provocation-excerpt">"' + escapeHtml(p.sourceExcerpt) + '"</div>' : '') +
+      '<div id="prov-interim-' + p.id + '" class="interim-transcript hidden"></div>' +
+      '<div class="provocation-actions">' +
+        '<button class="btn btn-sm" onclick="respondToProvocation(\'' + p.id + '\')">Respond</button>' +
+        '<button class="btn btn-sm" onclick="dismissProvocation(\'' + p.id + '\')">Dismiss</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+var PROVOCATION_TYPES = ['opportunity', 'fallacy', 'alternative'];
+
+function setActiveLens(lens) {
+  state.activeLens = lens;
+  renderProvocations();
+}
+
+/**
+ * Respond to a provocation with text (opens a prompt).
+ */
+function respondToProvocation(provId) {
+  var prov = state.provocations.find(function(p) { return p.id === provId; });
+  if (!prov) return;
+
+  var response = prompt('Respond to: "' + prov.title + '"\n\nType your response:');
+  if (!response || !response.trim()) return;
+
+  applyProvocationResponse(provId, response.trim());
+}
+
+/**
+ * Apply a response (text or voice) to a provocation.
+ */
+function applyProvocationResponse(provId, transcript) {
+  var prov = state.provocations.find(function(p) { return p.id === provId; });
+  if (!prov || !state.document) return;
+
+  var docText = document.getElementById('doc-text')
+    ? document.getElementById('doc-text').value
+    : state.document.text;
+
+  setLoading(true, 'Addressing provocation...');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      state.document.text = result.document;
+      state.versions.push({
+        text: result.document,
+        description: 'Addressed: ' + prov.title,
+        timestamp: Date.now()
+      });
+      state.editHistory.push({
+        instruction: transcript,
+        instructionType: result.instructionType || 'general',
+        summary: result.summary || 'Provocation addressed',
+        timestamp: Date.now()
+      });
+      state.lastSuggestions = result.suggestions || [];
+
+      // Mark provocation as addressed
+      prov.status = 'addressed';
+
+      setLoading(false);
+      renderProvocations();
+      showToast(result.summary || 'Provocation addressed', 'success');
+    })
+    .withFailureHandler(function(err) {
+      setLoading(false);
+      showToast('Failed: ' + err.message, 'error');
+    })
+    .writeDocument({
+      document: docText,
+      objective: state.document.objective || '',
+      instruction: transcript,
+      provocation: {
+        type: prov.type,
+        title: prov.title,
+        content: prov.content,
+        sourceExcerpt: prov.sourceExcerpt
+      },
+      activeLens: state.activeLens,
+      editHistory: state.editHistory.slice(-10)
+    });
+}
+
+function dismissProvocation(provId) {
+  state.provocations = state.provocations.filter(function(p) { return p.id !== provId; });
+  renderProvocations();
+}
+
+// ============================================================
+// Lenses Tab
+// ============================================================
+
+function renderLenses() {
+  var container = document.getElementById('lenses-content');
+  if (state.lenses.length === 0) {
+    container.innerHTML = '<p class="text-muted text-center mt-3">No lenses yet.</p>';
+    return;
+  }
+
+  var html = '';
+  state.lenses.forEach(function(lens) {
+    html += '<div class="card">' +
+      '<div class="card-header">' +
+        '<span class="card-title">' + escapeHtml(lens.title) + '</span>' +
+        '<span class="lens-chip active" style="cursor:default">' + lens.type + '</span>' +
+      '</div>' +
+      '<div class="card-body">' + escapeHtml(lens.summary) + '</div>';
+
+    if (lens.keyPoints && lens.keyPoints.length > 0) {
+      html += '<ul style="margin-top:6px;padding-left:16px;font-size:12px;color:var(--text-secondary)">';
+      lens.keyPoints.forEach(function(kp) {
+        html += '<li>' + escapeHtml(kp) + '</li>';
+      });
+      html += '</ul>';
+    }
+
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+// ============================================================
+// Versions Tab
+// ============================================================
+
+function renderVersions() {
+  var container = document.getElementById('versions-content');
+  if (state.versions.length === 0) {
+    container.innerHTML = '<p class="text-muted text-center mt-3">No versions yet.</p>';
+    return;
+  }
+
+  var html = '';
+  // Show in reverse order (newest first)
+  for (var i = state.versions.length - 1; i >= 0; i--) {
+    var v = state.versions[i];
+    var time = new Date(v.timestamp).toLocaleTimeString();
+    html += '<div class="version-item" onclick="restoreVersion(' + i + ')">' +
+      '<div class="flex-between">' +
+        '<span class="version-desc">' + escapeHtml(v.description) + '</span>' +
+        '<span class="version-time">' + time + '</span>' +
+      '</div>' +
+      '<div class="text-sm text-muted mt-2">' +
+        escapeHtml(v.text.substring(0, 100)) + (v.text.length > 100 ? '...' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function restoreVersion(idx) {
+  var version = state.versions[idx];
+  if (!version) return;
+
+  if (confirm('Restore this version? Current text will be added as a new version.')) {
+    state.versions.push({
+      text: state.document.text,
+      description: 'Before restore',
+      timestamp: Date.now()
+    });
+    state.document.text = version.text;
+    showToast('Version restored', 'success');
+    switchTab('document');
+  }
+}
+
+// ============================================================
+// Voice Recognition (Web Speech API)
+// ============================================================
+
+function initVoiceRecognition() {
+  var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    console.log('Speech recognition not supported');
+    return;
+  }
+
+  state.recognition = new SpeechRecognition();
+  state.recognition.continuous = true;
+  state.recognition.interimResults = true;
+  state.recognition.lang = 'en-US';
+
+  state.recognition.onresult = function(event) {
+    var finalTranscript = '';
+    var interimTranscript = '';
+
+    for (var i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript;
+      } else {
+        interimTranscript += event.results[i][0].transcript;
+      }
+    }
+
+    if (finalTranscript) {
+      state.interimTranscript += finalTranscript + ' ';
+    }
+
+    // Show interim in UI
+    var display = state.interimTranscript + interimTranscript;
+    if (state.activeProvocationId) {
+      var el = document.getElementById('prov-interim-' + state.activeProvocationId);
+      if (el) {
+        el.textContent = display;
+        el.classList.remove('hidden');
+      }
+    } else {
+      var docInterim = document.getElementById('doc-interim');
+      if (docInterim) {
+        docInterim.textContent = display;
+        docInterim.classList.remove('hidden');
+      }
+    }
+  };
+
+  state.recognition.onend = function() {
+    var transcript = state.interimTranscript.trim();
+    state.isRecording = false;
+    state.interimTranscript = '';
+
+    // Hide interim displays
+    document.querySelectorAll('.interim-transcript').forEach(function(el) {
+      el.classList.add('hidden');
+    });
+
+    if (transcript) {
+      if (state.activeProvocationId) {
+        applyProvocationResponse(state.activeProvocationId, transcript);
+      } else {
+        // Append to document
+        var docTextarea = document.getElementById('doc-text');
+        if (docTextarea) {
+          var current = docTextarea.value;
+          docTextarea.value = current + (current.endsWith(' ') || current.endsWith('\n') ? '' : ' ') + transcript;
+          state.document.text = docTextarea.value;
+        }
+      }
+    }
+
+    state.activeProvocationId = null;
+    renderProvocations();  // Update voice button states
+  };
+
+  state.recognition.onerror = function(event) {
+    if (event.error === 'not-allowed') {
+      showToast('Microphone access required. Please allow microphone permissions.', 'error');
+    } else if (event.error === 'no-speech') {
+      showToast('No speech detected. Try again.', 'info');
+    } else {
+      console.log('Speech recognition error:', event.error);
+    }
+    state.isRecording = false;
+    state.activeProvocationId = null;
+  };
+}
+
+/**
+ * Start/stop voice recording for a provocation.
+ */
+function voiceRespondToProvocation(provId) {
+  if (!state.recognition) {
+    showToast('Voice input not supported in this browser.', 'error');
+    return;
+  }
+
+  if (state.isRecording) {
+    state.recognition.stop();
+    return;
+  }
+
+  state.activeProvocationId = provId;
+  state.interimTranscript = '';
+  state.isRecording = true;
+
+  try {
+    state.recognition.start();
+    renderProvocations();  // Update button state
+  } catch (e) {
+    state.isRecording = false;
+    showToast('Could not start recording: ' + e.message, 'error');
+  }
+}
+
+/**
+ * Start/stop voice append to document.
+ */
+function voiceAppend() {
+  if (!state.recognition) {
+    showToast('Voice input not supported in this browser.', 'error');
+    return;
+  }
+
+  if (state.isRecording) {
+    state.recognition.stop();
+    return;
+  }
+
+  state.activeProvocationId = null;
+  state.interimTranscript = '';
+  state.isRecording = true;
+
+  try {
+    state.recognition.start();
+    var icon = document.getElementById('doc-voice-icon');
+    if (icon) icon.textContent = '\u25A0'; // Stop square
+  } catch (e) {
+    state.isRecording = false;
+    showToast('Could not start recording: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
+// UI Helpers
+// ============================================================
+
+/**
+ * Switch between app phases.
+ */
+function setPhase(phase) {
+  state.phase = phase;
+  document.getElementById('phase-input').classList.toggle('hidden', phase !== 'input');
+  document.getElementById('phase-loading').classList.toggle('hidden', phase !== 'loading');
+  document.getElementById('phase-workspace').classList.toggle('hidden', phase !== 'workspace');
+}
+
+/**
+ * Show/hide loading state.
+ */
+function setLoading(loading, message) {
+  state.isLoading = loading;
+  state.loadingMessage = message || 'Working...';
+
+  var overlay = document.getElementById('phase-loading');
+  if (loading && state.phase !== 'workspace') {
+    overlay.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><span>' +
+      escapeHtml(state.loadingMessage) + '</span></div>';
+    overlay.classList.remove('hidden');
+  }
+
+  // In workspace phase, show inline loading
+  var inlineLoader = document.getElementById('inline-loader');
+  if (inlineLoader) {
+    if (loading) {
+      inlineLoader.innerHTML = '<div class="spinner"></div> ' + escapeHtml(message);
+      inlineLoader.classList.remove('hidden');
+    } else {
+      inlineLoader.classList.add('hidden');
+    }
+  }
+
+  // Disable buttons during loading
+  document.querySelectorAll('.btn').forEach(function(btn) {
+    btn.disabled = loading;
+  });
+}
+
+/**
+ * Show a toast notification.
+ */
+function showToast(message, type) {
+  type = type || 'info';
+  var container = document.getElementById('toast-container');
+  var toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(function() {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(function() { toast.remove(); }, 300);
+  }, 4000);
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+</script>
