@@ -75,8 +75,22 @@ export default function Workspace() {
   // Transcript overlay state
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(false);
   const [rawTranscript, setRawTranscript] = useState("");
+  const [cleanedTranscript, setCleanedTranscript] = useState<string | undefined>(undefined);
   const [transcriptSummary, setTranscriptSummary] = useState("");
   const [isRecordingFromMain, setIsRecordingFromMain] = useState(false);
+
+  // Pending voice context for deferred sending (holds selectedText until user reviews transcript)
+  const [pendingVoiceContext, setPendingVoiceContext] = useState<{
+    selectedText?: string;
+    provocation?: {
+      id: string;
+      type: string;
+      title: string;
+      content: string;
+      sourceExcerpt: string;
+    };
+    context: "selection" | "provocation" | "document";
+  } | null>(null);
 
   // Edit history for coherent iteration
   const [editHistory, setEditHistory] = useState<EditHistoryEntry[]>([]);
@@ -422,39 +436,43 @@ export default function Workspace() {
   const handleVoiceResponse = useCallback((provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
     if (!document || !transcript.trim()) return;
 
-    writeMutation.mutate({
-      instruction: transcript,
+    // Store the context for deferred sending - user will review and click "Send to writer"
+    setPendingVoiceContext({
       provocation: {
-        type: provocationData.type as "opportunity" | "fallacy" | "alternative",
+        id: provocationId,
+        type: provocationData.type,
         title: provocationData.title,
         content: provocationData.content,
         sourceExcerpt: provocationData.sourceExcerpt,
       },
-      activeLens: activeLens || undefined,
-      description: `Addressed provocation: ${provocationData.title}`,
+      context: "provocation",
     });
 
-    // Mark the provocation as addressed
-    setProvocations((prev) =>
-      prev.map((p) => (p.id === provocationId ? { ...p, status: "addressed" as const } : p))
-    );
-  }, [document, writeMutation, activeLens]);
+    // Show the transcript overlay for review
+    setRawTranscript(transcript);
+    setShowTranscriptOverlay(true);
+    setTranscriptSummary("");
+    setCleanedTranscript(undefined);
+    // Don't auto-send anymore - user will click "Send to writer" after reviewing
+  }, [document]);
 
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
   }, []);
 
   // Handle voice merge from text selection in ReadingPane
+  // Now stores context and lets user review transcript before sending
   const handleSelectionVoiceMerge = useCallback((selectedText: string, transcript: string) => {
     if (!document || !transcript.trim()) return;
 
-    writeMutation.mutate({
-      instruction: transcript,
+    // Store the context for deferred sending - user will review and click "Send to writer"
+    setPendingVoiceContext({
       selectedText,
-      activeLens: activeLens || undefined,
-      description: "Voice edit on selection",
+      context: "selection",
     });
-  }, [document, writeMutation, activeLens]);
+    // Transcript is already set via handleTranscriptUpdate
+    // Don't auto-send anymore - user will click "Send to writer" after reviewing
+  }, [document]);
 
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
     setRawTranscript(transcript);
@@ -468,8 +486,58 @@ export default function Workspace() {
   const handleCloseTranscriptOverlay = useCallback(() => {
     setShowTranscriptOverlay(false);
     setRawTranscript("");
+    setCleanedTranscript(undefined);
     setTranscriptSummary("");
     setIsRecordingFromMain(false);
+    setPendingVoiceContext(null);
+  }, []);
+
+  // Handle explicit send from TranscriptOverlay
+  const handleSendTranscript = useCallback((transcript: string) => {
+    if (!document || !transcript.trim()) return;
+
+    // Use the pending context if available
+    const context = pendingVoiceContext;
+
+    if (context?.provocation) {
+      // Sending as provocation response
+      writeMutation.mutate({
+        instruction: transcript,
+        provocation: {
+          type: context.provocation.type as "opportunity" | "fallacy" | "alternative",
+          title: context.provocation.title,
+          content: context.provocation.content,
+          sourceExcerpt: context.provocation.sourceExcerpt,
+        },
+        activeLens: activeLens || undefined,
+        description: `Addressed provocation: ${context.provocation.title}`,
+      });
+
+      // Mark the provocation as addressed
+      setProvocations((prev) =>
+        prev.map((p) => (p.id === context.provocation!.id ? { ...p, status: "addressed" as const } : p))
+      );
+    } else if (context?.selectedText) {
+      // Sending as selection edit
+      writeMutation.mutate({
+        instruction: transcript,
+        selectedText: context.selectedText,
+        activeLens: activeLens || undefined,
+        description: "Voice edit on selection",
+      });
+    } else {
+      // Sending as general document instruction
+      writeMutation.mutate({
+        instruction: transcript,
+        activeLens: activeLens || undefined,
+        description: "Voice instruction",
+      });
+    }
+  }, [document, pendingVoiceContext, writeMutation, activeLens]);
+
+  // Handle cleaned transcript from TranscriptOverlay
+  const handleCleanTranscript = useCallback((cleaned: string) => {
+    setCleanedTranscript(cleaned);
   }, []);
 
   const activeLensSummary = lenses?.find((l) => l.type === activeLens)?.summary;
@@ -739,9 +807,13 @@ export default function Workspace() {
                 isVisible={showTranscriptOverlay}
                 isRecording={isRecordingFromMain}
                 rawTranscript={rawTranscript}
-                summary={transcriptSummary}
-                isSummarizing={writeMutation.isPending}
+                cleanedTranscript={cleanedTranscript}
+                resultSummary={transcriptSummary}
+                isProcessing={writeMutation.isPending}
                 onClose={handleCloseTranscriptOverlay}
+                onSend={handleSendTranscript}
+                onCleanTranscript={handleCleanTranscript}
+                context={pendingVoiceContext?.context || "document"}
               />
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
                 <TabsList className="w-full justify-start rounded-none border-b px-4 h-auto py-0 bg-transparent">
@@ -786,6 +858,7 @@ export default function Workspace() {
                     provocations={provocations}
                     onUpdateStatus={handleUpdateProvocationStatus}
                     onVoiceResponse={handleVoiceResponse}
+                    onTranscriptUpdate={handleTranscriptUpdate}
                     onHoverProvocation={setHoveredProvocationId}
                     isLoading={analyzeMutation.isPending}
                     isMerging={writeMutation.isPending}

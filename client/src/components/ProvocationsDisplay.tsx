@@ -47,6 +47,7 @@ interface ProvocationsDisplayProps {
   provocations: Provocation[];
   onUpdateStatus: (id: string, status: Provocation["status"]) => void;
   onVoiceResponse?: (provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onHoverProvocation?: (provocationId: string | null) => void;
   isLoading?: boolean;
   isMerging?: boolean;
@@ -56,12 +57,14 @@ function ProvocationCard({
   provocation,
   onUpdateStatus,
   onVoiceResponse,
+  onTranscriptUpdate,
   onHover,
   isMerging
 }: {
   provocation: Provocation;
   onUpdateStatus: (status: Provocation["status"]) => void;
   onVoiceResponse?: (transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onHover?: (isHovered: boolean) => void;
   isMerging?: boolean;
 }) {
@@ -145,6 +148,12 @@ function ProvocationCard({
                         sourceExcerpt: provocation.sourceExcerpt,
                       });
                     }}
+                    onInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
+                    onRecordingChange={(isRecording) => {
+                      if (isRecording) {
+                        onTranscriptUpdate?.("", true);
+                      }
+                    }}
                     size="sm"
                     variant="outline"
                     className={isMerging ? "opacity-50 pointer-events-none" : ""}
@@ -208,7 +217,7 @@ function ProvocationCard({
   );
 }
 
-export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onHoverProvocation, isLoading, isMerging }: ProvocationsDisplayProps) {
+export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onTranscriptUpdate, onHoverProvocation, isLoading, isMerging }: ProvocationsDisplayProps) {
   const [filter, setFilter] = useState<ProvocationType | "all">("all");
   
   const safeProvocations = provocations ?? [];
@@ -305,6 +314,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
               provocation={provocation}
               onUpdateStatus={(status) => onUpdateStatus(provocation.id, status)}
               onVoiceResponse={(transcript, provocationData) => onVoiceResponse?.(provocation.id, transcript, provocationData)}
+              onTranscriptUpdate={onTranscriptUpdate}
               onHover={(isHovered) => onHoverProvocation?.(isHovered ? provocation.id : null)}
               isMerging={isMerging}
             />
