@@ -28,6 +28,8 @@
  * @return {Object} { document, summary, instructionType, changes, suggestions }
  */
 function writeDocument(request) {
+  enforceAccess();
+
   if (!request || !request.document || !request.instruction) {
     throw new Error('Document and instruction are required');
   }
@@ -253,6 +255,8 @@ function analyzeChanges_(original, evolved, instruction) {
  * @return {Object} { summary, originalLength, summaryLength }
  */
 function summarizeIntent(transcript, context) {
+  enforceAccess();
+
   if (!transcript || typeof transcript !== 'string') {
     throw new Error('Transcript is required');
   }

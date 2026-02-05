@@ -1,9 +1,11 @@
 <script>
 /**
- * SidebarJS — Client-side logic for the Provocations sidebar.
+ * SidebarJS — Client-side logic for the AnnotationApp sidebar.
  *
- * Replaces: React components, React Query, Workspace.tsx orchestration.
- * Communication: google.script.run → server-side .gs functions
+ * Salesforce Lightning-styled. Includes:
+ * - MediaRecorder for saving audio files to Drive
+ * - Web Speech API for live transcription
+ * - google.script.run calls to server-side .gs functions
  */
 
 // ============================================================
@@ -11,15 +13,15 @@
 // ============================================================
 
 var state = {
-  phase: 'input',           // 'input' | 'loading' | 'workspace'
-  document: null,            // { id, text, objective }
+  phase: 'input',
+  document: null,
   lenses: [],
   provocations: [],
   activeLens: null,
   versions: [],
   editHistory: [],
   lastSuggestions: [],
-  activeTab: 'document',    // 'document' | 'provocations' | 'lenses' | 'versions'
+  activeTab: 'document',
   isLoading: false,
   loadingMessage: '',
 
@@ -27,7 +29,11 @@ var state = {
   recognition: null,
   isRecording: false,
   interimTranscript: '',
-  activeProvocationId: null  // Which provocation is being voice-responded to
+  activeProvocationId: null,
+
+  // Audio recording (MediaRecorder)
+  mediaRecorder: null,
+  audioChunks: []
 };
 
 // ============================================================
@@ -35,16 +41,14 @@ var state = {
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-  // Initialize speech recognition
   initVoiceRecognition();
+  initMediaRecorder();
 
-  // Check configuration
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result.hasApiKey) {
-        showToast('Please configure your Gemini API key in Settings.', 'info');
+        showToast('Configure your Gemini API key in AnnotationApp > Settings.', 'info');
       }
-      // Try to load current Google Doc content
       tryLoadCurrentDoc();
     })
     .withFailureHandler(function(err) {
@@ -53,21 +57,15 @@ document.addEventListener('DOMContentLoaded', function() {
     .getConfigState();
 });
 
-/**
- * Try to load content from the currently open Google Doc.
- */
 function tryLoadCurrentDoc() {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result && result.content && result.content.trim()) {
         document.getElementById('input-text').value = result.content;
-        document.getElementById('input-source-label').textContent =
-          'Loaded from: ' + result.name;
+        document.getElementById('input-source-label').textContent = 'Loaded from: ' + result.name;
       }
     })
-    .withFailureHandler(function() {
-      // Not in a Google Doc context, that's fine
-    })
+    .withFailureHandler(function() {})
     .getCurrentDocContent();
 }
 
@@ -75,9 +73,6 @@ function tryLoadCurrentDoc() {
 // Phase: Input
 // ============================================================
 
-/**
- * Start analysis of the input text.
- */
 function startAnalysis() {
   var text = document.getElementById('input-text').value.trim();
   var objective = document.getElementById('input-objective').value.trim();
@@ -88,7 +83,6 @@ function startAnalysis() {
   }
 
   state.document = { text: text, objective: objective || 'Create a compelling document' };
-
   setPhase('loading');
   setLoading(true, 'Analyzing through multiple lenses...');
 
@@ -115,56 +109,25 @@ function startAnalysis() {
     .analyzeText({ text: text });
 }
 
-/**
- * Load a file from Google Drive.
- */
 function loadFromDrive() {
   google.script.run.showDrivePicker();
-}
-
-/**
- * Called from DrivePicker dialog when a file is selected.
- */
-function onDriveFileSelected(fileId) {
-  setLoading(true, 'Loading file from Drive...');
-
-  google.script.run
-    .withSuccessHandler(function(result) {
-      setLoading(false);
-      document.getElementById('input-text').value = result.content;
-      document.getElementById('input-source-label').textContent =
-        'Loaded from Drive: ' + result.name;
-    })
-    .withFailureHandler(function(err) {
-      setLoading(false);
-      showToast('Failed to load file: ' + err.message, 'error');
-    })
-    .readDriveFile(fileId);
 }
 
 // ============================================================
 // Phase: Workspace
 // ============================================================
 
-/**
- * Switch between tabs.
- */
 function switchTab(tabName) {
   state.activeTab = tabName;
 
-  // Update tab buttons
-  var tabs = document.querySelectorAll('.tab');
-  tabs.forEach(function(t) {
-    t.classList.toggle('active', t.dataset.tab === tabName);
+  document.querySelectorAll('.slds-tab').forEach(function(t) {
+    t.classList.toggle('slds-is-active', t.dataset.tab === tabName);
   });
 
-  // Update tab panels
-  var panels = document.querySelectorAll('.tab-panel');
-  panels.forEach(function(p) {
+  document.querySelectorAll('.tab-panel').forEach(function(p) {
     p.classList.toggle('active', p.id === 'panel-' + tabName);
   });
 
-  // Render tab content
   if (tabName === 'document') renderDocument();
   if (tabName === 'provocations') renderProvocations();
   if (tabName === 'lenses') renderLenses();
@@ -180,16 +143,16 @@ function renderDocument() {
   if (!state.document) return;
 
   container.innerHTML =
-    '<div class="form-group">' +
+    '<div class="slds-form-element">' +
       '<label>Objective</label>' +
       '<input type="text" id="doc-objective" value="' + escapeHtml(state.document.objective || '') + '" ' +
         'placeholder="What is this document for?" />' +
     '</div>' +
-    '<div class="form-group">' +
-      '<div class="flex-between mb-2">' +
+    '<div class="slds-form-element">' +
+      '<div class="slds-grid slds-grid_align-spread slds-m-bottom_x-small">' +
         '<label style="margin:0">Document</label>' +
-        '<div class="flex gap-2">' +
-          '<button class="btn-icon" onclick="voiceAppend()" title="Dictate">' +
+        '<div class="slds-grid slds-gap_x-small">' +
+          '<button class="slds-button_icon" onclick="voiceAppend()" title="Dictate">' +
             '<span id="doc-voice-icon">&#x1F3A4;</span>' +
           '</button>' +
         '</div>' +
@@ -199,27 +162,28 @@ function renderDocument() {
       '</textarea>' +
       '<div id="doc-interim" class="interim-transcript hidden"></div>' +
     '</div>' +
-    '<div class="form-group">' +
+    '<div class="slds-form-element">' +
       '<label>Instruction</label>' +
-      '<div class="flex gap-2">' +
+      '<div class="slds-grid slds-gap_x-small">' +
         '<input type="text" id="doc-instruction" placeholder="e.g., Expand the introduction, Make it more concise..." ' +
           'onkeydown="if(event.key===\'Enter\')applyInstruction()" />' +
-        '<button class="btn btn-primary btn-sm" onclick="applyInstruction()">Apply</button>' +
+        '<button class="slds-button slds-button_brand slds-button_small" onclick="applyInstruction()">Apply</button>' +
       '</div>' +
     '</div>' +
     renderSuggestions() +
-    '<div class="flex gap-2 mt-2">' +
-      '<button class="btn btn-sm" onclick="reanalyze()">Re-analyze</button>' +
-      '<button class="btn btn-sm" onclick="writeToDoc()">Write to Doc</button>' +
+    '<div class="slds-grid slds-gap_x-small slds-m-top_x-small">' +
+      '<button class="slds-button slds-button_small" onclick="reanalyze()">Re-analyze</button>' +
+      '<button class="slds-button slds-button_small" onclick="writeToDoc()">Write to Doc</button>' +
+      '<button class="slds-button slds-button_small slds-button_success" onclick="saveToDrive()">Save to Drive</button>' +
     '</div>';
 }
 
 function renderSuggestions() {
   if (!state.lastSuggestions || state.lastSuggestions.length === 0) return '';
 
-  var html = '<div class="card mt-2"><div class="card-header"><span class="card-title">Suggestions</span></div><div class="card-body">';
+  var html = '<div class="slds-card slds-m-top_x-small"><div class="slds-card__header"><span class="slds-card__header-title">Suggestions</span></div><div class="slds-card__body">';
   state.lastSuggestions.forEach(function(s) {
-    html += '<div style="margin-bottom:4px;cursor:pointer;color:var(--accent)" ' +
+    html += '<div style="margin-bottom:4px;cursor:pointer;color:var(--brand-primary)" ' +
       'onclick="document.getElementById(\'doc-instruction\').value=\'' + escapeHtml(s).replace(/'/g, "\\'") + '\'">' +
       '&rarr; ' + escapeHtml(s) + '</div>';
   });
@@ -227,20 +191,12 @@ function renderSuggestions() {
   return html;
 }
 
-/**
- * Apply an instruction to the document.
- */
 function applyInstruction() {
   var instruction = document.getElementById('doc-instruction').value.trim();
-  if (!instruction) {
-    showToast('Enter an instruction first.', 'error');
-    return;
-  }
+  if (!instruction) { showToast('Enter an instruction first.', 'error'); return; }
 
   var docText = document.getElementById('doc-text').value;
   var objective = document.getElementById('doc-objective').value || state.document.objective;
-
-  // Get selected text if any
   var textarea = document.getElementById('doc-text');
   var selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd) || undefined;
 
@@ -250,19 +206,9 @@ function applyInstruction() {
     .withSuccessHandler(function(result) {
       state.document.text = result.document;
       state.document.objective = objective;
-      state.versions.push({
-        text: result.document,
-        description: result.summary || instruction,
-        timestamp: Date.now()
-      });
-      state.editHistory.push({
-        instruction: instruction,
-        instructionType: result.instructionType || 'general',
-        summary: result.summary || 'Updated',
-        timestamp: Date.now()
-      });
+      state.versions.push({ text: result.document, description: result.summary || instruction, timestamp: Date.now() });
+      state.editHistory.push({ instruction: instruction, instructionType: result.instructionType || 'general', summary: result.summary || 'Updated', timestamp: Date.now() });
       state.lastSuggestions = result.suggestions || [];
-
       setLoading(false);
       renderDocument();
       document.getElementById('doc-instruction').value = '';
@@ -273,22 +219,14 @@ function applyInstruction() {
       showToast('Update failed: ' + err.message, 'error');
     })
     .writeDocument({
-      document: docText,
-      objective: objective,
-      instruction: instruction,
-      selectedText: selectedText,
-      activeLens: state.activeLens,
-      editHistory: state.editHistory.slice(-10)
+      document: docText, objective: objective, instruction: instruction,
+      selectedText: selectedText, activeLens: state.activeLens, editHistory: state.editHistory.slice(-10)
     });
 }
 
-/**
- * Re-analyze the current document.
- */
 function reanalyze() {
   var text = document.getElementById('doc-text').value;
   setLoading(true, 'Re-analyzing...');
-
   google.script.run
     .withSuccessHandler(function(result) {
       state.lenses = result.lenses || [];
@@ -297,49 +235,51 @@ function reanalyze() {
       showToast('Analysis updated with ' + state.provocations.length + ' provocations', 'success');
       switchTab('provocations');
     })
-    .withFailureHandler(function(err) {
-      setLoading(false);
-      showToast('Re-analysis failed: ' + err.message, 'error');
-    })
+    .withFailureHandler(function(err) { setLoading(false); showToast('Re-analysis failed: ' + err.message, 'error'); })
     .analyzeText({ text: text });
 }
 
-/**
- * Write evolved document back to the open Google Doc.
- */
 function writeToDoc() {
   var text = document.getElementById('doc-text').value;
   setLoading(true, 'Writing to document...');
-
   google.script.run
-    .withSuccessHandler(function() {
-      setLoading(false);
-      showToast('Document updated!', 'success');
-    })
-    .withFailureHandler(function(err) {
-      setLoading(false);
-      showToast('Write failed: ' + err.message, 'error');
-    })
+    .withSuccessHandler(function() { setLoading(false); showToast('Document updated!', 'success'); })
+    .withFailureHandler(function(err) { setLoading(false); showToast('Write failed: ' + err.message, 'error'); })
     .updateCurrentDoc(text);
+}
+
+function saveToDrive() {
+  var text = document.getElementById('doc-text').value;
+  var objective = document.getElementById('doc-objective').value || state.document.objective || '';
+  setLoading(true, 'Saving to Drive...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      setLoading(false);
+      showToast('Saved: ' + result.fileName, 'success');
+    })
+    .withFailureHandler(function(err) { setLoading(false); showToast('Save failed: ' + err.message, 'error'); })
+    .saveDocumentToDrive(text, objective.substring(0, 50) || 'Document', objective);
 }
 
 // ============================================================
 // Provocations Tab
 // ============================================================
 
+var PROVOCATION_TYPES = ['opportunity', 'fallacy', 'alternative'];
+
 function renderProvocations() {
   var container = document.getElementById('provocations-content');
   if (state.provocations.length === 0) {
-    container.innerHTML = '<p class="text-muted text-center mt-3">No provocations yet. Analyze a document first.</p>';
+    container.innerHTML = '<p class="slds-text-color_weak slds-text-center slds-m-top_small">No provocations yet. Analyze a document first.</p>';
     return;
   }
 
-  var html = '<div class="lens-chips mb-3">' +
-    '<button class="lens-chip' + (!state.activeLens ? ' active' : '') + '" onclick="setActiveLens(null)">All</button>';
+  var html = '<div class="slds-pill-container slds-m-bottom_small">' +
+    '<button class="slds-pill' + (!state.activeLens ? ' slds-is-selected' : '') + '" onclick="setActiveLens(null)">All</button>';
 
   PROVOCATION_TYPES.forEach(function(t) {
     var count = state.provocations.filter(function(p) { return p.type === t; }).length;
-    html += '<button class="lens-chip' + (state.activeLens === t ? ' active' : '') +
+    html += '<button class="slds-pill' + (state.activeLens === t ? ' slds-is-selected' : '') +
       '" onclick="setActiveLens(\'' + t + '\')">' + capitalize(t) + ' (' + count + ')</button>';
   });
   html += '</div>';
@@ -351,22 +291,22 @@ function renderProvocations() {
 
   filtered.forEach(function(p) {
     var isAddressed = p.status === 'addressed';
-    html += '<div class="card provocation-card' + (isAddressed ? ' addressed' : '') +
+    html += '<div class="slds-card provocation-card' + (isAddressed ? ' addressed' : '') +
       '" data-type="' + p.type + '" id="prov-' + p.id + '">' +
-      '<div class="card-header">' +
+      '<div class="slds-card__header">' +
         '<span class="provocation-type ' + p.type + '">' + p.type + '</span>' +
         '<button class="voice-btn' + (state.isRecording && state.activeProvocationId === p.id ? ' recording' : '') +
           '" onclick="voiceRespondToProvocation(\'' + p.id + '\')" title="Respond with voice">' +
           (state.isRecording && state.activeProvocationId === p.id ? '&#x25A0;' : '&#x1F3A4;') +
         '</button>' +
       '</div>' +
-      '<div class="card-title">' + escapeHtml(p.title) + '</div>' +
-      '<div class="card-body mt-2">' + escapeHtml(p.content) + '</div>' +
+      '<div class="slds-card__header-title">' + escapeHtml(p.title) + '</div>' +
+      '<div class="slds-card__body slds-m-top_xx-small">' + escapeHtml(p.content) + '</div>' +
       (p.sourceExcerpt ? '<div class="provocation-excerpt">"' + escapeHtml(p.sourceExcerpt) + '"</div>' : '') +
       '<div id="prov-interim-' + p.id + '" class="interim-transcript hidden"></div>' +
       '<div class="provocation-actions">' +
-        '<button class="btn btn-sm" onclick="respondToProvocation(\'' + p.id + '\')">Respond</button>' +
-        '<button class="btn btn-sm" onclick="dismissProvocation(\'' + p.id + '\')">Dismiss</button>' +
+        '<button class="slds-button slds-button_small" onclick="respondToProvocation(\'' + p.id + '\')">Respond</button>' +
+        '<button class="slds-button slds-button_small" onclick="dismissProvocation(\'' + p.id + '\')">Dismiss</button>' +
       '</div>' +
     '</div>';
   });
@@ -374,78 +314,47 @@ function renderProvocations() {
   container.innerHTML = html;
 }
 
-var PROVOCATION_TYPES = ['opportunity', 'fallacy', 'alternative'];
+function setActiveLens(lens) { state.activeLens = lens; renderProvocations(); }
 
-function setActiveLens(lens) {
-  state.activeLens = lens;
-  renderProvocations();
-}
-
-/**
- * Respond to a provocation with text (opens a prompt).
- */
 function respondToProvocation(provId) {
   var prov = state.provocations.find(function(p) { return p.id === provId; });
   if (!prov) return;
-
   var response = prompt('Respond to: "' + prov.title + '"\n\nType your response:');
   if (!response || !response.trim()) return;
-
   applyProvocationResponse(provId, response.trim());
 }
 
-/**
- * Apply a response (text or voice) to a provocation.
- */
 function applyProvocationResponse(provId, transcript) {
   var prov = state.provocations.find(function(p) { return p.id === provId; });
   if (!prov || !state.document) return;
 
   var docText = document.getElementById('doc-text')
-    ? document.getElementById('doc-text').value
-    : state.document.text;
+    ? document.getElementById('doc-text').value : state.document.text;
+
+  // Save transcript to Drive
+  google.script.run.saveTranscript(transcript, prov.title, {
+    provocationTitle: prov.title, provocationId: prov.id,
+    documentObjective: state.document.objective
+  });
 
   setLoading(true, 'Addressing provocation...');
 
   google.script.run
     .withSuccessHandler(function(result) {
       state.document.text = result.document;
-      state.versions.push({
-        text: result.document,
-        description: 'Addressed: ' + prov.title,
-        timestamp: Date.now()
-      });
-      state.editHistory.push({
-        instruction: transcript,
-        instructionType: result.instructionType || 'general',
-        summary: result.summary || 'Provocation addressed',
-        timestamp: Date.now()
-      });
+      state.versions.push({ text: result.document, description: 'Addressed: ' + prov.title, timestamp: Date.now() });
+      state.editHistory.push({ instruction: transcript, instructionType: result.instructionType || 'general', summary: result.summary || 'Provocation addressed', timestamp: Date.now() });
       state.lastSuggestions = result.suggestions || [];
-
-      // Mark provocation as addressed
       prov.status = 'addressed';
-
       setLoading(false);
       renderProvocations();
       showToast(result.summary || 'Provocation addressed', 'success');
     })
-    .withFailureHandler(function(err) {
-      setLoading(false);
-      showToast('Failed: ' + err.message, 'error');
-    })
+    .withFailureHandler(function(err) { setLoading(false); showToast('Failed: ' + err.message, 'error'); })
     .writeDocument({
-      document: docText,
-      objective: state.document.objective || '',
-      instruction: transcript,
-      provocation: {
-        type: prov.type,
-        title: prov.title,
-        content: prov.content,
-        sourceExcerpt: prov.sourceExcerpt
-      },
-      activeLens: state.activeLens,
-      editHistory: state.editHistory.slice(-10)
+      document: docText, objective: state.document.objective || '', instruction: transcript,
+      provocation: { type: prov.type, title: prov.title, content: prov.content, sourceExcerpt: prov.sourceExcerpt },
+      activeLens: state.activeLens, editHistory: state.editHistory.slice(-10)
     });
 }
 
@@ -461,27 +370,24 @@ function dismissProvocation(provId) {
 function renderLenses() {
   var container = document.getElementById('lenses-content');
   if (state.lenses.length === 0) {
-    container.innerHTML = '<p class="text-muted text-center mt-3">No lenses yet.</p>';
+    container.innerHTML = '<p class="slds-text-color_weak slds-text-center slds-m-top_small">No lenses yet.</p>';
     return;
   }
 
   var html = '';
   state.lenses.forEach(function(lens) {
-    html += '<div class="card">' +
-      '<div class="card-header">' +
-        '<span class="card-title">' + escapeHtml(lens.title) + '</span>' +
-        '<span class="lens-chip active" style="cursor:default">' + lens.type + '</span>' +
+    html += '<div class="slds-card">' +
+      '<div class="slds-card__header">' +
+        '<span class="slds-card__header-title">' + escapeHtml(lens.title) + '</span>' +
+        '<span class="slds-pill slds-is-selected" style="cursor:default">' + lens.type + '</span>' +
       '</div>' +
-      '<div class="card-body">' + escapeHtml(lens.summary) + '</div>';
+      '<div class="slds-card__body">' + escapeHtml(lens.summary) + '</div>';
 
     if (lens.keyPoints && lens.keyPoints.length > 0) {
-      html += '<ul style="margin-top:6px;padding-left:16px;font-size:12px;color:var(--text-secondary)">';
-      lens.keyPoints.forEach(function(kp) {
-        html += '<li>' + escapeHtml(kp) + '</li>';
-      });
+      html += '<ul style="margin-top:6px;padding-left:16px;font-size:12px;color:var(--color-text-secondary)">';
+      lens.keyPoints.forEach(function(kp) { html += '<li>' + escapeHtml(kp) + '</li>'; });
       html += '</ul>';
     }
-
     html += '</div>';
   });
 
@@ -495,39 +401,32 @@ function renderLenses() {
 function renderVersions() {
   var container = document.getElementById('versions-content');
   if (state.versions.length === 0) {
-    container.innerHTML = '<p class="text-muted text-center mt-3">No versions yet.</p>';
+    container.innerHTML = '<p class="slds-text-color_weak slds-text-center slds-m-top_small">No versions yet.</p>';
     return;
   }
 
   var html = '';
-  // Show in reverse order (newest first)
   for (var i = state.versions.length - 1; i >= 0; i--) {
     var v = state.versions[i];
     var time = new Date(v.timestamp).toLocaleTimeString();
     html += '<div class="version-item" onclick="restoreVersion(' + i + ')">' +
-      '<div class="flex-between">' +
+      '<div class="slds-grid slds-grid_align-spread">' +
         '<span class="version-desc">' + escapeHtml(v.description) + '</span>' +
         '<span class="version-time">' + time + '</span>' +
       '</div>' +
-      '<div class="text-sm text-muted mt-2">' +
+      '<div class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small">' +
         escapeHtml(v.text.substring(0, 100)) + (v.text.length > 100 ? '...' : '') +
       '</div>' +
     '</div>';
   }
-
   container.innerHTML = html;
 }
 
 function restoreVersion(idx) {
   var version = state.versions[idx];
   if (!version) return;
-
   if (confirm('Restore this version? Current text will be added as a new version.')) {
-    state.versions.push({
-      text: state.document.text,
-      description: 'Before restore',
-      timestamp: Date.now()
-    });
+    state.versions.push({ text: state.document.text, description: 'Before restore', timestamp: Date.now() });
     state.document.text = version.text;
     showToast('Version restored', 'success');
     switchTab('document');
@@ -535,15 +434,12 @@ function restoreVersion(idx) {
 }
 
 // ============================================================
-// Voice Recognition (Web Speech API)
+// Voice Recognition (Web Speech API — transcription)
 // ============================================================
 
 function initVoiceRecognition() {
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.log('Speech recognition not supported');
-    return;
-  }
+  if (!SpeechRecognition) return;
 
   state.recognition = new SpeechRecognition();
   state.recognition.continuous = true;
@@ -553,33 +449,19 @@ function initVoiceRecognition() {
   state.recognition.onresult = function(event) {
     var finalTranscript = '';
     var interimTranscript = '';
-
     for (var i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        finalTranscript += event.results[i][0].transcript;
-      } else {
-        interimTranscript += event.results[i][0].transcript;
-      }
+      if (event.results[i].isFinal) { finalTranscript += event.results[i][0].transcript; }
+      else { interimTranscript += event.results[i][0].transcript; }
     }
+    if (finalTranscript) { state.interimTranscript += finalTranscript + ' '; }
 
-    if (finalTranscript) {
-      state.interimTranscript += finalTranscript + ' ';
-    }
-
-    // Show interim in UI
     var display = state.interimTranscript + interimTranscript;
     if (state.activeProvocationId) {
       var el = document.getElementById('prov-interim-' + state.activeProvocationId);
-      if (el) {
-        el.textContent = display;
-        el.classList.remove('hidden');
-      }
+      if (el) { el.textContent = display; el.classList.remove('hidden'); }
     } else {
       var docInterim = document.getElementById('doc-interim');
-      if (docInterim) {
-        docInterim.textContent = display;
-        docInterim.classList.remove('hidden');
-      }
+      if (docInterim) { docInterim.textContent = display; docInterim.classList.remove('hidden'); }
     }
   };
 
@@ -588,16 +470,17 @@ function initVoiceRecognition() {
     state.isRecording = false;
     state.interimTranscript = '';
 
-    // Hide interim displays
-    document.querySelectorAll('.interim-transcript').forEach(function(el) {
-      el.classList.add('hidden');
-    });
+    // Stop MediaRecorder and save audio
+    if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+      state.mediaRecorder.stop();
+    }
+
+    document.querySelectorAll('.interim-transcript').forEach(function(el) { el.classList.add('hidden'); });
 
     if (transcript) {
       if (state.activeProvocationId) {
         applyProvocationResponse(state.activeProvocationId, transcript);
       } else {
-        // Append to document
         var docTextarea = document.getElementById('doc-text');
         if (docTextarea) {
           var current = docTextarea.value;
@@ -605,87 +488,102 @@ function initVoiceRecognition() {
           state.document.text = docTextarea.value;
         }
       }
+      // Save transcript file
+      google.script.run.saveTranscript(transcript, 'voice-input');
     }
 
     state.activeProvocationId = null;
-    renderProvocations();  // Update voice button states
+    renderProvocations();
   };
 
   state.recognition.onerror = function(event) {
-    if (event.error === 'not-allowed') {
-      showToast('Microphone access required. Please allow microphone permissions.', 'error');
-    } else if (event.error === 'no-speech') {
-      showToast('No speech detected. Try again.', 'info');
-    } else {
-      console.log('Speech recognition error:', event.error);
-    }
+    if (event.error === 'not-allowed') { showToast('Microphone access required.', 'error'); }
+    else if (event.error === 'no-speech') { showToast('No speech detected.', 'info'); }
     state.isRecording = false;
     state.activeProvocationId = null;
   };
 }
 
-/**
- * Start/stop voice recording for a provocation.
- */
-function voiceRespondToProvocation(provId) {
-  if (!state.recognition) {
-    showToast('Voice input not supported in this browser.', 'error');
-    return;
-  }
+// ============================================================
+// MediaRecorder (audio file capture for Drive)
+// ============================================================
 
-  if (state.isRecording) {
-    state.recognition.stop();
-    return;
-  }
+function initMediaRecorder() {
+  // Will be initialized on first use (requires user gesture for getUserMedia)
+}
+
+function startMediaRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(function(stream) {
+      state.audioChunks = [];
+      state.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      state.mediaRecorder.ondataavailable = function(event) {
+        if (event.data.size > 0) state.audioChunks.push(event.data);
+      };
+
+      state.mediaRecorder.onstop = function() {
+        var blob = new Blob(state.audioChunks, { type: 'audio/webm' });
+        stream.getTracks().forEach(function(t) { t.stop(); });
+
+        // Convert to base64 and send to server
+        var reader = new FileReader();
+        reader.onloadend = function() {
+          var base64 = reader.result.split(',')[1];
+          google.script.run
+            .withSuccessHandler(function(result) {
+              // Audio saved silently
+            })
+            .withFailureHandler(function(err) {
+              console.log('Audio save failed:', err.message);
+            })
+            .saveAudioFile(base64, 'audio/webm');
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      state.mediaRecorder.start();
+    })
+    .catch(function(err) {
+      console.log('MediaRecorder init failed:', err.message);
+    });
+}
+
+function voiceRespondToProvocation(provId) {
+  if (!state.recognition) { showToast('Voice not supported.', 'error'); return; }
+  if (state.isRecording) { state.recognition.stop(); return; }
 
   state.activeProvocationId = provId;
   state.interimTranscript = '';
   state.isRecording = true;
-
   try {
     state.recognition.start();
-    renderProvocations();  // Update button state
-  } catch (e) {
-    state.isRecording = false;
-    showToast('Could not start recording: ' + e.message, 'error');
-  }
+    startMediaRecording();
+    renderProvocations();
+  } catch (e) { state.isRecording = false; showToast('Recording failed: ' + e.message, 'error'); }
 }
 
-/**
- * Start/stop voice append to document.
- */
 function voiceAppend() {
-  if (!state.recognition) {
-    showToast('Voice input not supported in this browser.', 'error');
-    return;
-  }
-
-  if (state.isRecording) {
-    state.recognition.stop();
-    return;
-  }
+  if (!state.recognition) { showToast('Voice not supported.', 'error'); return; }
+  if (state.isRecording) { state.recognition.stop(); return; }
 
   state.activeProvocationId = null;
   state.interimTranscript = '';
   state.isRecording = true;
-
   try {
     state.recognition.start();
+    startMediaRecording();
     var icon = document.getElementById('doc-voice-icon');
-    if (icon) icon.textContent = '\u25A0'; // Stop square
-  } catch (e) {
-    state.isRecording = false;
-    showToast('Could not start recording: ' + e.message, 'error');
-  }
+    if (icon) icon.textContent = '\u25A0';
+  } catch (e) { state.isRecording = false; showToast('Recording failed: ' + e.message, 'error'); }
 }
 
 // ============================================================
 // UI Helpers
 // ============================================================
 
-/**
- * Switch between app phases.
- */
 function setPhase(phase) {
   state.phase = phase;
   document.getElementById('phase-input').classList.toggle('hidden', phase !== 'input');
@@ -693,48 +591,37 @@ function setPhase(phase) {
   document.getElementById('phase-workspace').classList.toggle('hidden', phase !== 'workspace');
 }
 
-/**
- * Show/hide loading state.
- */
 function setLoading(loading, message) {
   state.isLoading = loading;
   state.loadingMessage = message || 'Working...';
 
   var overlay = document.getElementById('phase-loading');
   if (loading && state.phase !== 'workspace') {
-    overlay.innerHTML = '<div class="loading-overlay"><div class="spinner"></div><span>' +
+    overlay.innerHTML = '<div class="loading-overlay"><div class="slds-spinner"></div><span>' +
       escapeHtml(state.loadingMessage) + '</span></div>';
     overlay.classList.remove('hidden');
   }
 
-  // In workspace phase, show inline loading
   var inlineLoader = document.getElementById('inline-loader');
   if (inlineLoader) {
     if (loading) {
-      inlineLoader.innerHTML = '<div class="spinner"></div> ' + escapeHtml(message);
+      inlineLoader.innerHTML = '<div class="slds-spinner"></div> ' + escapeHtml(message);
       inlineLoader.classList.remove('hidden');
     } else {
       inlineLoader.classList.add('hidden');
     }
   }
 
-  // Disable buttons during loading
-  document.querySelectorAll('.btn').forEach(function(btn) {
-    btn.disabled = loading;
-  });
+  document.querySelectorAll('.slds-button').forEach(function(btn) { btn.disabled = loading; });
 }
 
-/**
- * Show a toast notification.
- */
 function showToast(message, type) {
   type = type || 'info';
   var container = document.getElementById('toast-container');
   var toast = document.createElement('div');
-  toast.className = 'toast toast-' + type;
+  toast.className = 'slds-notify slds-notify_' + type;
   toast.textContent = message;
   container.appendChild(toast);
-
   setTimeout(function() {
     toast.style.opacity = '0';
     toast.style.transition = 'opacity 0.3s';
@@ -744,12 +631,7 @@ function showToast(message, type) {
 
 function escapeHtml(str) {
   if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 
 function capitalize(str) {

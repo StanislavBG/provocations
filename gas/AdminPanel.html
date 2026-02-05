@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Salesforce Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; padding: 16px; color: #181818; background: #f4f6f9; }
+    h2 { font-size: 16px; margin-bottom: 16px; color: #0176d3; }
+    h3 { font-size: 13px; margin: 16px 0 8px; color: #444; text-transform: uppercase; letter-spacing: 0.5px; }
+    .slds-card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+    .form-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .form-row input { flex: 1; padding: 8px 12px; font-size: 13px; border: 1px solid #d8dde6; border-radius: 4px; }
+    .form-row input:focus { outline: none; border-color: #0176d3; box-shadow: 0 0 0 2px rgba(1,118,211,0.2); }
+    .btn { padding: 8px 16px; font-size: 13px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; }
+    .btn-brand { background: #0176d3; color: #fff; }
+    .btn-brand:hover { background: #014486; }
+    .btn-destructive { background: #c23934; color: #fff; }
+    .btn-destructive:hover { background: #8e2e2a; }
+    .btn-neutral { background: #fff; color: #0176d3; border: 1px solid #d8dde6; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px; color: #706e6b; font-weight: 600; border-bottom: 2px solid #e5e5e5; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+    td { padding: 8px; border-bottom: 1px solid #f0f0f0; }
+    .status-active { color: #2e844a; font-weight: 600; }
+    .status-revoked { color: #c23934; font-weight: 600; }
+    .empty { text-align: center; padding: 20px; color: #706e6b; }
+    .actions { text-align: right; margin-top: 16px; }
+    .toast { position: fixed; bottom: 16px; left: 16px; right: 16px; padding: 10px 14px; border-radius: 6px; font-size: 13px; color: #fff; z-index: 100; }
+    .toast-success { background: #2e844a; }
+    .toast-error { background: #c23934; }
+  </style>
+</head>
+<body>
+  <h2>Admin Panel</h2>
+
+  <div class="slds-card">
+    <h3>Invite Users</h3>
+    <p style="font-size:12px;color:#706e6b;margin-bottom:8px">Only @salesforce.com emails can be invited.</p>
+    <div class="form-row">
+      <input type="text" id="invite-email" placeholder="user@salesforce.com"
+        onkeydown="if(event.key==='Enter')invite()">
+      <button class="btn btn-brand" onclick="invite()">Invite</button>
+    </div>
+    <div id="invite-result" style="font-size:12px;margin-top:4px"></div>
+  </div>
+
+  <div class="slds-card">
+    <h3>Invited Users</h3>
+    <div id="users-table">
+      <div class="empty">Loading...</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-neutral" onclick="google.script.host.close()">Close</button>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script>
+    // Load users on open
+    loadUsers();
+
+    function loadUsers() {
+      google.script.run
+        .withSuccessHandler(renderUsers)
+        .withFailureHandler(function(err) {
+          document.getElementById('users-table').innerHTML =
+            '<div class="empty">' + err.message + '</div>';
+        })
+        .listInvitedUsers();
+    }
+
+    function renderUsers(users) {
+      var container = document.getElementById('users-table');
+      if (!users || users.length === 0) {
+        container.innerHTML = '<div class="empty">No users invited yet.</div>';
+        return;
+      }
+
+      var html = '<table><thead><tr><th>Email</th><th>Status</th><th>Last Access</th><th></th></tr></thead><tbody>';
+      users.forEach(function(u) {
+        var statusClass = u.status === 'active' ? 'status-active' : 'status-revoked';
+        var lastAccess = u.lastAccess && u.lastAccess !== 'never'
+          ? new Date(u.lastAccess).toLocaleDateString()
+          : 'Never';
+        html += '<tr>' +
+          '<td>' + escapeHtml(u.email) + '</td>' +
+          '<td><span class="' + statusClass + '">' + u.status + '</span></td>' +
+          '<td>' + lastAccess + '</td>' +
+          '<td>';
+        if (u.status === 'active') {
+          html += '<button class="btn btn-destructive" style="padding:4px 8px;font-size:11px" ' +
+            'onclick="revoke(\'' + escapeHtml(u.email) + '\')">Revoke</button>';
+        } else {
+          html += '<button class="btn btn-brand" style="padding:4px 8px;font-size:11px" ' +
+            'onclick="reinvite(\'' + escapeHtml(u.email) + '\')">Reactivate</button>';
+        }
+        html += '</td></tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    function invite() {
+      var email = document.getElementById('invite-email').value.trim();
+      if (!email) return;
+
+      document.getElementById('invite-result').textContent = 'Inviting...';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          document.getElementById('invite-result').innerHTML =
+            '<span style="color:' + (result.success ? '#2e844a' : '#c23934') + '">' +
+            escapeHtml(result.message) + '</span>';
+          document.getElementById('invite-email').value = '';
+          if (result.success) loadUsers();
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('invite-result').innerHTML =
+            '<span style="color:#c23934">' + escapeHtml(err.message) + '</span>';
+        })
+        .inviteUser(email);
+    }
+
+    function revoke(email) {
+      if (!confirm('Revoke access for ' + email + '?')) return;
+
+      google.script.run
+        .withSuccessHandler(function() { loadUsers(); showToast('Revoked', 'success'); })
+        .withFailureHandler(function(err) { showToast(err.message, 'error'); })
+        .revokeUser(email);
+    }
+
+    function reinvite(email) {
+      google.script.run
+        .withSuccessHandler(function() { loadUsers(); showToast('Reactivated', 'success'); })
+        .withFailureHandler(function(err) { showToast(err.message, 'error'); })
+        .inviteUser(email);
+    }
+
+    function showToast(msg, type) {
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(function() { el.remove(); }, 3000);
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

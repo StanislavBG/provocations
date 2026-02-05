@@ -1,36 +1,50 @@
 <style>
   /* ============================================================
-     Provocations Sidebar — Styles
-     Theme: Aged paper/ink, intellectual warmth
+     AnnotationApp Sidebar — Salesforce Lightning Design System Style
+     Colors, spacing, and patterns inspired by SLDS.
      ============================================================ */
 
   :root {
-    --primary: #B35C1E;
-    --primary-light: #D4884A;
-    --primary-dark: #8A4515;
-    --accent: hsl(200, 60%, 45%);
-    --accent-light: hsl(200, 60%, 55%);
+    /* Salesforce brand palette */
+    --brand-primary: #0176d3;
+    --brand-primary-dark: #014486;
+    --brand-primary-light: #1b96ff;
+    --brand-accessible: #0176d3;
 
-    --bg: #faf8f5;
-    --bg-card: #ffffff;
-    --bg-hover: #f5f2ed;
-    --bg-input: #ffffff;
+    /* Grays — SLDS neutral palette */
+    --color-background: #f4f6f9;
+    --color-background-alt: #ffffff;
+    --color-background-row-hover: #f3f3f3;
+    --color-background-input: #ffffff;
+    --color-background-highlight: #eef4ff;
 
-    --text: #2c2417;
-    --text-secondary: #6b5d4f;
-    --text-muted: #9b8e80;
+    --color-text-default: #181818;
+    --color-text-secondary: #444444;
+    --color-text-weak: #706e6b;
+    --color-text-inverse: #ffffff;
+    --color-text-link: #0176d3;
 
-    --border: #e0d8cf;
-    --border-light: #ede8e2;
+    --color-border: #d8dde6;
+    --color-border-light: #e5e5e5;
 
-    --success: #2d7a3a;
-    --warning: #b8860b;
-    --danger: #c0392b;
+    /* Status colors */
+    --color-success: #2e844a;
+    --color-warning: #fe9339;
+    --color-error: #c23934;
+    --color-info: #0176d3;
 
-    --radius: 8px;
-    --radius-sm: 4px;
-    --shadow: 0 1px 3px rgba(44, 36, 23, 0.1);
-    --shadow-md: 0 4px 12px rgba(44, 36, 23, 0.12);
+    /* Elevation */
+    --shadow-card: 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-elevated: 0 4px 14px rgba(0, 0, 0, 0.1);
+
+    /* Spacing & radius */
+    --radius-medium: 8px;
+    --radius-small: 4px;
+    --spacing-xx-small: 4px;
+    --spacing-x-small: 8px;
+    --spacing-small: 12px;
+    --spacing-medium: 16px;
+    --spacing-large: 24px;
   }
 
   * {
@@ -40,12 +54,48 @@
   }
 
   body {
-    font-family: 'Source Serif 4', 'Georgia', serif;
-    font-size: 14px;
-    color: var(--text);
-    background: var(--bg);
+    font-family: 'Salesforce Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    color: var(--color-text-default);
+    background: var(--color-background);
     line-height: 1.5;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Global Header (SLDS page-header) ---- */
+
+  .slds-page-header {
+    background: var(--brand-primary);
+    padding: var(--spacing-small) var(--spacing-medium);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-x-small);
+  }
+
+  .slds-page-header .header-icon {
+    width: 28px;
+    height: 28px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .slds-page-header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text-inverse);
+    letter-spacing: 0.2px;
+  }
+
+  .slds-page-header .subtitle {
+    font-size: 11px;
+    color: rgba(255,255,255,0.75);
+    font-weight: 400;
   }
 
   /* ---- Layout ---- */
@@ -57,71 +107,54 @@
     overflow: hidden;
   }
 
-  .header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-card);
-    flex-shrink: 0;
-  }
-
-  .header h1 {
-    font-family: 'Libre Baskerville', 'Georgia', serif;
-    font-size: 16px;
-    color: var(--primary);
-    margin-bottom: 2px;
-  }
-
-  .header .subtitle {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
   .main-content {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 16px;
+    padding: var(--spacing-small) var(--spacing-medium);
   }
 
   .footer {
-    padding: 8px 16px;
-    border-top: 1px solid var(--border);
-    background: var(--bg-card);
+    padding: var(--spacing-x-small) var(--spacing-medium);
+    border-top: 1px solid var(--color-border-light);
+    background: var(--color-background-alt);
     flex-shrink: 0;
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--color-text-weak);
     text-align: center;
   }
 
-  /* ---- Tabs ---- */
+  /* ---- SLDS Tabs ---- */
 
-  .tabs {
+  .slds-tabs {
     display: flex;
-    gap: 2px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--border);
+    gap: 0;
+    margin-bottom: var(--spacing-small);
+    border-bottom: 2px solid var(--color-border-light);
   }
 
-  .tab {
-    padding: 8px 12px;
+  .slds-tab {
+    padding: 10px 14px;
     font-size: 12px;
+    font-weight: 600;
     font-family: inherit;
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
-    color: var(--text-secondary);
+    margin-bottom: -2px;
+    color: var(--color-text-weak);
     cursor: pointer;
     transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
 
-  .tab:hover {
-    color: var(--text);
-    background: var(--bg-hover);
+  .slds-tab:hover {
+    color: var(--color-text-default);
   }
 
-  .tab.active {
-    color: var(--primary);
-    border-bottom-color: var(--primary);
-    font-weight: 600;
+  .slds-tab.slds-is-active {
+    color: var(--brand-primary);
+    border-bottom-color: var(--brand-primary);
   }
 
   .tab-panel {
@@ -132,96 +165,101 @@
     display: block;
   }
 
-  /* ---- Buttons ---- */
+  /* ---- SLDS Buttons ---- */
 
-  .btn {
+  .slds-button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 8px 16px;
     font-family: inherit;
     font-size: 13px;
-    font-weight: 500;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    font-weight: 600;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
     cursor: pointer;
-    transition: all 0.15s;
-    background: var(--bg-card);
-    color: var(--text);
+    transition: all 0.12s;
+    background: var(--color-background-alt);
+    color: var(--brand-primary);
+    text-decoration: none;
+    line-height: 1.4;
   }
 
-  .btn:hover {
-    background: var(--bg-hover);
-    box-shadow: var(--shadow);
+  .slds-button:hover {
+    background: var(--color-background-row-hover);
   }
 
-  .btn:disabled {
+  .slds-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .btn-primary {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
+  .slds-button_brand {
+    background: var(--brand-primary);
+    color: var(--color-text-inverse);
+    border-color: var(--brand-primary);
   }
 
-  .btn-primary:hover {
-    background: var(--primary-dark);
+  .slds-button_brand:hover {
+    background: var(--brand-primary-dark);
+    border-color: var(--brand-primary-dark);
   }
 
-  .btn-accent {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
+  .slds-button_success {
+    background: var(--color-success);
+    color: var(--color-text-inverse);
+    border-color: var(--color-success);
   }
 
-  .btn-accent:hover {
-    background: var(--accent-light);
+  .slds-button_destructive {
+    background: var(--color-error);
+    color: var(--color-text-inverse);
+    border-color: var(--color-error);
   }
 
-  .btn-sm {
+  .slds-button_small {
     padding: 4px 10px;
     font-size: 12px;
   }
 
-  .btn-icon {
+  .slds-button_icon {
     padding: 6px;
     border: none;
     background: none;
     cursor: pointer;
-    color: var(--text-secondary);
-    border-radius: var(--radius-sm);
+    color: var(--color-text-weak);
+    border-radius: var(--radius-small);
+    transition: background 0.1s;
   }
 
-  .btn-icon:hover {
-    background: var(--bg-hover);
-    color: var(--text);
+  .slds-button_icon:hover {
+    background: var(--color-background-row-hover);
+    color: var(--color-text-default);
   }
 
-  .btn-full {
+  .slds-button_full {
     width: 100%;
     justify-content: center;
   }
 
-  /* ---- Forms ---- */
+  /* ---- SLDS Forms ---- */
 
-  textarea, input[type="text"], select {
+  textarea, input[type="text"], input[type="password"], select {
     width: 100%;
     padding: 8px 12px;
     font-family: inherit;
     font-size: 13px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-input);
-    color: var(--text);
-    transition: border-color 0.15s;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    background: var(--color-background-input);
+    color: var(--color-text-default);
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
 
-  textarea:focus, input[type="text"]:focus, select:focus {
+  textarea:focus, input[type="text"]:focus, input[type="password"]:focus, select:focus {
     outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(179, 92, 30, 0.15);
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(1, 118, 211, 0.2);
   }
 
   textarea {
@@ -230,93 +268,97 @@
     line-height: 1.6;
   }
 
-  label {
+  label, .slds-form-element__label {
     display: block;
     font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-xx-small);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
 
-  .form-group {
-    margin-bottom: 12px;
+  .slds-form-element {
+    margin-bottom: var(--spacing-small);
   }
 
-  /* ---- Cards ---- */
+  /* ---- SLDS Cards ---- */
 
-  .card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px;
-    margin-bottom: 8px;
-    box-shadow: var(--shadow);
+  .slds-card {
+    background: var(--color-background-alt);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-medium);
+    padding: var(--spacing-small);
+    margin-bottom: var(--spacing-x-small);
+    box-shadow: var(--shadow-card);
   }
 
-  .card-header {
+  .slds-card__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
+    margin-bottom: var(--spacing-x-small);
   }
 
-  .card-title {
+  .slds-card__header-title {
     font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
+    font-weight: 700;
+    color: var(--color-text-default);
   }
 
-  .card-body {
+  .slds-card__body {
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     line-height: 1.5;
   }
 
-  /* ---- Lens Chips ---- */
+  /* ---- Pill / Badge Chips (SLDS pill pattern) ---- */
 
-  .lens-chips {
+  .slds-pill-container {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-bottom: 12px;
+    margin-bottom: var(--spacing-small);
   }
 
-  .lens-chip {
-    padding: 4px 10px;
+  .slds-pill {
+    padding: 4px 12px;
     font-size: 11px;
+    font-weight: 600;
     font-family: inherit;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
     border-radius: 16px;
-    background: var(--bg-card);
-    color: var(--text-secondary);
+    background: var(--color-background-alt);
+    color: var(--color-text-weak);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.12s;
   }
 
-  .lens-chip:hover {
-    border-color: var(--primary-light);
-    color: var(--primary);
+  .slds-pill:hover {
+    border-color: var(--brand-primary-light);
+    color: var(--brand-primary);
+    background: var(--color-background-highlight);
   }
 
-  .lens-chip.active {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
+  .slds-pill.slds-is-selected {
+    background: var(--brand-primary);
+    color: var(--color-text-inverse);
+    border-color: var(--brand-primary);
   }
 
   /* ---- Provocation Cards ---- */
 
   .provocation-card {
-    border-left: 3px solid var(--border);
+    border-left: 3px solid var(--color-border);
     transition: border-color 0.15s;
   }
 
-  .provocation-card[data-type="opportunity"] { border-left-color: var(--success); }
-  .provocation-card[data-type="fallacy"]     { border-left-color: var(--danger); }
-  .provocation-card[data-type="alternative"] { border-left-color: var(--accent); }
+  .provocation-card[data-type="opportunity"] { border-left-color: var(--color-success); }
+  .provocation-card[data-type="fallacy"]     { border-left-color: var(--color-error); }
+  .provocation-card[data-type="alternative"] { border-left-color: var(--color-info); }
 
   .provocation-card.addressed {
-    opacity: 0.5;
+    opacity: 0.45;
   }
 
   .provocation-type {
@@ -324,52 +366,54 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
   }
 
-  .provocation-type.opportunity { color: var(--success); }
-  .provocation-type.fallacy     { color: var(--danger); }
-  .provocation-type.alternative { color: var(--accent); }
+  .provocation-type.opportunity { color: var(--color-success); background: #e6f6ec; }
+  .provocation-type.fallacy     { color: var(--color-error); background: #fce4e4; }
+  .provocation-type.alternative { color: var(--color-info); background: #eef4ff; }
 
   .provocation-excerpt {
     font-size: 12px;
     font-style: italic;
-    color: var(--text-muted);
+    color: var(--color-text-weak);
     margin-top: 6px;
     padding-left: 8px;
-    border-left: 2px solid var(--border-light);
+    border-left: 2px solid var(--color-border-light);
   }
 
   .provocation-actions {
     display: flex;
     gap: 4px;
-    margin-top: 8px;
+    margin-top: var(--spacing-x-small);
   }
 
-  /* ---- Document Pane ---- */
+  /* ---- Document Textarea ---- */
 
   .document-area {
     width: 100%;
     min-height: 200px;
     max-height: 400px;
-    font-family: 'Source Serif 4', 'Georgia', serif;
+    font-family: inherit;
     font-size: 14px;
     line-height: 1.7;
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-card);
-    color: var(--text);
+    padding: var(--spacing-small);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    background: var(--color-background-alt);
+    color: var(--color-text-default);
   }
 
-  /* ---- Voice Recorder ---- */
+  /* ---- Voice Recorder (SLDS icon button style) ---- */
 
   .voice-btn {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 2px solid var(--border);
-    background: var(--bg-card);
-    color: var(--text-secondary);
+    border: 2px solid var(--color-border);
+    background: var(--color-background-alt);
+    color: var(--color-text-weak);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -378,35 +422,35 @@
   }
 
   .voice-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
   }
 
   .voice-btn.recording {
-    border-color: var(--danger);
-    background: var(--danger);
-    color: white;
-    animation: pulse 1.5s infinite;
+    border-color: var(--color-error);
+    background: var(--color-error);
+    color: var(--color-text-inverse);
+    animation: slds-pulse 1.5s infinite;
   }
 
-  @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.4); }
-    50%      { box-shadow: 0 0 0 8px rgba(192, 57, 43, 0); }
+  @keyframes slds-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194, 57, 52, 0.4); }
+    50%      { box-shadow: 0 0 0 8px rgba(194, 57, 52, 0); }
   }
 
   .interim-transcript {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--color-text-weak);
     font-style: italic;
     padding: 6px 8px;
-    background: var(--bg-hover);
-    border-radius: var(--radius-sm);
-    margin-top: 4px;
+    background: var(--color-background-highlight);
+    border-radius: var(--radius-small);
+    margin-top: var(--spacing-xx-small);
     max-height: 60px;
     overflow-y: auto;
   }
 
-  /* ---- Toast Notifications ---- */
+  /* ---- SLDS Toast / Notification ---- */
 
   .toast-container {
     position: fixed;
@@ -416,37 +460,41 @@
     z-index: 1000;
   }
 
-  .toast {
+  .slds-notify {
     padding: 10px 14px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-small);
     font-size: 12px;
+    font-weight: 500;
     margin-top: 6px;
-    animation: slideUp 0.2s ease;
-    box-shadow: var(--shadow-md);
+    animation: slds-slide-up 0.2s ease;
+    box-shadow: var(--shadow-elevated);
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
-  .toast-success { background: var(--success); color: white; }
-  .toast-error   { background: var(--danger); color: white; }
-  .toast-info    { background: var(--accent); color: white; }
+  .slds-notify_success { background: var(--color-success); color: #fff; }
+  .slds-notify_error   { background: var(--color-error); color: #fff; }
+  .slds-notify_info    { background: var(--color-info); color: #fff; }
 
-  @keyframes slideUp {
+  @keyframes slds-slide-up {
     from { transform: translateY(10px); opacity: 0; }
     to   { transform: translateY(0); opacity: 1; }
   }
 
-  /* ---- Loading / Spinner ---- */
+  /* ---- Loading / Spinner (SLDS spinner) ---- */
 
-  .spinner {
+  .slds-spinner {
     display: inline-block;
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--border);
-    border-top-color: var(--primary);
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid var(--color-border);
+    border-top-color: var(--brand-primary);
     border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+    animation: slds-spin 0.6s linear infinite;
   }
 
-  @keyframes spin {
+  @keyframes slds-spin {
     to { transform: rotate(360deg); }
   }
 
@@ -454,77 +502,48 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 24px;
-    color: var(--text-secondary);
+    gap: 10px;
+    padding: var(--spacing-large);
+    color: var(--color-text-secondary);
     font-size: 13px;
   }
 
   /* ---- Utility ---- */
 
   .hidden { display: none !important; }
-  .text-center { text-align: center; }
-  .text-muted { color: var(--text-muted); }
-  .text-sm { font-size: 12px; }
-  .mt-2 { margin-top: 8px; }
-  .mt-3 { margin-top: 12px; }
-  .mb-2 { margin-bottom: 8px; }
-  .mb-3 { margin-bottom: 12px; }
-  .flex { display: flex; }
-  .flex-between { display: flex; justify-content: space-between; align-items: center; }
-  .gap-2 { gap: 8px; }
+  .slds-text-center { text-align: center; }
+  .slds-text-color_weak { color: var(--color-text-weak); }
+  .slds-text-body_small { font-size: 12px; }
+  .slds-m-top_xx-small { margin-top: 4px; }
+  .slds-m-top_x-small { margin-top: 8px; }
+  .slds-m-top_small { margin-top: 12px; }
+  .slds-m-bottom_x-small { margin-bottom: 8px; }
+  .slds-m-bottom_small { margin-bottom: 12px; }
+  .slds-grid { display: flex; }
+  .slds-grid_align-spread { justify-content: space-between; align-items: center; }
+  .slds-col { flex: 1; }
+  .slds-gap_x-small { gap: 8px; }
 
-  /* ---- Versions List ---- */
+  /* ---- Versions ---- */
 
   .version-item {
-    padding: 8px;
-    border-bottom: 1px solid var(--border-light);
+    padding: var(--spacing-x-small);
+    border-bottom: 1px solid var(--color-border-light);
     cursor: pointer;
     transition: background 0.1s;
   }
 
   .version-item:hover {
-    background: var(--bg-hover);
+    background: var(--color-background-row-hover);
   }
 
-  .version-item .version-time {
+  .version-time {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--color-text-weak);
   }
 
-  .version-item .version-desc {
+  .version-desc {
     font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  /* ---- Drive Picker ---- */
-
-  .drive-file-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px;
-    border-bottom: 1px solid var(--border-light);
-    cursor: pointer;
-  }
-
-  .drive-file-item:hover {
-    background: var(--bg-hover);
-  }
-
-  .drive-file-icon {
-    font-size: 18px;
-    width: 24px;
-    text-align: center;
-  }
-
-  .drive-file-name {
-    font-size: 13px;
-    flex: 1;
-  }
-
-  .drive-file-date {
-    font-size: 11px;
-    color: var(--text-muted);
+    color: var(--color-text-secondary);
   }
 </style>

@@ -1,7 +1,7 @@
 /**
  * StorageService.gs — Per-user data storage in Google Sheets.
  *
- * Each user gets a "Provocations Data" spreadsheet in their Drive.
+ * Each user gets an "AnnotationApp Data" spreadsheet in their Drive.
  * Replaces the in-memory storage from server/storage.ts.
  *
  * Sheet structure:
@@ -11,7 +11,7 @@
  *   "EditHistory" — id, documentId, instruction, instructionType, summary, timestamp
  */
 
-var STORAGE_SHEET_NAME = 'Provocations Data';
+var STORAGE_SHEET_NAME = 'AnnotationApp Data';
 var SHEET_DOCUMENTS = 'Documents';
 var SHEET_VERSIONS = 'Versions';
 var SHEET_ANALYSIS = 'Analysis';

@@ -1,10 +1,11 @@
 /**
- * Provocations - Google Apps Script Edition
+ * AnnotationApp (Provocations) - Google Apps Script Edition
  *
  * AI-augmented document workspace where users iteratively shape ideas
  * into polished documents through thought-provoking AI interactions.
  *
  * Entry point: menu setup, sidebar launch, initialization.
+ * All entry points enforce @salesforce.com domain + invite list access.
  */
 
 // ============================================================
@@ -13,7 +14,7 @@
 
 /**
  * Runs when the document/spreadsheet is opened.
- * Adds the Provocations menu to the UI.
+ * Adds the AnnotationApp menu to the UI.
  */
 function onOpen() {
   var ui;
@@ -28,11 +29,12 @@ function onOpen() {
     }
   }
 
-  ui.createMenu('Provocations')
+  ui.createMenu('AnnotationApp')
     .addItem('Open Workspace', 'showSidebar')
     .addItem('Import from Drive', 'showDrivePicker')
     .addSeparator()
     .addItem('Settings', 'showSettings')
+    .addItem('Admin Panel', 'showAdminPanel')
     .addItem('About', 'showAbout')
     .addToUi();
 }
@@ -42,7 +44,7 @@ function onOpen() {
  */
 function onDocsHomepage(e) {
   return CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle('Provocations'))
+    .setHeader(CardService.newCardHeader().setTitle('AnnotationApp'))
     .addSection(
       CardService.newCardSection()
         .addWidget(CardService.newTextParagraph().setText(
@@ -57,12 +59,18 @@ function onDocsHomepage(e) {
 }
 
 /**
- * Opens the main Provocations sidebar.
+ * Opens the main sidebar. Enforces access control.
  */
 function showSidebar() {
+  var access = checkAccess();
+  if (!access.authorized) {
+    showAccessDenied_(access.reason);
+    return;
+  }
+
   var html = HtmlService.createTemplateFromFile('Sidebar')
     .evaluate()
-    .setTitle('Provocations')
+    .setTitle('AnnotationApp')
     .setWidth(420);
 
   try {
@@ -80,6 +88,8 @@ function showSidebar() {
  * Opens a Drive file picker dialog.
  */
 function showDrivePicker() {
+  enforceAccess();
+
   var html = HtmlService.createTemplateFromFile('DrivePicker')
     .evaluate()
     .setWidth(600)
@@ -96,16 +106,50 @@ function showDrivePicker() {
  * Opens the settings dialog.
  */
 function showSettings() {
+  enforceAccess();
+
   var html = HtmlService.createTemplateFromFile('Settings')
     .evaluate()
     .setWidth(450)
     .setHeight(350);
 
   try {
-    DocumentApp.getUi().showModalDialog(html, 'Provocations Settings');
+    DocumentApp.getUi().showModalDialog(html, 'AnnotationApp Settings');
   } catch (e) {
-    SpreadsheetApp.getUi().showModalDialog(html, 'Provocations Settings');
+    SpreadsheetApp.getUi().showModalDialog(html, 'AnnotationApp Settings');
   }
+}
+
+/**
+ * Opens the admin panel dialog.
+ */
+function showAdminPanel() {
+  enforceAccess();
+
+  var html = HtmlService.createTemplateFromFile('AdminPanel')
+    .evaluate()
+    .setWidth(550)
+    .setHeight(500);
+
+  try {
+    DocumentApp.getUi().showModalDialog(html, 'AnnotationApp Admin');
+  } catch (e) {
+    SpreadsheetApp.getUi().showModalDialog(html, 'AnnotationApp Admin');
+  }
+}
+
+/**
+ * Shows access denied message.
+ * @private
+ */
+function showAccessDenied_(reason) {
+  var ui;
+  try { ui = DocumentApp.getUi(); } catch (e) { ui = SpreadsheetApp.getUi(); }
+  ui.alert(
+    'Access Denied',
+    reason + '\n\nThis app is restricted to invited @salesforce.com users.',
+    ui.ButtonSet.OK
+  );
 }
 
 /**
@@ -115,10 +159,11 @@ function showAbout() {
   var ui;
   try { ui = DocumentApp.getUi(); } catch (e) { ui = SpreadsheetApp.getUi(); }
   ui.alert(
-    'Provocations',
+    'AnnotationApp',
     'AI-augmented document workspace.\n\n' +
     'The AI doesn\'t write for you — it provokes deeper thinking so you write better.\n\n' +
-    'Version 1.0.0',
+    'Restricted to @salesforce.com users.\n' +
+    'Version 2.0.0',
     ui.ButtonSet.OK
   );
 }
@@ -140,16 +185,18 @@ function include(filename) {
 // ============================================================
 
 /**
- * First-run setup: creates the user's storage sheet if it doesn't exist.
+ * First-run setup: validates access, creates user's storage and Drive folders.
  */
 function initialize() {
-  var sheet = StorageService.getOrCreateStorageSheet();
+  var access = enforceAccess();
+  var folders = DriveService.getOrCreateAppFolders();
   var config = getConfig();
+
   return {
     ready: true,
-    hasApiKey: !!config.geminiApiKey,
-    userEmail: Session.getActiveUser().getEmail(),
-    storageSheetId: sheet.getId()
+    hasApiKey: !!config.geminiApiKey || config.useVertexAi,
+    userEmail: access.email,
+    appFolderId: folders.root.getId()
   };
 }
 
@@ -157,9 +204,10 @@ function initialize() {
  * Get current configuration state (no secrets exposed to client).
  */
 function getConfigState() {
+  enforceAccess();
   var config = getConfig();
   return {
-    hasApiKey: !!config.geminiApiKey,
+    hasApiKey: !!config.geminiApiKey || config.useVertexAi,
     model: config.model,
     useVertexAi: config.useVertexAi,
     vertexProject: config.vertexProject ? '(configured)' : null,

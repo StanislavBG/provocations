@@ -21,6 +21,8 @@
  * @return {Object} { documentId, lenses, provocations, warnings }
  */
 function analyzeText(request) {
+  enforceAccess();
+
   if (!request || !request.text || typeof request.text !== 'string') {
     throw new Error('Text is required for analysis');
   }
