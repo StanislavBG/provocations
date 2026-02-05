@@ -24,12 +24,12 @@ function doGet(e) {
 }
 
 // ============================================================
-// Menu & Sidebar
+// Add-on Menu (only works when bound to Docs/Sheets, ignored in web app)
 // ============================================================
 
 /**
- * Runs when the document/spreadsheet is opened.
- * Adds the AnnotationApp menu to the UI.
+ * Runs when the document/spreadsheet is opened (add-on context only).
+ * Silently does nothing when running as a web app.
  */
 function onOpen() {
   var ui;
@@ -39,60 +39,23 @@ function onOpen() {
     try {
       ui = SpreadsheetApp.getUi();
     } catch (e2) {
-      Logger.log('Could not get UI — running outside Docs/Sheets');
+      // Running as web app — no menu needed
       return;
     }
   }
 
-  var menu = ui.createMenu('AnnotationApp')
-    .addItem('Open Workspace', 'showSidebar')
-    .addItem('Import from Drive', 'showDrivePicker')
-    .addItem('Send Feedback', 'showFeedback')
+  ui.createMenu('AnnotationApp')
+    .addItem('Open Workspace', 'openSidebarAddon_')
     .addSeparator()
-    .addItem('Settings', 'showSettings');
-
-  // Admin submenu — shown to all but enforced server-side
-  menu.addSeparator()
-    .addSubMenu(ui.createMenu('Admin')
-      .addItem('Run Setup / Migrate', 'runSetup')
-      .addItem('User Management', 'showAdminPanel')
-      .addItem('Dashboard', 'showAdminDashboard')
-      .addItem('Feedback Manager', 'showFeedbackManager')
-      .addItem('Log Viewer', 'showLogViewer')
-    )
-    .addItem('About', 'showAbout')
+    .addItem('Run Setup / Migrate', 'runSetup')
     .addToUi();
 }
 
 /**
- * Google Docs add-on homepage trigger.
+ * Opens the sidebar in add-on context only.
+ * @private
  */
-function onDocsHomepage(e) {
-  return CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle('AnnotationApp'))
-    .addSection(
-      CardService.newCardSection()
-        .addWidget(CardService.newTextParagraph().setText(
-          'AI-augmented document workspace for iterative thinking.'
-        ))
-        .addWidget(CardService.newTextButton()
-          .setText('Open Workspace')
-          .setOnClickAction(CardService.newAction().setFunctionName('showSidebar'))
-        )
-    )
-    .build();
-}
-
-/**
- * Opens the main sidebar. Enforces access control.
- */
-function showSidebar() {
-  var access = checkAccess();
-  if (!access.authorized) {
-    showAccessDenied_(access.reason);
-    return;
-  }
-
+function openSidebarAddon_() {
   var html = HtmlService.createTemplateFromFile('Sidebar')
     .evaluate()
     .setTitle('AnnotationApp')
@@ -107,162 +70,6 @@ function showSidebar() {
       Logger.log('Cannot show sidebar outside Docs/Sheets');
     }
   }
-}
-
-/**
- * Opens a Drive file picker dialog.
- */
-function showDrivePicker() {
-  enforceAccess();
-
-  var html = HtmlService.createTemplateFromFile('DrivePicker')
-    .evaluate()
-    .setWidth(600)
-    .setHeight(400);
-
-  try {
-    DocumentApp.getUi().showModalDialog(html, 'Select a Document');
-  } catch (e) {
-    SpreadsheetApp.getUi().showModalDialog(html, 'Select a Document');
-  }
-}
-
-/**
- * Opens the settings dialog.
- */
-function showSettings() {
-  enforceAccess();
-
-  var html = HtmlService.createTemplateFromFile('Settings')
-    .evaluate()
-    .setWidth(450)
-    .setHeight(350);
-
-  try {
-    DocumentApp.getUi().showModalDialog(html, 'AnnotationApp Settings');
-  } catch (e) {
-    SpreadsheetApp.getUi().showModalDialog(html, 'AnnotationApp Settings');
-  }
-}
-
-/**
- * Opens the admin panel dialog.
- */
-function showAdminPanel() {
-  enforceAdmin();
-
-  var html = HtmlService.createTemplateFromFile('AdminPanel')
-    .evaluate()
-    .setWidth(550)
-    .setHeight(500);
-
-  try {
-    DocumentApp.getUi().showModalDialog(html, 'AnnotationApp Admin');
-  } catch (e) {
-    SpreadsheetApp.getUi().showModalDialog(html, 'AnnotationApp Admin');
-  }
-}
-
-/**
- * Opens the feedback submission dialog.
- */
-function showFeedback() {
-  enforceAccess();
-
-  var html = HtmlService.createTemplateFromFile('FeedbackModal')
-    .evaluate()
-    .setWidth(480)
-    .setHeight(520);
-
-  showDialog_(html, 'Send Feedback');
-}
-
-/**
- * Opens the admin dashboard.
- */
-function showAdminDashboard() {
-  enforceAdmin();
-
-  var html = HtmlService.createTemplateFromFile('AdminDashboard')
-    .evaluate()
-    .setWidth(580)
-    .setHeight(560);
-
-  showDialog_(html, 'Admin Dashboard');
-}
-
-/**
- * Opens the feedback manager (admin-only).
- */
-function showFeedbackManager() {
-  enforceAdmin();
-
-  var html = HtmlService.createTemplateFromFile('FeedbackManager')
-    .evaluate()
-    .setWidth(680)
-    .setHeight(560);
-
-  showDialog_(html, 'Feedback Manager');
-}
-
-/**
- * Opens the log viewer (admin-only).
- */
-function showLogViewer() {
-  enforceAdmin();
-
-  var html = HtmlService.createTemplateFromFile('LogViewer')
-    .evaluate()
-    .setWidth(650)
-    .setHeight(520);
-
-  showDialog_(html, 'Log Viewer');
-}
-
-/**
- * Helper to show a modal dialog in either Docs or Sheets.
- * @private
- */
-function showDialog_(html, title) {
-  try {
-    DocumentApp.getUi().showModalDialog(html, title);
-  } catch (e) {
-    try {
-      SpreadsheetApp.getUi().showModalDialog(html, title);
-    } catch (e2) {
-      Logger.log('Cannot show dialog outside Docs/Sheets');
-    }
-  }
-}
-
-/**
- * Shows access denied message.
- * @private
- */
-function showAccessDenied_(reason) {
-  var ui;
-  try { ui = DocumentApp.getUi(); } catch (e) { ui = SpreadsheetApp.getUi(); }
-  ui.alert(
-    'Access Denied',
-    reason + '\n\nThis app is restricted to invited @salesforce.com users.',
-    ui.ButtonSet.OK
-  );
-}
-
-/**
- * Shows the about dialog.
- */
-function showAbout() {
-  var ui;
-  try { ui = DocumentApp.getUi(); } catch (e) { ui = SpreadsheetApp.getUi(); }
-  ui.alert(
-    'AnnotationApp',
-    'AI-augmented document workspace.\n\n' +
-    'The AI doesn\'t write for you — it provokes deeper thinking so you write better.\n\n' +
-    'Restricted to @salesforce.com users.\n' +
-    'Version 2.0.0',
-    ui.ButtonSet.OK
-  );
 }
 
 // ============================================================

@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result.hasApiKey) {
-        showToast('Configure your Gemini API key in AnnotationApp > Settings.', 'info');
+        showToast('Configure your Gemini API key in Settings (gear icon in footer).', 'info');
       }
       tryLoadCurrentDoc();
     })
@@ -110,7 +110,15 @@ function startAnalysis() {
 }
 
 function loadFromDrive() {
-  google.script.run.showDrivePicker();
+  openModal('modal-drive');
+  document.getElementById('drive-file-list').innerHTML = '<div class="modal-loading">Loading recent documents...</div>';
+  google.script.run
+    .withSuccessHandler(renderDriveFiles)
+    .withFailureHandler(function(err) {
+      document.getElementById('drive-file-list').innerHTML =
+        '<div class="modal-loading">Error: ' + escapeHtml(err.message) + '</div>';
+    })
+    .searchDriveFiles('', 20);
 }
 
 // ============================================================
@@ -640,10 +648,224 @@ function capitalize(str) {
 }
 
 // ============================================================
-// Feedback Pill
+// Modal Helpers
 // ============================================================
 
+function openModal(id) {
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+// Close modal on backdrop click
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.add('hidden');
+  }
+});
+
+// ============================================================
+// Drive Picker (client-side modal)
+// ============================================================
+
+var MIME_ICONS = {
+  'application/vnd.google-apps.document': '\uD83D\uDCC4',
+  'text/plain': '\uD83D\uDCDD',
+  'text/markdown': '\uD83D\uDCDD',
+  'application/pdf': '\uD83D\uDCC3',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '\uD83D\uDCC1'
+};
+
+function driveSearch() {
+  var query = document.getElementById('drive-search-query').value;
+  document.getElementById('drive-file-list').innerHTML = '<div class="modal-loading">Searching...</div>';
+  google.script.run
+    .withSuccessHandler(renderDriveFiles)
+    .withFailureHandler(function(err) {
+      document.getElementById('drive-file-list').innerHTML =
+        '<div class="modal-loading">Search failed: ' + escapeHtml(err.message) + '</div>';
+    })
+    .searchDriveFiles(query, 20);
+}
+
+function renderDriveFiles(files) {
+  var container = document.getElementById('drive-file-list');
+  if (!files || files.length === 0) {
+    container.innerHTML = '<div class="modal-loading">No documents found.</div>';
+    return;
+  }
+  var html = '';
+  files.forEach(function(f) {
+    var icon = MIME_ICONS[f.mimeType] || '\uD83D\uDCC4';
+    var date = new Date(f.lastUpdated).toLocaleDateString();
+    html += '<div class="drive-file-item" onclick="selectDriveFile(\'' + f.id + '\')">' +
+      '<div class="drive-file-icon">' + icon + '</div>' +
+      '<div class="drive-file-info">' +
+        '<div class="drive-file-name">' + escapeHtml(f.name) + '</div>' +
+        '<div class="drive-file-date">Updated ' + date + '</div>' +
+      '</div>' +
+    '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function selectDriveFile(fileId) {
+  document.getElementById('drive-file-list').innerHTML = '<div class="modal-loading">Loading file...</div>';
+  google.script.run
+    .withSuccessHandler(function(result) {
+      closeModal('modal-drive');
+      if (result && result.content) {
+        document.getElementById('input-text').value = result.content;
+        document.getElementById('input-source-label').textContent = 'Loaded from: ' + (result.name || 'Drive');
+        showToast('File loaded from Drive', 'success');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to load file: ' + err.message, 'error');
+      driveSearch();
+    })
+    .readDriveFile(fileId);
+}
+
+// ============================================================
+// Settings (client-side modal)
+// ============================================================
+
+function openSettings() {
+  openModal('modal-settings');
+  google.script.run
+    .withSuccessHandler(function(config) {
+      document.getElementById('settings-model').value = config.model || 'gemini-2.0-flash';
+      document.getElementById('settings-use-vertex').checked = config.useVertexAi;
+      if (config.vertexProject) {
+        document.getElementById('settings-vertex-project').value = config.vertexProject;
+      }
+      if (config.vertexLocation) {
+        document.getElementById('settings-vertex-location').value = config.vertexLocation;
+      }
+      toggleVertexFields();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Failed to load settings: ' + err.message, 'error');
+    })
+    .getConfigState();
+}
+
+function toggleVertexFields() {
+  var useVertex = document.getElementById('settings-use-vertex').checked;
+  document.getElementById('settings-vertex-fields').style.display = useVertex ? 'block' : 'none';
+  document.getElementById('settings-apikey-fields').style.display = useVertex ? 'none' : 'block';
+}
+
+function saveSettings() {
+  var settings = {
+    model: document.getElementById('settings-model').value,
+    useVertexAi: document.getElementById('settings-use-vertex').checked
+  };
+  if (settings.useVertexAi) {
+    settings.vertexProject = document.getElementById('settings-vertex-project').value;
+    settings.vertexLocation = document.getElementById('settings-vertex-location').value;
+  } else {
+    var apiKey = document.getElementById('settings-api-key').value;
+    if (apiKey) settings.geminiApiKey = apiKey;
+  }
+  google.script.run
+    .withSuccessHandler(function() {
+      closeModal('modal-settings');
+      showToast('Settings saved', 'success');
+    })
+    .withFailureHandler(function(err) {
+      showToast('Save failed: ' + err.message, 'error');
+    })
+    .saveConfig(settings);
+}
+
+// ============================================================
+// Feedback (client-side modal)
+// ============================================================
+
+var feedbackType = 'general';
+
 function openFeedback() {
-  google.script.run.showFeedback();
+  feedbackType = 'general';
+  openModal('modal-feedback');
+  // Reset form
+  document.getElementById('fb-title').value = '';
+  document.getElementById('fb-body').value = '';
+  document.getElementById('fb-status-msg').textContent = '';
+  document.getElementById('fb-status-msg').className = 'fb-status-msg';
+  document.querySelectorAll('#modal-feedback .slds-pill').forEach(function(p) {
+    p.classList.toggle('slds-is-selected', p.dataset.type === 'general');
+  });
+  // Load history
+  google.script.run
+    .withSuccessHandler(renderFeedbackHistory)
+    .withFailureHandler(function() {})
+    .getMyFeedback();
+}
+
+function selectFeedbackType(el) {
+  document.querySelectorAll('#modal-feedback .slds-pill').forEach(function(p) { p.classList.remove('slds-is-selected'); });
+  el.classList.add('slds-is-selected');
+  feedbackType = el.dataset.type;
+}
+
+function submitFeedback() {
+  var title = document.getElementById('fb-title').value.trim();
+  var body = document.getElementById('fb-body').value.trim();
+  if (!title) { showFbStatus('Please enter a title.', 'error'); return; }
+  if (!body) { showFbStatus('Please enter a description.', 'error'); return; }
+
+  var btn = document.getElementById('fb-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+      if (result.success) {
+        showFbStatus(result.message, 'success');
+        document.getElementById('fb-title').value = '';
+        document.getElementById('fb-body').value = '';
+        google.script.run.withSuccessHandler(renderFeedbackHistory).getMyFeedback();
+      } else {
+        showFbStatus(result.message, 'error');
+      }
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+      showFbStatus('Error: ' + err.message, 'error');
+    })
+    .submitFeedback({ type: feedbackType, title: title, body: body });
+}
+
+function showFbStatus(msg, type) {
+  var el = document.getElementById('fb-status-msg');
+  el.textContent = msg;
+  el.className = 'fb-status-msg ' + type;
+}
+
+function renderFeedbackHistory(items) {
+  var section = document.getElementById('fb-history-section');
+  var list = document.getElementById('fb-history-list');
+  if (!items || items.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  var html = '';
+  items.forEach(function(item) {
+    var date = item.timestamp ? new Date(item.timestamp).toLocaleDateString() : '';
+    var typeLabel = (item.type || 'general').replace(/_/g, ' ');
+    html += '<div style="padding:6px 0;border-bottom:1px solid var(--color-border-light);font-size:12px">' +
+      '<div style="display:flex;justify-content:space-between">' +
+        '<span style="font-weight:600">' + escapeHtml(item.title) + '</span>' +
+        '<span class="slds-text-color_weak">' + escapeHtml(typeLabel) + ' &middot; ' + date + '</span>' +
+      '</div>' +
+      (item.adminComments ? '<div style="margin-top:4px;padding:4px 8px;background:var(--color-background-highlight);border-radius:4px;font-size:11px"><strong>Admin:</strong> ' + escapeHtml(item.adminComments) + '</div>' : '') +
+    '</div>';
+  });
+  list.innerHTML = html;
 }
 </script>

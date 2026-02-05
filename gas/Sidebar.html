@@ -96,13 +96,125 @@
 
     <!-- Footer -->
     <div class="footer">
-      AnnotationApp &mdash; Think deeper, write better
+      <span>AnnotationApp &mdash; Think deeper, write better</span>
+      <button class="footer-link" onclick="openSettings()" title="Settings">&#x2699; Settings</button>
     </div>
 
     <!-- Feedback Pill (always visible, bottom-right) -->
     <button class="feedback-pill" onclick="openFeedback()" title="Send Feedback">
       &#x1F4AC; Feedback
     </button>
+
+    <!-- ===== Modal: Drive Picker ===== -->
+    <div id="modal-drive" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h2>Select a Document</h2>
+          <button class="modal-close" onclick="closeModal('modal-drive')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="search-bar">
+            <input type="text" id="drive-search-query" placeholder="Search your Drive..."
+              onkeydown="if(event.key==='Enter')driveSearch()">
+            <button class="slds-button slds-button_brand slds-button_small" onclick="driveSearch()">Search</button>
+          </div>
+          <div id="drive-file-list" class="drive-file-list">
+            <div class="modal-loading">Loading recent documents...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Modal: Settings ===== -->
+    <div id="modal-settings" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button class="modal-close" onclick="closeModal('modal-settings')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="slds-form-element">
+            <label>Gemini Model</label>
+            <select id="settings-model">
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash (fast, good)</option>
+              <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (fastest)</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash (best)</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro (highest quality)</option>
+            </select>
+          </div>
+          <div class="slds-form-element">
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="settings-use-vertex" onchange="toggleVertexFields()" style="width:auto">
+              <label style="margin:0;display:inline" for="settings-use-vertex">Use Vertex AI (enterprise)</label>
+            </div>
+            <div class="help-text">Use your organization's Vertex AI endpoint instead of an API key.</div>
+          </div>
+          <div id="settings-vertex-fields" style="display:none">
+            <div class="slds-form-element">
+              <label>GCP Project ID</label>
+              <input type="text" id="settings-vertex-project" placeholder="my-gcp-project-123">
+            </div>
+            <div class="slds-form-element">
+              <label>Vertex AI Location</label>
+              <input type="text" id="settings-vertex-location" placeholder="us-central1" value="us-central1">
+            </div>
+          </div>
+          <div id="settings-apikey-fields">
+            <div class="slds-form-element">
+              <label>Gemini API Key</label>
+              <input type="password" id="settings-api-key" placeholder="Enter your API key">
+              <div class="help-text">From Google AI Studio. Not needed if using Vertex AI.</div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="slds-button" onclick="closeModal('modal-settings')">Cancel</button>
+            <button class="slds-button slds-button_brand" onclick="saveSettings()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Modal: Feedback ===== -->
+    <div id="modal-feedback" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h2>Send Feedback</h2>
+          <button class="modal-close" onclick="closeModal('modal-feedback')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">Help us improve AnnotationApp. Bug reports, ideas, and questions welcome.</div>
+          <div class="slds-form-element">
+            <label>Type</label>
+            <div class="slds-pill-container">
+              <button class="slds-pill slds-is-selected" data-type="general" onclick="selectFeedbackType(this)">General</button>
+              <button class="slds-pill" data-type="bug" onclick="selectFeedbackType(this)">Bug</button>
+              <button class="slds-pill" data-type="feature_request" onclick="selectFeedbackType(this)">Feature Request</button>
+              <button class="slds-pill" data-type="improvement" onclick="selectFeedbackType(this)">Improvement</button>
+              <button class="slds-pill" data-type="question" onclick="selectFeedbackType(this)">Question</button>
+            </div>
+          </div>
+          <div class="slds-form-element">
+            <label>Title</label>
+            <input type="text" id="fb-title" placeholder="Brief summary of your feedback" maxlength="200" />
+          </div>
+          <div class="slds-form-element">
+            <label>Description</label>
+            <textarea id="fb-body" placeholder="Describe in detail. For bugs, include steps to reproduce." rows="4"></textarea>
+          </div>
+          <div id="fb-status-msg" class="fb-status-msg"></div>
+          <div class="modal-actions">
+            <button class="slds-button" onclick="closeModal('modal-feedback')">Cancel</button>
+            <button class="slds-button slds-button_brand" id="fb-submit-btn" onclick="submitFeedback()">Submit</button>
+          </div>
+          <div id="fb-history-section" style="display:none">
+            <div style="border-top:1px solid var(--color-border-light);margin-top:16px;padding-top:12px">
+              <label>My Previous Feedback</label>
+              <div id="fb-history-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
