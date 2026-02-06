@@ -48,6 +48,215 @@ const instructionPatterns: Record<InstructionType, RegExp[]> = {
   general: [], // fallback
 };
 
+// Speech artifact patterns to detect voice transcripts
+const speechArtifacts = [
+  /\b(um|uh|er|ah|like|you know|basically|so basically|I mean|kind of|sort of)\b/gi,
+  /\b(gonna|wanna|gotta|kinda|sorta)\b/gi,
+  /(\w+)\s+\1\b/gi, // repeated words
+  /^(so|and|but|okay|alright|well)\s/i, // filler starts
+];
+
+// Detect if instruction looks like a voice transcript
+function isLikelyVoiceTranscript(text: string): boolean {
+  let artifactCount = 0;
+  for (const pattern of speechArtifacts) {
+    const matches = text.match(pattern);
+    if (matches) artifactCount += matches.length;
+  }
+  // If more than 2 artifacts per 100 words, likely voice
+  const wordCount = text.split(/\s+/).length;
+  return artifactCount > 0 && (artifactCount / wordCount) > 0.02;
+}
+
+// Clean voice transcript to extract clear intent
+async function cleanVoiceTranscript(transcript: string): Promise<string> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert at extracting clear editing instructions from spoken transcripts.
+
+Your job is to:
+1. Remove speech artifacts (um, uh, like, you know, basically, so, repeated words)
+2. Extract the core instruction/intent
+3. Make it a clear, actionable editing directive
+
+Keep the user's intent intact. Don't add information they didn't mention.
+Output ONLY the cleaned instruction, nothing else.`
+        },
+        {
+          role: "user",
+          content: transcript
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.2,
+    });
+    return response.choices[0]?.message?.content?.trim() || transcript;
+  } catch {
+    return transcript; // Fall back to original if cleaning fails
+  }
+}
+
+// Determine if instruction is complex enough to need planning
+function isComplexInstruction(instruction: string, instructionType: InstructionType): boolean {
+  // Complex if: restructure type, multiple actions, or long instruction
+  if (instructionType === "restructure") return true;
+  if (instruction.length > 200) return true;
+
+  // Check for multiple action words
+  const actionWords = instruction.match(/\b(add|remove|change|move|update|fix|expand|condense|rewrite|split|merge|create|delete)\b/gi);
+  if (actionWords && actionWords.length >= 2) return true;
+
+  // Check for list-like instructions (numbered or bulleted)
+  if (/\d\.\s|[-•]\s/.test(instruction)) return true;
+
+  return false;
+}
+
+// Generate a plan for complex instructions
+async function generateEditPlan(
+  document: string,
+  instruction: string,
+  selectedText: string | undefined,
+  objective: string
+): Promise<string> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert editor planning document changes. Given an instruction, create a brief execution plan.
+
+Output a concise numbered list (3-5 steps max) of specific changes to make.
+Each step should be atomic and verifiable.
+Focus on WHAT to change, not HOW to write it.
+
+Example:
+Instruction: "Add more detail about pricing and move the FAQ to the end"
+Plan:
+1. Expand the pricing section with specific tier information
+2. Add pricing comparison table after the tier descriptions
+3. Move the FAQ section to after the Contact section
+4. Update any internal references to FAQ location`
+        },
+        {
+          role: "user",
+          content: `Document (first 1000 chars): ${document.slice(0, 1000)}${document.length > 1000 ? "..." : ""}
+${selectedText ? `\nSelected text: "${selectedText}"` : ""}
+Objective: ${objective}
+Instruction: ${instruction}
+
+Create a brief execution plan:`
+        }
+      ],
+      max_tokens: 300,
+      temperature: 0.3,
+    });
+    return response.choices[0]?.message?.content?.trim() || "";
+  } catch {
+    return ""; // Skip planning if it fails
+  }
+}
+
+// Extract style metrics from reference documents
+function extractStyleMetrics(content: string): {
+  avgSentenceLength: number;
+  avgParagraphLength: number;
+  formalityIndicators: string[];
+  structurePatterns: string[];
+} {
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 0);
+  const words = content.split(/\s+/).length;
+
+  const avgSentenceLength = sentences.length > 0 ? Math.round(words / sentences.length) : 0;
+  const avgParagraphLength = paragraphs.length > 0 ? Math.round(sentences.length / paragraphs.length) : 0;
+
+  // Detect formality indicators
+  const formalityIndicators: string[] = [];
+  if (/\b(therefore|however|moreover|furthermore|consequently)\b/i.test(content)) {
+    formalityIndicators.push("uses formal transitions");
+  }
+  if (/\b(I|we|you)\b/i.test(content)) {
+    formalityIndicators.push("uses personal pronouns");
+  } else {
+    formalityIndicators.push("avoids personal pronouns");
+  }
+  if (/\b(don't|won't|can't|isn't|aren't)\b/.test(content)) {
+    formalityIndicators.push("uses contractions (informal)");
+  } else {
+    formalityIndicators.push("avoids contractions (formal)");
+  }
+
+  // Detect structure patterns
+  const structurePatterns: string[] = [];
+  if (/^#+\s/m.test(content)) {
+    structurePatterns.push("uses markdown headers");
+  }
+  if (/^[-*]\s/m.test(content)) {
+    structurePatterns.push("uses bullet lists");
+  }
+  if (/^\d+\.\s/m.test(content)) {
+    structurePatterns.push("uses numbered lists");
+  }
+  if (/\*\*[^*]+\*\*/.test(content)) {
+    structurePatterns.push("uses bold for emphasis");
+  }
+
+  return { avgSentenceLength, avgParagraphLength, formalityIndicators, structurePatterns };
+}
+
+// Format style metrics for prompt inclusion
+function formatStyleGuidance(docs: ReferenceDocument[]): string {
+  const metrics = docs.map(doc => ({
+    name: doc.name,
+    type: doc.type,
+    ...extractStyleMetrics(doc.content)
+  }));
+
+  const lines: string[] = ["STYLE GUIDANCE (extracted from reference documents):"];
+
+  for (const m of metrics) {
+    lines.push(`\n[${m.type.toUpperCase()}: ${m.name}]`);
+    lines.push(`- Average sentence length: ${m.avgSentenceLength} words`);
+    lines.push(`- Average paragraph length: ${m.avgParagraphLength} sentences`);
+    if (m.formalityIndicators.length > 0) {
+      lines.push(`- Formality: ${m.formalityIndicators.join(", ")}`);
+    }
+    if (m.structurePatterns.length > 0) {
+      lines.push(`- Structure: ${m.structurePatterns.join(", ")}`);
+    }
+  }
+
+  lines.push("\nMatch these style characteristics in your edits.");
+  return lines.join("\n");
+}
+
+// Provocation response examples for better guidance
+const provocationResponseExamples: Record<ProvocationType, string> = {
+  opportunity: `Example good responses to opportunity provocations:
+- "Add a section about X to address this gap"
+- "Expand the benefits section to include Y"
+- "Include a case study showing Z"
+The goal is to enrich the document with new content that addresses the opportunity.`,
+
+  fallacy: `Example good responses to fallacy provocations:
+- "Add evidence to support the claim about X"
+- "Soften the absolute language in paragraph Y"
+- "Add a counterargument and address it"
+The goal is to strengthen the argument with better reasoning or evidence.`,
+
+  alternative: `Example good responses to alternative provocations:
+- "Acknowledge the alternative approach and explain why we chose this one"
+- "Add a comparison section weighing both options"
+- "Include the alternative as an option for different use cases"
+The goal is to show thoughtful consideration of alternatives.`,
+};
+
 // Strategy prompts for each instruction type
 const instructionStrategies: Record<InstructionType, string> = {
   expand: "Add depth, examples, supporting details, and elaboration. Develop ideas more fully while maintaining coherence.",
@@ -281,7 +490,7 @@ Output only valid JSON, no markdown.`
         document,
         objective,
         selectedText,
-        instruction,
+        instruction: rawInstruction,
         provocation,
         activeLens,
         tone,
@@ -290,9 +499,27 @@ Output only valid JSON, no markdown.`
         editHistory
       } = parsed.data;
 
+      // Step 1: Clean voice transcripts before processing
+      let instruction = rawInstruction;
+      let wasVoiceTranscript = false;
+      if (isLikelyVoiceTranscript(rawInstruction)) {
+        wasVoiceTranscript = true;
+        instruction = await cleanVoiceTranscript(rawInstruction);
+        console.log(`[Write API] Cleaned voice transcript: "${rawInstruction.slice(0, 50)}..." → "${instruction.slice(0, 50)}..."`);
+      }
+
       // Classify the instruction type
       const instructionType = classifyInstruction(instruction);
       const strategy = instructionStrategies[instructionType];
+
+      // Step 2: Generate plan for complex instructions
+      let editPlan = "";
+      if (isComplexInstruction(instruction, instructionType)) {
+        editPlan = await generateEditPlan(document, instruction, selectedText, objective);
+        if (editPlan) {
+          console.log(`[Write API] Generated plan for complex instruction`);
+        }
+      }
 
       // Build context sections
       const contextParts: string[] = [];
@@ -300,6 +527,12 @@ Output only valid JSON, no markdown.`
       // Add instruction strategy
       contextParts.push(`INSTRUCTION TYPE: ${instructionType}
 STRATEGY: ${strategy}`);
+
+      // Add edit plan if generated
+      if (editPlan) {
+        contextParts.push(`EXECUTION PLAN (follow this step by step):
+${editPlan}`);
+      }
 
       // Add edit history for coherent iteration
       if (editHistory && editHistory.length > 0) {
@@ -313,17 +546,21 @@ ${historyStr}`);
 
       // Add reference document context for style inference
       if (referenceDocuments && referenceDocuments.length > 0) {
-        const refSummaries = referenceDocuments.map(d => {
+        // Extract and format style metrics from references
+        const styleGuidance = formatStyleGuidance(referenceDocuments);
+
+        // Also include a brief excerpt for context
+        const refExcerpts = referenceDocuments.map(d => {
           const typeLabel = d.type === "style" ? "STYLE GUIDE"
             : d.type === "template" ? "TEMPLATE"
             : "EXAMPLE";
-          return `[${typeLabel}: ${d.name}]\n${d.content.slice(0, 1000)}${d.content.length > 1000 ? "..." : ""}`;
+          return `[${typeLabel}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`;
         }).join("\n\n---\n\n");
 
-        contextParts.push(`REFERENCE DOCUMENTS (use these to guide tone, style, and structure):
-${refSummaries}
+        contextParts.push(`${styleGuidance}
 
-Analyze the style, structure, and voice of these references. Match the target document's quality, formatting patterns, and professional standards where appropriate.`);
+REFERENCE EXCERPTS (for additional context):
+${refExcerpts}`);
       }
 
       if (activeLens) {
@@ -339,11 +576,16 @@ Analyze the style, structure, and voice of these references. Match the target do
       }
 
       if (provocation) {
+        const responseGuidance = provocationResponseExamples[provocation.type];
         contextParts.push(`PROVOCATION BEING ADDRESSED:
 Type: ${provocation.type}
 Challenge: ${provocation.title}
 Details: ${provocation.content}
-Relevant excerpt: "${provocation.sourceExcerpt}"`);
+Relevant excerpt: "${provocation.sourceExcerpt}"
+
+${responseGuidance}
+
+The user's response should be integrated thoughtfully - don't just append it, weave it into the document naturally.`);
       }
 
       if (tone) {
@@ -367,6 +609,30 @@ Relevant excerpt: "${provocation.sourceExcerpt}"`);
         ? `The user has selected specific text to focus on. Apply the instruction primarily to this selection, but ensure it integrates well with the rest of the document.`
         : `Apply the instruction to improve the document holistically.`;
 
+      // Build preservation directives based on context
+      const preservationDirectives: string[] = [];
+      if (selectedText) {
+        preservationDirectives.push("- PRESERVE all text outside the selected area unless the instruction explicitly affects it");
+        preservationDirectives.push("- DO NOT reformat or restructure sections that weren't mentioned");
+      }
+      if (instructionType === "correct") {
+        preservationDirectives.push("- ONLY fix the specific error mentioned - no other changes");
+      }
+      if (instructionType === "style") {
+        preservationDirectives.push("- PRESERVE the content and meaning - only change the voice/tone");
+      }
+      if (instructionType === "condense") {
+        preservationDirectives.push("- PRESERVE all key information - only remove redundancy and filler");
+      }
+      // Always include these
+      preservationDirectives.push("- DO NOT add information the user didn't mention or request");
+      preservationDirectives.push("- DO NOT remove content unless explicitly asked to");
+      preservationDirectives.push("- PRESERVE markdown formatting and structure unless asked to change it");
+
+      const preservationSection = preservationDirectives.length > 0
+        ? `\n\nPRESERVATION RULES (follow strictly):\n${preservationDirectives.join("\n")}`
+        : "";
+
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
       const documentResponse = await openai.chat.completions.create({
         model: "gpt-5.2",
@@ -380,13 +646,19 @@ DOCUMENT OBJECTIVE: ${objective}
 
 Your role is to evolve the document based on the user's instruction while always keeping the objective in mind. The document should get better with each iteration - clearer, more compelling, better structured.
 
+APPROACH:
+1. First, understand exactly what the user wants changed
+2. Identify the minimal set of changes needed
+3. Execute those changes precisely
+4. Verify you haven't made unintended changes
+
 Guidelines:
 1. ${focusInstruction}
 2. Preserve the document's voice and structure unless explicitly asked to change it
 3. Make targeted improvements, not wholesale rewrites
 4. The output should be the complete evolved document (not just the changed parts)
 5. Use markdown formatting for structure (headers, lists, emphasis) where appropriate
-${contextSection}
+${contextSection}${preservationSection}
 
 Output only the evolved document text. No explanations or meta-commentary.`
           },
