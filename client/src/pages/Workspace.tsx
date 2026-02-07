@@ -4,7 +4,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
-import { LensesPanel } from "@/components/LensesPanel";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
 import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
@@ -36,10 +35,8 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
   Document,
-  Lens,
   Provocation,
   OutlineItem,
-  LensType,
   ToneOption,
   DocumentVersion,
   WriteRequest,
@@ -57,8 +54,6 @@ export default function Workspace() {
   const [document, setDocument] = useState<Document | null>(null);
   const [objective, setObjective] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
-  const [lenses, setLenses] = useState<Lens[]>([]);
-  const [activeLens, setActiveLens] = useState<LensType | null>(null);
   const [provocations, setProvocations] = useState<Provocation[]>([]);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [selectedTone, setSelectedTone] = useState<ToneOption>("practical");
@@ -115,16 +110,13 @@ export default function Workspace() {
       });
       return await response.json() as {
         document: Document;
-        lenses: Lens[];
         provocations: Provocation[];
         warnings?: Array<{ type: string; message: string }>;
       };
     },
     onSuccess: (data) => {
-      const lensesData = data.lenses ?? [];
       const provocationsData = data.provocations ?? [];
       setDocument(data.document);
-      setLenses(lensesData);
       setProvocations(provocationsData);
       setPhase("workspace");
 
@@ -149,7 +141,7 @@ export default function Workspace() {
 
       toast({
         title: "Analysis Complete",
-        description: `Generated ${lensesData.length} lenses and ${provocationsData.length} provocations.`,
+        description: `Generated ${provocationsData.length} provocations.`,
       });
     },
     onError: (error) => {
@@ -276,6 +268,33 @@ export default function Workspace() {
     },
   });
 
+  const regenerateProvocationsMutation = useMutation({
+    mutationFn: async ({ guidance }: { guidance?: string }) => {
+      if (!document) throw new Error("No document");
+      const response = await apiRequest("POST", "/api/generate-provocations", {
+        text: document.rawText,
+        guidance,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+      });
+      return await response.json() as { provocations: Provocation[] };
+    },
+    onSuccess: (data) => {
+      const newProvocations = data.provocations ?? [];
+      setProvocations(prev => [...prev, ...newProvocations]);
+      toast({
+        title: "New Provocations Generated",
+        description: `Added ${newProvocations.length} new provocations.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Generation Failed",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAnalyze = useCallback((text: string, docObjective?: string, refs?: ReferenceDocument[]) => {
     if (docObjective) {
       setObjective(docObjective);
@@ -382,13 +401,15 @@ export default function Workspace() {
     setRefinedPreview(null);
   }, []);
 
+  const handleRegenerateProvocations = useCallback((guidance?: string) => {
+    regenerateProvocationsMutation.mutate({ guidance });
+  }, [regenerateProvocationsMutation]);
+
   const handleReset = useCallback(() => {
     setPhase("input");
     setDocument(null);
     setObjective("");
     setReferenceDocuments([]);
-    setLenses([]);
-    setActiveLens(null);
     setProvocations([]);
     setOutline([]);
     setRefinedPreview(null);
@@ -515,7 +536,6 @@ export default function Workspace() {
           content: context.provocation.content,
           sourceExcerpt: context.provocation.sourceExcerpt,
         },
-        activeLens: activeLens || undefined,
         description: `Addressed provocation: ${context.provocation.title}`,
       });
 
@@ -528,25 +548,22 @@ export default function Workspace() {
       writeMutation.mutate({
         instruction: transcript,
         selectedText: context.selectedText,
-        activeLens: activeLens || undefined,
         description: "Voice edit on selection",
       });
     } else {
       // Sending as general document instruction
       writeMutation.mutate({
         instruction: transcript,
-        activeLens: activeLens || undefined,
         description: "Voice instruction",
       });
     }
-  }, [document, pendingVoiceContext, writeMutation, activeLens]);
+  }, [document, pendingVoiceContext, writeMutation]);
 
   // Handle cleaned transcript from TranscriptOverlay
   const handleCleanTranscript = useCallback((cleaned: string) => {
     setCleanedTranscript(cleaned);
   }, []);
 
-  const activeLensSummary = lenses?.find((l) => l.type === activeLens)?.summary;
   const hasOutlineContent = outline?.some((item) => item.content) ?? false;
   const canShowDiff = versions.length >= 2;
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
@@ -764,18 +781,7 @@ export default function Workspace() {
       
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-            <LensesPanel
-              lenses={lenses}
-              activeLens={activeLens}
-              onSelectLens={setActiveLens}
-              isLoading={analyzeMutation.isPending}
-            />
-          </ResizablePanel>
-          
-          <ResizableHandle withHandle />
-          
-          <ResizablePanel defaultSize={45} minSize={30}>
+          <ResizablePanel defaultSize={55} minSize={35}>
             {showDiffView && previousVersion && currentVersion ? (
               <Suspense fallback={
                 <div className="h-full flex flex-col p-4 space-y-4">
@@ -793,8 +799,6 @@ export default function Workspace() {
             ) : (
               <ReadingPane
                 text={document?.rawText || ""}
-                activeLens={activeLens}
-                lensSummary={activeLensSummary}
                 onTextChange={handleDocumentTextChange}
                 highlightText={hoveredProvocationContext}
                 onVoiceMerge={handleSelectionVoiceMerge}
@@ -807,7 +811,7 @@ export default function Workspace() {
           
           <ResizableHandle withHandle />
           
-          <ResizablePanel defaultSize={35} minSize={25}>
+          <ResizablePanel defaultSize={45} minSize={25}>
             <div className="h-full flex flex-col relative">
               <TranscriptOverlay
                 isVisible={showTranscriptOverlay}
@@ -866,8 +870,10 @@ export default function Workspace() {
                     onVoiceResponse={handleVoiceResponse}
                     onTranscriptUpdate={handleTranscriptUpdate}
                     onHoverProvocation={setHoveredProvocationId}
+                    onRegenerateProvocations={handleRegenerateProvocations}
                     isLoading={analyzeMutation.isPending}
                     isMerging={writeMutation.isPending}
+                    isRegenerating={regenerateProvocationsMutation.isPending}
                   />
                 </TabsContent>
                 

@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import {
   analyzeTextRequestSchema,
   writeRequestSchema,
+  generateProvocationsRequestSchema,
   lensTypes,
   provocationType,
   instructionTypes,
@@ -475,6 +476,99 @@ Output only valid JSON, no markdown.`
       console.error("Analysis error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to analyze text", details: errorMessage });
+    }
+  });
+
+  // Generate new provocations for an existing document
+  app.post("/api/generate-provocations", async (req, res) => {
+    try {
+      const parsed = generateProvocationsRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { text, guidance, referenceDocuments } = parsed.data;
+
+      const MAX_ANALYSIS_LENGTH = 8000;
+      const analysisText = text.slice(0, MAX_ANALYSIS_LENGTH);
+
+      const refDocSummary = referenceDocuments && referenceDocuments.length > 0
+        ? referenceDocuments.map(d => `[${d.type.toUpperCase()}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`).join("\n\n")
+        : null;
+
+      const refContext = refDocSummary
+        ? `\n\nReference documents:\n${refDocSummary}\n\nCompare against these for gaps.`
+        : "";
+
+      const guidanceContext = guidance
+        ? `\n\nUSER GUIDANCE: The user specifically wants provocations about: ${guidance}`
+        : "";
+
+      const provDescriptions = provocationType.map(t => `- ${t}: ${provocationPrompts[t]}`).join("\n");
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 4096,
+        messages: [
+          {
+            role: "system",
+            content: `You are a critical thinking partner. Challenge assumptions and push thinking deeper.
+
+Generate provocations in these categories:
+${provDescriptions}
+${refContext}${guidanceContext}
+
+Respond with a JSON object containing a "provocations" array. Generate 2-3 provocations per category (6-9 total).
+For each provocation:
+- type: The category (opportunity, fallacy, or alternative)
+- title: A punchy headline (max 60 chars)
+- content: A 2-3 sentence explanation
+- sourceExcerpt: A relevant quote from the source text (max 150 chars)
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: `Generate provocations for this text:\n\n${analysisText}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let parsedResponse: Record<string, unknown> = {};
+      try {
+        parsedResponse = JSON.parse(content);
+      } catch {
+        console.error("Failed to parse provocations JSON:", content);
+        return res.json({ provocations: [] });
+      }
+
+      const provocationsArray = Array.isArray(parsedResponse.provocations)
+        ? parsedResponse.provocations
+        : [];
+
+      const provocations = provocationsArray.map((p: unknown, idx: number): Provocation => {
+        const item = p as Record<string, unknown>;
+        const provType = provocationType.includes(item?.type as ProvocationType)
+          ? item.type as ProvocationType
+          : provocationType[idx % 3];
+
+        return {
+          id: `${provType}-${Date.now()}-${idx}`,
+          type: provType,
+          title: typeof item?.title === 'string' ? item.title : "Untitled Provocation",
+          content: typeof item?.content === 'string' ? item.content : "",
+          sourceExcerpt: typeof item?.sourceExcerpt === 'string' ? item.sourceExcerpt : "",
+          status: "pending",
+        };
+      });
+
+      res.json({ provocations });
+    } catch (error) {
+      console.error("Generate provocations error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate provocations", details: errorMessage });
     }
   });
 

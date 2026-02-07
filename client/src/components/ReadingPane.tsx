@@ -3,25 +3,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BookOpen, Eye, Download, Mic, Square, Send, X, Loader2 } from "lucide-react";
+import { BookOpen, Download, Mic, Square, Send, X, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
-import type { LensType } from "@shared/schema";
-
-const lensLabels: Record<LensType, string> = {
-  consumer: "Consumer's Lens",
-  executive: "Executive's Lens",
-  technical: "Technical Lens",
-  financial: "Financial Lens",
-  strategic: "Strategic Lens",
-  skeptic: "Skeptic's Lens",
-};
 
 interface ReadingPaneProps {
   text: string;
-  activeLens: LensType | null;
-  lensSummary?: string;
   onTextChange?: (text: string) => void;
   highlightText?: string;
   onVoiceMerge?: (selectedText: string, transcript: string) => void;
@@ -30,7 +18,7 @@ interface ReadingPaneProps {
   onTextEdit?: (newText: string) => void;
 }
 
-export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit }: ReadingPaneProps) {
+export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit }: ReadingPaneProps) {
   const { toast } = useToast();
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
@@ -320,18 +308,6 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
           </Button>
         </div>
       </div>
-
-      {activeLens && lensSummary && (
-        <div className="p-4 border-b bg-primary/5">
-          <div className="flex items-center gap-2 mb-2">
-            <Eye className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">Viewing through {lensLabels[activeLens]}</span>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {lensSummary}
-          </p>
-        </div>
-      )}
 
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
         <ScrollArea className="h-full">
