@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
+import { InterviewPanel } from "@/components/InterviewPanel";
 import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
 import { DimensionsToolbar } from "@/components/DimensionsToolbar";
@@ -23,6 +24,7 @@ import {
   Sparkles,
   RotateCcw,
   MessageSquareWarning,
+  MessageCircleQuestion,
   ListTree,
   Settings2,
   GitCompare,
@@ -42,7 +44,9 @@ import type {
   WriteRequest,
   WriteResponse,
   ReferenceDocument,
-  EditHistoryEntry
+  EditHistoryEntry,
+  InterviewEntry,
+  InterviewQuestionResponse
 } from "@shared/schema";
 
 type AppPhase = "input" | "blank-document" | "workspace";
@@ -92,6 +96,12 @@ export default function Workspace() {
 
   // Suggestions from last write response
   const [lastSuggestions, setLastSuggestions] = useState<string[]>([]);
+
+  // Interview state
+  const [isInterviewActive, setIsInterviewActive] = useState(false);
+  const [interviewEntries, setInterviewEntries] = useState<InterviewEntry[]>([]);
+  const [currentInterviewQuestion, setCurrentInterviewQuestion] = useState<string | null>(null);
+  const [currentInterviewTopic, setCurrentInterviewTopic] = useState<string | null>(null);
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
@@ -295,6 +305,92 @@ export default function Workspace() {
     },
   });
 
+  const interviewQuestionMutation = useMutation({
+    mutationFn: async ({ overrideEntries }: { overrideEntries?: InterviewEntry[] } = {}) => {
+      if (!document) throw new Error("No document");
+      const templateDoc = referenceDocuments.find(d => d.type === "template");
+      const entries = overrideEntries ?? interviewEntries;
+      const response = await apiRequest("POST", "/api/interview/question", {
+        objective,
+        document: document.rawText,
+        template: templateDoc?.content,
+        previousEntries: entries.length > 0 ? entries : undefined,
+        provocations: provocations.length > 0 ? provocations : undefined,
+      });
+      return await response.json() as InterviewQuestionResponse;
+    },
+    onSuccess: (data) => {
+      setCurrentInterviewQuestion(data.question);
+      setCurrentInterviewTopic(data.topic);
+    },
+    onError: (error) => {
+      toast({
+        title: "Interview Error",
+        description: error instanceof Error ? error.message : "Failed to generate question",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const interviewSummaryMutation = useMutation({
+    mutationFn: async () => {
+      if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
+      // Step 1: Get summarized instruction from interview entries
+      const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
+        objective,
+        entries: interviewEntries,
+        document: document.rawText,
+      });
+      const { instruction } = await summaryResponse.json() as { instruction: string };
+
+      // Step 2: Use the writer to merge into document
+      const writeResponse = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        instruction,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        editHistory: editHistory.length > 0 ? editHistory : undefined,
+      });
+      return await writeResponse.json() as WriteResponse;
+    },
+    onSuccess: (data) => {
+      if (document) {
+        const newVersion: DocumentVersion = {
+          id: generateId("v"),
+          text: data.document,
+          timestamp: Date.now(),
+          description: `Interview merge (${interviewEntries.length} answers)`,
+        };
+        setVersions(prev => [...prev, newVersion]);
+        setDocument({ ...document, rawText: data.document });
+
+        const historyEntry: EditHistoryEntry = {
+          instruction: `Interview session with ${interviewEntries.length} Q&A pairs`,
+          instructionType: data.instructionType || "general",
+          summary: data.summary || "Interview responses merged",
+          timestamp: Date.now(),
+        };
+        setEditHistory(prev => [...prev.slice(-9), historyEntry]);
+
+        setIsInterviewActive(false);
+        setCurrentInterviewQuestion(null);
+        setCurrentInterviewTopic(null);
+
+        toast({
+          title: "Interview Merged",
+          description: `${interviewEntries.length} answers integrated into your document.`,
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Merge Failed",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAnalyze = useCallback((text: string, docObjective?: string, refs?: ReferenceDocument[]) => {
     if (docObjective) {
       setObjective(docObjective);
@@ -405,6 +501,35 @@ export default function Workspace() {
     regenerateProvocationsMutation.mutate({ guidance });
   }, [regenerateProvocationsMutation]);
 
+  const handleStartInterview = useCallback(() => {
+    setIsInterviewActive(true);
+    setActiveTab("interview");
+    interviewQuestionMutation.mutate({});
+  }, [interviewQuestionMutation]);
+
+  const handleInterviewAnswer = useCallback((answer: string) => {
+    if (!currentInterviewQuestion || !currentInterviewTopic) return;
+
+    const entry: InterviewEntry = {
+      id: generateId("iq"),
+      question: currentInterviewQuestion,
+      answer,
+      topic: currentInterviewTopic,
+      timestamp: Date.now(),
+    };
+    const updatedEntries = [...interviewEntries, entry];
+    setInterviewEntries(updatedEntries);
+    setCurrentInterviewQuestion(null);
+    setCurrentInterviewTopic(null);
+
+    // Fetch next question, passing updated entries directly
+    interviewQuestionMutation.mutate({ overrideEntries: updatedEntries });
+  }, [currentInterviewQuestion, currentInterviewTopic, interviewEntries, interviewQuestionMutation]);
+
+  const handleEndInterview = useCallback(() => {
+    interviewSummaryMutation.mutate();
+  }, [interviewSummaryMutation]);
+
   const handleReset = useCallback(() => {
     setPhase("input");
     setDocument(null);
@@ -418,6 +543,10 @@ export default function Workspace() {
     setIsRecordingBlank(false);
     setEditHistory([]);
     setLastSuggestions([]);
+    setIsInterviewActive(false);
+    setInterviewEntries([]);
+    setCurrentInterviewQuestion(null);
+    setCurrentInterviewTopic(null);
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -840,8 +969,19 @@ export default function Workspace() {
                       </span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger 
-                    value="outline" 
+                  <TabsTrigger
+                    value="interview"
+                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
+                    data-testid="tab-interview"
+                  >
+                    <MessageCircleQuestion className="w-4 h-4" />
+                    Interview
+                    {isInterviewActive && (
+                      <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="outline"
                     className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
                     data-testid="tab-outline"
                   >
@@ -877,6 +1017,20 @@ export default function Workspace() {
                   />
                 </TabsContent>
                 
+                <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
+                  <InterviewPanel
+                    isActive={isInterviewActive}
+                    entries={interviewEntries}
+                    currentQuestion={currentInterviewQuestion}
+                    currentTopic={currentInterviewTopic}
+                    isLoadingQuestion={interviewQuestionMutation.isPending}
+                    isMerging={interviewSummaryMutation.isPending}
+                    onStart={handleStartInterview}
+                    onAnswer={handleInterviewAnswer}
+                    onEnd={handleEndInterview}
+                  />
+                </TabsContent>
+
                 <TabsContent value="outline" className="flex-1 mt-0 overflow-hidden">
                   <OutlineBuilder
                     outline={outline}

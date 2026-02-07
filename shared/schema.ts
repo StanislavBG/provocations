@@ -187,6 +187,51 @@ export interface DocumentVersion {
 }
 
 // Workspace state for context provider
+// Generate template request - creates a document template from an objective
+export const generateTemplateRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+});
+
+export type GenerateTemplateRequest = z.infer<typeof generateTemplateRequestSchema>;
+
+// Interview entry - a single Q&A pair from the interview flow
+export const interviewEntrySchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answer: z.string(),
+  topic: z.string(),
+  timestamp: z.number(),
+});
+
+export type InterviewEntry = z.infer<typeof interviewEntrySchema>;
+
+// Interview question request - generates the next provocative question
+export const interviewQuestionRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+  document: z.string().optional(),
+  template: z.string().optional(),
+  previousEntries: z.array(interviewEntrySchema).optional(),
+  provocations: z.array(provocationSchema).optional(),
+});
+
+export type InterviewQuestionRequest = z.infer<typeof interviewQuestionRequestSchema>;
+
+// Interview question response
+export interface InterviewQuestionResponse {
+  question: string;
+  topic: string;
+  reasoning: string;
+}
+
+// Interview summary request - summarize all entries for merge
+export const interviewSummaryRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+  entries: z.array(interviewEntrySchema).min(1, "At least one entry is required"),
+  document: z.string().optional(),
+});
+
+export type InterviewSummaryRequest = z.infer<typeof interviewSummaryRequestSchema>;
+
 export interface WorkspaceState {
   document: Document | null;
   objective: string;

@@ -36,6 +36,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [isRecordingText, setIsRecordingText] = useState(false);
   const [textInterim, setTextInterim] = useState("");
 
+  // Template generation
+  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
+
   // Raw transcript storage for "show original"
   const [objectiveRawTranscript, setObjectiveRawTranscript] = useState<string | null>(null);
   const [textRawTranscript, setTextRawTranscript] = useState<string | null>(null);
@@ -160,6 +163,31 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     if (textRawTranscript) {
       setText(textRawTranscript);
       setShowTextRaw(false);
+    }
+  };
+
+  const handleGenerateTemplate = async () => {
+    if (!objective.trim()) return;
+    setIsGeneratingTemplate(true);
+    try {
+      const response = await apiRequest("POST", "/api/generate-template", {
+        objective: objective.trim(),
+      });
+      const data = await response.json();
+      if (data.template) {
+        const templateDoc: ReferenceDocument = {
+          id: generateId("ref"),
+          name: data.name || `Template: ${objective.slice(0, 40)}`,
+          content: data.template,
+          type: "template",
+        };
+        setReferenceDocuments((prev) => [...prev, templateDoc]);
+        setIsReferencesOpen(true);
+      }
+    } catch (error) {
+      console.error("Failed to generate template:", error);
+    } finally {
+      setIsGeneratingTemplate(false);
     }
   };
 
@@ -300,6 +328,29 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="space-y-4 pt-0">
+                {/* Generate template from objective */}
+                {objective.trim() && !referenceDocuments.some(d => d.type === "template") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateTemplate}
+                    disabled={isGeneratingTemplate}
+                    className="gap-1.5 w-full"
+                  >
+                    {isGeneratingTemplate ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Generating template...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-3.5 h-3.5" />
+                        Generate Document Template from Objective
+                      </>
+                    )}
+                  </Button>
+                )}
+
                 {/* Existing references */}
                 {referenceDocuments.length > 0 && (
                   <div className="space-y-2">
