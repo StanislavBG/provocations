@@ -5,16 +5,19 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { VoiceRecorder } from "./VoiceRecorder";
-import { 
-  Lightbulb, 
-  AlertTriangle, 
-  GitBranch, 
-  Check, 
-  X, 
+import { Input } from "@/components/ui/input";
+import {
+  Lightbulb,
+  AlertTriangle,
+  GitBranch,
+  Check,
+  X,
   Star,
   MessageSquareWarning,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  RefreshCw,
+  Loader2
 } from "lucide-react";
 import { useState } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
@@ -49,8 +52,10 @@ interface ProvocationsDisplayProps {
   onVoiceResponse?: (provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onHoverProvocation?: (provocationId: string | null) => void;
+  onRegenerateProvocations?: (guidance?: string) => void;
   isLoading?: boolean;
   isMerging?: boolean;
+  isRegenerating?: boolean;
 }
 
 function ProvocationCard({
@@ -150,9 +155,7 @@ function ProvocationCard({
                     }}
                     onInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
                     onRecordingChange={(isRecording) => {
-                      if (isRecording) {
-                        onTranscriptUpdate?.("", true);
-                      }
+                      onTranscriptUpdate?.("", isRecording);
                     }}
                     size="sm"
                     variant="outline"
@@ -217,8 +220,11 @@ function ProvocationCard({
   );
 }
 
-export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onTranscriptUpdate, onHoverProvocation, isLoading, isMerging }: ProvocationsDisplayProps) {
+export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
   const [filter, setFilter] = useState<ProvocationType | "all">("all");
+  const [guidance, setGuidance] = useState("");
+  const [guidanceInterim, setGuidanceInterim] = useState("");
+  const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
   
   const safeProvocations = provocations ?? [];
   
@@ -321,6 +327,58 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
           ))}
         </div>
       </ScrollArea>
+
+      {onRegenerateProvocations && (
+        <div className="border-t p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Guide: e.g. 'Challenge my pricing assumptions'"
+              value={isRecordingGuidance ? guidanceInterim || guidance : guidance}
+              onChange={(e) => setGuidance(e.target.value)}
+              className="flex-1 text-sm h-8"
+              readOnly={isRecordingGuidance}
+              disabled={isRegenerating}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onRegenerateProvocations(guidance || undefined);
+                  setGuidance("");
+                }
+              }}
+            />
+            <VoiceRecorder
+              onTranscript={(transcript) => {
+                setGuidance(transcript);
+                setGuidanceInterim("");
+              }}
+              onInterimTranscript={setGuidanceInterim}
+              onRecordingChange={setIsRecordingGuidance}
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+            />
+            <Button
+              onClick={() => {
+                onRegenerateProvocations(guidance || undefined);
+                setGuidance("");
+              }}
+              disabled={isRegenerating}
+              size="sm"
+              className="gap-1.5 shrink-0"
+            >
+              {isRegenerating ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3 h-3" />
+              )}
+              Provoke More
+            </Button>
+          </div>
+          {isRecordingGuidance && (
+            <p className="text-xs text-primary animate-pulse">Listening... describe what you want challenged</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

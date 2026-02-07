@@ -4,8 +4,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
-import { LensesPanel } from "@/components/LensesPanel";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
+import { InterviewPanel } from "@/components/InterviewPanel";
 import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
 import { DimensionsToolbar } from "@/components/DimensionsToolbar";
@@ -24,6 +24,7 @@ import {
   Sparkles,
   RotateCcw,
   MessageSquareWarning,
+  MessageCircleQuestion,
   ListTree,
   Settings2,
   GitCompare,
@@ -36,16 +37,16 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
   Document,
-  Lens,
   Provocation,
   OutlineItem,
-  LensType,
   ToneOption,
   DocumentVersion,
   WriteRequest,
   WriteResponse,
   ReferenceDocument,
-  EditHistoryEntry
+  EditHistoryEntry,
+  InterviewEntry,
+  InterviewQuestionResponse
 } from "@shared/schema";
 
 type AppPhase = "input" | "blank-document" | "workspace";
@@ -57,8 +58,6 @@ export default function Workspace() {
   const [document, setDocument] = useState<Document | null>(null);
   const [objective, setObjective] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
-  const [lenses, setLenses] = useState<Lens[]>([]);
-  const [activeLens, setActiveLens] = useState<LensType | null>(null);
   const [provocations, setProvocations] = useState<Provocation[]>([]);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [selectedTone, setSelectedTone] = useState<ToneOption>("practical");
@@ -98,6 +97,12 @@ export default function Workspace() {
   // Suggestions from last write response
   const [lastSuggestions, setLastSuggestions] = useState<string[]>([]);
 
+  // Interview state
+  const [isInterviewActive, setIsInterviewActive] = useState(false);
+  const [interviewEntries, setInterviewEntries] = useState<InterviewEntry[]>([]);
+  const [currentInterviewQuestion, setCurrentInterviewQuestion] = useState<string | null>(null);
+  const [currentInterviewTopic, setCurrentInterviewTopic] = useState<string | null>(null);
+
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
   const [objectiveInterimTranscript, setObjectiveInterimTranscript] = useState("");
@@ -115,16 +120,13 @@ export default function Workspace() {
       });
       return await response.json() as {
         document: Document;
-        lenses: Lens[];
         provocations: Provocation[];
         warnings?: Array<{ type: string; message: string }>;
       };
     },
     onSuccess: (data) => {
-      const lensesData = data.lenses ?? [];
       const provocationsData = data.provocations ?? [];
       setDocument(data.document);
-      setLenses(lensesData);
       setProvocations(provocationsData);
       setPhase("workspace");
 
@@ -149,7 +151,7 @@ export default function Workspace() {
 
       toast({
         title: "Analysis Complete",
-        description: `Generated ${lensesData.length} lenses and ${provocationsData.length} provocations.`,
+        description: `Generated ${provocationsData.length} provocations.`,
       });
     },
     onError: (error) => {
@@ -276,6 +278,119 @@ export default function Workspace() {
     },
   });
 
+  const regenerateProvocationsMutation = useMutation({
+    mutationFn: async ({ guidance }: { guidance?: string }) => {
+      if (!document) throw new Error("No document");
+      const response = await apiRequest("POST", "/api/generate-provocations", {
+        text: document.rawText,
+        guidance,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+      });
+      return await response.json() as { provocations: Provocation[] };
+    },
+    onSuccess: (data) => {
+      const newProvocations = data.provocations ?? [];
+      setProvocations(prev => [...prev, ...newProvocations]);
+      toast({
+        title: "New Provocations Generated",
+        description: `Added ${newProvocations.length} new provocations.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Generation Failed",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const interviewQuestionMutation = useMutation({
+    mutationFn: async ({ overrideEntries }: { overrideEntries?: InterviewEntry[] } = {}) => {
+      if (!document) throw new Error("No document");
+      const templateDoc = referenceDocuments.find(d => d.type === "template");
+      const entries = overrideEntries ?? interviewEntries;
+      const response = await apiRequest("POST", "/api/interview/question", {
+        objective,
+        document: document.rawText,
+        template: templateDoc?.content,
+        previousEntries: entries.length > 0 ? entries : undefined,
+        provocations: provocations.length > 0 ? provocations : undefined,
+      });
+      return await response.json() as InterviewQuestionResponse;
+    },
+    onSuccess: (data) => {
+      setCurrentInterviewQuestion(data.question);
+      setCurrentInterviewTopic(data.topic);
+    },
+    onError: (error) => {
+      toast({
+        title: "Interview Error",
+        description: error instanceof Error ? error.message : "Failed to generate question",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const interviewSummaryMutation = useMutation({
+    mutationFn: async () => {
+      if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
+      // Step 1: Get summarized instruction from interview entries
+      const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
+        objective,
+        entries: interviewEntries,
+        document: document.rawText,
+      });
+      const { instruction } = await summaryResponse.json() as { instruction: string };
+
+      // Step 2: Use the writer to merge into document
+      const writeResponse = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        instruction,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        editHistory: editHistory.length > 0 ? editHistory : undefined,
+      });
+      return await writeResponse.json() as WriteResponse;
+    },
+    onSuccess: (data) => {
+      if (document) {
+        const newVersion: DocumentVersion = {
+          id: generateId("v"),
+          text: data.document,
+          timestamp: Date.now(),
+          description: `Interview merge (${interviewEntries.length} answers)`,
+        };
+        setVersions(prev => [...prev, newVersion]);
+        setDocument({ ...document, rawText: data.document });
+
+        const historyEntry: EditHistoryEntry = {
+          instruction: `Interview session with ${interviewEntries.length} Q&A pairs`,
+          instructionType: data.instructionType || "general",
+          summary: data.summary || "Interview responses merged",
+          timestamp: Date.now(),
+        };
+        setEditHistory(prev => [...prev.slice(-9), historyEntry]);
+
+        setIsInterviewActive(false);
+        setCurrentInterviewQuestion(null);
+        setCurrentInterviewTopic(null);
+
+        toast({
+          title: "Interview Merged",
+          description: `${interviewEntries.length} answers integrated into your document.`,
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Merge Failed",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAnalyze = useCallback((text: string, docObjective?: string, refs?: ReferenceDocument[]) => {
     if (docObjective) {
       setObjective(docObjective);
@@ -382,13 +497,44 @@ export default function Workspace() {
     setRefinedPreview(null);
   }, []);
 
+  const handleRegenerateProvocations = useCallback((guidance?: string) => {
+    regenerateProvocationsMutation.mutate({ guidance });
+  }, [regenerateProvocationsMutation]);
+
+  const handleStartInterview = useCallback(() => {
+    setIsInterviewActive(true);
+    setActiveTab("interview");
+    interviewQuestionMutation.mutate({});
+  }, [interviewQuestionMutation]);
+
+  const handleInterviewAnswer = useCallback((answer: string) => {
+    if (!currentInterviewQuestion || !currentInterviewTopic) return;
+
+    const entry: InterviewEntry = {
+      id: generateId("iq"),
+      question: currentInterviewQuestion,
+      answer,
+      topic: currentInterviewTopic,
+      timestamp: Date.now(),
+    };
+    const updatedEntries = [...interviewEntries, entry];
+    setInterviewEntries(updatedEntries);
+    setCurrentInterviewQuestion(null);
+    setCurrentInterviewTopic(null);
+
+    // Fetch next question, passing updated entries directly
+    interviewQuestionMutation.mutate({ overrideEntries: updatedEntries });
+  }, [currentInterviewQuestion, currentInterviewTopic, interviewEntries, interviewQuestionMutation]);
+
+  const handleEndInterview = useCallback(() => {
+    interviewSummaryMutation.mutate();
+  }, [interviewSummaryMutation]);
+
   const handleReset = useCallback(() => {
     setPhase("input");
     setDocument(null);
     setObjective("");
     setReferenceDocuments([]);
-    setLenses([]);
-    setActiveLens(null);
     setProvocations([]);
     setOutline([]);
     setRefinedPreview(null);
@@ -397,6 +543,10 @@ export default function Workspace() {
     setIsRecordingBlank(false);
     setEditHistory([]);
     setLastSuggestions([]);
+    setIsInterviewActive(false);
+    setInterviewEntries([]);
+    setCurrentInterviewQuestion(null);
+    setCurrentInterviewTopic(null);
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -453,6 +603,7 @@ export default function Workspace() {
     setShowTranscriptOverlay(true);
     setTranscriptSummary("");
     setCleanedTranscript(undefined);
+    setIsRecordingFromMain(false);
     // Don't auto-send anymore - user will click "Send to writer" after reviewing
   }, [document]);
 
@@ -475,11 +626,16 @@ export default function Workspace() {
   }, [document]);
 
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
-    setRawTranscript(transcript);
+    // Only update rawTranscript if there's content or recording is starting (clear for fresh start)
+    // When isRecording=false and transcript is empty, preserve the existing transcript
+    if (transcript || isRecording) {
+      setRawTranscript(transcript);
+    }
     setIsRecordingFromMain(isRecording);
     if (isRecording && !showTranscriptOverlay) {
       setShowTranscriptOverlay(true);
       setTranscriptSummary("");
+      setCleanedTranscript(undefined);
     }
   }, [showTranscriptOverlay]);
 
@@ -509,7 +665,6 @@ export default function Workspace() {
           content: context.provocation.content,
           sourceExcerpt: context.provocation.sourceExcerpt,
         },
-        activeLens: activeLens || undefined,
         description: `Addressed provocation: ${context.provocation.title}`,
       });
 
@@ -522,25 +677,22 @@ export default function Workspace() {
       writeMutation.mutate({
         instruction: transcript,
         selectedText: context.selectedText,
-        activeLens: activeLens || undefined,
         description: "Voice edit on selection",
       });
     } else {
       // Sending as general document instruction
       writeMutation.mutate({
         instruction: transcript,
-        activeLens: activeLens || undefined,
         description: "Voice instruction",
       });
     }
-  }, [document, pendingVoiceContext, writeMutation, activeLens]);
+  }, [document, pendingVoiceContext, writeMutation]);
 
   // Handle cleaned transcript from TranscriptOverlay
   const handleCleanTranscript = useCallback((cleaned: string) => {
     setCleanedTranscript(cleaned);
   }, []);
 
-  const activeLensSummary = lenses?.find((l) => l.type === activeLens)?.summary;
   const hasOutlineContent = outline?.some((item) => item.content) ?? false;
   const canShowDiff = versions.length >= 2;
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
@@ -758,18 +910,7 @@ export default function Workspace() {
       
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-            <LensesPanel
-              lenses={lenses}
-              activeLens={activeLens}
-              onSelectLens={setActiveLens}
-              isLoading={analyzeMutation.isPending}
-            />
-          </ResizablePanel>
-          
-          <ResizableHandle withHandle />
-          
-          <ResizablePanel defaultSize={45} minSize={30}>
+          <ResizablePanel defaultSize={55} minSize={35}>
             {showDiffView && previousVersion && currentVersion ? (
               <Suspense fallback={
                 <div className="h-full flex flex-col p-4 space-y-4">
@@ -787,8 +928,6 @@ export default function Workspace() {
             ) : (
               <ReadingPane
                 text={document?.rawText || ""}
-                activeLens={activeLens}
-                lensSummary={activeLensSummary}
                 onTextChange={handleDocumentTextChange}
                 highlightText={hoveredProvocationContext}
                 onVoiceMerge={handleSelectionVoiceMerge}
@@ -801,7 +940,7 @@ export default function Workspace() {
           
           <ResizableHandle withHandle />
           
-          <ResizablePanel defaultSize={35} minSize={25}>
+          <ResizablePanel defaultSize={45} minSize={25}>
             <div className="h-full flex flex-col relative">
               <TranscriptOverlay
                 isVisible={showTranscriptOverlay}
@@ -830,8 +969,19 @@ export default function Workspace() {
                       </span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger 
-                    value="outline" 
+                  <TabsTrigger
+                    value="interview"
+                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
+                    data-testid="tab-interview"
+                  >
+                    <MessageCircleQuestion className="w-4 h-4" />
+                    Interview
+                    {isInterviewActive && (
+                      <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="outline"
                     className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
                     data-testid="tab-outline"
                   >
@@ -860,11 +1010,27 @@ export default function Workspace() {
                     onVoiceResponse={handleVoiceResponse}
                     onTranscriptUpdate={handleTranscriptUpdate}
                     onHoverProvocation={setHoveredProvocationId}
+                    onRegenerateProvocations={handleRegenerateProvocations}
                     isLoading={analyzeMutation.isPending}
                     isMerging={writeMutation.isPending}
+                    isRegenerating={regenerateProvocationsMutation.isPending}
                   />
                 </TabsContent>
                 
+                <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
+                  <InterviewPanel
+                    isActive={isInterviewActive}
+                    entries={interviewEntries}
+                    currentQuestion={currentInterviewQuestion}
+                    currentTopic={currentInterviewTopic}
+                    isLoadingQuestion={interviewQuestionMutation.isPending}
+                    isMerging={interviewSummaryMutation.isPending}
+                    onStart={handleStartInterview}
+                    onAnswer={handleInterviewAnswer}
+                    onEnd={handleEndInterview}
+                  />
+                </TabsContent>
+
                 <TabsContent value="outline" className="flex-1 mt-0 overflow-hidden">
                   <OutlineBuilder
                     outline={outline}
