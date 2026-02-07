@@ -5,6 +5,10 @@ import OpenAI from "openai";
 import {
   analyzeTextRequestSchema,
   writeRequestSchema,
+  generateProvocationsRequestSchema,
+  generateTemplateRequestSchema,
+  interviewQuestionRequestSchema,
+  interviewSummaryRequestSchema,
   lensTypes,
   provocationType,
   instructionTypes,
@@ -14,7 +18,8 @@ import {
   type Lens,
   type Provocation,
   type ReferenceDocument,
-  type ChangeEntry
+  type ChangeEntry,
+  type InterviewQuestionResponse
 } from "@shared/schema";
 
 const openai = new OpenAI({
@@ -475,6 +480,99 @@ Output only valid JSON, no markdown.`
       console.error("Analysis error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to analyze text", details: errorMessage });
+    }
+  });
+
+  // Generate new provocations for an existing document
+  app.post("/api/generate-provocations", async (req, res) => {
+    try {
+      const parsed = generateProvocationsRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { text, guidance, referenceDocuments } = parsed.data;
+
+      const MAX_ANALYSIS_LENGTH = 8000;
+      const analysisText = text.slice(0, MAX_ANALYSIS_LENGTH);
+
+      const refDocSummary = referenceDocuments && referenceDocuments.length > 0
+        ? referenceDocuments.map(d => `[${d.type.toUpperCase()}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`).join("\n\n")
+        : null;
+
+      const refContext = refDocSummary
+        ? `\n\nReference documents:\n${refDocSummary}\n\nCompare against these for gaps.`
+        : "";
+
+      const guidanceContext = guidance
+        ? `\n\nUSER GUIDANCE: The user specifically wants provocations about: ${guidance}`
+        : "";
+
+      const provDescriptions = provocationType.map(t => `- ${t}: ${provocationPrompts[t]}`).join("\n");
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 4096,
+        messages: [
+          {
+            role: "system",
+            content: `You are a critical thinking partner. Challenge assumptions and push thinking deeper.
+
+Generate provocations in these categories:
+${provDescriptions}
+${refContext}${guidanceContext}
+
+Respond with a JSON object containing a "provocations" array. Generate 2-3 provocations per category (6-9 total).
+For each provocation:
+- type: The category (opportunity, fallacy, or alternative)
+- title: A punchy headline (max 60 chars)
+- content: A 2-3 sentence explanation
+- sourceExcerpt: A relevant quote from the source text (max 150 chars)
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: `Generate provocations for this text:\n\n${analysisText}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let parsedResponse: Record<string, unknown> = {};
+      try {
+        parsedResponse = JSON.parse(content);
+      } catch {
+        console.error("Failed to parse provocations JSON:", content);
+        return res.json({ provocations: [] });
+      }
+
+      const provocationsArray = Array.isArray(parsedResponse.provocations)
+        ? parsedResponse.provocations
+        : [];
+
+      const provocations = provocationsArray.map((p: unknown, idx: number): Provocation => {
+        const item = p as Record<string, unknown>;
+        const provType = provocationType.includes(item?.type as ProvocationType)
+          ? item.type as ProvocationType
+          : provocationType[idx % 3];
+
+        return {
+          id: `${provType}-${Date.now()}-${idx}`,
+          type: provType,
+          title: typeof item?.title === 'string' ? item.title : "Untitled Provocation",
+          content: typeof item?.content === 'string' ? item.content : "",
+          sourceExcerpt: typeof item?.sourceExcerpt === 'string' ? item.sourceExcerpt : "",
+          status: "pending",
+        };
+      });
+
+      res.json({ provocations });
+    } catch (error) {
+      console.error("Generate provocations error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate provocations", details: errorMessage });
     }
   });
 
@@ -944,6 +1042,199 @@ Be faithful to their intent - don't add information they didn't mention.`
       console.error("Summarize intent error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize", details: errorMessage });
+    }
+  });
+
+  // Generate a document template from an objective
+  app.post("/api/generate-template", async (req, res) => {
+    try {
+      const parsed = generateTemplateRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective } = parsed.data;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 4096,
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert document strategist. Given a document objective, generate a comprehensive template that serves as a blueprint for the document the user needs to create.
+
+The template should:
+1. Include all key sections/headings the document should have
+2. Under each section, provide brief guidance on what content belongs there
+3. Include placeholder prompts that help the user think about what to write
+4. Be structured with markdown headings and bullet points
+5. Cover completeness — include sections that are commonly forgotten
+
+The template is NOT the final document. It's a guide that helps the user know what to cover and in what order.
+
+Output only the template content in markdown format. No meta-commentary.`
+          },
+          {
+            role: "user",
+            content: `Generate a comprehensive document template for this objective:\n\n${objective}`
+          }
+        ],
+      });
+
+      const template = response.choices[0]?.message?.content?.trim() || "";
+
+      res.json({
+        template,
+        name: `Template: ${objective.slice(0, 50)}${objective.length > 50 ? "..." : ""}`,
+      });
+    } catch (error) {
+      console.error("Generate template error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate template", details: errorMessage });
+    }
+  });
+
+  // Generate next interview question based on context
+  app.post("/api/interview/question", async (req, res) => {
+    try {
+      const parsed = interviewQuestionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, document: docText, template, previousEntries, provocations } = parsed.data;
+
+      // Build context from previous Q&A
+      const previousContext = previousEntries && previousEntries.length > 0
+        ? previousEntries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n")
+        : "No previous questions yet — this is the first question.";
+
+      // Build template context
+      const templateContext = template
+        ? `\n\nDOCUMENT TEMPLATE (sections that need to be covered):\n${template.slice(0, 2000)}`
+        : "";
+
+      // Build document context
+      const documentContext = docText
+        ? `\n\nCURRENT DOCUMENT STATE:\n${docText.slice(0, 2000)}`
+        : "";
+
+      // Build provocations context
+      const pendingProvocations = provocations
+        ? provocations.filter(p => p.status === "pending")
+        : [];
+      const provocationsContext = pendingProvocations.length > 0
+        ? `\n\nPENDING PROVOCATIONS (challenges not yet addressed):\n${pendingProvocations.map(p => `- [${p.type}] ${p.title}: ${p.content}`).join("\n")}`
+        : "";
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 1024,
+        messages: [
+          {
+            role: "system",
+            content: `You are a skilled interviewer helping a user develop their document by asking probing questions. Your goal is to extract the information, perspectives, and insights the user needs to include in their document.
+
+OBJECTIVE: ${objective}
+${templateContext}${documentContext}${provocationsContext}
+
+PREVIOUS Q&A:
+${previousContext}
+
+Your job:
+1. Identify what's MISSING — gaps in content, unexplored angles, unaddressed template sections
+2. Ask ONE focused, provocative question that will elicit useful content for the document
+3. Make the question specific and actionable — the user should be able to answer it directly
+4. Don't repeat topics already covered in previous Q&A
+5. Prioritize questions that address pending provocations or uncovered template sections
+6. If the template is mostly covered and provocations addressed, ask about nuance, examples, or edge cases
+
+Respond with a JSON object:
+- question: The question to ask (conversational, direct, max 200 chars)
+- topic: A short label for what this question covers (max 40 chars)
+- reasoning: Brief internal reasoning for why this question matters (max 100 chars)
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: `Generate the next interview question to help me develop my document.`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result: InterviewQuestionResponse;
+      try {
+        const parsed = JSON.parse(content);
+        result = {
+          question: typeof parsed.question === 'string' ? parsed.question : "What's the most important thing you haven't covered yet?",
+          topic: typeof parsed.topic === 'string' ? parsed.topic : "General",
+          reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : "",
+        };
+      } catch {
+        result = {
+          question: "What's the most important thing you haven't covered yet?",
+          topic: "General",
+          reasoning: "Fallback question",
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Interview question error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate interview question", details: errorMessage });
+    }
+  });
+
+  // Summarize interview entries into a coherent instruction for the writer
+  app.post("/api/interview/summary", async (req, res) => {
+    try {
+      const parsed = interviewSummaryRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, entries, document: docText } = parsed.data;
+
+      const qaText = entries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n---\n\n");
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 2048,
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert at synthesizing interview responses into clear editing instructions.
+
+Given a series of Q&A pairs from a document development interview, create a single comprehensive instruction that tells a document editor how to integrate all the information gathered.
+
+OBJECTIVE: ${objective}
+
+The instruction should:
+1. Group related answers by theme
+2. Specify where new content should be added or what should be modified
+3. Include all key points from the user's answers
+4. Be written as a clear directive to a document editor
+
+Output only the instruction text. No meta-commentary.`
+          },
+          {
+            role: "user",
+            content: `${docText ? `Current document:\n${docText.slice(0, 2000)}\n\n---\n\n` : ""}Interview Q&A:\n\n${qaText}`
+          }
+        ],
+      });
+
+      const instruction = response.choices[0]?.message?.content?.trim() || "";
+
+      res.json({ instruction });
+    } catch (error) {
+      console.error("Interview summary error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to summarize interview", details: errorMessage });
     }
   });
 
