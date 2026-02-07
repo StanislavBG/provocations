@@ -92,6 +92,15 @@ export const analyzeTextRequestSchema = z.object({
 
 export type AnalyzeTextRequest = z.infer<typeof analyzeTextRequestSchema>;
 
+// Generate provocations request (for regeneration with optional guidance)
+export const generateProvocationsRequestSchema = z.object({
+  text: z.string().min(1, "Text is required"),
+  guidance: z.string().optional(),
+  referenceDocuments: z.array(referenceDocumentSchema).optional(),
+});
+
+export type GenerateProvocationsRequest = z.infer<typeof generateProvocationsRequestSchema>;
+
 // Unified write request - single interface to the AI writer
 export const provocationContextSchema = z.object({
   type: z.enum(provocationType),
