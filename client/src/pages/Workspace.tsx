@@ -453,6 +453,7 @@ export default function Workspace() {
     setShowTranscriptOverlay(true);
     setTranscriptSummary("");
     setCleanedTranscript(undefined);
+    setIsRecordingFromMain(false);
     // Don't auto-send anymore - user will click "Send to writer" after reviewing
   }, [document]);
 
@@ -475,11 +476,16 @@ export default function Workspace() {
   }, [document]);
 
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
-    setRawTranscript(transcript);
+    // Only update rawTranscript if there's content or recording is starting (clear for fresh start)
+    // When isRecording=false and transcript is empty, preserve the existing transcript
+    if (transcript || isRecording) {
+      setRawTranscript(transcript);
+    }
     setIsRecordingFromMain(isRecording);
     if (isRecording && !showTranscriptOverlay) {
       setShowTranscriptOverlay(true);
       setTranscriptSummary("");
+      setCleanedTranscript(undefined);
     }
   }, [showTranscriptOverlay]);
 

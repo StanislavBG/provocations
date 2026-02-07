@@ -272,14 +272,6 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
     }, 50);
   }, []);
 
-  // Handle voice transcript for appending to document
-  const handleVoiceAppend = useCallback((transcript: string) => {
-    if (transcript.trim() && onTextChange) {
-      const newText = text + (text.endsWith('\n') || text.endsWith(' ') ? '' : ' ') + transcript;
-      onTextChange(newText);
-    }
-  }, [text, onTextChange]);
-
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const readingTime = Math.ceil(wordCount / 200);
 
@@ -304,7 +296,15 @@ export function ReadingPane({ text, activeLens, lensSummary, onTextChange, highl
           <Badge variant="outline">{wordCount.toLocaleString()} words</Badge>
           <Badge variant="secondary">{readingTime} min read</Badge>
           <VoiceRecorder
-            onTranscript={handleVoiceAppend}
+            onTranscript={(transcript) => {
+              onTranscriptUpdate?.(transcript, false);
+            }}
+            onInterimTranscript={(interim) => {
+              onTranscriptUpdate?.(interim, true);
+            }}
+            onRecordingChange={(recording) => {
+              onTranscriptUpdate?.("", recording);
+            }}
             size="icon"
             variant="ghost"
             className="h-8 w-8"
