@@ -150,9 +150,7 @@ function ProvocationCard({
                     }}
                     onInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
                     onRecordingChange={(isRecording) => {
-                      if (isRecording) {
-                        onTranscriptUpdate?.("", true);
-                      }
+                      onTranscriptUpdate?.("", isRecording);
                     }}
                     size="sm"
                     variant="outline"
