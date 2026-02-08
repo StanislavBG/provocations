@@ -6,15 +6,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  ListTree, 
-  Plus, 
-  GripVertical, 
-  ChevronDown, 
+import { VoiceRecorder } from "./VoiceRecorder";
+import {
+  ListTree,
+  Plus,
+  GripVertical,
+  ChevronDown,
   ChevronRight,
   Trash2,
   Wand2,
-  Loader2
+  Loader2,
+  Send
 } from "lucide-react";
 import type { OutlineItem, ToneOption } from "@shared/schema";
 
@@ -25,6 +27,9 @@ interface OutlineBuilderProps {
   onRemoveItem: (id: string) => void;
   onReorder: (items: OutlineItem[]) => void;
   onExpandHeading: (id: string, heading: string, tone?: ToneOption) => Promise<string>;
+  onVoiceInput?: (sectionId: string, heading: string, transcript: string) => void;
+  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
+  onTextInstruction?: (sectionId: string, heading: string, instruction: string, currentContent: string) => void;
   isLoading?: boolean;
 }
 
@@ -33,16 +38,24 @@ function OutlineItemCard({
   onUpdate,
   onRemove,
   onExpand,
+  onVoiceInput,
+  onTranscriptUpdate,
+  onTextInstruction,
   isExpanding,
 }: {
   item: OutlineItem;
   onUpdate: (updates: Partial<OutlineItem>) => void;
   onRemove: () => void;
   onExpand: () => void;
+  onVoiceInput?: (transcript: string) => void;
+  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
+  onTextInstruction?: (instruction: string) => void;
   isExpanding: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.heading);
+  const [showInstruction, setShowInstruction] = useState(false);
+  const [instructionText, setInstructionText] = useState("");
 
   const handleSaveHeading = () => {
     if (editValue.trim()) {
@@ -51,8 +64,16 @@ function OutlineItemCard({
     setIsEditing(false);
   };
 
+  const handleSubmitInstruction = () => {
+    if (instructionText.trim() && onTextInstruction) {
+      onTextInstruction(instructionText.trim());
+      setInstructionText("");
+      setShowInstruction(false);
+    }
+  };
+
   return (
-    <Card 
+    <Card
       data-testid={`outline-item-${item.id}`}
       className="group"
     >
@@ -61,7 +82,7 @@ function OutlineItemCard({
           <div className="cursor-grab opacity-0 group-hover:opacity-50 transition-opacity">
             <GripVertical className="w-4 h-4" />
           </div>
-          
+
           <button
             data-testid={`button-toggle-expand-${item.id}`}
             onClick={() => onUpdate({ isExpanded: !item.isExpanded })}
@@ -73,7 +94,7 @@ function OutlineItemCard({
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             )}
           </button>
-          
+
           {isEditing ? (
             <Input
               data-testid={`input-heading-${item.id}`}
@@ -85,7 +106,7 @@ function OutlineItemCard({
               autoFocus
             />
           ) : (
-            <span 
+            <span
               className="flex-1 font-medium cursor-text"
               onClick={() => setIsEditing(true)}
               data-testid={`text-heading-${item.id}`}
@@ -93,7 +114,7 @@ function OutlineItemCard({
               {item.heading}
             </span>
           )}
-          
+
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
               data-testid={`button-expand-ai-${item.id}`}
@@ -122,18 +143,81 @@ function OutlineItemCard({
           </div>
         </CardTitle>
       </CardHeader>
-      
+
       {item.isExpanded && (
-        <CardContent className="p-3 pt-0">
+        <CardContent className="p-3 pt-0 space-y-2">
+          {/* Edit controls: voice + text instruction input (above content) */}
+          <div className="flex items-center gap-1">
+            <VoiceRecorder
+              onTranscript={(transcript) => onVoiceInput?.(transcript)}
+              onInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
+              onRecordingChange={(isRecording) => onTranscriptUpdate?.("", isRecording)}
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 shrink-0"
+            />
+            {showInstruction ? (
+              <div className="flex items-center gap-1 flex-1">
+                <Input
+                  value={instructionText}
+                  onChange={(e) => setInstructionText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmitInstruction();
+                    } else if (e.key === "Escape") {
+                      setShowInstruction(false);
+                      setInstructionText("");
+                    }
+                  }}
+                  placeholder={`How to modify "${item.heading}"...`}
+                  className="h-7 text-sm flex-1"
+                  autoFocus
+                />
+                <VoiceRecorder
+                  onTranscript={(transcript) => {
+                    if (onTextInstruction) {
+                      onTextInstruction(transcript);
+                    }
+                    setShowInstruction(false);
+                    setInstructionText("");
+                  }}
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0"
+                />
+                <Button
+                  size="icon"
+                  variant="default"
+                  className="h-7 w-7 shrink-0"
+                  onClick={handleSubmitInstruction}
+                  disabled={!instructionText.trim()}
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs text-muted-foreground"
+                onClick={() => setShowInstruction(true)}
+              >
+                <Send className="w-3 h-3" />
+                Edit with instruction
+              </Button>
+            )}
+          </div>
+
           <Textarea
             data-testid={`textarea-content-${item.id}`}
-            placeholder="Write your content here, or use AI to generate from the heading..."
+            placeholder="Write your content here, or use voice / AI to generate..."
             value={item.content}
             onChange={(e) => onUpdate({ content: e.target.value })}
             className="min-h-[100px] text-sm resize-none"
           />
           {item.content && (
-            <div className="flex items-center justify-end gap-2 mt-2">
+            <div className="flex items-center justify-end gap-2">
               <span className="text-xs text-muted-foreground">
                 {item.content.split(/\s+/).filter(Boolean).length} words
               </span>
@@ -152,6 +236,9 @@ export function OutlineBuilder({
   onRemoveItem,
   onReorder,
   onExpandHeading,
+  onVoiceInput,
+  onTranscriptUpdate,
+  onTextInstruction,
   isLoading,
 }: OutlineBuilderProps) {
   const [newHeading, setNewHeading] = useState("");
@@ -254,6 +341,9 @@ export function OutlineBuilder({
                   onUpdate={(updates) => onUpdateItem(item.id, updates)}
                   onRemove={() => onRemoveItem(item.id)}
                   onExpand={() => handleExpand(item)}
+                  onVoiceInput={(transcript) => onVoiceInput?.(item.id, item.heading, transcript)}
+                  onTranscriptUpdate={onTranscriptUpdate}
+                  onTextInstruction={(instruction) => onTextInstruction?.(item.id, item.heading, instruction, item.content)}
                   isExpanding={expandingId === item.id}
                 />
               ))
