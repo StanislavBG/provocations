@@ -283,11 +283,13 @@ export default function Workspace() {
   });
 
   const regenerateProvocationsMutation = useMutation({
-    mutationFn: async ({ guidance }: { guidance?: string }) => {
+    mutationFn: async ({ guidance, types }: { guidance?: string; types?: string[] }) => {
       if (!document) throw new Error("No document");
       const response = await apiRequest("POST", "/api/generate-provocations", {
         text: document.rawText,
         guidance,
+        objective: objective || undefined,
+        types: types && types.length > 0 ? types : undefined,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
       });
       return await response.json() as { provocations: Provocation[] };
@@ -501,8 +503,8 @@ export default function Workspace() {
     setRefinedPreview(null);
   }, []);
 
-  const handleRegenerateProvocations = useCallback((guidance?: string) => {
-    regenerateProvocationsMutation.mutate({ guidance });
+  const handleRegenerateProvocations = useCallback((guidance?: string, types?: string[]) => {
+    regenerateProvocationsMutation.mutate({ guidance, types });
   }, [regenerateProvocationsMutation]);
 
   const handleStartInterview = useCallback(() => {
