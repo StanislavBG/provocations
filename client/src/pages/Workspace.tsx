@@ -46,7 +46,7 @@ import type {
   ReferenceDocument,
   EditHistoryEntry,
   InterviewEntry,
-  InterviewQuestionResponse
+  InterviewQuestionResponse,
 } from "@shared/schema";
 
 type AppPhase = "input" | "blank-document" | "workspace";
@@ -88,7 +88,11 @@ export default function Workspace() {
       content: string;
       sourceExcerpt: string;
     };
-    context: "selection" | "provocation" | "document";
+    outlineSection?: {
+      id: string;
+      heading: string;
+    };
+    context: "selection" | "provocation" | "document" | "outline";
   } | null>(null);
 
   // Edit history for coherent iteration
@@ -625,6 +629,34 @@ export default function Workspace() {
     // Don't auto-send anymore - user will click "Send to writer" after reviewing
   }, [document]);
 
+  // Handle voice input from outline section
+  const handleOutlineVoiceInput = useCallback((sectionId: string, heading: string, transcript: string) => {
+    if (!document || !transcript.trim()) return;
+
+    setPendingVoiceContext({
+      outlineSection: { id: sectionId, heading },
+      context: "outline",
+    });
+
+    setRawTranscript(transcript);
+    setShowTranscriptOverlay(true);
+    setTranscriptSummary("");
+    setCleanedTranscript(undefined);
+    setIsRecordingFromMain(false);
+  }, [document]);
+
+  // Handle text instruction for outline section (goes directly through writer)
+  const handleOutlineTextInstruction = useCallback((sectionId: string, heading: string, instruction: string, currentContent: string) => {
+    if (!document) return;
+
+    const sectionDoc = currentContent || `## ${heading}\n\n(empty section)`;
+    writeMutation.mutate({
+      instruction: `For the section "${heading}": ${instruction}`,
+      selectedText: sectionDoc,
+      description: `Edit outline section: ${heading}`,
+    });
+  }, [document, writeMutation]);
+
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
     // Only update rawTranscript if there's content or recording is starting (clear for fresh start)
     // When isRecording=false and transcript is empty, preserve the existing transcript
@@ -672,6 +704,15 @@ export default function Workspace() {
       setProvocations((prev) =>
         prev.map((p) => (p.id === context.provocation!.id ? { ...p, status: "addressed" as const } : p))
       );
+    } else if (context?.outlineSection) {
+      // Sending as outline section edit
+      const section = outline.find(item => item.id === context.outlineSection!.id);
+      const sectionContent = section?.content || `## ${context.outlineSection.heading}\n\n(empty section)`;
+      writeMutation.mutate({
+        instruction: `For the section "${context.outlineSection.heading}": ${transcript}`,
+        selectedText: sectionContent,
+        description: `Voice edit on outline: ${context.outlineSection.heading}`,
+      });
     } else if (context?.selectedText) {
       // Sending as selection edit
       writeMutation.mutate({
@@ -1039,6 +1080,9 @@ export default function Workspace() {
                     onRemoveItem={handleRemoveOutlineItem}
                     onReorder={handleReorderOutline}
                     onExpandHeading={handleExpandHeading}
+                    onVoiceInput={handleOutlineVoiceInput}
+                    onTranscriptUpdate={handleTranscriptUpdate}
+                    onTextInstruction={handleOutlineTextInstruction}
                   />
                 </TabsContent>
                 

@@ -1,28 +1,5 @@
 import { z } from "zod";
 
-// Lens types
-export const lensTypes = [
-  "consumer",
-  "executive", 
-  "technical",
-  "financial",
-  "strategic",
-  "skeptic",
-] as const;
-
-export type LensType = typeof lensTypes[number];
-
-export const lensSchema = z.object({
-  id: z.string(),
-  type: z.enum(lensTypes),
-  title: z.string(),
-  summary: z.string(),
-  keyPoints: z.array(z.string()),
-  isActive: z.boolean(),
-});
-
-export type Lens = z.infer<typeof lensSchema>;
-
 // Provocation types
 export const provocationType = [
   "opportunity",
@@ -86,7 +63,6 @@ export type ReferenceDocument = z.infer<typeof referenceDocumentSchema>;
 // API request schemas - used by both frontend and backend
 export const analyzeTextRequestSchema = z.object({
   text: z.string().min(1, "Text is required"),
-  selectedLenses: z.array(z.enum(lensTypes)).optional(),
   referenceDocuments: z.array(referenceDocumentSchema).optional(),
 });
 
@@ -145,7 +121,6 @@ export const writeRequestSchema = z.object({
 
   // Context (optional - additional grounding)
   provocation: provocationContextSchema.optional(),
-  activeLens: z.enum(lensTypes).optional(),
 
   // Style (optional)
   tone: z.enum(toneOptions).optional(),
@@ -237,8 +212,6 @@ export interface WorkspaceState {
   objective: string;
   referenceDocuments: ReferenceDocument[];
   editHistory: EditHistoryEntry[];
-  lenses: Lens[];
-  activeLens: LensType | null;
   provocations: Provocation[];
   outline: OutlineItem[];
   currentPhase: "input" | "blank-document" | "workspace";
