@@ -116,31 +116,9 @@ function ProvocationCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-0 space-y-3">
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {provocation.content}
-        </p>
-        
-        {provocation.sourceExcerpt && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            data-testid={`button-toggle-excerpt-${provocation.id}`}
-          >
-            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            {isExpanded ? "Hide source excerpt" : "View source excerpt"}
-          </button>
-        )}
-        
-        {isExpanded && provocation.sourceExcerpt && (
-          <div className="p-3 rounded-md bg-muted/50 border-l-2 border-muted-foreground/30">
-            <p className="text-sm italic text-muted-foreground leading-relaxed">
-              "{provocation.sourceExcerpt}"
-            </p>
-          </div>
-        )}
-
+        {/* Action buttons at top - before content */}
         {provocation.status === "pending" && (
-          <div className="flex items-center gap-2 pt-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
@@ -165,7 +143,7 @@ function ProvocationCard({
               </TooltipTrigger>
               <TooltipContent>Respond with your voice to integrate feedback</TooltipContent>
             </Tooltip>
-            
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -181,7 +159,7 @@ function ProvocationCard({
               </TooltipTrigger>
               <TooltipContent>Mark as important for your outline</TooltipContent>
             </Tooltip>
-            
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -197,7 +175,7 @@ function ProvocationCard({
               </TooltipTrigger>
               <TooltipContent>You've considered this point</TooltipContent>
             </Tooltip>
-            
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -213,6 +191,29 @@ function ProvocationCard({
               </TooltipTrigger>
               <TooltipContent>This doesn't apply to your work</TooltipContent>
             </Tooltip>
+          </div>
+        )}
+
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {provocation.content}
+        </p>
+
+        {provocation.sourceExcerpt && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            data-testid={`button-toggle-excerpt-${provocation.id}`}
+          >
+            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {isExpanded ? "Hide source excerpt" : "View source excerpt"}
+          </button>
+        )}
+
+        {isExpanded && provocation.sourceExcerpt && (
+          <div className="p-3 rounded-md bg-muted/50 border-l-2 border-muted-foreground/30">
+            <p className="text-sm italic text-muted-foreground leading-relaxed">
+              "{provocation.sourceExcerpt}"
+            </p>
           </div>
         )}
       </CardContent>

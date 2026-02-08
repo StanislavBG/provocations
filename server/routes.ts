@@ -9,13 +9,10 @@ import {
   generateTemplateRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
-  lensTypes,
   provocationType,
   instructionTypes,
-  type LensType,
   type ProvocationType,
   type InstructionType,
-  type Lens,
   type Provocation,
   type ReferenceDocument,
   type ChangeEntry,
@@ -26,15 +23,6 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
-
-const lensPrompts: Record<LensType, string> = {
-  consumer: "Analyze from a consumer/end-user perspective. What matters to customers? What pain points or delights exist?",
-  executive: "Analyze from a leadership/executive perspective. What are the strategic implications, risks, and opportunities?",
-  technical: "Analyze from a technical implementation perspective. What's feasible, what are the constraints, what technical debt exists?",
-  financial: "Analyze from a financial perspective. What are the costs, revenues, ROI implications, and budget considerations?",
-  strategic: "Analyze from a long-term strategic perspective. How does this affect competitive positioning and market presence?",
-  skeptic: "Analyze with healthy skepticism. What assumptions are being made? What could go wrong? What's being overlooked?",
-};
 
 const provocationPrompts: Record<ProvocationType, string> = {
   opportunity: "Identify potential opportunities for growth, innovation, or improvement that might be missed.",
@@ -302,7 +290,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { text, selectedLenses, referenceDocuments } = parsed.data;
+      const { text, referenceDocuments } = parsed.data;
 
       // Check if text will be truncated for analysis
       const MAX_ANALYSIS_LENGTH = 8000;
@@ -317,83 +305,8 @@ export async function registerRoutes(
       // Create document (stores full text)
       const document = await storage.createDocument(text);
 
-      // Use selected lenses or default to all
-      const lensesToGenerate = selectedLenses && selectedLenses.length > 0
-        ? selectedLenses
-        : lensTypes;
-
-      // BATCHED CALL 1: Generate all lenses in a single API call
-      const lensesPromise = (async (): Promise<Lens[]> => {
-        try {
-          const lensDescriptions = lensesToGenerate.map(t => `- ${t}: ${lensPrompts[t]}`).join("\n");
-
-          const response = await openai.chat.completions.create({
-            model: "gpt-5.2",
-            max_completion_tokens: 4096,
-            messages: [
-              {
-                role: "system",
-                content: `You are an analytical assistant helping users understand text through multiple perspectives.
-
-Analyze the given text through each of these lenses:
-${lensDescriptions}
-
-Respond with a JSON object containing a "lenses" array. For each lens, provide:
-- type: The lens type (${lensesToGenerate.join(", ")})
-- title: A brief title for this lens analysis (max 50 chars)
-- summary: A 2-3 sentence summary from this perspective
-- keyPoints: An array of 3-5 key observations (each max 30 chars)
-
-Output only valid JSON, no markdown.`
-              },
-              {
-                role: "user",
-                content: `Analyze this text through the following lenses (${lensesToGenerate.join(", ")}):\n\n${analysisText}`
-              }
-            ],
-            response_format: { type: "json_object" },
-          });
-
-          const content = response.choices[0]?.message?.content || "{}";
-          let parsedResponse: Record<string, unknown> = {};
-          try {
-            parsedResponse = JSON.parse(content);
-          } catch {
-            console.error("Failed to parse lenses JSON:", content);
-          }
-
-          const lensesArray = Array.isArray(parsedResponse.lenses) ? parsedResponse.lenses : [];
-
-          return lensesToGenerate.map((lensType, idx): Lens => {
-            const lensData = lensesArray.find((l: unknown) =>
-              (l as Record<string, unknown>)?.type === lensType
-            ) || lensesArray[idx] || {};
-            const item = lensData as Record<string, unknown>;
-
-            return {
-              id: `${lensType}-${Date.now()}-${idx}`,
-              type: lensType,
-              title: typeof item?.title === 'string' ? item.title : `${lensType} Analysis`,
-              summary: typeof item?.summary === 'string' ? item.summary : "Analysis not available",
-              keyPoints: Array.isArray(item?.keyPoints) ? item.keyPoints : [],
-              isActive: false,
-            };
-          });
-        } catch (error) {
-          console.error("Error generating lenses:", error);
-          return lensesToGenerate.map((lensType, idx): Lens => ({
-            id: `${lensType}-${Date.now()}-${idx}`,
-            type: lensType,
-            title: `${lensType} Analysis`,
-            summary: "Analysis could not be generated",
-            keyPoints: [],
-            isActive: false,
-          }));
-        }
-      })();
-
-      // BATCHED CALL 2: Generate all provocations in a single API call
-      const provocationsPromise = (async (): Promise<Provocation[]> => {
+      // Generate all provocations in a single API call
+      const provocations: Provocation[] = await (async (): Promise<Provocation[]> => {
         try {
           const refContext = refDocSummary
             ? `\n\nThe user has provided reference documents that represent their target quality:\n${refDocSummary}\n\nCompare the source text against these references to identify gaps.`
@@ -464,12 +377,8 @@ Output only valid JSON, no markdown.`
         }
       })();
 
-      // Execute both batched calls in parallel
-      const [lenses, provocations] = await Promise.all([lensesPromise, provocationsPromise]);
-
       res.json({
         document,
-        lenses,
         provocations,
         warnings: wasTextTruncated ? [{
           type: "text_truncated",
@@ -590,7 +499,6 @@ Output only valid JSON, no markdown.`
         selectedText,
         instruction: rawInstruction,
         provocation,
-        activeLens,
         tone,
         targetLength,
         referenceDocuments,
@@ -659,18 +567,6 @@ ${historyStr}`);
 
 REFERENCE EXCERPTS (for additional context):
 ${refExcerpts}`);
-      }
-
-      if (activeLens) {
-        const lensDescriptions: Record<LensType, string> = {
-          consumer: "end-user/customer perspective - focusing on user needs and experience",
-          executive: "strategic leadership perspective - focusing on business impact",
-          technical: "technical implementation perspective - focusing on feasibility",
-          financial: "financial perspective - focusing on costs and ROI",
-          strategic: "competitive positioning perspective - focusing on market advantage",
-          skeptic: "critical perspective - questioning assumptions and risks",
-        };
-        contextParts.push(`PERSPECTIVE: Apply the ${activeLens} lens (${lensDescriptions[activeLens]})`);
       }
 
       if (provocation) {
@@ -867,7 +763,6 @@ INSTRUCTION APPLIED: ${instruction}`
         selectedText,
         instruction,
         provocation,
-        activeLens,
         tone,
         targetLength,
         referenceDocuments,
@@ -898,18 +793,6 @@ STRATEGY: ${strategy}`);
           return `[${typeLabel}: ${d.name}]\n${d.content.slice(0, 500)}...`;
         }).join("\n\n---\n\n");
         contextParts.push(`REFERENCE DOCUMENTS:\n${refSummaries}`);
-      }
-
-      if (activeLens) {
-        const lensDescriptions: Record<LensType, string> = {
-          consumer: "end-user/customer perspective",
-          executive: "strategic leadership perspective",
-          technical: "technical implementation perspective",
-          financial: "financial perspective",
-          strategic: "competitive positioning perspective",
-          skeptic: "critical perspective",
-        };
-        contextParts.push(`PERSPECTIVE: ${activeLens} lens (${lensDescriptions[activeLens]})`);
       }
 
       if (provocation) {
