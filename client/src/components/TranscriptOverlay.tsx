@@ -19,7 +19,7 @@ interface TranscriptOverlayProps {
   onSend?: (transcript: string) => void;
   onCleanTranscript?: (cleaned: string) => void;
   // Context for cleaning
-  context?: "selection" | "provocation" | "document";
+  context?: "selection" | "provocation" | "document" | "outline";
 }
 
 export function TranscriptOverlay({
@@ -95,6 +95,89 @@ export function TranscriptOverlay({
       </div>
 
       <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+        {/* Action buttons at top - before transcript content */}
+        {!isRecording && rawTranscript.trim() && !resultSummary && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {onSend && (
+              <Button
+                size="sm"
+                onClick={handleSend}
+                disabled={isProcessing || isCleaning}
+                className="gap-1.5"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3 h-3" />
+                    Send to writer
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCleanTranscript}
+              disabled={isCleaning || isProcessing}
+              className="gap-1.5"
+            >
+              {isCleaning ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Cleaning...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-3 h-3" />
+                  Clean up
+                </>
+              )}
+            </Button>
+            {hasCleanedVersion && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRevertToRaw}
+                className="gap-1.5"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Use raw instead
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Processing indicator */}
+        {isProcessing && !resultSummary && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Updating document...
+          </div>
+        )}
+
+        {/* Result Summary Card - shows after writer responds */}
+        {resultSummary && (
+          <Card className="flex flex-col overflow-hidden border-primary/30">
+            <CardHeader className="pb-2 py-2 flex flex-row items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <CardTitle className="text-sm font-medium">
+                What Changed
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-hidden pb-2">
+              <ScrollArea className="h-full">
+                <p className="text-sm whitespace-pre-wrap" data-testid="text-result-summary">
+                  {resultSummary}
+                </p>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Raw/Cleaned Transcript Card */}
         <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader className="pb-2 py-2 flex flex-row items-center justify-between">
@@ -128,62 +211,6 @@ export function TranscriptOverlay({
           </CardContent>
         </Card>
 
-        {/* Action buttons - only show after recording stops */}
-        {!isRecording && rawTranscript.trim() && !resultSummary && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCleanTranscript}
-              disabled={isCleaning || isProcessing}
-              className="gap-1.5"
-            >
-              {isCleaning ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Cleaning...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-3 h-3" />
-                  Clean up transcript
-                </>
-              )}
-            </Button>
-            {hasCleanedVersion && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRevertToRaw}
-                className="gap-1.5"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Use raw instead
-              </Button>
-            )}
-            {onSend && (
-              <Button
-                size="sm"
-                onClick={handleSend}
-                disabled={isProcessing || isCleaning}
-                className="gap-1.5 ml-auto"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-3 h-3" />
-                    Send to writer
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        )}
-
         {/* What gets sent explanation */}
         {!isRecording && rawTranscript.trim() && !resultSummary && (
           <p className="text-xs text-muted-foreground">
@@ -191,33 +218,6 @@ export function TranscriptOverlay({
               ? "The cleaned version will be sent as your instruction to the AI writer."
               : "Your raw transcript will be sent as-is to the AI writer. Use 'Clean up' to remove speech artifacts first."}
           </p>
-        )}
-
-        {/* Result Summary Card - shows after writer responds */}
-        {resultSummary && (
-          <Card className="flex-1 flex flex-col overflow-hidden border-primary/30">
-            <CardHeader className="pb-2 py-2 flex flex-row items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <CardTitle className="text-sm font-medium">
-                What Changed
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden pb-2">
-              <ScrollArea className="h-full">
-                <p className="text-sm whitespace-pre-wrap" data-testid="text-result-summary">
-                  {resultSummary}
-                </p>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Processing indicator */}
-        {isProcessing && !resultSummary && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Updating document...
-          </div>
         )}
       </div>
     </div>

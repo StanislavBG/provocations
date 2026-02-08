@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import type { Document, Lens, Provocation, OutlineItem, LensType, WorkspaceState, ReferenceDocument, EditHistoryEntry } from "@shared/schema";
+import type { Document, Provocation, OutlineItem, WorkspaceState, ReferenceDocument, EditHistoryEntry } from "@shared/schema";
 
 interface WorkspaceContextType {
   state: WorkspaceState;
@@ -10,8 +10,6 @@ interface WorkspaceContextType {
   removeReferenceDocument: (id: string) => void;
   addEditHistoryEntry: (entry: EditHistoryEntry) => void;
   clearEditHistory: () => void;
-  setLenses: (lenses: Lens[]) => void;
-  setActiveLens: (lens: LensType | null) => void;
   setProvocations: (provocations: Provocation[]) => void;
   updateProvocationStatus: (id: string, status: Provocation["status"]) => void;
   setOutline: (outline: OutlineItem[]) => void;
@@ -28,8 +26,6 @@ const initialState: WorkspaceState = {
   objective: "",
   referenceDocuments: [],
   editHistory: [],
-  lenses: [],
-  activeLens: null,
   provocations: [],
   outline: [],
   currentPhase: "input",
@@ -76,14 +72,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const clearEditHistory = useCallback(() => {
     setState((prev) => ({ ...prev, editHistory: [] }));
-  }, []);
-
-  const setLenses = useCallback((lenses: Lens[]) => {
-    setState((prev) => ({ ...prev, lenses }));
-  }, []);
-
-  const setActiveLens = useCallback((lens: LensType | null) => {
-    setState((prev) => ({ ...prev, activeLens: lens }));
   }, []);
 
   const setProvocations = useCallback((provocations: Provocation[]) => {
@@ -149,8 +137,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         removeReferenceDocument,
         addEditHistoryEntry,
         clearEditHistory,
-        setLenses,
-        setActiveLens,
         setProvocations,
         updateProvocationStatus,
         setOutline,
