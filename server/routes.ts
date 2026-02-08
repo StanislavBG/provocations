@@ -28,6 +28,7 @@ const provocationPrompts: Record<ProvocationType, string> = {
   opportunity: "Identify potential opportunities for growth, innovation, or improvement that might be missed.",
   fallacy: "Identify logical fallacies, weak arguments, unsupported claims, or gaps in reasoning.",
   alternative: "Suggest alternative approaches, different perspectives, or lateral thinking opportunities.",
+  challenge: "Based on the user's objective, identify what's missing, incomplete, or underdeveloped. Push the user toward a more complete, well-rounded document by highlighting gaps in coverage, depth, or clarity.",
 };
 
 // Instruction classification patterns
@@ -248,6 +249,12 @@ The goal is to strengthen the argument with better reasoning or evidence.`,
 - "Add a comparison section weighing both options"
 - "Include the alternative as an option for different use cases"
 The goal is to show thoughtful consideration of alternatives.`,
+
+  challenge: `Example good responses to challenge provocations:
+- "You're right, I need to add a section covering X"
+- "Let me flesh out the Y section with more specifics"
+- "I should address Z to make this more complete"
+The goal is to fill gaps and push the document toward completeness based on the objective.`,
 };
 
 // Strategy prompts for each instruction type
@@ -400,7 +407,7 @@ Output only valid JSON, no markdown.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { text, guidance, referenceDocuments } = parsed.data;
+      const { text, guidance, objective, types, referenceDocuments } = parsed.data;
 
       const MAX_ANALYSIS_LENGTH = 8000;
       const analysisText = text.slice(0, MAX_ANALYSIS_LENGTH);
@@ -417,7 +424,15 @@ Output only valid JSON, no markdown.`
         ? `\n\nUSER GUIDANCE: The user specifically wants provocations about: ${guidance}`
         : "";
 
-      const provDescriptions = provocationType.map(t => `- ${t}: ${provocationPrompts[t]}`).join("\n");
+      const objectiveContext = objective
+        ? `\n\nDOCUMENT OBJECTIVE: ${objective}\nEvaluate the document against this objective. Identify what's missing, underdeveloped, or could be stronger to fulfill this goal.`
+        : "";
+
+      // Filter to requested types or use all
+      const requestedTypes = types && types.length > 0 ? types : [...provocationType];
+      const provDescriptions = requestedTypes.map(t => `- ${t}: ${provocationPrompts[t]}`).join("\n");
+      const typesList = requestedTypes.join(", ");
+      const perTypeCount = Math.max(2, Math.ceil(6 / requestedTypes.length));
 
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
@@ -425,18 +440,20 @@ Output only valid JSON, no markdown.`
         messages: [
           {
             role: "system",
-            content: `You are a critical thinking partner. Challenge assumptions and push thinking deeper.
+            content: `You are a critical thinking partner. Challenge assumptions and push thinking deeper. Gently push the user toward a more complete, well-rounded document.
 
 Generate provocations in these categories:
 ${provDescriptions}
-${refContext}${guidanceContext}
+${refContext}${guidanceContext}${objectiveContext}
 
-Respond with a JSON object containing a "provocations" array. Generate 2-3 provocations per category (6-9 total).
+Respond with a JSON object containing a "provocations" array. Generate ${perTypeCount} provocations per category.
 For each provocation:
-- type: The category (opportunity, fallacy, or alternative)
+- type: The category (one of: ${typesList})
 - title: A punchy headline (max 60 chars)
-- content: A 2-3 sentence explanation
+- content: A 2-3 sentence explanation that gently nudges the user to improve their document
 - sourceExcerpt: A relevant quote from the source text (max 150 chars)
+
+Focus on completeness: what's missing, what's thin, what could be stronger. Be constructive, not just critical.
 
 Output only valid JSON, no markdown.`
           },
@@ -465,7 +482,7 @@ Output only valid JSON, no markdown.`
         const item = p as Record<string, unknown>;
         const provType = provocationType.includes(item?.type as ProvocationType)
           ? item.type as ProvocationType
-          : provocationType[idx % 3];
+          : requestedTypes[idx % requestedTypes.length];
 
         return {
           id: `${provType}-${Date.now()}-${idx}`,

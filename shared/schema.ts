@@ -3,8 +3,9 @@ import { z } from "zod";
 // Provocation types
 export const provocationType = [
   "opportunity",
-  "fallacy", 
+  "fallacy",
   "alternative",
+  "challenge",
 ] as const;
 
 export type ProvocationType = typeof provocationType[number];
@@ -72,6 +73,8 @@ export type AnalyzeTextRequest = z.infer<typeof analyzeTextRequestSchema>;
 export const generateProvocationsRequestSchema = z.object({
   text: z.string().min(1, "Text is required"),
   guidance: z.string().optional(),
+  objective: z.string().optional(),
+  types: z.array(z.enum(provocationType)).optional(),
   referenceDocuments: z.array(referenceDocumentSchema).optional(),
 });
 
