@@ -55,8 +55,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   // Draft section expanded state
   const [isDraftExpanded, setIsDraftExpanded] = useState(false);
 
-  // Side panel state (Templates & References)
-  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
+  // Side panel state (Document Mode & References)
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
 
   const handleAddReference = () => {
     if (newRefName.trim() && newRefContent.trim()) {
@@ -172,18 +172,26 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     setText(template.starterText);
     setActivePrebuilt(template);
     setIsDraftExpanded(true);
-    const templateDoc: ReferenceDocument = {
-      id: generateId("ref"),
-      name: `Template: ${template.title}`,
-      content: template.templateContent,
-      type: "template",
-    };
-    setReferenceDocuments((prev) => {
-      const withoutOldPrebuilt = prev.filter(
-        (d) => d.type !== "template" || !d.name.startsWith("Template: ")
+    // Only add a reference document if the template has content (freeform modes don't)
+    if (template.templateContent) {
+      const templateDoc: ReferenceDocument = {
+        id: generateId("ref"),
+        name: `Template: ${template.title}`,
+        content: template.templateContent,
+        type: "template",
+      };
+      setReferenceDocuments((prev) => {
+        const withoutOldPrebuilt = prev.filter(
+          (d) => d.type !== "template" || !d.name.startsWith("Template: ")
+        );
+        return [...withoutOldPrebuilt, templateDoc];
+      });
+    } else {
+      // Clear any previous template reference
+      setReferenceDocuments((prev) =>
+        prev.filter((d) => d.type !== "template" || !d.name.startsWith("Template: "))
       );
-      return [...withoutOldPrebuilt, templateDoc];
-    });
+    }
   };
 
   const handleClearPrebuilt = () => {
@@ -235,15 +243,15 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   return (
     <div className="h-full flex">
-      {/* ── LEFT SIDE PANEL ─── Templates & References (starts closed) ── */}
+      {/* ── LEFT SIDE PANEL ─── Document Mode & References ── */}
       <div
         className={`shrink-0 border-r bg-card overflow-y-auto transition-all duration-300 ease-in-out ${
-          isSidePanelOpen ? "w-80" : "w-0"
+          isSidePanelOpen ? "w-96" : "w-0"
         }`}
       >
-        <div className={`w-80 p-4 space-y-4 ${isSidePanelOpen ? "opacity-100" : "opacity-0 pointer-events-none"} transition-opacity duration-200`}>
+        <div className={`w-96 p-4 space-y-4 ${isSidePanelOpen ? "opacity-100" : "opacity-0 pointer-events-none"} transition-opacity duration-200`}>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Templates & References</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Document Mode</h2>
             <Button
               variant="ghost"
               size="icon"
@@ -254,11 +262,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </Button>
           </div>
 
-          <Tabs defaultValue="templates" className="w-full">
+          <Tabs defaultValue="modes" className="w-full">
             <TabsList className="w-full">
-              <TabsTrigger value="templates" className="flex-1 gap-1.5">
+              <TabsTrigger value="modes" className="flex-1 gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
-                Templates
+                Modes
               </TabsTrigger>
               <TabsTrigger value="references" className="flex-1 gap-1.5">
                 <BookCopy className="w-3.5 h-3.5" />
@@ -269,8 +277,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               </TabsTrigger>
             </TabsList>
 
-            {/* ── Templates Tab ── */}
-            <TabsContent value="templates">
+            {/* ── Modes Tab ── */}
+            <TabsContent value="modes">
               <div className="space-y-4">
                 {/* Pre-built templates */}
                 {!activePrebuilt && (
@@ -434,7 +442,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 className="gap-1.5"
               >
                 <PanelLeftOpen className="w-4 h-4" />
-                Templates & References
+                Document Mode
                 {referenceDocuments.length > 0 && (
                   <Badge variant="secondary" className="text-xs ml-1">{referenceDocuments.length}</Badge>
                 )}
