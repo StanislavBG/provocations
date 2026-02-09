@@ -20,6 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
+import { SaveDocumentDialog } from "@/components/SaveDocumentDialog";
+import { LoadDocumentDialog } from "@/components/LoadDocumentDialog";
 import {
   Sparkles,
   RotateCcw,
@@ -31,7 +33,9 @@ import {
   Target,
   BookCopy,
   X,
-  Lightbulb
+  Lightbulb,
+  Save,
+  FolderOpen,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -107,6 +111,10 @@ export default function Workspace() {
   const [interviewEntries, setInterviewEntries] = useState<InterviewEntry[]>([]);
   const [currentInterviewQuestion, setCurrentInterviewQuestion] = useState<string | null>(null);
   const [currentInterviewTopic, setCurrentInterviewTopic] = useState<string | null>(null);
+
+  // Save/Load dialogs
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showLoadDialog, setShowLoadDialog] = useState(false);
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
@@ -737,6 +745,12 @@ export default function Workspace() {
     setCleanedTranscript(cleaned);
   }, []);
 
+  // Handle loading a decrypted document from the LoadDocumentDialog
+  const handleLoadDocument = useCallback((text: string, title: string) => {
+    setObjective(title);
+    analyzeMutation.mutate({ text, referenceDocuments });
+  }, [analyzeMutation, referenceDocuments]);
+
   const hasOutlineContent = outline?.some((item) => item.content) ?? false;
   const canShowDiff = versions.length >= 2;
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
@@ -745,13 +759,27 @@ export default function Workspace() {
   if (phase === "input") {
     return (
       <div className="min-h-screen">
-        <div className="absolute top-4 right-4">
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowLoadDialog(true)}
+            className="gap-1.5"
+          >
+            <FolderOpen className="w-4 h-4" />
+            Load Saved
+          </Button>
           <ThemeToggle />
         </div>
-        <TextInputForm 
-          onSubmit={handleAnalyze} 
+        <TextInputForm
+          onSubmit={handleAnalyze}
           onBlankDocument={handleBlankDocument}
-          isLoading={analyzeMutation.isPending} 
+          isLoading={analyzeMutation.isPending}
+        />
+        <LoadDocumentDialog
+          open={showLoadDialog}
+          onOpenChange={setShowLoadDialog}
+          onLoad={handleLoadDocument}
         />
       </div>
     );
@@ -824,6 +852,16 @@ export default function Workspace() {
                 Versions ({versions.length})
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSaveDialog(true)}
+              className="gap-1.5"
+              disabled={!document?.rawText}
+            >
+              <Save className="w-4 h-4" />
+              Save
+            </Button>
             <Button
               data-testid="button-reset"
               variant="ghost"
@@ -1108,6 +1146,17 @@ export default function Workspace() {
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
+
+      <SaveDocumentDialog
+        open={showSaveDialog}
+        onOpenChange={setShowSaveDialog}
+        documentText={document?.rawText || ""}
+      />
+      <LoadDocumentDialog
+        open={showLoadDialog}
+        onOpenChange={setShowLoadDialog}
+        onLoad={handleLoadDocument}
+      />
     </div>
   );
 }
