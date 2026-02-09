@@ -26,6 +26,7 @@ import {
   Gauge,
   MousePointerClick,
   Layers,
+  Rocket,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
@@ -35,6 +36,7 @@ const provocationIcons: Record<ProvocationType, typeof Lightbulb> = {
   fallacy: AlertTriangle,
   alternative: GitBranch,
   challenge: Crosshair,
+  thinking_bigger: Rocket,
   performance: Gauge,
   ux: MousePointerClick,
   architecture: Layers,
@@ -45,6 +47,7 @@ const provocationColors: Record<ProvocationType, string> = {
   fallacy: "text-amber-600 dark:text-amber-400",
   alternative: "text-blue-600 dark:text-blue-400",
   challenge: "text-violet-600 dark:text-violet-400",
+  thinking_bigger: "text-orange-600 dark:text-orange-400",
   performance: "text-rose-600 dark:text-rose-400",
   ux: "text-fuchsia-600 dark:text-fuchsia-400",
   architecture: "text-cyan-600 dark:text-cyan-400",
@@ -55,6 +58,7 @@ const provocationBgColors: Record<ProvocationType, string> = {
   fallacy: "bg-amber-50 dark:bg-amber-950/30",
   alternative: "bg-blue-50 dark:bg-blue-950/30",
   challenge: "bg-violet-50 dark:bg-violet-950/30",
+  thinking_bigger: "bg-orange-50 dark:bg-orange-950/30",
   performance: "bg-rose-50 dark:bg-rose-950/30",
   ux: "bg-fuchsia-50 dark:bg-fuchsia-950/30",
   architecture: "bg-cyan-50 dark:bg-cyan-950/30",
@@ -65,6 +69,7 @@ const provocationLabels: Record<ProvocationType, string> = {
   fallacy: "Fallacy",
   alternative: "Alternative",
   challenge: "Challenge",
+  thinking_bigger: "Think Bigger",
   performance: "Performance",
   ux: "UX",
   architecture: "Architecture",
@@ -434,7 +439,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
 
   // Type selection for which provocation types to generate/answer
   const [selectedTypes, setSelectedTypes] = useState<Set<ProvocationType>>(
-    () => new Set<ProvocationType>(["opportunity", "fallacy", "alternative", "challenge", "performance", "ux", "architecture"])
+    () => new Set<ProvocationType>(["opportunity", "fallacy", "alternative", "challenge", "thinking_bigger", "performance", "ux", "architecture"])
   );
 
   const safeProvocations = provocations ?? [];
@@ -589,7 +594,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         >
           All
         </Button>
-        {(["challenge", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
+        {(["challenge", "thinking_bigger", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
           const Icon = provocationIcons[type];
           const count = safeProvocations.filter((p) => p.type === type).length;
           if (count === 0 && type !== "challenge") return null;
@@ -670,7 +675,7 @@ function ChallengeInput({
             </label>
           </div>
           <div className="flex items-center gap-1 flex-wrap">
-            {(["challenge", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
+            {(["challenge", "thinking_bigger", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
               const Icon = provocationIcons[type];
               const isSelected = selectedTypes.has(type);
               return (

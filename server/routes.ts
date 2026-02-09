@@ -31,6 +31,7 @@ const provocationPrompts: Record<ProvocationType, string> = {
   fallacy: "Identify logical fallacies, weak arguments, unsupported claims, or gaps in reasoning.",
   alternative: "Suggest alternative approaches, different perspectives, or lateral thinking opportunities.",
   challenge: "Based on the user's objective, identify what's missing, incomplete, or underdeveloped. Push the user toward a more complete, well-rounded document by highlighting gaps in coverage, depth, or clarity.",
+  thinking_bigger: "Push the user to think bigger — challenge them to raise the ambition, scope, or impact of their ideas. Ask why they're settling for incremental when transformative is possible. Question small targets, safe assumptions, and limited vision.",
   performance: "As a Performance Reviewer: Question scalability, throughput, and expected load. Clarify that the business requirements are translated into concrete technical expectations. Ask about bottlenecks, response times, data volumes, and what happens at scale.",
   ux: "As a UX Reviewer: Question how users will discover, understand, and complete tasks. Ask 'how would a user know to do this?' and 'what happens if they get confused here?' Push for clarity on layout, flows, error states, and ease of use.",
   architecture: "As an Architecture Reviewer: Question the clarity of system abstractions — frontend components, backend services, system-to-system communication. Push for well-defined boundaries, API contracts, data flow, and separation of concerns.",
@@ -260,6 +261,12 @@ The goal is to show thoughtful consideration of alternatives.`,
 - "Let me flesh out the Y section with more specifics"
 - "I should address Z to make this more complete"
 The goal is to fill gaps and push the document toward completeness based on the objective.`,
+
+  thinking_bigger: `Example good responses to thinking bigger provocations:
+- "You're right, I'm aiming too low — let me reframe X as a platform opportunity"
+- "Instead of targeting just Y, let me expand the vision to include Z"
+- "I should articulate a bolder 10x version of this strategy"
+The goal is to raise the ambition and scope of the document's ideas and proposals.`,
 
   performance: `Example good responses to performance provocations:
 - "We expect 10k concurrent users at peak, I should specify that"
