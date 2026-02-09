@@ -222,3 +222,37 @@ export interface WorkspaceState {
   outline: OutlineItem[];
   currentPhase: "input" | "blank-document" | "workspace";
 }
+
+// Encrypted document save/load schemas
+export const saveEncryptedDocumentRequestSchema = z.object({
+  ownerHash: z.string().min(1, "Owner hash is required"),
+  title: z.string().min(1, "Title is required").max(200),
+  ciphertext: z.string().min(1, "Ciphertext is required"),
+  salt: z.string().min(1, "Salt is required"),
+  iv: z.string().min(1, "IV is required"),
+});
+
+export type SaveEncryptedDocumentRequest = z.infer<typeof saveEncryptedDocumentRequestSchema>;
+
+export const listEncryptedDocumentsRequestSchema = z.object({
+  ownerHash: z.string().min(1, "Owner hash is required"),
+});
+
+export type ListEncryptedDocumentsRequest = z.infer<typeof listEncryptedDocumentsRequestSchema>;
+
+export interface EncryptedDocumentListItem {
+  id: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EncryptedDocumentFull {
+  id: number;
+  title: string;
+  ciphertext: string;
+  salt: string;
+  iv: string;
+  createdAt: string;
+  updatedAt: string;
+}
