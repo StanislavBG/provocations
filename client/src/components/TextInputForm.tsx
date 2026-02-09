@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
-import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2, Settings2, Check } from "lucide-react";
 import { generateId } from "@/lib/utils";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { apiRequest } from "@/lib/queryClient";
@@ -36,8 +36,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [isRecordingText, setIsRecordingText] = useState(false);
   const [textInterim, setTextInterim] = useState("");
 
-  // Template generation
+  // Advanced options
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+  // Template generation with approval flow
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<{ name: string; content: string } | null>(null);
 
   // Raw transcript storage for "show original"
   const [objectiveRawTranscript, setObjectiveRawTranscript] = useState<string | null>(null);
@@ -169,26 +173,39 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const handleGenerateTemplate = async () => {
     if (!objective.trim()) return;
     setIsGeneratingTemplate(true);
+    setPendingTemplate(null);
     try {
       const response = await apiRequest("POST", "/api/generate-template", {
         objective: objective.trim(),
       });
       const data = await response.json();
       if (data.template) {
-        const templateDoc: ReferenceDocument = {
-          id: generateId("ref"),
+        setPendingTemplate({
           name: data.name || `Template: ${objective.slice(0, 40)}`,
           content: data.template,
-          type: "template",
-        };
-        setReferenceDocuments((prev) => [...prev, templateDoc]);
-        setIsReferencesOpen(true);
+        });
       }
     } catch (error) {
       console.error("Failed to generate template:", error);
     } finally {
       setIsGeneratingTemplate(false);
     }
+  };
+
+  const handleApproveTemplate = () => {
+    if (!pendingTemplate) return;
+    const templateDoc: ReferenceDocument = {
+      id: generateId("ref"),
+      name: pendingTemplate.name,
+      content: pendingTemplate.content,
+      type: "template",
+    };
+    setReferenceDocuments((prev) => [...prev, templateDoc]);
+    setPendingTemplate(null);
+  };
+
+  const handleRejectTemplate = () => {
+    setPendingTemplate(null);
   };
 
   return (
@@ -306,133 +323,192 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
 
-        <Collapsible open={isReferencesOpen} onOpenChange={setIsReferencesOpen}>
-          <Card className="border-2">
-            <CollapsibleTrigger asChild>
-              <CardHeader className="pb-4 cursor-pointer hover:bg-muted/50 transition-colors">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <BookCopy className="w-5 h-5 text-primary" />
-                  Style & Reference Documents
-                  <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${isReferencesOpen ? "rotate-180" : ""}`} />
+            {/* Advanced Options - Style & Reference Documents */}
+            <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full pt-2">
+                  <Settings2 className="w-4 h-4" />
+                  <span>Advanced Options</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isAdvancedOpen ? "rotate-180" : ""}`} />
                   {referenceDocuments.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">{referenceDocuments.length}</Badge>
+                    <Badge variant="secondary" className="text-xs ml-1">{referenceDocuments.length} ref{referenceDocuments.length !== 1 ? "s" : ""}</Badge>
                   )}
-                </CardTitle>
-                <CardDescription className="text-base text-left">
-                  Add templates, style guides, or prior examples to guide tone and completeness.
-                </CardDescription>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="space-y-4 pt-0">
-                {/* Generate template from objective */}
-                {objective.trim() && !referenceDocuments.some(d => d.type === "template") && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateTemplate}
-                    disabled={isGeneratingTemplate}
-                    className="gap-1.5 w-full"
-                  >
-                    {isGeneratingTemplate ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Generating template...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="w-3.5 h-3.5" />
-                        Generate Document Template from Objective
-                      </>
-                    )}
-                  </Button>
-                )}
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-4 pt-4 border-t mt-3">
+                  {/* Generate template from objective */}
+                  {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Auto-generate a structured template based on your objective using AI research.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateTemplate}
+                        disabled={isGeneratingTemplate}
+                        className="gap-1.5 w-full"
+                      >
+                        {isGeneratingTemplate ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Generating template...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="w-3.5 h-3.5" />
+                            Generate Template from Objective
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
 
-                {/* Existing references */}
-                {referenceDocuments.length > 0 && (
-                  <div className="space-y-2">
-                    {referenceDocuments.map((doc) => (
-                      <div key={doc.id} className="flex items-start gap-2 p-3 rounded-lg border bg-muted/30">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm truncate">{doc.name}</span>
-                            <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                            {doc.content.slice(0, 150)}...
-                          </p>
+                  {/* Pending template approval */}
+                  {pendingTemplate && (
+                    <div className="space-y-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Wand2 className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-sm">{pendingTemplate.name}</span>
                         </div>
+                        <Badge variant="outline" className="text-xs">Pending Approval</Badge>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto p-3 rounded-md bg-background border text-sm font-serif whitespace-pre-wrap leading-relaxed">
+                        {pendingTemplate.content}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleApproveTemplate}
+                          className="gap-1.5 flex-1"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Approve & Add Template
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRejectTemplate}
+                          className="gap-1.5"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Discard
+                        </Button>
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={() => handleRemoveReference(doc.id)}
+                          size="sm"
+                          onClick={handleGenerateTemplate}
+                          disabled={isGeneratingTemplate}
+                          className="gap-1.5"
                         >
-                          <X className="w-3 h-3" />
+                          {isGeneratingTemplate ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Wand2 className="w-3.5 h-3.5" />
+                          )}
+                          Regenerate
                         </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                {/* Add new reference */}
-                <div className="space-y-3 p-3 rounded-lg border border-dashed">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="Reference name (e.g., 'Company Style Guide')"
-                      value={newRefName}
-                      onChange={(e) => setNewRefName(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Select value={newRefType} onValueChange={(v) => setNewRefType(v as ReferenceDocument["type"])}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="style">Style</SelectItem>
-                        <SelectItem value="template">Template</SelectItem>
-                        <SelectItem value="example">Example</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="relative">
-                    <AutoExpandTextarea
-                      placeholder="Paste the reference content here..."
-                      value={newRefContent}
-                      onChange={(e) => setNewRefContent(e.target.value)}
-                      className="text-sm pr-10"
-                      minRows={3}
-                      maxRows={15}
-                    />
-                    <div className="absolute top-2 right-2">
-                      <VoiceRecorder
-                        onTranscript={(transcript) => {
-                          setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
-                        }}
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                      />
+                  {/* Style & Reference Documents */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <BookCopy className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Style & Reference Documents</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Add templates, style guides, or prior examples to guide tone and completeness.
+                    </p>
+
+                    {/* Existing references */}
+                    {referenceDocuments.length > 0 && (
+                      <div className="space-y-2">
+                        {referenceDocuments.map((doc) => (
+                          <div key={doc.id} className="flex items-start gap-2 p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm truncate">{doc.name}</span>
+                                <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                {doc.content.slice(0, 150)}...
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0"
+                              onClick={() => handleRemoveReference(doc.id)}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add new reference */}
+                    <div className="space-y-3 p-3 rounded-lg border border-dashed">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          placeholder="Reference name (e.g., 'Company Style Guide')"
+                          value={newRefName}
+                          onChange={(e) => setNewRefName(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Select value={newRefType} onValueChange={(v) => setNewRefType(v as ReferenceDocument["type"])}>
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="style">Style</SelectItem>
+                            <SelectItem value="template">Template</SelectItem>
+                            <SelectItem value="example">Example</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="relative">
+                        <AutoExpandTextarea
+                          placeholder="Paste the reference content here..."
+                          value={newRefContent}
+                          onChange={(e) => setNewRefContent(e.target.value)}
+                          className="text-sm pr-10"
+                          minRows={3}
+                          maxRows={15}
+                        />
+                        <div className="absolute top-2 right-2">
+                          <VoiceRecorder
+                            onTranscript={(transcript) => {
+                              setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
+                            }}
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddReference}
+                        disabled={!newRefName.trim() || !newRefContent.trim()}
+                        className="gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add Reference
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddReference}
-                    disabled={!newRefName.trim() || !newRefContent.trim()}
-                    className="gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add Reference
-                  </Button>
                 </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
+              </CollapsibleContent>
+            </Collapsible>
+          </CardContent>
+        </Card>
 
         <Card className="border-2">
           <CardHeader className="pb-4">
