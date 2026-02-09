@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
-import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2, Settings2, Check, MessageSquareWarning, PenLine } from "lucide-react";
+import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2, Settings2, Check, PenLine } from "lucide-react";
 import { generateId } from "@/lib/utils";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { apiRequest } from "@/lib/queryClient";
@@ -27,7 +26,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
-  const [isReferencesOpen, setIsReferencesOpen] = useState(false);
   const [newRefName, setNewRefName] = useState("");
   const [newRefContent, setNewRefContent] = useState("");
   const [newRefType, setNewRefType] = useState<ReferenceDocument["type"]>("example");
@@ -57,6 +55,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
+
+  // Draft section expanded state
+  const [isDraftExpanded, setIsDraftExpanded] = useState(false);
 
   const handleAddReference = () => {
     if (newRefName.trim() && newRefContent.trim()) {
@@ -95,7 +96,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const handleObjectiveVoiceComplete = (transcript: string) => {
     setObjective(transcript);
     setObjectiveInterim("");
-    // Store raw transcript for potential "show original"
     if (transcript.length > 50) {
       setObjectiveRawTranscript(transcript);
     }
@@ -106,7 +106,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     const newText = text ? text + " " + transcript : transcript;
     setText(newText);
     setTextInterim("");
-    // Store raw transcript (append to existing if any)
     if (transcript.length > 100) {
       setTextRawTranscript((prev) => prev ? prev + " " + transcript : transcript);
     }
@@ -123,7 +122,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
       });
       const data = await response.json();
       if (data.summary) {
-        // Store original before replacing
         if (!objectiveRawTranscript) {
           setObjectiveRawTranscript(objective);
         }
@@ -147,7 +145,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
       });
       const data = await response.json();
       if (data.summary) {
-        // Store original before replacing
         if (!textRawTranscript) {
           setTextRawTranscript(text);
         }
@@ -179,7 +176,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     setObjective(template.objective);
     setText(template.starterText);
     setActivePrebuilt(template);
-    // Add the template content as a reference document
+    setIsDraftExpanded(true);
     const templateDoc: ReferenceDocument = {
       id: generateId("ref"),
       name: `Template: ${template.title}`,
@@ -187,7 +184,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
       type: "template",
     };
     setReferenceDocuments((prev) => {
-      // Replace any existing prebuilt template, keep other refs
       const withoutOldPrebuilt = prev.filter(
         (d) => d.type !== "template" || !d.name.startsWith("Template: ")
       );
@@ -244,511 +240,457 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-3xl space-y-8">
-        <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-            <Sparkles className="w-8 h-8 text-primary" />
+      <div className="w-full max-w-2xl space-y-6">
+        {/* Minimal header */}
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-2">
+            <Sparkles className="w-6 h-6 text-primary" />
           </div>
-          <h1 className="text-4xl font-serif font-bold tracking-tight" data-testid="text-title">
+          <h1 className="text-3xl font-serif font-bold tracking-tight" data-testid="text-title">
             Provocations
           </h1>
-          <p className="text-xl text-muted-foreground max-w-xl mx-auto leading-relaxed">
-            A tool that makes you think, not one that thinks for you.
+          <p className="text-base text-muted-foreground max-w-md mx-auto">
+            Shape your ideas into documents that hold up under scrutiny.
           </p>
-          <div className="text-sm text-muted-foreground max-w-lg mx-auto space-y-2 pt-2">
-            <p>
-              Shape your ideas into polished documents through voice, text, and thought-provoking AI challenges.
-            </p>
-            <div className="flex items-center justify-center gap-6 pt-1 text-xs">
-              <span className="flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5 text-primary" />
-                Set your objective
-              </span>
-              <span className="flex items-center gap-1.5">
-                <MessageSquareWarning className="w-3.5 h-3.5 text-primary" />
-                Get challenged
-              </span>
-              <span className="flex items-center gap-1.5">
-                <PenLine className="w-3.5 h-3.5 text-primary" />
-                Refine your doc
-              </span>
-            </div>
-          </div>
         </div>
 
-        {/* Pre-built templates */}
-        {!activePrebuilt && (
-          <PrebuiltTemplates onSelect={handleSelectPrebuilt} />
-        )}
-
-        {/* Active prebuilt indicator */}
-        {activePrebuilt && (
-          <div className="flex items-center justify-between p-3 rounded-lg border border-primary/30 bg-primary/5">
-            <div className="flex items-center gap-2 text-sm">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <span className="font-medium">Using template:</span>
-              <span className="text-muted-foreground">{activePrebuilt.title}</span>
-            </div>
-            <button
-              onClick={handleClearPrebuilt}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        {/* ── STEP 1: OBJECTIVE ─── front and center ── */}
+        <div className="space-y-2">
+          <label
+            htmlFor="objective"
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
+          >
+            <Target className="w-4 h-4 text-primary" />
+            Step 1 — What are you creating?
+          </label>
+          <div className="flex gap-2">
+            <AutoExpandTextarea
+              id="objective"
+              data-testid="input-objective"
+              placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
+              className={`text-lg flex-1 leading-relaxed font-serif ${isRecordingObjective ? "border-primary text-primary" : ""}`}
+              value={isRecordingObjective ? objectiveInterim || objective : objective}
+              onChange={(e) => setObjective(e.target.value)}
+              readOnly={isRecordingObjective}
+              minRows={2}
+              maxRows={5}
+            />
+            <VoiceRecorder
+              onTranscript={handleObjectiveVoiceComplete}
+              onInterimTranscript={setObjectiveInterim}
+              onRecordingChange={setIsRecordingObjective}
+              size="default"
+              variant={isRecordingObjective ? "destructive" : "outline"}
+            />
           </div>
-        )}
+          {isRecordingObjective && (
+            <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
+          )}
 
-        <Card className="border-2">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Target className="w-5 h-5 text-primary" />
-              What are you creating?
-            </CardTitle>
-            <CardDescription className="text-base">
-              Define the objective for your document. This guides all AI assistance.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="objective" className="text-sm font-medium">Document Objective</Label>
-              <div className="flex gap-2">
-                <AutoExpandTextarea
-                  id="objective"
-                  data-testid="input-objective"
-                  placeholder="e.g., Create a persuasive investor pitch, Write a technical design doc, Draft a team communication..."
-                  className={`text-base flex-1 ${isRecordingObjective ? "border-primary text-primary" : ""}`}
-                  value={isRecordingObjective ? objectiveInterim || objective : objective}
-                  onChange={(e) => setObjective(e.target.value)}
-                  readOnly={isRecordingObjective}
-                  minRows={1}
-                  maxRows={6}
-                />
-                <VoiceRecorder
-                  onTranscript={handleObjectiveVoiceComplete}
-                  onInterimTranscript={setObjectiveInterim}
-                  onRecordingChange={setIsRecordingObjective}
-                  size="default"
-                  variant={isRecordingObjective ? "destructive" : "outline"}
-                />
-              </div>
-              {isRecordingObjective && (
-                <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
-              )}
-
-              {/* Summarize and show original controls for objective */}
-              {objective.length > 50 && !isRecordingObjective && (
-                <div className="flex items-center gap-2 flex-wrap">
+          {/* Summarize controls for long objectives */}
+          {objective.length > 50 && !isRecordingObjective && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSummarizeObjective}
+                disabled={isSummarizingObjective}
+                className="gap-1.5 text-xs h-7"
+              >
+                {isSummarizingObjective ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Summarizing...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-3 h-3" />
+                    Clean up
+                  </>
+                )}
+              </Button>
+              {objectiveRawTranscript && objectiveRawTranscript !== objective && (
+                <>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleSummarizeObjective}
-                    disabled={isSummarizingObjective}
+                    onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
                     className="gap-1.5 text-xs h-7"
                   >
-                    {isSummarizingObjective ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Summarizing...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="w-3 h-3" />
-                        Clean up / Summarize
-                      </>
-                    )}
+                    {showObjectiveRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original</>}
                   </Button>
-                  {objectiveRawTranscript && objectiveRawTranscript !== objective && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
-                      className="gap-1.5 text-xs h-7"
-                    >
-                      {showObjectiveRaw ? (
-                        <>
-                          <EyeOff className="w-3 h-3" />
-                          Hide original
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-3 h-3" />
-                          Show original
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  {objectiveRawTranscript && objectiveRawTranscript !== objective && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRestoreObjective}
-                      className="gap-1.5 text-xs h-7"
-                    >
-                      Restore original
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* Show original transcript */}
-              {showObjectiveRaw && objectiveRawTranscript && (
-                <div className="p-3 rounded-lg bg-muted/50 border text-sm">
-                  <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
-                </div>
+                  <Button variant="ghost" size="sm" onClick={handleRestoreObjective} className="gap-1.5 text-xs h-7">
+                    Restore original
+                  </Button>
+                </>
               )}
             </div>
+          )}
+          {showObjectiveRaw && objectiveRawTranscript && (
+            <div className="p-3 rounded-lg bg-muted/50 border text-sm">
+              <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
+              <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
+            </div>
+          )}
 
-            {/* Advanced Options - Style & Reference Documents */}
-            <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full pt-2">
-                  <Settings2 className="w-4 h-4" />
-                  <span>Advanced Options</span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isAdvancedOpen ? "rotate-180" : ""}`} />
-                  {referenceDocuments.length > 0 && (
-                    <Badge variant="secondary" className="text-xs ml-1">{referenceDocuments.length} ref{referenceDocuments.length !== 1 ? "s" : ""}</Badge>
-                  )}
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="space-y-4 pt-4 border-t mt-3">
-                  {/* Generate template from objective */}
-                  {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">
-                        Auto-generate a structured template based on your objective using AI research.
+          {/* Active prebuilt indicator */}
+          {activePrebuilt && (
+            <div className="flex items-center justify-between p-2 rounded-lg border border-primary/30 bg-primary/5">
+              <div className="flex items-center gap-2 text-sm">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                <span className="text-muted-foreground">Template: {activePrebuilt.title}</span>
+              </div>
+              <button
+                onClick={handleClearPrebuilt}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── STEP 2: START YOUR DRAFT ─── clear action ── */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <PenLine className="w-4 h-4 text-primary" />
+            Step 2 — Start your draft
+          </label>
+
+          {!isDraftExpanded ? (
+            /* Collapsed: two clear action buttons */
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setIsDraftExpanded(true)}
+                className="group p-5 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <FileText className="w-5 h-5 text-primary" />
+                  </div>
+                  <span className="font-medium">Paste text</span>
+                </div>
+                <p className="text-sm text-muted-foreground leading-snug">
+                  Notes, transcripts, reports — any raw material to shape.
+                </p>
+              </button>
+
+              <button
+                onClick={handleBlankDocument}
+                disabled={isLoading}
+                className="group p-5 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Mic className="w-5 h-5 text-primary" />
+                  </div>
+                  <span className="font-medium">Speak it</span>
+                </div>
+                <p className="text-sm text-muted-foreground leading-snug">
+                  Talk through your ideas and we'll capture them as a draft.
+                </p>
+              </button>
+            </div>
+          ) : (
+            /* Expanded: the text input area */
+            <Card className="border-2">
+              <CardContent className="p-4 space-y-4">
+                <div className="relative">
+                  <AutoExpandTextarea
+                    data-testid="input-source-text"
+                    placeholder="Paste your notes, transcript, or source material here..."
+                    className={`text-base leading-relaxed font-serif pr-12 ${isRecordingText ? "border-primary" : ""}`}
+                    value={isRecordingText ? textInterim || text : text}
+                    onChange={(e) => setText(e.target.value)}
+                    readOnly={isRecordingText}
+                    minRows={6}
+                    maxRows={24}
+                    autoFocus
+                  />
+                  <div className="absolute top-2 right-2">
+                    <VoiceRecorder
+                      onTranscript={handleTextVoiceComplete}
+                      onInterimTranscript={(interim) => setTextInterim(text ? text + " " + interim : interim)}
+                      onRecordingChange={setIsRecordingText}
+                      size="icon"
+                      variant={isRecordingText ? "destructive" : "ghost"}
+                    />
+                  </div>
+                  {isRecordingText && (
+                    <div className="absolute bottom-2 left-2 right-12">
+                      <p className="text-xs text-primary animate-pulse bg-background/80 px-2 py-1 rounded">
+                        Listening... speak your source material (up to 10 min)
                       </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleGenerateTemplate}
-                        disabled={isGeneratingTemplate}
-                        className="gap-1.5 w-full"
-                      >
-                        {isGeneratingTemplate ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Generating template...
-                          </>
-                        ) : (
-                          <>
-                            <Wand2 className="w-3.5 h-3.5" />
-                            Generate Template from Objective
-                          </>
-                        )}
-                      </Button>
                     </div>
                   )}
+                </div>
 
-                  {/* Pending template approval */}
-                  {pendingTemplate && (
-                    <div className="space-y-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Wand2 className="w-4 h-4 text-primary" />
-                          <span className="font-medium text-sm">{pendingTemplate.name}</span>
-                        </div>
-                        <Badge variant="outline" className="text-xs">Pending Approval</Badge>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto p-3 rounded-md bg-background border text-sm font-serif whitespace-pre-wrap leading-relaxed">
-                        {pendingTemplate.content}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleApproveTemplate}
-                          className="gap-1.5 flex-1"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          Approve & Add Template
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRejectTemplate}
-                          className="gap-1.5"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                          Discard
-                        </Button>
+                {/* Summarize controls for long text */}
+                {text.length > 200 && !isRecordingText && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleSummarizeText}
+                      disabled={isSummarizingText}
+                      className="gap-1.5 text-xs h-7"
+                    >
+                      {isSummarizingText ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" /> Cleaning up...</>
+                      ) : (
+                        <><Wand2 className="w-3 h-3" /> Clean up transcript</>
+                      )}
+                    </Button>
+                    {textRawTranscript && textRawTranscript !== text && (
+                      <>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={handleGenerateTemplate}
-                          disabled={isGeneratingTemplate}
-                          className="gap-1.5"
+                          onClick={() => setShowTextRaw(!showTextRaw)}
+                          className="gap-1.5 text-xs h-7"
                         >
-                          {isGeneratingTemplate ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Wand2 className="w-3.5 h-3.5" />
-                          )}
-                          Regenerate
+                          {showTextRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)</>}
                         </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Style & Reference Documents */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <BookCopy className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Style & Reference Documents</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Add templates, style guides, or prior examples to guide tone and completeness.
-                    </p>
-
-                    {/* Existing references */}
-                    {referenceDocuments.length > 0 && (
-                      <div className="space-y-2">
-                        {referenceDocuments.map((doc) => (
-                          <div key={doc.id} className="flex items-start gap-2 p-3 rounded-lg border bg-muted/30">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm truncate">{doc.name}</span>
-                                <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                {doc.content.slice(0, 150)}...
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 shrink-0"
-                              onClick={() => handleRemoveReference(doc.id)}
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
+                        <Button variant="ghost" size="sm" onClick={handleRestoreText} className="gap-1.5 text-xs h-7">
+                          Restore original
+                        </Button>
+                      </>
                     )}
-
-                    {/* Add new reference */}
-                    <div className="space-y-3 p-3 rounded-lg border border-dashed">
-                      <div className="flex items-center gap-2">
-                        <Input
-                          placeholder="Reference name (e.g., 'Company Style Guide')"
-                          value={newRefName}
-                          onChange={(e) => setNewRefName(e.target.value)}
-                          className="flex-1"
-                        />
-                        <Select value={newRefType} onValueChange={(v) => setNewRefType(v as ReferenceDocument["type"])}>
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="style">Style</SelectItem>
-                            <SelectItem value="template">Template</SelectItem>
-                            <SelectItem value="example">Example</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="relative">
-                        <AutoExpandTextarea
-                          placeholder="Paste the reference content here..."
-                          value={newRefContent}
-                          onChange={(e) => setNewRefContent(e.target.value)}
-                          className="text-sm pr-10"
-                          minRows={3}
-                          maxRows={15}
-                        />
-                        <div className="absolute top-2 right-2">
-                          <VoiceRecorder
-                            onTranscript={(transcript) => {
-                              setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
-                            }}
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6"
-                          />
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddReference}
-                        disabled={!newRefName.trim() || !newRefContent.trim()}
-                        className="gap-1"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Add Reference
-                      </Button>
-                    </div>
                   </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
+                )}
+                {showTextRaw && textRawTranscript && (
+                  <div className="p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
+                    <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
+                    <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
+                  </div>
+                )}
 
-        <Card className="border-2">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <FileText className="w-5 h-5 text-primary" />
-              Paste Your Source Material
-            </CardTitle>
-            <CardDescription className="text-base">
-              Meeting transcripts, reports, notes, or any text you want to shape into your document.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="relative">
-              <AutoExpandTextarea
-                data-testid="input-source-text"
-                placeholder="Paste your text here, or use the microphone to speak for up to 10 minutes. The more context you provide, the more incisive the provocations will be."
-                className={`text-base leading-relaxed font-serif pr-12 ${isRecordingText ? "border-primary" : ""}`}
-                value={isRecordingText ? textInterim || text : text}
-                onChange={(e) => setText(e.target.value)}
-                readOnly={isRecordingText}
-                minRows={8}
-                maxRows={30}
-              />
-              <div className="absolute top-2 right-2">
-                <VoiceRecorder
-                  onTranscript={handleTextVoiceComplete}
-                  onInterimTranscript={(interim) => setTextInterim(text ? text + " " + interim : interim)}
-                  onRecordingChange={setIsRecordingText}
-                  size="icon"
-                  variant={isRecordingText ? "destructive" : "ghost"}
-                />
-              </div>
-              {isRecordingText && (
-                <div className="absolute bottom-2 left-2 right-12">
-                  <p className="text-xs text-primary animate-pulse bg-background/80 px-2 py-1 rounded">
-                    Listening... speak your source material (up to 10 min)
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Summarize and show original controls for source text */}
-            {text.length > 200 && !isRecordingText && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSummarizeText}
-                  disabled={isSummarizingText}
-                  className="gap-1.5 text-xs h-7"
-                >
-                  {isSummarizingText ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Cleaning up...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-3 h-3" />
-                      Clean up transcript
-                    </>
-                  )}
-                </Button>
-                {textRawTranscript && textRawTranscript !== text && (
-                  <>
+                {/* Action row */}
+                <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                  <div className="text-sm text-muted-foreground">
+                    {text.length > 0 && (
+                      <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setShowTextRaw(!showTextRaw)}
-                      className="gap-1.5 text-xs h-7"
+                      onClick={() => { setIsDraftExpanded(false); }}
+                      className="text-muted-foreground"
                     >
-                      {showTextRaw ? (
+                      Cancel
+                    </Button>
+                    <Button
+                      data-testid="button-analyze"
+                      onClick={handleSubmit}
+                      disabled={!text.trim() || isLoading}
+                      size="lg"
+                      className="gap-2"
+                    >
+                      {isLoading ? (
                         <>
-                          <EyeOff className="w-3 h-3" />
-                          Hide original
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Analyzing...
                         </>
                       ) : (
                         <>
-                          <Eye className="w-3 h-3" />
-                          Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)
+                          Begin Analysis
+                          <ArrowRight className="w-4 h-4" />
                         </>
                       )}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRestoreText}
-                      className="gap-1.5 text-xs h-7"
-                    >
-                      Restore original
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* ── ADVANCED SETTINGS ─── hidden by default ── */}
+        <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full">
+              <Settings2 className="w-4 h-4" />
+              <span>Advanced options</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isAdvancedOpen ? "rotate-180" : ""}`} />
+              {referenceDocuments.length > 0 && (
+                <Badge variant="secondary" className="text-xs ml-1">{referenceDocuments.length} ref{referenceDocuments.length !== 1 ? "s" : ""}</Badge>
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="space-y-6 pt-4 mt-2 border-t">
+              {/* Pre-built templates */}
+              {!activePrebuilt && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    Quick-start templates
+                  </h3>
+                  <PrebuiltTemplates onSelect={handleSelectPrebuilt} />
+                </div>
+              )}
+
+              {/* Generate template from objective */}
+              {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-primary" />
+                    AI-generated template
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Generate a structured template based on your objective.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateTemplate}
+                    disabled={isGeneratingTemplate}
+                    className="gap-1.5 w-full"
+                  >
+                    {isGeneratingTemplate ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
+                    ) : (
+                      <><Wand2 className="w-3.5 h-3.5" /> Generate Template from Objective</>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Pending template approval */}
+              {pendingTemplate && (
+                <div className="space-y-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wand2 className="w-4 h-4 text-primary" />
+                      <span className="font-medium text-sm">{pendingTemplate.name}</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs">Pending Approval</Badge>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto p-3 rounded-md bg-background border text-sm font-serif whitespace-pre-wrap leading-relaxed">
+                    {pendingTemplate.content}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={handleApproveTemplate} className="gap-1.5 flex-1">
+                      <Check className="w-3.5 h-3.5" /> Approve & Add
                     </Button>
-                  </>
-                )}
-              </div>
-            )}
+                    <Button variant="outline" size="sm" onClick={handleRejectTemplate} className="gap-1.5">
+                      <X className="w-3.5 h-3.5" /> Discard
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={handleGenerateTemplate} disabled={isGeneratingTemplate} className="gap-1.5">
+                      {isGeneratingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                      Regenerate
+                    </Button>
+                  </div>
+                </div>
+              )}
 
-            {/* Show original transcript */}
-            {showTextRaw && textRawTranscript && (
-              <div className="p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
-                <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
-                <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
-              </div>
-            )}
+              {/* Style & Reference Documents */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <BookCopy className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Style & Reference Documents</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Add templates, style guides, or prior examples to guide tone and completeness.
+                </p>
 
-            <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
-              <div className="text-sm text-muted-foreground">
-                {text.length > 0 && (
-                  <span data-testid="text-char-count">{text.length.toLocaleString()} characters (~{Math.ceil(text.split(/\s+/).length / 150)} min read)</span>
+                {referenceDocuments.length > 0 && (
+                  <div className="space-y-2">
+                    {referenceDocuments.map((doc) => (
+                      <div key={doc.id} className="flex items-start gap-2 p-3 rounded-lg border bg-muted/30">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm truncate">{doc.name}</span>
+                            <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                            {doc.content.slice(0, 150)}...
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => handleRemoveReference(doc.id)}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 )}
+
+                <div className="space-y-3 p-3 rounded-lg border border-dashed">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Reference name (e.g., 'Company Style Guide')"
+                      value={newRefName}
+                      onChange={(e) => setNewRefName(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Select value={newRefType} onValueChange={(v) => setNewRefType(v as ReferenceDocument["type"])}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="style">Style</SelectItem>
+                        <SelectItem value="template">Template</SelectItem>
+                        <SelectItem value="example">Example</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="relative">
+                    <AutoExpandTextarea
+                      placeholder="Paste the reference content here..."
+                      value={newRefContent}
+                      onChange={(e) => setNewRefContent(e.target.value)}
+                      className="text-sm pr-10"
+                      minRows={3}
+                      maxRows={15}
+                    />
+                    <div className="absolute top-2 right-2">
+                      <VoiceRecorder
+                        onTranscript={(transcript) => {
+                          setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
+                        }}
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddReference}
+                    disabled={!newRefName.trim() || !newRefContent.trim()}
+                    className="gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Reference
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  data-testid="button-blank-document"
-                  onClick={handleBlankDocument}
-                  disabled={isLoading}
-                  variant="outline"
-                  size="lg"
-                  className="gap-2"
-                >
-                  <Mic className="w-4 h-4" />
-                  Blank Document
-                </Button>
+
+              {/* Test / Demo button */}
+              <div className="pt-2 border-t">
                 <Button
                   data-testid="button-test"
                   onClick={handleTest}
                   disabled={isLoading}
-                  variant="secondary"
-                  size="lg"
-                  className="gap-2"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground"
                 >
                   <FlaskConical className="w-4 h-4" />
-                  Test
-                </Button>
-                <Button
-                  data-testid="button-analyze"
-                  onClick={handleSubmit}
-                  disabled={!text.trim() || isLoading}
-                  size="lg"
-                  className="gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      Begin Analysis
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
+                  Load demo content
                 </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <div className="text-center pt-4 space-y-2">
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Paste your material, speak your ideas, or pick a template above. The AI will challenge your thinking with provocations — you respond, and the document evolves.
-          </p>
-          <p className="text-xs text-muted-foreground italic max-w-md mx-auto">
-            "Would you rather have a tool that thinks for you, or a tool that makes you think?"
-          </p>
-        </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
     </div>
   );
