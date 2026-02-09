@@ -55,12 +55,12 @@ export const documentSchema = z.object({
 
 export type Document = z.infer<typeof documentSchema>;
 
-// Reference document types (style guides, templates, prior examples)
+// Reference document types (style guides, templates)
 export const referenceDocumentSchema = z.object({
   id: z.string(),
   name: z.string(),
   content: z.string(),
-  type: z.enum(["style", "template", "example"]),
+  type: z.enum(["style", "template"]),
 });
 
 export type ReferenceDocument = z.infer<typeof referenceDocumentSchema>;
