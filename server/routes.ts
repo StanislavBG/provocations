@@ -1,9 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { db } from "./db";
-import { encryptedDocuments } from "../shared/models/chat";
-import { eq, desc } from "drizzle-orm";
 import OpenAI from "openai";
 import {
   analyzeTextRequestSchema,
@@ -22,8 +19,6 @@ import {
   type ReferenceDocument,
   type ChangeEntry,
   type InterviewQuestionResponse,
-  type EncryptedDocumentListItem,
-  type EncryptedDocumentFull,
 } from "@shared/schema";
 
 const openai = new OpenAI({
@@ -1180,12 +1175,9 @@ Output only the instruction text. No meta-commentary.`
 
       const { ownerHash, title, ciphertext, salt, iv } = parsed.data;
 
-      const [doc] = await db
-        .insert(encryptedDocuments)
-        .values({ ownerHash, title, ciphertext, salt, iv })
-        .returning({ id: encryptedDocuments.id, createdAt: encryptedDocuments.createdAt });
+      const doc = await storage.saveEncryptedDocument({ ownerHash, title, ciphertext, salt, iv });
 
-      res.json({ id: doc.id, createdAt: doc.createdAt.toISOString() });
+      res.json({ id: doc.id, createdAt: doc.createdAt });
     } catch (error) {
       console.error("Save encrypted document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1203,23 +1195,7 @@ Output only the instruction text. No meta-commentary.`
 
       const { ownerHash } = parsed.data;
 
-      const docs = await db
-        .select({
-          id: encryptedDocuments.id,
-          title: encryptedDocuments.title,
-          createdAt: encryptedDocuments.createdAt,
-          updatedAt: encryptedDocuments.updatedAt,
-        })
-        .from(encryptedDocuments)
-        .where(eq(encryptedDocuments.ownerHash, ownerHash))
-        .orderBy(desc(encryptedDocuments.updatedAt));
-
-      const items: EncryptedDocumentListItem[] = docs.map((d) => ({
-        id: d.id,
-        title: d.title,
-        createdAt: d.createdAt.toISOString(),
-        updatedAt: d.updatedAt.toISOString(),
-      }));
+      const items = await storage.listEncryptedDocuments(ownerHash);
 
       res.json({ documents: items });
     } catch (error) {
@@ -1237,27 +1213,13 @@ Output only the instruction text. No meta-commentary.`
         return res.status(400).json({ error: "Invalid document ID" });
       }
 
-      const [doc] = await db
-        .select()
-        .from(encryptedDocuments)
-        .where(eq(encryptedDocuments.id, id))
-        .limit(1);
+      const doc = await storage.getEncryptedDocument(id);
 
       if (!doc) {
         return res.status(404).json({ error: "Document not found" });
       }
 
-      const result: EncryptedDocumentFull = {
-        id: doc.id,
-        title: doc.title,
-        ciphertext: doc.ciphertext,
-        salt: doc.salt,
-        iv: doc.iv,
-        createdAt: doc.createdAt.toISOString(),
-        updatedAt: doc.updatedAt.toISOString(),
-      };
-
-      res.json(result);
+      res.json(doc);
     } catch (error) {
       console.error("Load encrypted document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1273,9 +1235,7 @@ Output only the instruction text. No meta-commentary.`
         return res.status(400).json({ error: "Invalid document ID" });
       }
 
-      await db
-        .delete(encryptedDocuments)
-        .where(eq(encryptedDocuments.id, id));
+      await storage.deleteEncryptedDocument(id);
 
       res.json({ success: true });
     } catch (error) {
