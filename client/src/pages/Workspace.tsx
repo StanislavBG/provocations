@@ -38,6 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type {
   Document,
   Provocation,
+  ProvocationType,
   OutlineItem,
   ToneOption,
   DocumentVersion,
@@ -694,7 +695,7 @@ export default function Workspace() {
       writeMutation.mutate({
         instruction: transcript,
         provocation: {
-          type: context.provocation.type as "opportunity" | "fallacy" | "alternative",
+          type: context.provocation.type as ProvocationType,
           title: context.provocation.title,
           content: context.provocation.content,
           sourceExcerpt: context.provocation.sourceExcerpt,

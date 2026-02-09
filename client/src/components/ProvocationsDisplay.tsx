@@ -23,6 +23,9 @@ import {
   Play,
   ChevronLeft,
   ChevronRight,
+  Gauge,
+  MousePointerClick,
+  Layers,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
@@ -32,6 +35,9 @@ const provocationIcons: Record<ProvocationType, typeof Lightbulb> = {
   fallacy: AlertTriangle,
   alternative: GitBranch,
   challenge: Crosshair,
+  performance: Gauge,
+  ux: MousePointerClick,
+  architecture: Layers,
 };
 
 const provocationColors: Record<ProvocationType, string> = {
@@ -39,6 +45,9 @@ const provocationColors: Record<ProvocationType, string> = {
   fallacy: "text-amber-600 dark:text-amber-400",
   alternative: "text-blue-600 dark:text-blue-400",
   challenge: "text-violet-600 dark:text-violet-400",
+  performance: "text-rose-600 dark:text-rose-400",
+  ux: "text-fuchsia-600 dark:text-fuchsia-400",
+  architecture: "text-cyan-600 dark:text-cyan-400",
 };
 
 const provocationBgColors: Record<ProvocationType, string> = {
@@ -46,6 +55,9 @@ const provocationBgColors: Record<ProvocationType, string> = {
   fallacy: "bg-amber-50 dark:bg-amber-950/30",
   alternative: "bg-blue-50 dark:bg-blue-950/30",
   challenge: "bg-violet-50 dark:bg-violet-950/30",
+  performance: "bg-rose-50 dark:bg-rose-950/30",
+  ux: "bg-fuchsia-50 dark:bg-fuchsia-950/30",
+  architecture: "bg-cyan-50 dark:bg-cyan-950/30",
 };
 
 const provocationLabels: Record<ProvocationType, string> = {
@@ -53,6 +65,9 @@ const provocationLabels: Record<ProvocationType, string> = {
   fallacy: "Fallacy",
   alternative: "Alternative",
   challenge: "Challenge",
+  performance: "Performance",
+  ux: "UX",
+  architecture: "Architecture",
 };
 
 interface ProvocationsDisplayProps {
@@ -130,7 +145,7 @@ function ProvocationCard({
           <div className="flex items-center gap-2 flex-wrap">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div>
+                <div className="inline-flex">
                   <VoiceRecorder
                     onTranscript={(transcript) => {
                       onVoiceResponse?.(transcript, {
@@ -146,7 +161,8 @@ function ProvocationCard({
                     }}
                     size="sm"
                     variant="outline"
-                    className={isMerging ? "opacity-50 pointer-events-none" : ""}
+                    label="Respond"
+                    className={`gap-1 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
                   />
                 </div>
               </TooltipTrigger>
@@ -418,7 +434,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
 
   // Type selection for which provocation types to generate/answer
   const [selectedTypes, setSelectedTypes] = useState<Set<ProvocationType>>(
-    () => new Set<ProvocationType>(["opportunity", "fallacy", "alternative", "challenge"])
+    () => new Set<ProvocationType>(["opportunity", "fallacy", "alternative", "challenge", "performance", "ux", "architecture"])
   );
 
   const safeProvocations = provocations ?? [];
@@ -573,7 +589,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         >
           All
         </Button>
-        {(["opportunity", "fallacy", "alternative", "challenge"] as ProvocationType[]).map((type) => {
+        {(["challenge", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
           const Icon = provocationIcons[type];
           const count = safeProvocations.filter((p) => p.type === type).length;
           if (count === 0 && type !== "challenge") return null;
@@ -644,14 +660,37 @@ function ChallengeInput({
 }) {
   return (
     <div className="border-b bg-muted/20 p-4 space-y-3">
-      {/* Direction input with voice */}
+      {/* Challenge input with type toggles integrated */}
       <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Challenge Direction
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Crosshair className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Challenge Me On...
+            </label>
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            {(["challenge", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
+              const Icon = provocationIcons[type];
+              const isSelected = selectedTypes.has(type);
+              return (
+                <Button
+                  key={type}
+                  size="sm"
+                  variant={isSelected ? "default" : "outline"}
+                  className={`gap-1 text-xs h-6 px-1.5 ${isSelected ? "" : "opacity-50"}`}
+                  onClick={() => toggleType(type)}
+                >
+                  <Icon className="w-3 h-3" />
+                  {provocationLabels[type]}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex items-start gap-2">
           <Textarea
-            placeholder="What should I challenge you on? e.g. 'Push me on pricing strategy' or 'Find gaps in my competitive analysis'"
+            placeholder="e.g. 'Push me on pricing strategy' or 'Find gaps in my competitive analysis'"
             value={isRecordingGuidance ? guidanceInterim || guidance : guidance}
             onChange={(e) => setGuidance(e.target.value)}
             className="flex-1 text-sm min-h-[60px] max-h-[100px] resize-none"
@@ -664,49 +703,21 @@ function ChallengeInput({
               }
             }}
           />
-          <div className="flex flex-col gap-1.5">
-            <VoiceRecorder
-              onTranscript={(transcript) => {
-                setGuidance(transcript);
-                setGuidanceInterim("");
-              }}
-              onInterimTranscript={setGuidanceInterim}
-              onRecordingChange={setIsRecordingGuidance}
-              size="icon"
-              variant="outline"
-              className="h-9 w-9"
-            />
-          </div>
+          <VoiceRecorder
+            onTranscript={(transcript) => {
+              setGuidance(transcript);
+              setGuidanceInterim("");
+            }}
+            onInterimTranscript={setGuidanceInterim}
+            onRecordingChange={setIsRecordingGuidance}
+            size="icon"
+            variant="outline"
+            className="h-9 w-9 shrink-0"
+          />
         </div>
         {isRecordingGuidance && (
           <p className="text-xs text-primary animate-pulse">Listening... describe the direction for your challenges</p>
         )}
-      </div>
-
-      {/* Type selection toggles */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Types to Generate
-        </label>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {(["challenge", "opportunity", "fallacy", "alternative"] as ProvocationType[]).map((type) => {
-            const Icon = provocationIcons[type];
-            const isSelected = selectedTypes.has(type);
-            const colorClass = provocationColors[type];
-            return (
-              <Button
-                key={type}
-                size="sm"
-                variant={isSelected ? "default" : "outline"}
-                className={`gap-1 text-xs h-7 px-2 ${isSelected ? "" : "opacity-50"}`}
-                onClick={() => toggleType(type)}
-              >
-                <Icon className="w-3 h-3" />
-                {provocationLabels[type]}
-              </Button>
-            );
-          })}
-        </div>
       </div>
 
       {/* Generate button */}

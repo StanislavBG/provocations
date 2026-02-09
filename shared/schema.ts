@@ -6,6 +6,9 @@ export const provocationType = [
   "fallacy",
   "alternative",
   "challenge",
+  "performance",
+  "ux",
+  "architecture",
 ] as const;
 
 export type ProvocationType = typeof provocationType[number];
