@@ -6,6 +6,7 @@ export const provocationType = [
   "fallacy",
   "alternative",
   "challenge",
+  "thinking_bigger",
   "performance",
   "ux",
   "architecture",
