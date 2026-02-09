@@ -10,6 +10,7 @@ interface VoiceRecorderProps {
   size?: "sm" | "default" | "lg" | "icon";
   variant?: "default" | "ghost" | "outline" | "secondary" | "destructive";
   className?: string;
+  label?: string;
 }
 
 interface SpeechRecognitionEvent {
@@ -47,7 +48,8 @@ export function VoiceRecorder({
   onRecordingChange,
   size = "icon",
   variant = "ghost",
-  className = ""
+  className = "",
+  label
 }: VoiceRecorderProps) {
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
@@ -211,6 +213,7 @@ export function VoiceRecorder({
       ) : (
         <Mic className="w-4 h-4" />
       )}
+      {label && <span>{isRecording ? "Stop" : label}</span>}
     </Button>
   );
 }
