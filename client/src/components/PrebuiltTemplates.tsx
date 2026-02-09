@@ -65,7 +65,7 @@ export function PrebuiltTemplates({ onSelect }: PrebuiltTemplatesProps) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {filtered.map((template) => {
           const Icon = iconMap[template.icon] || FileCode;
           const isExpanded = expandedId === template.id;
@@ -73,8 +73,8 @@ export function PrebuiltTemplates({ onSelect }: PrebuiltTemplatesProps) {
           return (
             <button
               key={template.id}
-              className={`group text-left p-3 rounded-lg border transition-all hover:border-primary/50 hover:bg-primary/5 ${
-                isExpanded ? "border-primary/50 bg-primary/5 col-span-1 sm:col-span-2 lg:col-span-3" : ""
+              className={`group text-left p-4 rounded-lg border transition-all hover:border-primary/50 hover:bg-primary/5 ${
+                isExpanded ? "border-primary/50 bg-primary/5 col-span-1 sm:col-span-2" : ""
               }`}
               onClick={() => {
                 if (isExpanded) {
@@ -84,25 +84,23 @@ export function PrebuiltTemplates({ onSelect }: PrebuiltTemplatesProps) {
                 }
               }}
             >
-              <div className="flex items-start gap-2.5">
-                <div className="mt-0.5 p-1.5 rounded-md bg-primary/10 shrink-0">
-                  <Icon className="w-3.5 h-3.5 text-primary" />
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 p-2 rounded-md bg-primary/10 shrink-0">
+                  <Icon className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm truncate">{template.title}</span>
-                    <Badge variant="outline" className="text-[10px] capitalize shrink-0 hidden sm:inline-flex">
-                      {template.category}
-                    </Badge>
-                  </div>
+                  <span className="font-medium text-sm leading-snug block">{template.title}</span>
+                  <Badge variant="outline" className="text-[10px] capitalize mt-1 inline-flex">
+                    {template.category}
+                  </Badge>
                   {!isExpanded && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                       {template.description}
                     </p>
                   )}
                   {isExpanded && (
                     <div className="mt-2 space-y-2">
-                      <p className="text-xs text-muted-foreground">{template.description}</p>
+                      <p className="text-sm text-muted-foreground">{template.description}</p>
                       <div className="text-xs text-muted-foreground/80 bg-muted/50 rounded-md p-2 border">
                         <span className="font-medium text-foreground/70">Objective:</span>{" "}
                         {template.objective}
@@ -110,7 +108,7 @@ export function PrebuiltTemplates({ onSelect }: PrebuiltTemplatesProps) {
                       <div className="flex items-center gap-2 pt-1">
                         <Button
                           size="sm"
-                          className="gap-1.5 h-7 text-xs"
+                          className="gap-1.5 h-8 text-xs"
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelect(template);
@@ -122,7 +120,7 @@ export function PrebuiltTemplates({ onSelect }: PrebuiltTemplatesProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 text-xs"
+                          className="h-8 text-xs"
                           onClick={(e) => {
                             e.stopPropagation();
                             setExpandedId(null);
@@ -135,7 +133,7 @@ export function PrebuiltTemplates({ onSelect }: PrebuiltTemplatesProps) {
                   )}
                 </div>
                 {!isExpanded && (
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-primary shrink-0 mt-1" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-primary shrink-0 mt-1" />
                 )}
               </div>
             </button>
