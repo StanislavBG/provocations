@@ -7,10 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
-import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2, Settings2, Check } from "lucide-react";
+import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2, Settings2, Check, MessageSquareWarning, PenLine } from "lucide-react";
 import { generateId } from "@/lib/utils";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { apiRequest } from "@/lib/queryClient";
+import { PrebuiltTemplates } from "@/components/PrebuiltTemplates";
+import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument } from "@shared/schema";
 
 const TEST_SAMPLE_TEXT = `By 2027, the labor market is expected to reach a critical "implementation plateau" where the novelty of AI shifts into deep organizational integration. Analysts from Gartner and the World Economic Forum suggest that while roughly 83 million jobs may be displaced globally, the emergence of 69 million new roles will offset much of this loss, centering the year on workforce transformation rather than total depletion. The most significant shift will be the rise of "Agentic AI," with 50% of companies expected to deploy autonomous AI agents that handle routine cognitive tasks like scheduling, basic coding, and data synthesis. This transition will likely hollow out entry-level white-collar positions—often called the "white-collar bloodbath"—forcing a massive "reskilling revolution" where 44% of core worker skills must be updated. While technical roles in AI ethics and data oversight will boom, the highest market value will ironically return to "AI-free" human skills: critical thinking, complex empathy, and high-stakes judgment in fields like healthcare and law.`;
@@ -52,6 +54,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   // Summarization state
   const [isSummarizingObjective, setIsSummarizingObjective] = useState(false);
   const [isSummarizingText, setIsSummarizingText] = useState(false);
+
+  // Prebuilt template state
+  const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
 
   const handleAddReference = () => {
     if (newRefName.trim() && newRefContent.trim()) {
@@ -170,6 +175,35 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     }
   };
 
+  const handleSelectPrebuilt = (template: PrebuiltTemplate) => {
+    setObjective(template.objective);
+    setText(template.starterText);
+    setActivePrebuilt(template);
+    // Add the template content as a reference document
+    const templateDoc: ReferenceDocument = {
+      id: generateId("ref"),
+      name: `Template: ${template.title}`,
+      content: template.templateContent,
+      type: "template",
+    };
+    setReferenceDocuments((prev) => {
+      // Replace any existing prebuilt template, keep other refs
+      const withoutOldPrebuilt = prev.filter(
+        (d) => d.type !== "template" || !d.name.startsWith("Template: ")
+      );
+      return [...withoutOldPrebuilt, templateDoc];
+    });
+  };
+
+  const handleClearPrebuilt = () => {
+    setActivePrebuilt(null);
+    setObjective("");
+    setText("");
+    setReferenceDocuments((prev) =>
+      prev.filter((d) => d.type !== "template" || !d.name.startsWith("Template: "))
+    );
+  };
+
   const handleGenerateTemplate = async () => {
     if (!objective.trim()) return;
     setIsGeneratingTemplate(true);
@@ -221,7 +255,48 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           <p className="text-xl text-muted-foreground max-w-xl mx-auto leading-relaxed">
             A tool that makes you think, not one that thinks for you.
           </p>
+          <div className="text-sm text-muted-foreground max-w-lg mx-auto space-y-2 pt-2">
+            <p>
+              Shape your ideas into polished documents through voice, text, and thought-provoking AI challenges.
+            </p>
+            <div className="flex items-center justify-center gap-6 pt-1 text-xs">
+              <span className="flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-primary" />
+                Set your objective
+              </span>
+              <span className="flex items-center gap-1.5">
+                <MessageSquareWarning className="w-3.5 h-3.5 text-primary" />
+                Get challenged
+              </span>
+              <span className="flex items-center gap-1.5">
+                <PenLine className="w-3.5 h-3.5 text-primary" />
+                Refine your doc
+              </span>
+            </div>
+          </div>
         </div>
+
+        {/* Pre-built templates */}
+        {!activePrebuilt && (
+          <PrebuiltTemplates onSelect={handleSelectPrebuilt} />
+        )}
+
+        {/* Active prebuilt indicator */}
+        {activePrebuilt && (
+          <div className="flex items-center justify-between p-3 rounded-lg border border-primary/30 bg-primary/5">
+            <div className="flex items-center gap-2 text-sm">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="font-medium">Using template:</span>
+              <span className="text-muted-foreground">{activePrebuilt.title}</span>
+            </div>
+            <button
+              onClick={handleClearPrebuilt}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         <Card className="border-2">
           <CardHeader className="pb-4">
@@ -666,7 +741,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           </CardContent>
         </Card>
 
-        <div className="text-center pt-4">
+        <div className="text-center pt-4 space-y-2">
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Paste your material, speak your ideas, or pick a template above. The AI will challenge your thinking with provocations — you respond, and the document evolves.
+          </p>
           <p className="text-xs text-muted-foreground italic max-w-md mx-auto">
             "Would you rather have a tool that thinks for you, or a tool that makes you think?"
           </p>
