@@ -771,9 +771,11 @@ export default function Workspace() {
               size="sm"
               onClick={() => setShowLoadDialog(true)}
               className="gap-1.5"
+              title="Your documents are encrypted — only you can read them"
             >
               <FolderOpen className="w-4 h-4" />
               Load Saved
+              <span className="text-[10px] text-muted-foreground font-normal hidden sm:inline">encrypted</span>
             </Button>
             <ThemeToggle />
           </div>
@@ -867,9 +869,11 @@ export default function Workspace() {
               onClick={() => setShowSaveDialog(true)}
               className="gap-1.5"
               disabled={!document?.rawText}
+              title="End-to-end encrypted — only you can read your saved documents"
             >
               <Save className="w-4 h-4" />
               Save
+              <span className="text-[10px] text-muted-foreground font-normal hidden sm:inline">encrypted</span>
             </Button>
             <Button
               data-testid="button-reset"

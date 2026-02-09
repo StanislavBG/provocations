@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { encrypt, hashPassphrase } from "@/lib/crypto";
 import { apiRequest } from "@/lib/queryClient";
-import { Lock, AlertTriangle } from "lucide-react";
+import { Lock, AlertTriangle, ShieldCheck } from "lucide-react";
 
 interface SaveDocumentDialogProps {
   open: boolean;
@@ -89,12 +89,26 @@ export function SaveDocumentDialog({
             Save Encrypted Document
           </DialogTitle>
           <DialogDescription>
-            Your document will be encrypted in your browser before being sent to
-            the server. Only someone with the passphrase can read it.
+            Your document is encrypted in your browser before anything leaves
+            your device. The server only stores unreadable ciphertext.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 font-medium text-foreground/80">
+              <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+              How your data is protected
+            </div>
+            <ul className="space-y-1 pl-5 list-disc marker:text-muted-foreground/50">
+              <li>Encryption happens entirely in your browser (AES-256-GCM)</li>
+              <li>Your passphrase never leaves your device</li>
+              <li>The server stores only encrypted data it cannot read</li>
+              <li>No account, no email, no tracking — the passphrase is the only key</li>
+              <li>Document titles are stored in plaintext so you can identify your files</li>
+            </ul>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="doc-title">Document Title</Label>
             <Input
@@ -104,7 +118,7 @@ export function SaveDocumentDialog({
               onChange={(e) => setTitle(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              The title is stored in plaintext so you can identify your documents.
+              Stored in plaintext so you can identify your documents.
             </p>
           </div>
 

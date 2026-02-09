@@ -1,6 +1,7 @@
 export interface PrebuiltTemplate {
   id: string;
   title: string;
+  shortLabel: string; // compact label for quick-select buttons
   subtitle: string;
   description: string;
   icon: string; // lucide icon name key
@@ -15,6 +16,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "incremental-development",
     title: "Incremental Development",
+    shortLabel: "Dev Iteration",
     subtitle: "Save typing, any format",
     description:
       "For when you already have a project and need to describe the next change. No rigid template — just get your intent across clearly. Write in whatever format feels natural: bullet points, stream of consciousness, pseudo-code, or plain English. The AI will push you on clarity and precision so Claude Code (or any AI tool) can act on it.",
@@ -37,6 +39,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "product-requirement",
     title: "Product Requirement",
+    shortLabel: "Feature PRD",
     subtitle: "Incremental feature, enterprise-grade",
     description:
       "For shipping an incremental feature in a software product. Uses a semi-structured format: who is the user, what's their workflow, what changes, and what does done look like. Provocations come from your toughest colleagues — the people who will poke holes in your spec before engineering starts.",
@@ -95,6 +98,7 @@ What specifically changes for the user? Walk through the new flow step by step.
   {
     id: "new-application",
     title: "New Application",
+    shortLabel: "App from Scratch",
     subtitle: "Full SaaS spec from scratch",
     description:
       "Starting from zero? This mode walks you through the questions needed to build a complete requirement document for a new SaaS application. It starts broad (what problem, who's the user) and progressively drills into specifics (data model, auth, deployment). By the end, you'll have a spec an AI or a team can build from.",

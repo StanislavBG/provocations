@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { decrypt, hashPassphrase } from "@/lib/crypto";
 import { apiRequest } from "@/lib/queryClient";
-import { FolderOpen, Trash2, Loader2 } from "lucide-react";
+import { FolderOpen, Trash2, Loader2, ShieldCheck } from "lucide-react";
 import type { EncryptedDocumentListItem, EncryptedDocumentFull } from "@shared/schema";
 
 interface LoadDocumentDialogProps {
@@ -145,6 +145,15 @@ export function LoadDocumentDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/30 p-2.5 text-xs text-muted-foreground">
+            <ShieldCheck className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+            <span>
+              Your documents are decrypted in your browser. The server never sees
+              your passphrase or plaintext — it only stores encrypted data it
+              cannot read.
+            </span>
+          </div>
+
           <div className="flex gap-2">
             <div className="flex-1 space-y-2">
               <Label htmlFor="load-passphrase">Passphrase</Label>
