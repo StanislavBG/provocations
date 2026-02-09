@@ -4,9 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
-import { FileText, ArrowRight, Sparkles, FlaskConical, Mic, Target, BookCopy, Plus, X, ChevronDown, Wand2, Eye, EyeOff, Loader2, Settings2, Check, PenLine } from "lucide-react";
+import { FileText, ArrowRight, Sparkles, Mic, Target, BookCopy, Plus, X, Wand2, Eye, EyeOff, Loader2, Check, PenLine } from "lucide-react";
 import { generateId } from "@/lib/utils";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { apiRequest } from "@/lib/queryClient";
@@ -14,7 +14,6 @@ import { PrebuiltTemplates } from "@/components/PrebuiltTemplates";
 import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument } from "@shared/schema";
 
-const TEST_SAMPLE_TEXT = `By 2027, the labor market is expected to reach a critical "implementation plateau" where the novelty of AI shifts into deep organizational integration. Analysts from Gartner and the World Economic Forum suggest that while roughly 83 million jobs may be displaced globally, the emergence of 69 million new roles will offset much of this loss, centering the year on workforce transformation rather than total depletion. The most significant shift will be the rise of "Agentic AI," with 50% of companies expected to deploy autonomous AI agents that handle routine cognitive tasks like scheduling, basic coding, and data synthesis. This transition will likely hollow out entry-level white-collar positions—often called the "white-collar bloodbath"—forcing a massive "reskilling revolution" where 44% of core worker skills must be updated. While technical roles in AI ethics and data oversight will boom, the highest market value will ironically return to "AI-free" human skills: critical thinking, complex empathy, and high-stakes judgment in fields like healthcare and law.`;
 
 interface TextInputFormProps {
   onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[]) => void;
@@ -28,16 +27,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
   const [newRefName, setNewRefName] = useState("");
   const [newRefContent, setNewRefContent] = useState("");
-  const [newRefType, setNewRefType] = useState<ReferenceDocument["type"]>("example");
+  const [newRefType, setNewRefType] = useState<ReferenceDocument["type"]>("template");
 
   // Voice input state
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
   const [objectiveInterim, setObjectiveInterim] = useState("");
   const [isRecordingText, setIsRecordingText] = useState(false);
   const [textInterim, setTextInterim] = useState("");
-
-  // Advanced options
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   // Template generation with approval flow
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
@@ -70,7 +66,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
       setReferenceDocuments((prev) => [...prev, newDoc]);
       setNewRefName("");
       setNewRefContent("");
-      setNewRefType("example");
+      setNewRefType("template");
     }
   };
 
@@ -82,10 +78,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     if (text.trim()) {
       onSubmit(text.trim(), objective.trim() || "Create a compelling, well-structured document", referenceDocuments);
     }
-  };
-
-  const handleTest = () => {
-    onSubmit(TEST_SAMPLE_TEXT, "Create an executive briefing on AI's impact on the labor market by 2027", []);
   };
 
   const handleBlankDocument = () => {
@@ -492,29 +484,28 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           )}
         </div>
 
-        {/* ── ADVANCED SETTINGS ─── hidden by default ── */}
-        <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
-          <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full">
-              <Settings2 className="w-4 h-4" />
-              <span>Advanced options</span>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isAdvancedOpen ? "rotate-180" : ""}`} />
+        {/* ── TABBED WIDGET ─── Templates & References ── */}
+        <Tabs defaultValue="templates" className="w-full">
+          <TabsList className="w-full">
+            <TabsTrigger value="templates" className="flex-1 gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Templates
+            </TabsTrigger>
+            <TabsTrigger value="references" className="flex-1 gap-1.5">
+              <BookCopy className="w-3.5 h-3.5" />
+              References
               {referenceDocuments.length > 0 && (
-                <Badge variant="secondary" className="text-xs ml-1">{referenceDocuments.length} ref{referenceDocuments.length !== 1 ? "s" : ""}</Badge>
+                <Badge variant="secondary" className="text-xs ml-1">{referenceDocuments.length}</Badge>
               )}
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="space-y-6 pt-4 mt-2 border-t">
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ── Templates Tab ── */}
+          <TabsContent value="templates">
+            <div className="space-y-4">
               {/* Pre-built templates */}
               {!activePrebuilt && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    Quick-start templates
-                  </h3>
-                  <PrebuiltTemplates onSelect={handleSelectPrebuilt} />
-                </div>
+                <PrebuiltTemplates onSelect={handleSelectPrebuilt} />
               )}
 
               {/* Generate template from objective */}
@@ -570,112 +561,94 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   </div>
                 </div>
               )}
+            </div>
+          </TabsContent>
 
-              {/* Style & Reference Documents */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <BookCopy className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Style & Reference Documents</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Add templates, style guides, or prior examples to guide tone and completeness.
-                </p>
+          {/* ── References Tab ── */}
+          <TabsContent value="references">
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Add style guides or reference documents to guide tone and completeness.
+              </p>
 
-                {referenceDocuments.length > 0 && (
-                  <div className="space-y-2">
-                    {referenceDocuments.map((doc) => (
-                      <div key={doc.id} className="flex items-start gap-2 p-3 rounded-lg border bg-muted/30">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm truncate">{doc.name}</span>
-                            <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                            {doc.content.slice(0, 150)}...
-                          </p>
+              {referenceDocuments.length > 0 && (
+                <div className="space-y-2">
+                  {referenceDocuments.map((doc) => (
+                    <div key={doc.id} className="flex items-start gap-2 p-3 rounded-lg border bg-muted/30">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm truncate">{doc.name}</span>
+                          <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={() => handleRemoveReference(doc.id)}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {doc.content.slice(0, 150)}...
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="space-y-3 p-3 rounded-lg border border-dashed">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="Reference name (e.g., 'Company Style Guide')"
-                      value={newRefName}
-                      onChange={(e) => setNewRefName(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Select value={newRefType} onValueChange={(v) => setNewRefType(v as ReferenceDocument["type"])}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="style">Style</SelectItem>
-                        <SelectItem value="template">Template</SelectItem>
-                        <SelectItem value="example">Example</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="relative">
-                    <AutoExpandTextarea
-                      placeholder="Paste the reference content here..."
-                      value={newRefContent}
-                      onChange={(e) => setNewRefContent(e.target.value)}
-                      className="text-sm pr-10"
-                      minRows={3}
-                      maxRows={15}
-                    />
-                    <div className="absolute top-2 right-2">
-                      <VoiceRecorder
-                        onTranscript={(transcript) => {
-                          setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
-                        }}
-                        size="icon"
+                      <Button
                         variant="ghost"
-                        className="h-6 w-6"
-                      />
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => handleRemoveReference(doc.id)}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
                     </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddReference}
-                    disabled={!newRefName.trim() || !newRefContent.trim()}
-                    className="gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add Reference
-                  </Button>
+                  ))}
                 </div>
-              </div>
+              )}
 
-              {/* Test / Demo button */}
-              <div className="pt-2 border-t">
+              <div className="space-y-3 p-3 rounded-lg border border-dashed">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Reference name (e.g., 'Company Style Guide')"
+                    value={newRefName}
+                    onChange={(e) => setNewRefName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Select value={newRefType} onValueChange={(v) => setNewRefType(v as ReferenceDocument["type"])}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="style">Style</SelectItem>
+                      <SelectItem value="template">Template</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="relative">
+                  <AutoExpandTextarea
+                    placeholder="Paste the reference content here..."
+                    value={newRefContent}
+                    onChange={(e) => setNewRefContent(e.target.value)}
+                    className="text-sm pr-10"
+                    minRows={3}
+                    maxRows={15}
+                  />
+                  <div className="absolute top-2 right-2">
+                    <VoiceRecorder
+                      onTranscript={(transcript) => {
+                        setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
+                      }}
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                    />
+                  </div>
+                </div>
                 <Button
-                  data-testid="button-test"
-                  onClick={handleTest}
-                  disabled={isLoading}
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="gap-2 text-muted-foreground"
+                  onClick={handleAddReference}
+                  disabled={!newRefName.trim() || !newRefContent.trim()}
+                  className="gap-1"
                 >
-                  <FlaskConical className="w-4 h-4" />
-                  Load demo content
+                  <Plus className="w-3 h-3" />
+                  Add Reference
                 </Button>
               </div>
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
