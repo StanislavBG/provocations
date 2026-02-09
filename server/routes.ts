@@ -29,6 +29,9 @@ const provocationPrompts: Record<ProvocationType, string> = {
   fallacy: "Identify logical fallacies, weak arguments, unsupported claims, or gaps in reasoning.",
   alternative: "Suggest alternative approaches, different perspectives, or lateral thinking opportunities.",
   challenge: "Based on the user's objective, identify what's missing, incomplete, or underdeveloped. Push the user toward a more complete, well-rounded document by highlighting gaps in coverage, depth, or clarity.",
+  performance: "As a Performance Reviewer: Question scalability, throughput, and expected load. Clarify that the business requirements are translated into concrete technical expectations. Ask about bottlenecks, response times, data volumes, and what happens at scale.",
+  ux: "As a UX Reviewer: Question how users will discover, understand, and complete tasks. Ask 'how would a user know to do this?' and 'what happens if they get confused here?' Push for clarity on layout, flows, error states, and ease of use.",
+  architecture: "As an Architecture Reviewer: Question the clarity of system abstractions — frontend components, backend services, system-to-system communication. Push for well-defined boundaries, API contracts, data flow, and separation of concerns.",
 };
 
 // Instruction classification patterns
@@ -255,6 +258,24 @@ The goal is to show thoughtful consideration of alternatives.`,
 - "Let me flesh out the Y section with more specifics"
 - "I should address Z to make this more complete"
 The goal is to fill gaps and push the document toward completeness based on the objective.`,
+
+  performance: `Example good responses to performance provocations:
+- "We expect 10k concurrent users at peak, I should specify that"
+- "Good point — I'll add expected response time targets for the API"
+- "Let me clarify the data volume expectations and caching strategy"
+The goal is to make performance expectations explicit and technically grounded.`,
+
+  ux: `Example good responses to UX provocations:
+- "You're right, users won't know about that feature — I'll add onboarding guidance"
+- "I need to describe the error state when X fails"
+- "Let me clarify the navigation flow from A to B"
+The goal is to ensure every user-facing interaction is thought through.`,
+
+  architecture: `Example good responses to architecture provocations:
+- "I should define the API contract between the frontend and this service"
+- "Good catch — the boundary between X and Y components isn't clear"
+- "Let me add a section on how data flows from the client through to storage"
+The goal is to ensure system abstractions are well-defined and communication patterns are explicit.`,
 };
 
 // Strategy prompts for each instruction type
@@ -333,9 +354,9 @@ Generate provocations in these categories:
 ${provDescriptions}
 ${refContext}
 
-Respond with a JSON object containing a "provocations" array. Generate 2-3 provocations per category (6-9 total).
+Respond with a JSON object containing a "provocations" array. Generate 1-2 provocations per category.
 For each provocation:
-- type: The category (opportunity, fallacy, or alternative)
+- type: The category (one of: ${provocationType.join(", ")})
 - title: A punchy headline (max 60 chars)
 - content: A 2-3 sentence explanation
 - sourceExcerpt: A relevant quote from the source text (max 150 chars)
@@ -344,7 +365,7 @@ Output only valid JSON, no markdown.`
               },
               {
                 role: "user",
-                content: `Generate provocations (opportunities, fallacies, and alternatives) for this text:\n\n${analysisText}`
+                content: `Generate provocations across all categories for this text:\n\n${analysisText}`
               }
             ],
             response_format: { type: "json_object" },
@@ -367,7 +388,7 @@ Output only valid JSON, no markdown.`
             const item = p as Record<string, unknown>;
             const provType = provocationType.includes(item?.type as ProvocationType)
               ? item.type as ProvocationType
-              : provocationType[idx % 3];
+              : provocationType[idx % provocationType.length];
 
             return {
               id: `${provType}-${Date.now()}-${idx}`,
