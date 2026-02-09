@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { encryptedDocuments } from "../shared/models/chat";
+import { eq, desc } from "drizzle-orm";
 import OpenAI from "openai";
 import {
   analyzeTextRequestSchema,
@@ -9,6 +12,8 @@ import {
   generateTemplateRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
+  saveEncryptedDocumentRequestSchema,
+  listEncryptedDocumentsRequestSchema,
   provocationType,
   instructionTypes,
   type ProvocationType,
@@ -16,7 +21,9 @@ import {
   type Provocation,
   type ReferenceDocument,
   type ChangeEntry,
-  type InterviewQuestionResponse
+  type InterviewQuestionResponse,
+  type EncryptedDocumentListItem,
+  type EncryptedDocumentFull,
 } from "@shared/schema";
 
 const openai = new OpenAI({
@@ -1156,6 +1163,125 @@ Output only the instruction text. No meta-commentary.`
       console.error("Interview summary error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize interview", details: errorMessage });
+    }
+  });
+
+  // ==========================================
+  // Encrypted Document Storage (E2EE)
+  // ==========================================
+
+  // Save an encrypted document
+  app.post("/api/documents/save", async (req, res) => {
+    try {
+      const parsed = saveEncryptedDocumentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { ownerHash, title, ciphertext, salt, iv } = parsed.data;
+
+      const [doc] = await db
+        .insert(encryptedDocuments)
+        .values({ ownerHash, title, ciphertext, salt, iv })
+        .returning({ id: encryptedDocuments.id, createdAt: encryptedDocuments.createdAt });
+
+      res.json({ id: doc.id, createdAt: doc.createdAt.toISOString() });
+    } catch (error) {
+      console.error("Save encrypted document error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to save document", details: errorMessage });
+    }
+  });
+
+  // List encrypted documents for an owner
+  app.post("/api/documents/list", async (req, res) => {
+    try {
+      const parsed = listEncryptedDocumentsRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { ownerHash } = parsed.data;
+
+      const docs = await db
+        .select({
+          id: encryptedDocuments.id,
+          title: encryptedDocuments.title,
+          createdAt: encryptedDocuments.createdAt,
+          updatedAt: encryptedDocuments.updatedAt,
+        })
+        .from(encryptedDocuments)
+        .where(eq(encryptedDocuments.ownerHash, ownerHash))
+        .orderBy(desc(encryptedDocuments.updatedAt));
+
+      const items: EncryptedDocumentListItem[] = docs.map((d) => ({
+        id: d.id,
+        title: d.title,
+        createdAt: d.createdAt.toISOString(),
+        updatedAt: d.updatedAt.toISOString(),
+      }));
+
+      res.json({ documents: items });
+    } catch (error) {
+      console.error("List encrypted documents error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to list documents", details: errorMessage });
+    }
+  });
+
+  // Load a single encrypted document
+  app.get("/api/documents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+
+      const [doc] = await db
+        .select()
+        .from(encryptedDocuments)
+        .where(eq(encryptedDocuments.id, id))
+        .limit(1);
+
+      if (!doc) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const result: EncryptedDocumentFull = {
+        id: doc.id,
+        title: doc.title,
+        ciphertext: doc.ciphertext,
+        salt: doc.salt,
+        iv: doc.iv,
+        createdAt: doc.createdAt.toISOString(),
+        updatedAt: doc.updatedAt.toISOString(),
+      };
+
+      res.json(result);
+    } catch (error) {
+      console.error("Load encrypted document error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to load document", details: errorMessage });
+    }
+  });
+
+  // Delete an encrypted document
+  app.delete("/api/documents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+
+      await db
+        .delete(encryptedDocuments)
+        .where(eq(encryptedDocuments.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete encrypted document error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to delete document", details: errorMessage });
     }
   });
 
