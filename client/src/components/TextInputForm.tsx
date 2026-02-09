@@ -239,29 +239,16 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-2xl space-y-6">
-        {/* Minimal header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-2">
-            <Sparkles className="w-6 h-6 text-primary" />
-          </div>
-          <h1 className="text-3xl font-serif font-bold tracking-tight" data-testid="text-title">
-            Provocations
-          </h1>
-          <p className="text-base text-muted-foreground max-w-md mx-auto">
-            Shape your ideas into documents that hold up under scrutiny.
-          </p>
-        </div>
-
-        {/* ── STEP 1: OBJECTIVE ─── front and center ── */}
+    <div className="h-full flex flex-col p-5 overflow-y-auto">
+      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 gap-5">
+        {/* ── OBJECTIVE ─── prominent, full-width ── */}
         <div className="space-y-2">
           <label
             htmlFor="objective"
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
           >
             <Target className="w-4 h-4 text-primary" />
-            Step 1 — What are you creating?
+            What are you creating?
           </label>
           <div className="flex gap-2">
             <AutoExpandTextarea
@@ -273,7 +260,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               onChange={(e) => setObjective(e.target.value)}
               readOnly={isRecordingObjective}
               minRows={2}
-              maxRows={5}
+              maxRows={6}
             />
             <VoiceRecorder
               onTranscript={handleObjectiveVoiceComplete}
@@ -350,15 +337,15 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           )}
         </div>
 
-        {/* ── STEP 2: START YOUR DRAFT ─── clear action ── */}
-        <div className="space-y-2">
+        {/* ── DRAFT ─── large, fills remaining space ── */}
+        <div className="flex flex-col flex-1 min-h-0 space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <PenLine className="w-4 h-4 text-primary" />
-            Step 2 — Start your draft
+            Your draft
           </label>
 
           {!isDraftExpanded ? (
-            /* Collapsed: two clear action buttons */
+            /* Collapsed: two action buttons */
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setIsDraftExpanded(true)}
@@ -392,118 +379,116 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               </button>
             </div>
           ) : (
-            /* Expanded: the text input area */
-            <Card className="border-2">
-              <CardContent className="p-4 space-y-4">
-                <div className="relative">
-                  <AutoExpandTextarea
-                    data-testid="input-source-text"
-                    placeholder="Paste your notes, transcript, or source material here..."
-                    className={`text-base leading-relaxed font-serif pr-12 ${isRecordingText ? "border-primary" : ""}`}
-                    value={isRecordingText ? textInterim || text : text}
-                    onChange={(e) => setText(e.target.value)}
-                    readOnly={isRecordingText}
-                    minRows={6}
-                    maxRows={24}
-                    autoFocus
+            /* Expanded: large text area filling available space */
+            <div className="flex flex-col flex-1 min-h-0 rounded-lg border-2 bg-card">
+              <div className="relative flex-1 min-h-0 p-4">
+                <AutoExpandTextarea
+                  data-testid="input-source-text"
+                  placeholder="Paste your notes, transcript, or source material here..."
+                  className={`text-base leading-relaxed font-serif pr-12 h-full min-h-[200px] ${isRecordingText ? "border-primary" : "border-none shadow-none focus-visible:ring-0"}`}
+                  value={isRecordingText ? textInterim || text : text}
+                  onChange={(e) => setText(e.target.value)}
+                  readOnly={isRecordingText}
+                  minRows={12}
+                  maxRows={40}
+                  autoFocus
+                />
+                <div className="absolute top-5 right-5">
+                  <VoiceRecorder
+                    onTranscript={handleTextVoiceComplete}
+                    onInterimTranscript={(interim) => setTextInterim(text ? text + " " + interim : interim)}
+                    onRecordingChange={setIsRecordingText}
+                    size="icon"
+                    variant={isRecordingText ? "destructive" : "ghost"}
                   />
-                  <div className="absolute top-2 right-2">
-                    <VoiceRecorder
-                      onTranscript={handleTextVoiceComplete}
-                      onInterimTranscript={(interim) => setTextInterim(text ? text + " " + interim : interim)}
-                      onRecordingChange={setIsRecordingText}
-                      size="icon"
-                      variant={isRecordingText ? "destructive" : "ghost"}
-                    />
+                </div>
+                {isRecordingText && (
+                  <div className="absolute bottom-5 left-5 right-14">
+                    <p className="text-xs text-primary animate-pulse bg-background/80 px-2 py-1 rounded">
+                      Listening... speak your source material (up to 10 min)
+                    </p>
                   </div>
-                  {isRecordingText && (
-                    <div className="absolute bottom-2 left-2 right-12">
-                      <p className="text-xs text-primary animate-pulse bg-background/80 px-2 py-1 rounded">
-                        Listening... speak your source material (up to 10 min)
-                      </p>
-                    </div>
+                )}
+              </div>
+
+              {/* Summarize controls for long text */}
+              {text.length > 200 && !isRecordingText && (
+                <div className="flex items-center gap-2 flex-wrap px-4 pb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSummarizeText}
+                    disabled={isSummarizingText}
+                    className="gap-1.5 text-xs h-7"
+                  >
+                    {isSummarizingText ? (
+                      <><Loader2 className="w-3 h-3 animate-spin" /> Cleaning up...</>
+                    ) : (
+                      <><Wand2 className="w-3 h-3" /> Clean up transcript</>
+                    )}
+                  </Button>
+                  {textRawTranscript && textRawTranscript !== text && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowTextRaw(!showTextRaw)}
+                        className="gap-1.5 text-xs h-7"
+                      >
+                        {showTextRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)</>}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleRestoreText} className="gap-1.5 text-xs h-7">
+                        Restore original
+                      </Button>
+                    </>
                   )}
                 </div>
+              )}
+              {showTextRaw && textRawTranscript && (
+                <div className="mx-4 mb-2 p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
+                  <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
+                </div>
+              )}
 
-                {/* Summarize controls for long text */}
-                {text.length > 200 && !isRecordingText && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleSummarizeText}
-                      disabled={isSummarizingText}
-                      className="gap-1.5 text-xs h-7"
-                    >
-                      {isSummarizingText ? (
-                        <><Loader2 className="w-3 h-3 animate-spin" /> Cleaning up...</>
-                      ) : (
-                        <><Wand2 className="w-3 h-3" /> Clean up transcript</>
-                      )}
-                    </Button>
-                    {textRawTranscript && textRawTranscript !== text && (
+              {/* Action row */}
+              <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
+                <div className="text-sm text-muted-foreground">
+                  {text.length > 0 && (
+                    <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setIsDraftExpanded(false); }}
+                    className="text-muted-foreground"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    data-testid="button-analyze"
+                    onClick={handleSubmit}
+                    disabled={!text.trim() || isLoading}
+                    size="lg"
+                    className="gap-2"
+                  >
+                    {isLoading ? (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowTextRaw(!showTextRaw)}
-                          className="gap-1.5 text-xs h-7"
-                        >
-                          {showTextRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)</>}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={handleRestoreText} className="gap-1.5 text-xs h-7">
-                          Restore original
-                        </Button>
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        Begin Analysis
+                        <ArrowRight className="w-4 h-4" />
                       </>
                     )}
-                  </div>
-                )}
-                {showTextRaw && textRawTranscript && (
-                  <div className="p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
-                    <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
-                    <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
-                  </div>
-                )}
-
-                {/* Action row */}
-                <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
-                  <div className="text-sm text-muted-foreground">
-                    {text.length > 0 && (
-                      <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setIsDraftExpanded(false); }}
-                      className="text-muted-foreground"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      data-testid="button-analyze"
-                      onClick={handleSubmit}
-                      disabled={!text.trim() || isLoading}
-                      size="lg"
-                      className="gap-2"
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          Analyzing...
-                        </>
-                      ) : (
-                        <>
-                          Begin Analysis
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
         </div>
 

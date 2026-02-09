@@ -758,24 +758,33 @@ export default function Workspace() {
 
   if (phase === "input") {
     return (
-      <div className="min-h-screen">
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowLoadDialog(true)}
-            className="gap-1.5"
-          >
-            <FolderOpen className="w-4 h-4" />
-            Load Saved
-          </Button>
-          <ThemeToggle />
+      <div className="h-screen flex flex-col">
+        {/* Top bar: branding left, actions right */}
+        <header className="flex items-center justify-between px-5 py-3 border-b bg-card shrink-0">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-5 h-5 text-primary" />
+            <h1 className="font-semibold text-lg">Provocations</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLoadDialog(true)}
+              className="gap-1.5"
+            >
+              <FolderOpen className="w-4 h-4" />
+              Load Saved
+            </Button>
+            <ThemeToggle />
+          </div>
+        </header>
+        <div className="flex-1 overflow-hidden">
+          <TextInputForm
+            onSubmit={handleAnalyze}
+            onBlankDocument={handleBlankDocument}
+            isLoading={analyzeMutation.isPending}
+          />
         </div>
-        <TextInputForm
-          onSubmit={handleAnalyze}
-          onBlankDocument={handleBlankDocument}
-          isLoading={analyzeMutation.isPending}
-        />
         <LoadDocumentDialog
           open={showLoadDialog}
           onOpenChange={setShowLoadDialog}
