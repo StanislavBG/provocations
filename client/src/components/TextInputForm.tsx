@@ -239,13 +239,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   };
 
   return (
-    <div className="h-full flex flex-col p-5 overflow-y-auto">
-      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 gap-5">
+    <div className="h-full flex flex-col p-6 overflow-y-auto">
+      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 gap-6">
         {/* ── OBJECTIVE ─── prominent, full-width ── */}
         <div className="space-y-2">
           <label
             htmlFor="objective"
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
+            className="flex items-center gap-2 text-base font-medium text-muted-foreground"
           >
             <Target className="w-4 h-4 text-primary" />
             What are you creating?
@@ -255,11 +255,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               id="objective"
               data-testid="input-objective"
               placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-              className={`text-lg flex-1 leading-relaxed font-serif ${isRecordingObjective ? "border-primary text-primary" : ""}`}
+              className={`text-base flex-1 leading-relaxed font-serif ${isRecordingObjective ? "border-primary text-primary" : ""}`}
               value={isRecordingObjective ? objectiveInterim || objective : objective}
               onChange={(e) => setObjective(e.target.value)}
               readOnly={isRecordingObjective}
-              minRows={2}
+              minRows={3}
               maxRows={6}
             />
             <VoiceRecorder
@@ -339,23 +339,23 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
         {/* ── DRAFT ─── large, fills remaining space ── */}
         <div className="flex flex-col flex-1 min-h-0 space-y-2">
-          <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <label className="flex items-center gap-2 text-base font-medium text-muted-foreground">
             <PenLine className="w-4 h-4 text-primary" />
             Your draft
           </label>
 
           {!isDraftExpanded ? (
             /* Collapsed: two action buttons */
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => setIsDraftExpanded(true)}
-                className="group p-5 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-2"
+                className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
               >
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-primary/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-primary/10">
                     <FileText className="w-5 h-5 text-primary" />
                   </div>
-                  <span className="font-medium">Paste text</span>
+                  <span className="font-medium text-base">Paste text</span>
                 </div>
                 <p className="text-sm text-muted-foreground leading-snug">
                   Notes, transcripts, reports — any raw material to shape.
@@ -365,13 +365,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               <button
                 onClick={handleBlankDocument}
                 disabled={isLoading}
-                className="group p-5 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-2"
+                className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
               >
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-primary/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-primary/10">
                     <Mic className="w-5 h-5 text-primary" />
                   </div>
-                  <span className="font-medium">Speak it</span>
+                  <span className="font-medium text-base">Speak it</span>
                 </div>
                 <p className="text-sm text-muted-foreground leading-snug">
                   Talk through your ideas and we'll capture them as a draft.
