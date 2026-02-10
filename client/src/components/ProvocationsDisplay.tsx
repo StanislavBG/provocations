@@ -27,6 +27,8 @@ import {
   MousePointerClick,
   Layers,
   Rocket,
+  Mic,
+  Plus,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
@@ -79,6 +81,8 @@ interface ProvocationsDisplayProps {
   provocations: Provocation[];
   onUpdateStatus: (id: string, status: Provocation["status"]) => void;
   onVoiceResponse?: (provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onStartResponse?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onAddToDocument?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onHoverProvocation?: (provocationId: string | null) => void;
   onRegenerateProvocations?: (guidance?: string, types?: ProvocationType[]) => void;
@@ -87,18 +91,51 @@ interface ProvocationsDisplayProps {
   isRegenerating?: boolean;
 }
 
+const scaleLabels: Record<number, string> = {
+  1: "Minor",
+  2: "Small",
+  3: "Moderate",
+  4: "Significant",
+  5: "Critical",
+};
+
+const scaleColors: Record<number, string> = {
+  1: "bg-slate-400/20 text-slate-600 dark:text-slate-400",
+  2: "bg-blue-400/20 text-blue-600 dark:text-blue-400",
+  3: "bg-amber-400/20 text-amber-600 dark:text-amber-400",
+  4: "bg-orange-400/20 text-orange-600 dark:text-orange-400",
+  5: "bg-red-400/20 text-red-600 dark:text-red-400",
+};
+
+function ScaleIndicator({ scale }: { scale?: number }) {
+  if (!scale) return null;
+  const label = scaleLabels[scale] || "Moderate";
+  const colorClass = scaleColors[scale] || scaleColors[3];
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${colorClass}`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <span
+          key={i}
+          className={`w-1 h-1 rounded-full ${i < scale ? "bg-current" : "bg-current/20"}`}
+        />
+      ))}
+      {label}
+    </span>
+  );
+}
+
 function ProvocationCard({
   provocation,
   onUpdateStatus,
-  onVoiceResponse,
-  onTranscriptUpdate,
+  onStartResponse,
+  onAddToDocument,
   onHover,
   isMerging
 }: {
   provocation: Provocation;
   onUpdateStatus: (status: Provocation["status"]) => void;
-  onVoiceResponse?: (transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
-  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
+  onStartResponse?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onAddToDocument?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onHover?: (isHovered: boolean) => void;
   isMerging?: boolean;
 }) {
@@ -131,6 +168,7 @@ function ProvocationCard({
               <Badge variant="outline" className={`text-xs ${colorClass} border-current`}>
                 {provocationLabels[provocation.type]}
               </Badge>
+              <ScaleIndicator scale={provocation.scale} />
               {provocation.status !== "pending" && (
                 <Badge
                   variant={provocation.status === "highlighted" ? "default" : "secondary"}
@@ -150,28 +188,44 @@ function ProvocationCard({
           <div className="flex items-center gap-2 flex-wrap">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="inline-flex">
-                  <VoiceRecorder
-                    onTranscript={(transcript) => {
-                      onVoiceResponse?.(transcript, {
-                        type: provocation.type,
-                        title: provocation.title,
-                        content: provocation.content,
-                        sourceExcerpt: provocation.sourceExcerpt,
-                      });
-                    }}
-                    onInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
-                    onRecordingChange={(isRecording) => {
-                      onTranscriptUpdate?.("", isRecording);
-                    }}
-                    size="sm"
-                    variant="outline"
-                    label="Respond"
-                    className={`gap-1 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-                  />
-                </div>
+                <Button
+                  data-testid={`button-respond-${provocation.id}`}
+                  size="sm"
+                  variant="outline"
+                  className={`gap-1 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+                  onClick={() => onStartResponse?.({
+                    type: provocation.type,
+                    title: provocation.title,
+                    content: provocation.content,
+                    sourceExcerpt: provocation.sourceExcerpt,
+                  })}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  Respond
+                </Button>
               </TooltipTrigger>
-              <TooltipContent>Respond with your voice to integrate feedback</TooltipContent>
+              <TooltipContent>Open voice recorder to respond to this provocation</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  data-testid={`button-add-to-doc-${provocation.id}`}
+                  size="sm"
+                  variant="outline"
+                  className={`gap-1 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+                  onClick={() => onAddToDocument?.({
+                    type: provocation.type,
+                    title: provocation.title,
+                    content: provocation.content,
+                    sourceExcerpt: provocation.sourceExcerpt,
+                  })}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add to Document
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Agree with this provocation and incorporate it into your document</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -254,15 +308,15 @@ function ProvocationCard({
 /** Focused view for resolving provocations one at a time via voice */
 function FocusMode({
   provocations,
-  onVoiceResponse,
-  onTranscriptUpdate,
+  onStartResponse,
+  onAddToDocument,
   onUpdateStatus,
   onExit,
   isMerging,
 }: {
   provocations: Provocation[];
-  onVoiceResponse?: (provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
-  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
+  onStartResponse?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onAddToDocument?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onUpdateStatus: (id: string, status: Provocation["status"]) => void;
   onExit: () => void;
   isMerging?: boolean;
@@ -334,9 +388,12 @@ function FocusMode({
         <div className={`p-3 rounded-xl ${bgClass} mb-4`}>
           <Icon className={`w-8 h-8 ${colorClass}`} />
         </div>
-        <Badge variant="outline" className={`text-xs mb-3 ${colorClass} border-current`}>
-          {provocationLabels[current.type]}
-        </Badge>
+        <div className="flex items-center gap-2 mb-3">
+          <Badge variant="outline" className={`text-xs ${colorClass} border-current`}>
+            {provocationLabels[current.type]}
+          </Badge>
+          <ScaleIndicator scale={current.scale} />
+        </div>
         <h3 className="text-xl font-semibold text-center mb-3 max-w-md">{current.title}</h3>
         <p className="text-sm text-muted-foreground text-center leading-relaxed max-w-lg mb-6">
           {current.content}
@@ -350,33 +407,41 @@ function FocusMode({
           </div>
         )}
 
-        {/* Voice response area */}
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-xs text-muted-foreground">Respond with your voice to address this</p>
+        {/* Response actions */}
+        <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-3">
-            <VoiceRecorder
-              onTranscript={(transcript) => {
-                onVoiceResponse?.(current.id, transcript, {
+            <Button
+              size="default"
+              variant="outline"
+              className={`gap-2 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+              onClick={() => {
+                onStartResponse?.(current.id, {
                   type: current.type,
                   title: current.title,
                   content: current.content,
                   sourceExcerpt: current.sourceExcerpt,
                 });
-                // Auto-advance after responding
-                setTimeout(() => {
-                  if (safeIndex < pending.length - 1) {
-                    setCurrentIndex(safeIndex + 1);
-                  }
-                }, 500);
               }}
-              onInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
-              onRecordingChange={(isRecording) => {
-                onTranscriptUpdate?.("", isRecording);
-              }}
-              size="lg"
+            >
+              <Mic className="w-4 h-4" />
+              Respond
+            </Button>
+            <Button
+              size="default"
               variant="outline"
-              className={`h-14 w-14 rounded-full ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-            />
+              className={`gap-2 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+              onClick={() => {
+                onAddToDocument?.(current.id, {
+                  type: current.type,
+                  title: current.title,
+                  content: current.content,
+                  sourceExcerpt: current.sourceExcerpt,
+                });
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              Add to Document
+            </Button>
           </div>
         </div>
 
@@ -388,7 +453,6 @@ function FocusMode({
             className="gap-1"
             onClick={() => {
               onUpdateStatus(current.id, "addressed");
-              // Stay at same index (next pending will slide in)
             }}
           >
             <Check className="w-3.5 h-3.5" />
@@ -430,7 +494,7 @@ function FocusMode({
   );
 }
 
-export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
+export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onStartResponse, onAddToDocument, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
   const [viewFilter, setViewFilter] = useState<ProvocationType | "all">("all");
   const [guidance, setGuidance] = useState("");
   const [guidanceInterim, setGuidanceInterim] = useState("");
@@ -527,8 +591,8 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
     return (
       <FocusMode
         provocations={focusProvocations}
-        onVoiceResponse={onVoiceResponse}
-        onTranscriptUpdate={onTranscriptUpdate}
+        onStartResponse={onStartResponse}
+        onAddToDocument={onAddToDocument}
         onUpdateStatus={onUpdateStatus}
         onExit={() => setIsFocusMode(false)}
         isMerging={isMerging}
@@ -622,8 +686,8 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
               key={provocation.id}
               provocation={provocation}
               onUpdateStatus={(status) => onUpdateStatus(provocation.id, status)}
-              onVoiceResponse={(transcript, provocationData) => onVoiceResponse?.(provocation.id, transcript, provocationData)}
-              onTranscriptUpdate={onTranscriptUpdate}
+              onStartResponse={(provocationData) => onStartResponse?.(provocation.id, provocationData)}
+              onAddToDocument={(provocationData) => onAddToDocument?.(provocation.id, provocationData)}
               onHover={(isHovered) => onHoverProvocation?.(isHovered ? provocation.id : null)}
               isMerging={isMerging}
             />
