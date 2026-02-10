@@ -14,6 +14,9 @@ export const provocationType = [
 
 export type ProvocationType = typeof provocationType[number];
 
+export const provocationScale = [1, 2, 3, 4, 5] as const;
+export type ProvocationScale = typeof provocationScale[number];
+
 export const provocationSchema = z.object({
   id: z.string(),
   type: z.enum(provocationType),
@@ -21,6 +24,7 @@ export const provocationSchema = z.object({
   content: z.string(),
   sourceExcerpt: z.string(),
   status: z.enum(["pending", "addressed", "rejected", "highlighted"]),
+  scale: z.number().min(1).max(5).optional(),
 });
 
 export type Provocation = z.infer<typeof provocationSchema>;
@@ -234,6 +238,15 @@ export const saveEncryptedDocumentRequestSchema = z.object({
 });
 
 export type SaveEncryptedDocumentRequest = z.infer<typeof saveEncryptedDocumentRequestSchema>;
+
+export const updateEncryptedDocumentRequestSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200),
+  ciphertext: z.string().min(1, "Ciphertext is required"),
+  salt: z.string().min(1, "Salt is required"),
+  iv: z.string().min(1, "IV is required"),
+});
+
+export type UpdateEncryptedDocumentRequest = z.infer<typeof updateEncryptedDocumentRequestSchema>;
 
 export const listEncryptedDocumentsRequestSchema = z.object({
   ownerHash: z.string().min(1, "Owner hash is required"),
