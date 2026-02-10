@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   Dialog,
@@ -13,12 +13,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Lock, AlertTriangle } from "lucide-react";
+import { Lock, AlertTriangle, Copy, Check, KeyRound } from "lucide-react";
+import {
+  encrypt,
+  hashPassphrase,
+  getOrCreateDeviceKey,
+} from "@/lib/crypto";
 
 export interface SaveCredentials {
   documentId: number;
   title: string;
   passphrase: string;
+  ownerHash: string;
 }
 
 interface SaveDocumentDialogProps {
@@ -38,6 +44,31 @@ export function SaveDocumentDialog({
   const [title, setTitle] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
+  const [deviceKey, setDeviceKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  // Load or create device key when dialog opens
+  useEffect(() => {
+    if (open) {
+      const key = getOrCreateDeviceKey();
+      setDeviceKey(key);
+    }
+  }, [open]);
+
+  const copyDeviceKey = async () => {
+    if (!deviceKey) return;
+    try {
+      await navigator.clipboard.writeText(deviceKey);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    } catch {
+      toast({
+        title: "Copy Failed",
+        description: "Could not copy to clipboard. Select and copy the key manually.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -47,29 +78,40 @@ export function SaveDocumentDialog({
       if (passphrase.length < 8) {
         throw new Error("Passphrase must be at least 8 characters");
       }
+      if (!deviceKey) {
+        throw new Error("Device key not available");
+      }
+
+      // All encryption happens here in the browser
+      const ownerHash = await hashPassphrase(passphrase);
+      const encrypted = await encrypt(documentText, passphrase, deviceKey);
 
       const response = await apiRequest("POST", "/api/documents/save", {
+        ownerHash,
         title: title.trim() || "Untitled Document",
-        text: documentText,
-        passphrase,
+        ciphertext: encrypted.ciphertext,
+        salt: encrypted.salt,
+        iv: encrypted.iv,
       });
 
-      return await response.json();
+      return { ...(await response.json()), ownerHash };
     },
     onSuccess: (data) => {
       const savedTitle = title.trim() || "Untitled Document";
       toast({
         title: "Document Saved",
-        description: "Your document has been saved. Remember your passphrase — it cannot be recovered.",
+        description: "Encrypted in your browser and stored on the server.",
       });
       onSaved?.({
         documentId: data.id,
         title: savedTitle,
         passphrase,
+        ownerHash: data.ownerHash,
       });
       setTitle("");
       setPassphrase("");
       setConfirmPassphrase("");
+      setCopiedKey(false);
       onOpenChange(false);
     },
     onError: (error) => {
@@ -84,7 +126,8 @@ export function SaveDocumentDialog({
   const canSave =
     passphrase.length >= 8 &&
     passphrase === confirmPassphrase &&
-    title.trim().length > 0;
+    title.trim().length > 0 &&
+    deviceKey !== null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -95,8 +138,8 @@ export function SaveDocumentDialog({
             Save Document
           </DialogTitle>
           <DialogDescription>
-            Your document is encrypted on the server with your passphrase.
-            Only someone with the passphrase can load it.
+            Your document is encrypted in your browser before being stored.
+            The server never sees your text or passphrase.
           </DialogDescription>
         </DialogHeader>
 
@@ -136,11 +179,43 @@ export function SaveDocumentDialog({
             )}
           </div>
 
+          {/* Device Key Display */}
+          {deviceKey && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5" />
+                Device Key
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={deviceKey}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={copyDeviceKey}
+                  title="Copy device key"
+                >
+                  {copiedKey ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This key is unique to this browser. Back it up to load documents on another device.
+              </p>
+            </div>
+          )}
+
           <div className="flex items-start gap-2 p-3 rounded-md bg-amber-500/10 border border-amber-500/20">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
             <p className="text-xs text-amber-700 dark:text-amber-400">
-              If you forget your passphrase, your document cannot be recovered.
-              There is no password reset.
+              You need <strong>both your passphrase and this browser's device key</strong> to
+              load your document. If you lose either one, your document cannot be recovered.
             </p>
           </div>
         </div>
@@ -153,7 +228,7 @@ export function SaveDocumentDialog({
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
           >
-            {saveMutation.isPending ? "Saving..." : "Save"}
+            {saveMutation.isPending ? "Encrypting..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

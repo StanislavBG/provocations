@@ -134,6 +134,7 @@ export class MemStorage implements IStorage {
     if (!doc) return null;
     return {
       id: doc.id,
+      ownerHash: doc.ownerHash,
       title: doc.title,
       ciphertext: doc.ciphertext,
       salt: doc.salt,
