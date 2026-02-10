@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BookOpen, Download, Mic, Square, Send, X, Loader2 } from "lucide-react";
+import { BookOpen, Copy, Download, Mic, Square, Send, X, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
@@ -297,6 +297,23 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             variant="ghost"
             className="h-8 w-8"
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={async () => {
+              if (text) {
+                try {
+                  await navigator.clipboard.writeText(text);
+                  toast({ title: "Copied to clipboard" });
+                } catch {
+                  toast({ title: "Failed to copy", variant: "destructive" });
+                }
+              }
+            }}
+            title="Copy document text"
+          >
+            <Copy className="w-4 h-4" />
+          </Button>
           <Button
             data-testid="button-download-document"
             variant="ghost"
