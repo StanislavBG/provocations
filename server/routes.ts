@@ -12,7 +12,6 @@ import {
   saveDocumentRequestSchema,
   updateDocumentRequestSchema,
   listDocumentsRequestSchema,
-  loadDocumentRequestSchema,
   provocationType,
   instructionTypes,
   type ProvocationType,
@@ -22,7 +21,7 @@ import {
   type ChangeEntry,
   type InterviewQuestionResponse,
 } from "@shared/schema";
-import { encrypt, decrypt, hashPassphrase } from "./crypto";
+// Note: server/crypto.ts is no longer used. All encryption happens client-side.
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -1182,10 +1181,13 @@ Output only the instruction text. No meta-commentary.`
   });
 
   // ==========================================
-  // Document Storage (server-side encryption)
+  // Document Storage (client-side encryption)
+  // The server is dumb storage. It never sees
+  // passphrases, device keys, or plaintext.
+  // All encryption/decryption happens in the browser.
   // ==========================================
 
-  // Save a document (server encrypts)
+  // Save a new encrypted document (client already encrypted it)
   app.post("/api/documents/save", async (req, res) => {
     try {
       const parsed = saveDocumentRequestSchema.safeParse(req.body);
@@ -1193,16 +1195,14 @@ Output only the instruction text. No meta-commentary.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { title, text, passphrase } = parsed.data;
-      const ownerHash = hashPassphrase(passphrase);
-      const encrypted = encrypt(text, passphrase);
+      const { ownerHash, title, ciphertext, salt, iv } = parsed.data;
 
       const doc = await storage.saveEncryptedDocument({
         ownerHash,
         title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        ciphertext,
+        salt,
+        iv,
       });
 
       res.json({ id: doc.id, createdAt: doc.createdAt });
@@ -1213,7 +1213,7 @@ Output only the instruction text. No meta-commentary.`
     }
   });
 
-  // Update an existing document (server re-encrypts)
+  // Update an existing encrypted document (client already re-encrypted it)
   app.put("/api/documents/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -1226,14 +1226,22 @@ Output only the instruction text. No meta-commentary.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { title, text, passphrase } = parsed.data;
-      const encrypted = encrypt(text, passphrase);
+      const { ownerHash, title, ciphertext, salt, iv } = parsed.data;
+
+      // Verify ownership before allowing update
+      const existing = await storage.getEncryptedDocument(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      if (existing.ownerHash !== ownerHash) {
+        return res.status(403).json({ error: "Not authorized to update this document" });
+      }
 
       const result = await storage.updateEncryptedDocument(id, {
         title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        ciphertext,
+        salt,
+        iv,
       });
 
       if (!result) {
@@ -1248,7 +1256,7 @@ Output only the instruction text. No meta-commentary.`
     }
   });
 
-  // List documents for a passphrase
+  // List documents by ownerHash
   app.post("/api/documents/list", async (req, res) => {
     try {
       const parsed = listDocumentsRequestSchema.safeParse(req.body);
@@ -1256,9 +1264,7 @@ Output only the instruction text. No meta-commentary.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { passphrase } = parsed.data;
-      const ownerHash = hashPassphrase(passphrase);
-
+      const { ownerHash } = parsed.data;
       const items = await storage.listEncryptedDocuments(ownerHash);
 
       res.json({ documents: items });
@@ -1269,39 +1275,30 @@ Output only the instruction text. No meta-commentary.`
     }
   });
 
-  // Load and decrypt a document
-  app.post("/api/documents/:id/load", async (req, res) => {
+  // Load an encrypted document (returns ciphertext — client decrypts)
+  app.get("/api/documents/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid document ID" });
       }
 
-      const parsed = loadDocumentRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { passphrase } = parsed.data;
-
       const doc = await storage.getEncryptedDocument(id);
       if (!doc) {
         return res.status(404).json({ error: "Document not found" });
       }
 
-      // Verify ownership via passphrase hash
-      const ownerHash = hashPassphrase(passphrase);
-      // We don't store ownerHash on the full doc response, so fetch and check
-      // For now, just attempt decryption - wrong passphrase will throw
-      try {
-        const text = decrypt(
-          { ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv },
-          passphrase,
-        );
-        res.json({ id: doc.id, title: doc.title, text });
-      } catch {
-        return res.status(403).json({ error: "Decryption failed — wrong passphrase" });
-      }
+      // Return the encrypted blob — client will decrypt
+      res.json({
+        id: doc.id,
+        ownerHash: doc.ownerHash,
+        title: doc.title,
+        ciphertext: doc.ciphertext,
+        salt: doc.salt,
+        iv: doc.iv,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+      });
     } catch (error) {
       console.error("Load document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1309,12 +1306,25 @@ Output only the instruction text. No meta-commentary.`
     }
   });
 
-  // Delete a document
+  // Delete a document (requires ownerHash for authorization)
   app.delete("/api/documents/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid document ID" });
+      }
+
+      const ownerHash = req.query.ownerHash as string;
+      if (!ownerHash) {
+        return res.status(400).json({ error: "ownerHash query parameter is required" });
+      }
+
+      const existing = await storage.getEncryptedDocument(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      if (existing.ownerHash !== ownerHash) {
+        return res.status(403).json({ error: "Not authorized to delete this document" });
       }
 
       await storage.deleteEncryptedDocument(id);
