@@ -242,6 +242,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     setPendingTemplate(null);
   };
 
+  // Handle draft question response — merge the user's answer into the draft text
+  const handleDraftQuestionResponse = (question: string, response: string) => {
+    const entry = `[${question}]\n${response}`;
+    setText((prev) => (prev ? prev + "\n\n" + entry : entry));
+  };
+
   return (
     <div className="h-full flex">
       {/* ── LEFT SIDE PANEL ─── Document Mode & References ── */}
@@ -549,8 +555,15 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 </button>
               </div>
             ) : (
-              /* Expanded: large text area filling available space, with optional questions panel */
+              /* Expanded: large text area filling available space, with optional questions panel on left */
               <div className="flex flex-1 min-h-0 gap-3">
+                {/* Questions panel — left side */}
+                {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
+                  <DraftQuestionsPanel
+                    questions={activePrebuilt.draftQuestions}
+                    onResponse={handleDraftQuestionResponse}
+                  />
+                )}
                 <div className="flex flex-col flex-1 min-h-0 rounded-lg border-2 bg-card">
                   <div className="flex-1 min-h-0 p-4">
                     <SmartTextPanel
@@ -651,10 +664,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   </div>
                 </div>
 
-                {/* Questions side panel — shown when template has probing questions */}
-                {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
-                  <DraftQuestionsPanel questions={activePrebuilt.draftQuestions} />
-                )}
               </div>
             )}
           </div>
