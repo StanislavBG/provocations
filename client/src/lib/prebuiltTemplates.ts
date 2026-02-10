@@ -7,6 +7,7 @@ export interface PrebuiltTemplate {
   icon: string; // lucide icon name key
   objective: string;
   starterText: string;
+  draftQuestions: string[]; // probing questions shown in a side panel (not in the draft)
   templateContent: string; // added as a reference document (empty = freeform)
   provocationSources: string[]; // who/what generates the provocations
   provocationExamples: string[]; // example provocations for the card preview
@@ -23,11 +24,12 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     icon: "pencil-line",
     objective:
       "Write a clear, unambiguous description of an incremental change to an existing codebase that an AI coding agent can execute",
-    starterText: `Describe what you want to change or add to your project. Any format works:
-
-- What's the change?
-- Where in the codebase?
-- What should it look like when it's done?`,
+    starterText: "",
+    draftQuestions: [
+      "What's the change?",
+      "Where in the codebase?",
+      "What should it look like when it's done?",
+    ],
     templateContent: "", // No template — freeform is the point
     provocationSources: ["Clarity Coach", "Intent Detector"],
     provocationExamples: [
@@ -46,12 +48,13 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     icon: "clipboard-list",
     objective:
       "Write a clear product requirements document for an incremental feature with defined user, workflow, scope, and acceptance criteria",
-    starterText: `Describe the feature you're building:
-
-- Who is the user?
-- What are they trying to do today?
-- What's broken or missing?
-- What should the new experience look like?`,
+    starterText: "",
+    draftQuestions: [
+      "Who is the user?",
+      "What are they trying to do today?",
+      "What's broken or missing?",
+      "What should the new experience look like?",
+    ],
     templateContent: `# Product Requirement
 
 ## Problem
@@ -105,12 +108,13 @@ What specifically changes for the user? Walk through the new flow step by step.
     icon: "rocket",
     objective:
       "Write a comprehensive application specification for a new SaaS product that covers users, features, technical architecture, and deployment",
-    starterText: `Start with the basics:
-
-- What does this app do in one sentence?
-- Who is it for?
-- What are the 3-5 core things a user can do?
-- What's the business model (free, paid, freemium)?`,
+    starterText: "",
+    draftQuestions: [
+      "What does this app do in one sentence?",
+      "Who is it for?",
+      "What are the 3-5 core things a user can do?",
+      "What's the business model (free, paid, freemium)?",
+    ],
     templateContent: `# New Application Specification
 
 ## Vision

@@ -10,6 +10,7 @@ import { generateId } from "@/lib/utils";
 import { SmartTextPanel } from "@/components/SmartTextPanel";
 import { apiRequest } from "@/lib/queryClient";
 import { PrebuiltTemplates } from "@/components/PrebuiltTemplates";
+import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument } from "@shared/schema";
 
@@ -164,7 +165,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   const handleSelectPrebuilt = (template: PrebuiltTemplate) => {
     setObjective(template.objective);
-    setText(template.starterText);
+    // Only set draft text if the template has no draftQuestions (questions go to side panel instead)
+    if (!template.draftQuestions?.length) {
+      setText(template.starterText);
+    } else {
+      setText("");
+    }
     setActivePrebuilt(template);
     setIsDraftExpanded(true);
     // Only add a reference document if the template has content (freeform modes don't)
@@ -410,9 +416,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
             )}
 
-            {/* Summarize controls for long objectives */}
-            {objective.length > 50 && !isRecordingObjective && (
-              <div className="flex items-center gap-2 flex-wrap">
+            {/* Step 1 action buttons — clean-up, generate template on one row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {objective.length > 50 && !isRecordingObjective && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -432,45 +438,43 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     </>
                   )}
                 </Button>
-                {objectiveRawTranscript && objectiveRawTranscript !== objective && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
-                      className="gap-1.5 text-xs h-7"
-                    >
-                      {showObjectiveRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original</>}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleRestoreObjective} className="gap-1.5 text-xs h-7">
-                      Restore original
-                    </Button>
-                  </>
-                )}
-              </div>
-            )}
+              )}
+              {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateTemplate}
+                  disabled={isGeneratingTemplate}
+                  className="gap-1.5"
+                >
+                  {isGeneratingTemplate ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
+                  ) : (
+                    <><Wand2 className="w-3.5 h-3.5" /> Generate Template</>
+                  )}
+                </Button>
+              )}
+              {objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
+                    className="gap-1.5 text-xs h-7"
+                  >
+                    {showObjectiveRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original</>}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleRestoreObjective} className="gap-1.5 text-xs h-7">
+                    Restore original
+                  </Button>
+                </>
+              )}
+            </div>
             {showObjectiveRaw && objectiveRawTranscript && (
               <div className="p-3 rounded-lg bg-muted/50 border text-sm">
                 <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
                 <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
               </div>
-            )}
-
-            {/* Generate template from objective — near objective input */}
-            {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGenerateTemplate}
-                disabled={isGeneratingTemplate}
-                className="gap-1.5 self-start"
-              >
-                {isGeneratingTemplate ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
-                ) : (
-                  <><Wand2 className="w-3.5 h-3.5" /> Generate Template from Objective</>
-                )}
-              </Button>
             )}
 
             {/* Pending template approval */}
@@ -501,21 +505,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               </div>
             )}
 
-            {/* Active prebuilt indicator */}
-            {activePrebuilt && (
-              <div className="flex items-center justify-between p-2 rounded-lg border border-primary/30 bg-primary/5">
-                <div className="flex items-center gap-2 text-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-muted-foreground">Template: {activePrebuilt.title}</span>
-                </div>
-                <button
-                  onClick={handleClearPrebuilt}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
           </div>
 
           {/* ── DRAFT ─── large, fills remaining space ── */}
@@ -560,105 +549,112 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 </button>
               </div>
             ) : (
-              /* Expanded: large text area filling available space */
-              <div className="flex flex-col flex-1 min-h-0 rounded-lg border-2 bg-card">
-                <div className="flex-1 min-h-0 p-4">
-                  <SmartTextPanel
-                    data-testid="input-source-text"
-                    placeholder="Paste your notes, transcript, or source material here..."
-                    className="text-base leading-relaxed font-serif border-none shadow-none focus-visible:ring-0 min-h-[200px]"
-                    value={text}
-                    onChange={(val) => setText(val)}
-                    minRows={12}
-                    maxRows={40}
-                    autoFocus
-                    onVoiceTranscript={handleTextVoiceComplete}
-                    onRecordingChange={setIsRecordingText}
-                  />
-                  {isRecordingText && (
-                    <p className="text-xs text-primary animate-pulse px-2 py-1 mt-1">
-                      Listening... speak your source material (up to 10 min)
-                    </p>
+              /* Expanded: large text area filling available space, with optional questions panel */
+              <div className="flex flex-1 min-h-0 gap-3">
+                <div className="flex flex-col flex-1 min-h-0 rounded-lg border-2 bg-card">
+                  <div className="flex-1 min-h-0 p-4">
+                    <SmartTextPanel
+                      data-testid="input-source-text"
+                      placeholder="Paste your notes, transcript, or source material here..."
+                      className="text-base leading-relaxed font-serif border-none shadow-none focus-visible:ring-0 min-h-[200px]"
+                      value={text}
+                      onChange={(val) => setText(val)}
+                      minRows={12}
+                      maxRows={40}
+                      autoFocus
+                      onVoiceTranscript={handleTextVoiceComplete}
+                      onRecordingChange={setIsRecordingText}
+                    />
+                    {isRecordingText && (
+                      <p className="text-xs text-primary animate-pulse px-2 py-1 mt-1">
+                        Listening... speak your source material (up to 10 min)
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Summarize controls for long text */}
+                  {text.length > 200 && !isRecordingText && (
+                    <div className="flex items-center gap-2 flex-wrap px-4 pb-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSummarizeText}
+                        disabled={isSummarizingText}
+                        className="gap-1.5 text-xs h-7"
+                      >
+                        {isSummarizingText ? (
+                          <><Loader2 className="w-3 h-3 animate-spin" /> Cleaning up...</>
+                        ) : (
+                          <><Wand2 className="w-3 h-3" /> Clean up transcript</>
+                        )}
+                      </Button>
+                      {textRawTranscript && textRawTranscript !== text && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowTextRaw(!showTextRaw)}
+                            className="gap-1.5 text-xs h-7"
+                          >
+                            {showTextRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)</>}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={handleRestoreText} className="gap-1.5 text-xs h-7">
+                            Restore original
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   )}
+                  {showTextRaw && textRawTranscript && (
+                    <div className="mx-4 mb-2 p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
+                      <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
+                      <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
+                    </div>
+                  )}
+
+                  {/* Action row */}
+                  <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
+                    <div className="text-sm text-muted-foreground">
+                      {text.length > 0 && (
+                        <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setIsDraftExpanded(false); }}
+                        className="text-muted-foreground"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        data-testid="button-analyze"
+                        onClick={handleSubmit}
+                        disabled={!text.trim() || isLoading}
+                        size="lg"
+                        className="gap-2"
+                      >
+                        {isLoading ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>
+                            Begin Analysis
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Summarize controls for long text */}
-                {text.length > 200 && !isRecordingText && (
-                  <div className="flex items-center gap-2 flex-wrap px-4 pb-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleSummarizeText}
-                      disabled={isSummarizingText}
-                      className="gap-1.5 text-xs h-7"
-                    >
-                      {isSummarizingText ? (
-                        <><Loader2 className="w-3 h-3 animate-spin" /> Cleaning up...</>
-                      ) : (
-                        <><Wand2 className="w-3 h-3" /> Clean up transcript</>
-                      )}
-                    </Button>
-                    {textRawTranscript && textRawTranscript !== text && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowTextRaw(!showTextRaw)}
-                          className="gap-1.5 text-xs h-7"
-                        >
-                          {showTextRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)</>}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={handleRestoreText} className="gap-1.5 text-xs h-7">
-                          Restore original
-                        </Button>
-                      </>
-                    )}
-                  </div>
+                {/* Questions side panel — shown when template has probing questions */}
+                {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
+                  <DraftQuestionsPanel questions={activePrebuilt.draftQuestions} />
                 )}
-                {showTextRaw && textRawTranscript && (
-                  <div className="mx-4 mb-2 p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
-                    <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
-                    <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
-                  </div>
-                )}
-
-                {/* Action row */}
-                <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
-                  <div className="text-sm text-muted-foreground">
-                    {text.length > 0 && (
-                      <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setIsDraftExpanded(false); }}
-                      className="text-muted-foreground"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      data-testid="button-analyze"
-                      onClick={handleSubmit}
-                      disabled={!text.trim() || isLoading}
-                      size="lg"
-                      className="gap-2"
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          Analyzing...
-                        </>
-                      ) : (
-                        <>
-                          Begin Analysis
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
               </div>
             )}
           </div>
