@@ -10,6 +10,7 @@ import {
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
   saveEncryptedDocumentRequestSchema,
+  updateEncryptedDocumentRequestSchema,
   listEncryptedDocumentsRequestSchema,
   provocationType,
   instructionTypes,
@@ -369,6 +370,7 @@ For each provocation:
 - title: A punchy headline (max 60 chars)
 - content: A 2-3 sentence explanation
 - sourceExcerpt: A relevant quote from the source text (max 150 chars)
+- scale: Impact level from 1-5 (1=minor tweak, 2=small improvement, 3=moderate gap, 4=significant issue, 5=critical flaw)
 
 Output only valid JSON, no markdown.`
               },
@@ -399,6 +401,9 @@ Output only valid JSON, no markdown.`
               ? item.type as ProvocationType
               : provocationType[idx % provocationType.length];
 
+            const rawScale = typeof item?.scale === 'number' ? item.scale : 3;
+            const scale = Math.max(1, Math.min(5, Math.round(rawScale)));
+
             return {
               id: `${provType}-${Date.now()}-${idx}`,
               type: provType,
@@ -406,6 +411,7 @@ Output only valid JSON, no markdown.`
               content: typeof item?.content === 'string' ? item.content : "",
               sourceExcerpt: typeof item?.sourceExcerpt === 'string' ? item.sourceExcerpt : "",
               status: "pending",
+              scale,
             };
           });
         } catch (error) {
@@ -482,6 +488,7 @@ For each provocation:
 - title: A punchy headline (max 60 chars)
 - content: A 2-3 sentence explanation that gently nudges the user to improve their document
 - sourceExcerpt: A relevant quote from the source text (max 150 chars)
+- scale: Impact level from 1-5 (1=minor tweak, 2=small improvement, 3=moderate gap, 4=significant issue, 5=critical flaw)
 
 Focus on completeness: what's missing, what's thin, what could be stronger. Be constructive, not just critical.
 
@@ -514,6 +521,9 @@ Output only valid JSON, no markdown.`
           ? item.type as ProvocationType
           : requestedTypes[idx % requestedTypes.length];
 
+        const rawScale = typeof item?.scale === 'number' ? item.scale : 3;
+        const scale = Math.max(1, Math.min(5, Math.round(rawScale)));
+
         return {
           id: `${provType}-${Date.now()}-${idx}`,
           type: provType,
@@ -521,6 +531,7 @@ Output only valid JSON, no markdown.`
           content: typeof item?.content === 'string' ? item.content : "",
           sourceExcerpt: typeof item?.sourceExcerpt === 'string' ? item.sourceExcerpt : "",
           status: "pending",
+          scale,
         };
       });
 
@@ -1189,6 +1200,33 @@ Output only the instruction text. No meta-commentary.`
       console.error("Save encrypted document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to save document", details: errorMessage });
+    }
+  });
+
+  // Update an existing encrypted document
+  app.put("/api/documents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+
+      const parsed = updateEncryptedDocumentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const result = await storage.updateEncryptedDocument(id, parsed.data);
+
+      if (!result) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Update encrypted document error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to update document", details: errorMessage });
     }
   });
 
