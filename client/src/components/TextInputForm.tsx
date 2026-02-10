@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FileText, ArrowRight, Sparkles, Mic, Target, BookCopy, Plus, X, Wand2, Eye, EyeOff, Loader2, Check, PenLine, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { generateId } from "@/lib/utils";
 import { SmartTextPanel } from "@/components/SmartTextPanel";
+import type { SmartAction } from "@/components/SmartTextPanel";
 import { apiRequest } from "@/lib/queryClient";
 import { PrebuiltTemplates } from "@/components/PrebuiltTemplates";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
@@ -411,65 +412,51 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               onVoiceTranscript={handleObjectiveVoiceComplete}
               onRecordingChange={setIsRecordingObjective}
               voiceMode="replace"
+              actions={[
+                {
+                  key: "clean-up-objective",
+                  label: "Clean up",
+                  loadingLabel: "Summarizing...",
+                  description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your objective into clear, concise language.",
+                  icon: Wand2,
+                  onClick: handleSummarizeObjective,
+                  disabled: isSummarizingObjective,
+                  loading: isSummarizingObjective,
+                  visible: objective.length > 50 && !isRecordingObjective,
+                },
+                {
+                  key: "generate-template",
+                  label: "Generate Template",
+                  loadingLabel: "Generating template...",
+                  description: "AI creates a structured document template tailored to your objective — outlines sections, headings, and placeholders so you have a solid starting framework.",
+                  icon: Wand2,
+                  onClick: handleGenerateTemplate,
+                  disabled: isGeneratingTemplate,
+                  loading: isGeneratingTemplate,
+                  variant: "outline",
+                  visible: !!objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template"),
+                },
+                {
+                  key: "toggle-objective-raw",
+                  label: showObjectiveRaw ? "Hide original" : "Show original",
+                  description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
+                  icon: showObjectiveRaw ? EyeOff : Eye,
+                  onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
+                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+                },
+                {
+                  key: "restore-objective",
+                  label: "Restore original",
+                  description: "Discard the cleaned-up version and revert to your original voice transcript.",
+                  icon: Eye,
+                  onClick: handleRestoreObjective,
+                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+                },
+              ] satisfies SmartAction[]}
             />
             {isRecordingObjective && (
               <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
             )}
-
-            {/* Step 1 action buttons — clean-up, generate template on one row */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {objective.length > 50 && !isRecordingObjective && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSummarizeObjective}
-                  disabled={isSummarizingObjective}
-                  className="gap-1.5 text-xs h-7"
-                >
-                  {isSummarizingObjective ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Summarizing...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-3 h-3" />
-                      Clean up
-                    </>
-                  )}
-                </Button>
-              )}
-              {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGenerateTemplate}
-                  disabled={isGeneratingTemplate}
-                  className="gap-1.5"
-                >
-                  {isGeneratingTemplate ? (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
-                  ) : (
-                    <><Wand2 className="w-3.5 h-3.5" /> Generate Template</>
-                  )}
-                </Button>
-              )}
-              {objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
-                    className="gap-1.5 text-xs h-7"
-                  >
-                    {showObjectiveRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original</>}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={handleRestoreObjective} className="gap-1.5 text-xs h-7">
-                    Restore original
-                  </Button>
-                </>
-              )}
-            </div>
             {showObjectiveRaw && objectiveRawTranscript && (
               <div className="p-3 rounded-lg bg-muted/50 border text-sm">
                 <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
@@ -564,6 +551,35 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                       autoFocus
                       onVoiceTranscript={handleTextVoiceComplete}
                       onRecordingChange={setIsRecordingText}
+                      actions={[
+                        {
+                          key: "clean-up-draft",
+                          label: "Clean up transcript",
+                          loadingLabel: "Cleaning up...",
+                          description: "Uses AI to clean your voice transcript — removes filler words, false starts, and grammatical errors while preserving your meaning.",
+                          icon: Wand2,
+                          onClick: handleSummarizeText,
+                          disabled: isSummarizingText,
+                          loading: isSummarizingText,
+                          visible: text.length > 200 && !isRecordingText,
+                        },
+                        {
+                          key: "toggle-draft-raw",
+                          label: showTextRaw ? "Hide original" : `Show original (${(textRawTranscript?.length ? (textRawTranscript.length / 1000).toFixed(1) : "0")}k chars)`,
+                          description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
+                          icon: showTextRaw ? EyeOff : Eye,
+                          onClick: () => setShowTextRaw(!showTextRaw),
+                          visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                        },
+                        {
+                          key: "restore-draft",
+                          label: "Restore original",
+                          description: "Discard the cleaned-up version and revert to your original voice transcript.",
+                          icon: Eye,
+                          onClick: handleRestoreText,
+                          visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                        },
+                      ] satisfies SmartAction[]}
                     />
                     {isRecordingText && (
                       <p className="text-xs text-primary animate-pulse px-2 py-1 mt-1">
@@ -571,40 +587,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                       </p>
                     )}
                   </div>
-
-                  {/* Summarize controls for long text */}
-                  {text.length > 200 && !isRecordingText && (
-                    <div className="flex items-center gap-2 flex-wrap px-4 pb-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleSummarizeText}
-                        disabled={isSummarizingText}
-                        className="gap-1.5 text-xs h-7"
-                      >
-                        {isSummarizingText ? (
-                          <><Loader2 className="w-3 h-3 animate-spin" /> Cleaning up...</>
-                        ) : (
-                          <><Wand2 className="w-3 h-3" /> Clean up transcript</>
-                        )}
-                      </Button>
-                      {textRawTranscript && textRawTranscript !== text && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowTextRaw(!showTextRaw)}
-                            className="gap-1.5 text-xs h-7"
-                          >
-                            {showTextRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original ({(textRawTranscript.length / 1000).toFixed(1)}k chars)</>}
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={handleRestoreText} className="gap-1.5 text-xs h-7">
-                            Restore original
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
                   {showTextRaw && textRawTranscript && (
                     <div className="mx-4 mb-2 p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
                       <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
