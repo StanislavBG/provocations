@@ -501,9 +501,9 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
   const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
 
-  // Type selection for which provocation types to generate/answer
+  // Type selection for which provocation types to generate/answer (empty by default — user opts in)
   const [selectedTypes, setSelectedTypes] = useState<Set<ProvocationType>>(
-    () => new Set<ProvocationType>(["opportunity", "fallacy", "alternative", "challenge", "thinking_bigger", "performance", "ux", "architecture"])
+    () => new Set<ProvocationType>()
   );
 
   const safeProvocations = provocations ?? [];
@@ -519,8 +519,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
     setSelectedTypes(prev => {
       const next = new Set<ProvocationType>(prev);
       if (next.has(type)) {
-        // Don't allow deselecting all
-        if (next.size > 1) next.delete(type);
+        next.delete(type);
       } else {
         next.add(type);
       }
@@ -729,33 +728,13 @@ function ChallengeInput({
 }) {
   return (
     <div className="border-b bg-muted/20 p-4 space-y-3">
-      {/* Challenge input with type toggles integrated */}
+      {/* Challenge input with type toggles below */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Crosshair className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Challenge Me On...
-            </label>
-          </div>
-          <div className="flex items-center gap-1 flex-wrap">
-            {(["challenge", "thinking_bigger", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
-              const Icon = provocationIcons[type];
-              const isSelected = selectedTypes.has(type);
-              return (
-                <Button
-                  key={type}
-                  size="sm"
-                  variant={isSelected ? "default" : "outline"}
-                  className={`gap-1 text-xs h-6 px-1.5 ${isSelected ? "" : "opacity-50"}`}
-                  onClick={() => toggleType(type)}
-                >
-                  <Icon className="w-3 h-3" />
-                  {provocationLabels[type]}
-                </Button>
-              );
-            })}
-          </div>
+        <div className="flex items-center gap-2">
+          <Crosshair className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Challenge Me On...
+          </label>
         </div>
         <div className="flex items-start gap-2">
           <Textarea
@@ -787,6 +766,24 @@ function ChallengeInput({
         {isRecordingGuidance && (
           <p className="text-xs text-primary animate-pulse">Listening... describe the direction for your challenges</p>
         )}
+        <div className="flex items-center gap-1 flex-wrap">
+          {(["challenge", "thinking_bigger", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
+            const Icon = provocationIcons[type];
+            const isSelected = selectedTypes.has(type);
+            return (
+              <Button
+                key={type}
+                size="sm"
+                variant={isSelected ? "default" : "outline"}
+                className={`gap-1 text-xs h-6 px-1.5 ${isSelected ? "" : "opacity-50"}`}
+                onClick={() => toggleType(type)}
+              >
+                <Icon className="w-3 h-3" />
+                {provocationLabels[type]}
+              </Button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Generate button */}
