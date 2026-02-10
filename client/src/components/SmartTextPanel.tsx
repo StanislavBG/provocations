@@ -2,9 +2,34 @@ import { useState } from "react";
 import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
-import { Copy, Eraser } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Copy, Eraser, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
+
+export interface SmartAction {
+  /** Unique key for React rendering */
+  key: string;
+  /** Button label text */
+  label: string;
+  /** Hover description explaining what the action does */
+  description: string;
+  /** Lucide icon component */
+  icon: LucideIcon;
+  /** Click handler */
+  onClick: () => void;
+  /** Whether the button is disabled */
+  disabled?: boolean;
+  /** Whether the action is currently in progress (shows spinner) */
+  loading?: boolean;
+  /** Label to show while loading */
+  loadingLabel?: string;
+  /** Button variant (default: "ghost") */
+  variant?: "ghost" | "outline" | "default";
+  /** Whether to show the button (default: true) */
+  visible?: boolean;
+}
 
 interface SmartTextPanelProps {
   value: string;
@@ -29,6 +54,8 @@ interface SmartTextPanelProps {
   showCopy?: boolean;
   /** Additional action buttons rendered in the icon toolbar */
   extraActions?: React.ReactNode;
+  /** AI action buttons rendered below the textarea with tooltip descriptions */
+  actions?: SmartAction[];
   autoFocus?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
@@ -54,6 +81,7 @@ export function SmartTextPanel({
   showClear = true,
   showCopy = true,
   extraActions,
+  actions,
   autoFocus,
   readOnly,
   disabled,
@@ -110,6 +138,7 @@ export function SmartTextPanel({
 
   const hasContent = value.length > 0;
   const shouldShowMic = showMic && !!onVoiceTranscript;
+  const visibleActions = actions?.filter((a) => a.visible !== false) ?? [];
 
   return (
     <div className={cn("relative", panelClassName)}>
@@ -166,6 +195,38 @@ export function SmartTextPanel({
           />
         )}
       </div>
+      {visibleActions.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap mt-1">
+          {visibleActions.map((action) => (
+            <Tooltip key={action.key}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={action.variant ?? "ghost"}
+                  size="sm"
+                  onClick={action.onClick}
+                  disabled={action.disabled || action.loading}
+                  className="gap-1.5 text-xs h-7"
+                >
+                  {action.loading ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      {action.loadingLabel ?? action.label}
+                    </>
+                  ) : (
+                    <>
+                      <action.icon className="w-3 h-3" />
+                      {action.label}
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p>{action.description}</p>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
