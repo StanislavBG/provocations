@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoiceRecorder } from "./VoiceRecorder";
+import { SmartTextPanel } from "./SmartTextPanel";
 import {
   ListTree,
   Plus,
@@ -146,16 +146,8 @@ function OutlineItemCard({
 
       {item.isExpanded && (
         <CardContent className="p-3 pt-0 space-y-2">
-          {/* Edit controls: voice + text instruction input (above content) */}
+          {/* Edit controls: text instruction input (above content) */}
           <div className="flex items-center gap-1">
-            <VoiceRecorder
-              onTranscript={(transcript) => onVoiceInput?.(transcript)}
-              onInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
-              onRecordingChange={(isRecording) => onTranscriptUpdate?.("", isRecording)}
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 shrink-0"
-            />
             {showInstruction ? (
               <div className="flex items-center gap-1 flex-1">
                 <Input
@@ -209,12 +201,18 @@ function OutlineItemCard({
             )}
           </div>
 
-          <Textarea
+          <SmartTextPanel
             data-testid={`textarea-content-${item.id}`}
             placeholder="Write your content here, or use voice / AI to generate..."
             value={item.content}
-            onChange={(e) => onUpdate({ content: e.target.value })}
-            className="min-h-[100px] text-sm resize-none"
+            onChange={(val) => onUpdate({ content: val })}
+            className="text-sm min-h-[100px]"
+            minRows={4}
+            maxRows={20}
+            onVoiceTranscript={(transcript) => onVoiceInput?.(transcript)}
+            onVoiceInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
+            onRecordingChange={(isRecording) => onTranscriptUpdate?.("", isRecording)}
+            voiceInline={false}
           />
           {item.content && (
             <div className="flex items-center justify-end gap-2">

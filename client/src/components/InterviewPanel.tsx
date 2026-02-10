@@ -3,8 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
-import { VoiceRecorder } from "./VoiceRecorder";
+import { SmartTextPanel } from "./SmartTextPanel";
 import {
   MessageCircleQuestion,
   Play,
@@ -41,7 +40,6 @@ export function InterviewPanel({
 }: InterviewPanelProps) {
   const [answerText, setAnswerText] = useState("");
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
-  const [answerInterim, setAnswerInterim] = useState("");
 
   const handleSubmitAnswer = () => {
     if (answerText.trim()) {
@@ -54,7 +52,6 @@ export function InterviewPanel({
     if (transcript.trim()) {
       onAnswer(transcript.trim());
       setAnswerText("");
-      setAnswerInterim("");
     }
   };
 
@@ -147,31 +144,23 @@ export function InterviewPanel({
 
                 {/* Answer input */}
                 <div className="space-y-2">
-                  <div className="relative">
-                    <AutoExpandTextarea
-                      placeholder="Type your answer or use the mic..."
-                      value={isRecordingAnswer ? answerInterim || answerText : answerText}
-                      onChange={(e) => setAnswerText(e.target.value)}
-                      readOnly={isRecordingAnswer}
-                      className={`text-sm pr-20 ${isRecordingAnswer ? "border-primary" : ""}`}
-                      minRows={2}
-                      maxRows={8}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSubmitAnswer();
-                        }
-                      }}
-                    />
-                    <div className="absolute top-2 right-2 flex items-center gap-1">
-                      <VoiceRecorder
-                        onTranscript={handleVoiceAnswer}
-                        onInterimTranscript={setAnswerInterim}
-                        onRecordingChange={setIsRecordingAnswer}
-                        size="icon"
-                        variant={isRecordingAnswer ? "destructive" : "ghost"}
-                        className="h-7 w-7"
-                      />
+                  <SmartTextPanel
+                    placeholder="Type your answer or use the mic..."
+                    value={answerText}
+                    onChange={setAnswerText}
+                    className="text-sm"
+                    minRows={2}
+                    maxRows={8}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmitAnswer();
+                      }
+                    }}
+                    onVoiceTranscript={handleVoiceAnswer}
+                    onRecordingChange={setIsRecordingAnswer}
+                    voiceMode="replace"
+                    extraActions={
                       <Button
                         size="icon"
                         variant="ghost"
@@ -181,8 +170,8 @@ export function InterviewPanel({
                       >
                         <Send className="w-3.5 h-3.5" />
                       </Button>
-                    </div>
-                  </div>
+                    }
+                  />
                   {isRecordingAnswer && (
                     <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
                       <Mic className="w-3 h-3" />
