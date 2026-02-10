@@ -670,6 +670,34 @@ export default function Workspace() {
     );
   }, [document, writeMutation]);
 
+  // Send provocation content directly to the document as a note for the author
+  const handleSendToAuthor = useCallback((provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
+    if (!document) return;
+
+    const typeLabel = provocationData.type.charAt(0).toUpperCase() + provocationData.type.slice(1).replace(/_/g, " ");
+    const note = `\n\n---\n[${typeLabel}] ${provocationData.title}\n${provocationData.content}\n---`;
+    const newText = document.rawText + note;
+
+    const newVersion: DocumentVersion = {
+      id: generateId("v"),
+      text: newText,
+      timestamp: Date.now(),
+      description: `Sent to author: ${provocationData.title}`,
+    };
+    setVersions(prev => [...prev, newVersion]);
+    setDocument({ ...document, rawText: newText });
+
+    // Mark the provocation as addressed
+    setProvocations((prev) =>
+      prev.map((p) => (p.id === provocationId ? { ...p, status: "addressed" as const } : p))
+    );
+
+    toast({
+      title: "Sent to Author",
+      description: `"${provocationData.title}" has been added as a note in the document.`,
+    });
+  }, [document, toast]);
+
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
   }, []);
@@ -805,6 +833,29 @@ export default function Workspace() {
   const handleLoadDocument = useCallback((text: string, title: string, docId: number, passphrase: string) => {
     setObjective(title);
     setSaveCredentials({ documentId: docId, title, passphrase });
+
+    // Immediately populate the document so it appears in the workspace
+    const tempDoc: Document = { id: `loaded-${Date.now()}`, rawText: text };
+    setDocument(tempDoc);
+    setPhase("workspace");
+
+    // Clear stale state from any previous document
+    setProvocations([]);
+    setOutline([]);
+    setEditHistory([]);
+    setLastSuggestions([]);
+    setShowDiffView(false);
+
+    // Create initial version
+    const initialVersion: DocumentVersion = {
+      id: generateId("v"),
+      text,
+      timestamp: Date.now(),
+      description: "Loaded document",
+    };
+    setVersions([initialVersion]);
+
+    // Run analysis in background to generate provocations
     analyzeMutation.mutate({ text, referenceDocuments });
   }, [analyzeMutation, referenceDocuments]);
 
@@ -1227,6 +1278,7 @@ export default function Workspace() {
                     onVoiceResponse={handleVoiceResponse}
                     onStartResponse={handleStartProvocationResponse}
                     onAddToDocument={handleAddToDocument}
+                    onSendToAuthor={handleSendToAuthor}
                     onTranscriptUpdate={handleTranscriptUpdate}
                     onHoverProvocation={setHoveredProvocationId}
                     onRegenerateProvocations={handleRegenerateProvocations}
