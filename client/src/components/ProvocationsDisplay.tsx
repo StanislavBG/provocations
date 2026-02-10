@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { VoiceRecorder } from "./VoiceRecorder";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextPanel } from "./SmartTextPanel";
 import {
   Lightbulb,
   AlertTriangle,
@@ -540,8 +539,6 @@ function FocusMode({
 export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onStartResponse, onAddToDocument, onSendToAuthor, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
   const [viewFilter, setViewFilter] = useState<ProvocationType | "all">("all");
   const [guidance, setGuidance] = useState("");
-  const [guidanceInterim, setGuidanceInterim] = useState("");
-  const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
 
   // Type selection for which provocation types to generate/answer (empty by default — user opts in)
@@ -603,10 +600,6 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
           <ChallengeInput
             guidance={guidance}
             setGuidance={setGuidance}
-            guidanceInterim={guidanceInterim}
-            setGuidanceInterim={setGuidanceInterim}
-            isRecordingGuidance={isRecordingGuidance}
-            setIsRecordingGuidance={setIsRecordingGuidance}
             isRegenerating={isRegenerating}
             selectedTypes={selectedTypes}
             toggleType={toggleType}
@@ -751,10 +744,6 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
 function ChallengeInput({
   guidance,
   setGuidance,
-  guidanceInterim,
-  setGuidanceInterim,
-  isRecordingGuidance,
-  setIsRecordingGuidance,
   isRegenerating,
   selectedTypes,
   toggleType,
@@ -762,15 +751,13 @@ function ChallengeInput({
 }: {
   guidance: string;
   setGuidance: (v: string) => void;
-  guidanceInterim: string;
-  setGuidanceInterim: (v: string) => void;
-  isRecordingGuidance: boolean;
-  setIsRecordingGuidance: (v: boolean) => void;
   isRegenerating?: boolean;
   selectedTypes: Set<ProvocationType>;
   toggleType: (type: ProvocationType) => void;
   onGenerate: () => void;
 }) {
+  const [isRecording, setIsRecording] = useState(false);
+
   return (
     <div className="border-b bg-muted/20 p-4 space-y-3">
       {/* Challenge input with type toggles below */}
@@ -781,34 +768,25 @@ function ChallengeInput({
             Challenge Me On...
           </label>
         </div>
-        <div className="flex items-start gap-2">
-          <Textarea
-            placeholder="e.g. 'Push me on pricing strategy' or 'Find gaps in my competitive analysis'"
-            value={isRecordingGuidance ? guidanceInterim || guidance : guidance}
-            onChange={(e) => setGuidance(e.target.value)}
-            className="flex-1 text-sm min-h-[60px] max-h-[100px] resize-none"
-            readOnly={isRecordingGuidance}
-            disabled={isRegenerating}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                onGenerate();
-              }
-            }}
-          />
-          <VoiceRecorder
-            onTranscript={(transcript) => {
-              setGuidance(transcript);
-              setGuidanceInterim("");
-            }}
-            onInterimTranscript={setGuidanceInterim}
-            onRecordingChange={setIsRecordingGuidance}
-            size="icon"
-            variant="outline"
-            className="h-9 w-9 shrink-0"
-          />
-        </div>
-        {isRecordingGuidance && (
+        <SmartTextPanel
+          placeholder="e.g. 'Push me on pricing strategy' or 'Find gaps in my competitive analysis'"
+          value={guidance}
+          onChange={setGuidance}
+          className="text-sm"
+          minRows={2}
+          maxRows={4}
+          disabled={isRegenerating}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onGenerate();
+            }
+          }}
+          onVoiceTranscript={(transcript) => setGuidance(transcript)}
+          onRecordingChange={setIsRecording}
+          voiceMode="replace"
+        />
+        {isRecording && (
           <p className="text-xs text-primary animate-pulse">Listening... describe the direction for your challenges</p>
         )}
         <div className="flex items-center gap-1 flex-wrap">

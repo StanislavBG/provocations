@@ -5,10 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
 import { FileText, ArrowRight, Sparkles, Mic, Target, BookCopy, Plus, X, Wand2, Eye, EyeOff, Loader2, Check, PenLine, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { generateId } from "@/lib/utils";
-import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { SmartTextPanel } from "@/components/SmartTextPanel";
 import { apiRequest } from "@/lib/queryClient";
 import { PrebuiltTemplates } from "@/components/PrebuiltTemplates";
 import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -31,9 +30,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   // Voice input state
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
-  const [objectiveInterim, setObjectiveInterim] = useState("");
   const [isRecordingText, setIsRecordingText] = useState(false);
-  const [textInterim, setTextInterim] = useState("");
 
   // Template generation with approval flow
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
@@ -90,7 +87,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   // Handle objective voice transcript
   const handleObjectiveVoiceComplete = (transcript: string) => {
     setObjective(transcript);
-    setObjectiveInterim("");
     if (transcript.length > 50) {
       setObjectiveRawTranscript(transcript);
     }
@@ -100,7 +96,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const handleTextVoiceComplete = (transcript: string) => {
     const newText = text ? text + " " + transcript : transcript;
     setText(newText);
-    setTextInterim("");
     if (transcript.length > 100) {
       setTextRawTranscript((prev) => prev ? prev + " " + transcript : transcript);
     }
@@ -340,26 +335,17 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="relative">
-                    <AutoExpandTextarea
-                      placeholder="Paste the reference content here..."
-                      value={newRefContent}
-                      onChange={(e) => setNewRefContent(e.target.value)}
-                      className="text-sm pr-10"
-                      minRows={3}
-                      maxRows={15}
-                    />
-                    <div className="absolute top-2 right-2">
-                      <VoiceRecorder
-                        onTranscript={(transcript) => {
-                          setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
-                        }}
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                      />
-                    </div>
-                  </div>
+                  <SmartTextPanel
+                    placeholder="Paste the reference content here..."
+                    value={newRefContent}
+                    onChange={(val) => setNewRefContent(val)}
+                    className="text-sm"
+                    minRows={3}
+                    maxRows={15}
+                    onVoiceTranscript={(transcript) => {
+                      setNewRefContent((prev) => prev ? prev + " " + transcript : transcript);
+                    }}
+                  />
                   <Button
                     variant="outline"
                     size="sm"
@@ -407,26 +393,19 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               <Target className="w-4 h-4 text-primary" />
               What are you creating?
             </label>
-            <div className="flex gap-2">
-              <AutoExpandTextarea
-                id="objective"
-                data-testid="input-objective"
-                placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-                className={`text-base flex-1 leading-relaxed font-serif ${isRecordingObjective ? "border-primary text-primary" : ""}`}
-                value={isRecordingObjective ? objectiveInterim || objective : objective}
-                onChange={(e) => setObjective(e.target.value)}
-                readOnly={isRecordingObjective}
-                minRows={3}
-                maxRows={6}
-              />
-              <VoiceRecorder
-                onTranscript={handleObjectiveVoiceComplete}
-                onInterimTranscript={setObjectiveInterim}
-                onRecordingChange={setIsRecordingObjective}
-                size="default"
-                variant={isRecordingObjective ? "destructive" : "outline"}
-              />
-            </div>
+            <SmartTextPanel
+              id="objective"
+              data-testid="input-objective"
+              placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
+              className="text-base leading-relaxed font-serif"
+              value={objective}
+              onChange={(val) => setObjective(val)}
+              minRows={3}
+              maxRows={6}
+              onVoiceTranscript={handleObjectiveVoiceComplete}
+              onRecordingChange={setIsRecordingObjective}
+              voiceMode="replace"
+            />
             {isRecordingObjective && (
               <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
             )}
@@ -583,33 +562,23 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             ) : (
               /* Expanded: large text area filling available space */
               <div className="flex flex-col flex-1 min-h-0 rounded-lg border-2 bg-card">
-                <div className="relative flex-1 min-h-0 p-4">
-                  <AutoExpandTextarea
+                <div className="flex-1 min-h-0 p-4">
+                  <SmartTextPanel
                     data-testid="input-source-text"
                     placeholder="Paste your notes, transcript, or source material here..."
-                    className={`text-base leading-relaxed font-serif pr-12 h-full min-h-[200px] ${isRecordingText ? "border-primary" : "border-none shadow-none focus-visible:ring-0"}`}
-                    value={isRecordingText ? textInterim || text : text}
-                    onChange={(e) => setText(e.target.value)}
-                    readOnly={isRecordingText}
+                    className="text-base leading-relaxed font-serif border-none shadow-none focus-visible:ring-0 min-h-[200px]"
+                    value={text}
+                    onChange={(val) => setText(val)}
                     minRows={12}
                     maxRows={40}
                     autoFocus
+                    onVoiceTranscript={handleTextVoiceComplete}
+                    onRecordingChange={setIsRecordingText}
                   />
-                  <div className="absolute top-5 right-5">
-                    <VoiceRecorder
-                      onTranscript={handleTextVoiceComplete}
-                      onInterimTranscript={(interim) => setTextInterim(text ? text + " " + interim : interim)}
-                      onRecordingChange={setIsRecordingText}
-                      size="icon"
-                      variant={isRecordingText ? "destructive" : "ghost"}
-                    />
-                  </div>
                   {isRecordingText && (
-                    <div className="absolute bottom-5 left-5 right-14">
-                      <p className="text-xs text-primary animate-pulse bg-background/80 px-2 py-1 rounded">
-                        Listening... speak your source material (up to 10 min)
-                      </p>
-                    </div>
+                    <p className="text-xs text-primary animate-pulse px-2 py-1 mt-1">
+                      Listening... speak your source material (up to 10 min)
+                    </p>
                   )}
                 </div>
 
