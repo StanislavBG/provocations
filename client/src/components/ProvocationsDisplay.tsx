@@ -643,10 +643,6 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         <ChallengeInput
           guidance={guidance}
           setGuidance={setGuidance}
-          guidanceInterim={guidanceInterim}
-          setGuidanceInterim={setGuidanceInterim}
-          isRecordingGuidance={isRecordingGuidance}
-          setIsRecordingGuidance={setIsRecordingGuidance}
           isRegenerating={isRegenerating}
           selectedTypes={selectedTypes}
           toggleType={toggleType}
