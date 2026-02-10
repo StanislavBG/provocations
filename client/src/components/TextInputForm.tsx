@@ -407,33 +407,31 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               <Target className="w-4 h-4 text-primary" />
               What are you creating?
             </label>
-            <div className="flex gap-2">
-              <AutoExpandTextarea
-                id="objective"
-                data-testid="input-objective"
-                placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-                className={`text-base flex-1 leading-relaxed font-serif ${isRecordingObjective ? "border-primary text-primary" : ""}`}
-                value={isRecordingObjective ? objectiveInterim || objective : objective}
-                onChange={(e) => setObjective(e.target.value)}
-                readOnly={isRecordingObjective}
-                minRows={3}
-                maxRows={6}
-              />
-              <VoiceRecorder
-                onTranscript={handleObjectiveVoiceComplete}
-                onInterimTranscript={setObjectiveInterim}
-                onRecordingChange={setIsRecordingObjective}
-                size="default"
-                variant={isRecordingObjective ? "destructive" : "outline"}
-              />
-            </div>
+            <AutoExpandTextarea
+              id="objective"
+              data-testid="input-objective"
+              placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
+              className={`text-base leading-relaxed font-serif ${isRecordingObjective ? "border-primary text-primary" : ""}`}
+              value={isRecordingObjective ? objectiveInterim || objective : objective}
+              onChange={(e) => setObjective(e.target.value)}
+              readOnly={isRecordingObjective}
+              minRows={3}
+              maxRows={6}
+            />
             {isRecordingObjective && (
               <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
             )}
 
-            {/* Summarize controls for long objectives */}
-            {objective.length > 50 && !isRecordingObjective && (
-              <div className="flex items-center gap-2 flex-wrap">
+            {/* Step 1 action buttons — microphone, clean-up, generate template on one row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <VoiceRecorder
+                onTranscript={handleObjectiveVoiceComplete}
+                onInterimTranscript={setObjectiveInterim}
+                onRecordingChange={setIsRecordingObjective}
+                size="sm"
+                variant={isRecordingObjective ? "destructive" : "outline"}
+              />
+              {objective.length > 50 && !isRecordingObjective && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -453,45 +451,43 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     </>
                   )}
                 </Button>
-                {objectiveRawTranscript && objectiveRawTranscript !== objective && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
-                      className="gap-1.5 text-xs h-7"
-                    >
-                      {showObjectiveRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original</>}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleRestoreObjective} className="gap-1.5 text-xs h-7">
-                      Restore original
-                    </Button>
-                  </>
-                )}
-              </div>
-            )}
+              )}
+              {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateTemplate}
+                  disabled={isGeneratingTemplate}
+                  className="gap-1.5"
+                >
+                  {isGeneratingTemplate ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
+                  ) : (
+                    <><Wand2 className="w-3.5 h-3.5" /> Generate Template</>
+                  )}
+                </Button>
+              )}
+              {objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowObjectiveRaw(!showObjectiveRaw)}
+                    className="gap-1.5 text-xs h-7"
+                  >
+                    {showObjectiveRaw ? <><EyeOff className="w-3 h-3" /> Hide original</> : <><Eye className="w-3 h-3" /> Show original</>}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleRestoreObjective} className="gap-1.5 text-xs h-7">
+                    Restore original
+                  </Button>
+                </>
+              )}
+            </div>
             {showObjectiveRaw && objectiveRawTranscript && (
               <div className="p-3 rounded-lg bg-muted/50 border text-sm">
                 <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
                 <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
               </div>
-            )}
-
-            {/* Generate template from objective — near objective input */}
-            {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGenerateTemplate}
-                disabled={isGeneratingTemplate}
-                className="gap-1.5 self-start"
-              >
-                {isGeneratingTemplate ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
-                ) : (
-                  <><Wand2 className="w-3.5 h-3.5" /> Generate Template from Objective</>
-                )}
-              </Button>
             )}
 
             {/* Pending template approval */}
@@ -522,21 +518,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               </div>
             )}
 
-            {/* Active prebuilt indicator */}
-            {activePrebuilt && (
-              <div className="flex items-center justify-between p-2 rounded-lg border border-primary/30 bg-primary/5">
-                <div className="flex items-center gap-2 text-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-muted-foreground">Template: {activePrebuilt.title}</span>
-                </div>
-                <button
-                  onClick={handleClearPrebuilt}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
           </div>
 
           {/* ── DRAFT ─── large, fills remaining space ── */}
