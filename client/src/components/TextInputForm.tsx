@@ -280,64 +280,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             {/* ── Modes Tab ── */}
             <TabsContent value="modes">
               <div className="space-y-4">
-                {/* Pre-built templates */}
-                {!activePrebuilt && (
-                  <PrebuiltTemplates onSelect={handleSelectPrebuilt} />
-                )}
-
-                {/* Generate template from objective */}
-                {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium flex items-center gap-2">
-                      <Wand2 className="w-4 h-4 text-primary" />
-                      AI-generated template
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Generate a structured template based on your objective.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleGenerateTemplate}
-                      disabled={isGeneratingTemplate}
-                      className="gap-1.5 w-full"
-                    >
-                      {isGeneratingTemplate ? (
-                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
-                      ) : (
-                        <><Wand2 className="w-3.5 h-3.5" /> Generate Template from Objective</>
-                      )}
-                    </Button>
-                  </div>
-                )}
-
-                {/* Pending template approval */}
-                {pendingTemplate && (
-                  <div className="space-y-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Wand2 className="w-4 h-4 text-primary" />
-                        <span className="font-medium text-sm">{pendingTemplate.name}</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs">Pending Approval</Badge>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto p-3 rounded-md bg-background border text-sm font-serif whitespace-pre-wrap leading-relaxed">
-                      {pendingTemplate.content}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={handleApproveTemplate} className="gap-1.5 flex-1">
-                        <Check className="w-3.5 h-3.5" /> Approve & Add
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={handleRejectTemplate} className="gap-1.5">
-                        <X className="w-3.5 h-3.5" /> Discard
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={handleGenerateTemplate} disabled={isGeneratingTemplate} className="gap-1.5">
-                        {isGeneratingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                        Regenerate
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                {/* Pre-built templates — always visible */}
+                <PrebuiltTemplates
+                  onSelect={handleSelectPrebuilt}
+                  onDeselect={handleClearPrebuilt}
+                  activeId={activePrebuilt?.id ?? null}
+                />
               </div>
             </TabsContent>
 
@@ -526,6 +474,51 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               <div className="p-3 rounded-lg bg-muted/50 border text-sm">
                 <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
                 <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
+              </div>
+            )}
+
+            {/* Generate template from objective — near objective input */}
+            {objective.trim() && !pendingTemplate && !referenceDocuments.some(d => d.type === "template") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateTemplate}
+                disabled={isGeneratingTemplate}
+                className="gap-1.5 self-start"
+              >
+                {isGeneratingTemplate ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating template...</>
+                ) : (
+                  <><Wand2 className="w-3.5 h-3.5" /> Generate Template from Objective</>
+                )}
+              </Button>
+            )}
+
+            {/* Pending template approval */}
+            {pendingTemplate && (
+              <div className="space-y-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-primary" />
+                    <span className="font-medium text-sm">{pendingTemplate.name}</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs">Pending Approval</Badge>
+                </div>
+                <div className="max-h-48 overflow-y-auto p-3 rounded-md bg-background border text-sm font-serif whitespace-pre-wrap leading-relaxed">
+                  {pendingTemplate.content}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={handleApproveTemplate} className="gap-1.5 flex-1">
+                    <Check className="w-3.5 h-3.5" /> Approve & Add
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleRejectTemplate} className="gap-1.5">
+                    <X className="w-3.5 h-3.5" /> Discard
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleGenerateTemplate} disabled={isGeneratingTemplate} className="gap-1.5">
+                    {isGeneratingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                    Regenerate
+                  </Button>
+                </div>
               </div>
             )}
 
