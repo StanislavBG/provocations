@@ -29,6 +29,7 @@ import {
   Rocket,
   Mic,
   Plus,
+  Send,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
@@ -83,6 +84,7 @@ interface ProvocationsDisplayProps {
   onVoiceResponse?: (provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onStartResponse?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onAddToDocument?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onSendToAuthor?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onHoverProvocation?: (provocationId: string | null) => void;
   onRegenerateProvocations?: (guidance?: string, types?: ProvocationType[]) => void;
@@ -129,6 +131,7 @@ function ProvocationCard({
   onUpdateStatus,
   onStartResponse,
   onAddToDocument,
+  onSendToAuthor,
   onHover,
   isMerging
 }: {
@@ -136,6 +139,7 @@ function ProvocationCard({
   onUpdateStatus: (status: Provocation["status"]) => void;
   onStartResponse?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onAddToDocument?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onSendToAuthor?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onHover?: (isHovered: boolean) => void;
   isMerging?: boolean;
 }) {
@@ -231,6 +235,27 @@ function ProvocationCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
+                  data-testid={`button-send-to-author-${provocation.id}`}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  onClick={() => onSendToAuthor?.({
+                    type: provocation.type,
+                    title: provocation.title,
+                    content: provocation.content,
+                    sourceExcerpt: provocation.sourceExcerpt,
+                  })}
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Send to Author
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Append this provocation as a note in the document</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
                   data-testid={`button-highlight-${provocation.id}`}
                   size="sm"
                   variant="outline"
@@ -310,6 +335,7 @@ function FocusMode({
   provocations,
   onStartResponse,
   onAddToDocument,
+  onSendToAuthor,
   onUpdateStatus,
   onExit,
   isMerging,
@@ -317,6 +343,7 @@ function FocusMode({
   provocations: Provocation[];
   onStartResponse?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onAddToDocument?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onSendToAuthor?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onUpdateStatus: (id: string, status: Provocation["status"]) => void;
   onExit: () => void;
   isMerging?: boolean;
@@ -442,6 +469,22 @@ function FocusMode({
               <Plus className="w-4 h-4" />
               Add to Document
             </Button>
+            <Button
+              size="default"
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                onSendToAuthor?.(current.id, {
+                  type: current.type,
+                  title: current.title,
+                  content: current.content,
+                  sourceExcerpt: current.sourceExcerpt,
+                });
+              }}
+            >
+              <Send className="w-4 h-4" />
+              Send to Author
+            </Button>
           </div>
         </div>
 
@@ -494,7 +537,7 @@ function FocusMode({
   );
 }
 
-export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onStartResponse, onAddToDocument, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
+export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onStartResponse, onAddToDocument, onSendToAuthor, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
   const [viewFilter, setViewFilter] = useState<ProvocationType | "all">("all");
   const [guidance, setGuidance] = useState("");
   const [guidanceInterim, setGuidanceInterim] = useState("");
@@ -592,6 +635,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         provocations={focusProvocations}
         onStartResponse={onStartResponse}
         onAddToDocument={onAddToDocument}
+        onSendToAuthor={onSendToAuthor}
         onUpdateStatus={onUpdateStatus}
         onExit={() => setIsFocusMode(false)}
         isMerging={isMerging}
@@ -687,6 +731,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
               onUpdateStatus={(status) => onUpdateStatus(provocation.id, status)}
               onStartResponse={(provocationData) => onStartResponse?.(provocation.id, provocationData)}
               onAddToDocument={(provocationData) => onAddToDocument?.(provocation.id, provocationData)}
+              onSendToAuthor={(provocationData) => onSendToAuthor?.(provocation.id, provocationData)}
               onHover={(isHovered) => onHoverProvocation?.(isHovered ? provocation.id : null)}
               isMerging={isMerging}
             />
