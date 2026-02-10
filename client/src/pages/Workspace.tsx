@@ -2,7 +2,7 @@ import { useState, useCallback, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { encrypt } from "@/lib/crypto";
+// crypto moved server-side — no client-side imports needed
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
@@ -859,7 +859,7 @@ export default function Workspace() {
     analyzeMutation.mutate({ text, referenceDocuments });
   }, [analyzeMutation, referenceDocuments]);
 
-  // Quick save: re-encrypt and overwrite the existing saved document
+  // Quick save: overwrite the existing saved document (server handles encryption)
   const handleSaveClick = useCallback(async () => {
     if (!document?.rawText) return;
 
@@ -869,15 +869,13 @@ export default function Workspace() {
       return;
     }
 
-    // Quick save - encrypt and PUT update
+    // Quick save - server re-encrypts
     setIsQuickSaving(true);
     try {
-      const encrypted = await encrypt(document.rawText, saveCredentials.passphrase);
       await apiRequest("PUT", `/api/documents/${saveCredentials.documentId}`, {
         title: saveCredentials.title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        text: document.rawText,
+        passphrase: saveCredentials.passphrase,
       });
       toast({
         title: "Saved",
@@ -919,11 +917,10 @@ export default function Workspace() {
               size="sm"
               onClick={() => setShowLoadDialog(true)}
               className="gap-1.5"
-              title="Your documents are encrypted — only you can read them"
+              title="Load a previously saved document"
             >
               <FolderOpen className="w-4 h-4" />
               Load Saved
-              <span className="text-[10px] text-muted-foreground font-normal hidden sm:inline">encrypted</span>
             </Button>
             <ThemeToggle />
           </div>
@@ -1019,13 +1016,10 @@ export default function Workspace() {
               disabled={!document?.rawText || isQuickSaving}
               title={saveCredentials
                 ? `Save to "${saveCredentials.title}"`
-                : "End-to-end encrypted — only you can read your saved documents"}
+                : "Save your document with a passphrase"}
             >
               <Save className="w-4 h-4" />
               {isQuickSaving ? "Saving..." : "Save"}
-              {!saveCredentials && (
-                <span className="text-[10px] text-muted-foreground font-normal hidden sm:inline">encrypted</span>
-              )}
             </Button>
             <Button
               data-testid="button-reset"
