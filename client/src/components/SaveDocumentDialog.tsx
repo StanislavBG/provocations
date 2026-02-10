@@ -16,16 +16,24 @@ import { encrypt, hashPassphrase } from "@/lib/crypto";
 import { apiRequest } from "@/lib/queryClient";
 import { Lock, AlertTriangle, ShieldCheck } from "lucide-react";
 
+export interface SaveCredentials {
+  documentId: number;
+  title: string;
+  passphrase: string;
+}
+
 interface SaveDocumentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   documentText: string;
+  onSaved?: (credentials: SaveCredentials) => void;
 }
 
 export function SaveDocumentDialog({
   open,
   onOpenChange,
   documentText,
+  onSaved,
 }: SaveDocumentDialogProps) {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
@@ -56,10 +64,16 @@ export function SaveDocumentDialog({
 
       return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const savedTitle = title.trim() || "Untitled Document";
       toast({
         title: "Document Saved",
         description: "Your document has been encrypted and saved. Remember your passphrase — it cannot be recovered.",
+      });
+      onSaved?.({
+        documentId: data.id,
+        title: savedTitle,
+        passphrase,
       });
       setTitle("");
       setPassphrase("");

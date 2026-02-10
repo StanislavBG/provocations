@@ -10,6 +10,7 @@ import {
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
   saveEncryptedDocumentRequestSchema,
+  updateEncryptedDocumentRequestSchema,
   listEncryptedDocumentsRequestSchema,
   provocationType,
   instructionTypes,
@@ -1189,6 +1190,33 @@ Output only the instruction text. No meta-commentary.`
       console.error("Save encrypted document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to save document", details: errorMessage });
+    }
+  });
+
+  // Update an existing encrypted document
+  app.put("/api/documents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+
+      const parsed = updateEncryptedDocumentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const result = await storage.updateEncryptedDocument(id, parsed.data);
+
+      if (!result) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Update encrypted document error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to update document", details: errorMessage });
     }
   });
 

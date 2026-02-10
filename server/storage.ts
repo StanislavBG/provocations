@@ -27,6 +27,10 @@ export interface IStorage {
   }): Promise<{ id: number; createdAt: string }>;
   listEncryptedDocuments(ownerHash: string): Promise<EncryptedDocumentListItem[]>;
   getEncryptedDocument(id: number): Promise<EncryptedDocumentFull | null>;
+  updateEncryptedDocument(
+    id: number,
+    data: { title: string; ciphertext: string; salt: string; iv: string }
+  ): Promise<{ id: number; updatedAt: string } | null>;
   deleteEncryptedDocument(id: number): Promise<void>;
 }
 
@@ -96,6 +100,25 @@ export class MemStorage implements IStorage {
       createdAt: doc.createdAt.toISOString(),
       updatedAt: doc.updatedAt.toISOString(),
     };
+  }
+
+  async updateEncryptedDocument(
+    id: number,
+    data: { title: string; ciphertext: string; salt: string; iv: string }
+  ): Promise<{ id: number; updatedAt: string } | null> {
+    const existing = this.encryptedDocuments.get(id);
+    if (!existing) return null;
+    const now = new Date();
+    const updated: StoredEncryptedDocument = {
+      ...existing,
+      title: data.title,
+      ciphertext: data.ciphertext,
+      salt: data.salt,
+      iv: data.iv,
+      updatedAt: now,
+    };
+    this.encryptedDocuments.set(id, updated);
+    return { id, updatedAt: now.toISOString() };
   }
 
   async deleteEncryptedDocument(id: number): Promise<void> {
