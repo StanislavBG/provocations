@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { X, Mic, Loader2, Sparkles, Wand2, Send, RotateCcw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { X, Mic, Loader2, Sparkles, Wand2, Send, RotateCcw, Crosshair, Rocket, AlertTriangle, GitBranch, Lightbulb, Gauge, MousePointerClick, Layers } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { VoiceRecorder } from "./VoiceRecorder";
 import { apiRequest } from "@/lib/queryClient";
+
+interface ProvocationContextInfo {
+  type: string;
+  title: string;
+  content: string;
+}
 
 interface TranscriptOverlayProps {
   isVisible: boolean;
@@ -18,9 +26,36 @@ interface TranscriptOverlayProps {
   onClose: () => void;
   onSend?: (transcript: string) => void;
   onCleanTranscript?: (cleaned: string) => void;
+  // Embedded recording callbacks (for overlay-initiated recording)
+  onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
+  onFinalTranscript?: (transcript: string) => void;
+  // Provocation context display
+  provocationContext?: ProvocationContextInfo;
   // Context for cleaning
   context?: "selection" | "provocation" | "document" | "outline";
 }
+
+const provocationTypeIcons: Record<string, typeof Lightbulb> = {
+  opportunity: Lightbulb,
+  fallacy: AlertTriangle,
+  alternative: GitBranch,
+  challenge: Crosshair,
+  thinking_bigger: Rocket,
+  performance: Gauge,
+  ux: MousePointerClick,
+  architecture: Layers,
+};
+
+const provocationTypeColors: Record<string, string> = {
+  opportunity: "text-emerald-600 dark:text-emerald-400",
+  fallacy: "text-amber-600 dark:text-amber-400",
+  alternative: "text-blue-600 dark:text-blue-400",
+  challenge: "text-violet-600 dark:text-violet-400",
+  thinking_bigger: "text-orange-600 dark:text-orange-400",
+  performance: "text-rose-600 dark:text-rose-400",
+  ux: "text-fuchsia-600 dark:text-fuchsia-400",
+  architecture: "text-cyan-600 dark:text-cyan-400",
+};
 
 export function TranscriptOverlay({
   isVisible,
@@ -32,6 +67,9 @@ export function TranscriptOverlay({
   onClose,
   onSend,
   onCleanTranscript,
+  onTranscriptUpdate,
+  onFinalTranscript,
+  provocationContext,
   context = "document",
 }: TranscriptOverlayProps) {
   const [isCleaning, setIsCleaning] = useState(false);
@@ -41,6 +79,9 @@ export function TranscriptOverlay({
 
   const displayTranscript = cleanedTranscript || rawTranscript;
   const hasCleanedVersion = cleanedTranscript && cleanedTranscript !== rawTranscript;
+
+  // Whether to show the embedded VoiceRecorder (when overlay opened without external recording)
+  const showEmbeddedRecorder = !isRecording && !rawTranscript.trim() && !resultSummary;
 
   const handleCleanTranscript = async () => {
     if (!rawTranscript.trim()) return;
@@ -95,6 +136,47 @@ export function TranscriptOverlay({
       </div>
 
       <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+        {/* Provocation context card - shows what the user is responding to */}
+        {provocationContext && !resultSummary && (
+          <Card className="shrink-0 border-muted">
+            <CardContent className="p-3 flex items-start gap-2">
+              {(() => {
+                const Icon = provocationTypeIcons[provocationContext.type] || Crosshair;
+                const colorClass = provocationTypeColors[provocationContext.type] || "text-muted-foreground";
+                return <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${colorClass}`} />;
+              })()}
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground mb-0.5">Responding to provocation:</p>
+                <p className="text-sm font-medium leading-snug">{provocationContext.title}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Embedded VoiceRecorder - shown when overlay opened without active recording */}
+        {showEmbeddedRecorder && onTranscriptUpdate && (
+          <div className="flex flex-col items-center gap-3 py-6">
+            <p className="text-sm text-muted-foreground">
+              {provocationContext ? "Record your response to this provocation" : "Record your voice input"}
+            </p>
+            <VoiceRecorder
+              onTranscript={(transcript) => {
+                onFinalTranscript?.(transcript);
+              }}
+              onInterimTranscript={(interim) => {
+                onTranscriptUpdate(interim, true);
+              }}
+              onRecordingChange={(recording) => {
+                onTranscriptUpdate("", recording);
+              }}
+              size="lg"
+              variant="outline"
+              className="h-14 w-14 rounded-full"
+            />
+            <p className="text-xs text-muted-foreground">Click to start recording</p>
+          </div>
+        )}
+
         {/* Action buttons at top - before transcript content */}
         {!isRecording && rawTranscript.trim() && !resultSummary && (
           <div className="flex items-center gap-2 flex-wrap">
@@ -178,46 +260,50 @@ export function TranscriptOverlay({
           </Card>
         )}
 
-        {/* Raw/Cleaned Transcript Card */}
-        <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardHeader className="pb-2 py-2 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                {hasCleanedVersion ? (showRaw ? "Raw Transcript" : "Cleaned Transcript") : "Your Voice Input"}
-              </CardTitle>
-              {hasCleanedVersion && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowRaw(!showRaw)}
-                  className="h-6 text-xs"
-                >
-                  {showRaw ? "Show cleaned" : "Show raw"}
-                </Button>
-              )}
-            </div>
-            {rawTranscript.length > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {(showRaw ? rawTranscript : displayTranscript).length.toLocaleString()} chars
-              </span>
-            )}
-          </CardHeader>
-          <CardContent className="flex-1 overflow-hidden pb-2">
-            <ScrollArea className="h-full">
-              <p className="text-sm whitespace-pre-wrap" data-testid="text-transcript">
-                {(showRaw ? rawTranscript : displayTranscript) || (isRecording ? "Listening..." : "No transcript yet")}
-              </p>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+        {/* Raw/Cleaned Transcript Card - hidden when waiting for user to start recording */}
+        {!showEmbeddedRecorder && (
+          <>
+            <Card className="flex-1 flex flex-col overflow-hidden">
+              <CardHeader className="pb-2 py-2 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium">
+                    {hasCleanedVersion ? (showRaw ? "Raw Transcript" : "Cleaned Transcript") : "Your Voice Input"}
+                  </CardTitle>
+                  {hasCleanedVersion && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowRaw(!showRaw)}
+                      className="h-6 text-xs"
+                    >
+                      {showRaw ? "Show cleaned" : "Show raw"}
+                    </Button>
+                  )}
+                </div>
+                {rawTranscript.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {(showRaw ? rawTranscript : displayTranscript).length.toLocaleString()} chars
+                  </span>
+                )}
+              </CardHeader>
+              <CardContent className="flex-1 overflow-hidden pb-2">
+                <ScrollArea className="h-full">
+                  <p className="text-sm whitespace-pre-wrap" data-testid="text-transcript">
+                    {(showRaw ? rawTranscript : displayTranscript) || (isRecording ? "Listening..." : "No transcript yet")}
+                  </p>
+                </ScrollArea>
+              </CardContent>
+            </Card>
 
-        {/* What gets sent explanation */}
-        {!isRecording && rawTranscript.trim() && !resultSummary && (
-          <p className="text-xs text-muted-foreground">
-            {hasCleanedVersion && !showRaw
-              ? "The cleaned version will be sent as your instruction to the AI writer."
-              : "Your raw transcript will be sent as-is to the AI writer. Use 'Clean up' to remove speech artifacts first."}
-          </p>
+            {/* What gets sent explanation */}
+            {!isRecording && rawTranscript.trim() && !resultSummary && (
+              <p className="text-xs text-muted-foreground">
+                {hasCleanedVersion && !showRaw
+                  ? "The cleaned version will be sent as your instruction to the AI writer."
+                  : "Your raw transcript will be sent as-is to the AI writer. Use 'Clean up' to remove speech artifacts first."}
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
