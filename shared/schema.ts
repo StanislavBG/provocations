@@ -228,34 +228,33 @@ export interface WorkspaceState {
   currentPhase: "input" | "blank-document" | "workspace";
 }
 
-// Document save/load schemas (server handles encryption)
+// Document save/load schemas (client handles all encryption — server is dumb storage)
+// The server never sees passphrases, device keys, or plaintext.
 export const saveDocumentRequestSchema = z.object({
+  ownerHash: z.string().min(1, "Owner hash is required"),
   title: z.string().min(1, "Title is required").max(200),
-  text: z.string().min(1, "Text is required"),
-  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
+  ciphertext: z.string().min(1, "Ciphertext is required"),
+  salt: z.string().min(1, "Salt is required"),
+  iv: z.string().min(1, "IV is required"),
 });
 
 export type SaveDocumentRequest = z.infer<typeof saveDocumentRequestSchema>;
 
 export const updateDocumentRequestSchema = z.object({
+  ownerHash: z.string().min(1, "Owner hash is required"),
   title: z.string().min(1, "Title is required").max(200),
-  text: z.string().min(1, "Text is required"),
-  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
+  ciphertext: z.string().min(1, "Ciphertext is required"),
+  salt: z.string().min(1, "Salt is required"),
+  iv: z.string().min(1, "IV is required"),
 });
 
 export type UpdateDocumentRequest = z.infer<typeof updateDocumentRequestSchema>;
 
 export const listDocumentsRequestSchema = z.object({
-  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
+  ownerHash: z.string().min(1, "Owner hash is required"),
 });
 
 export type ListDocumentsRequest = z.infer<typeof listDocumentsRequestSchema>;
-
-export const loadDocumentRequestSchema = z.object({
-  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
-});
-
-export type LoadDocumentRequest = z.infer<typeof loadDocumentRequestSchema>;
 
 export interface EncryptedDocumentListItem {
   id: number;
@@ -266,6 +265,7 @@ export interface EncryptedDocumentListItem {
 
 export interface EncryptedDocumentFull {
   id: number;
+  ownerHash: string;
   title: string;
   ciphertext: string;
   salt: string;

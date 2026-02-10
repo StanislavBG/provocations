@@ -2,7 +2,7 @@ import { useState, useCallback, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-// crypto moved server-side — no client-side imports needed
+import { encrypt, hashPassphrase, getOrCreateDeviceKey } from "@/lib/crypto";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
@@ -830,9 +830,9 @@ export default function Workspace() {
   }, []);
 
   // Handle loading a decrypted document from the LoadDocumentDialog
-  const handleLoadDocument = useCallback((text: string, title: string, docId: number, passphrase: string) => {
+  const handleLoadDocument = useCallback((text: string, title: string, docId: number, passphrase: string, ownerHash: string) => {
     setObjective(title);
-    setSaveCredentials({ documentId: docId, title, passphrase });
+    setSaveCredentials({ documentId: docId, title, passphrase, ownerHash });
 
     // Immediately populate the document so it appears in the workspace
     const tempDoc: Document = { id: `loaded-${Date.now()}`, rawText: text };
@@ -859,7 +859,7 @@ export default function Workspace() {
     analyzeMutation.mutate({ text, referenceDocuments });
   }, [analyzeMutation, referenceDocuments]);
 
-  // Quick save: overwrite the existing saved document (server handles encryption)
+  // Quick save: encrypt client-side, then overwrite on server
   const handleSaveClick = useCallback(async () => {
     if (!document?.rawText) return;
 
@@ -869,13 +869,18 @@ export default function Workspace() {
       return;
     }
 
-    // Quick save - server re-encrypts
+    // Quick save - encrypt in browser, then update server
     setIsQuickSaving(true);
     try {
+      const deviceKey = getOrCreateDeviceKey();
+      const encrypted = await encrypt(document.rawText, saveCredentials.passphrase, deviceKey);
+
       await apiRequest("PUT", `/api/documents/${saveCredentials.documentId}`, {
+        ownerHash: saveCredentials.ownerHash,
         title: saveCredentials.title,
-        text: document.rawText,
-        passphrase: saveCredentials.passphrase,
+        ciphertext: encrypted.ciphertext,
+        salt: encrypted.salt,
+        iv: encrypted.iv,
       });
       toast({
         title: "Saved",
