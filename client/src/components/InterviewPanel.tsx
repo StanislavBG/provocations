@@ -64,9 +64,9 @@ export function InterviewPanel({
       <div className="h-full flex items-center justify-center p-8">
         <div className="text-center space-y-4 max-w-sm">
           <MessageCircleQuestion className="w-12 h-12 text-muted-foreground/50 mx-auto" />
-          <h3 className="font-medium text-muted-foreground">Interview Mode</h3>
+          <h3 className="font-medium text-muted-foreground">Provoke Mode</h3>
           <p className="text-sm text-muted-foreground">
-            Start an AI-guided interview that will ask you provocative questions to develop your document.
+            Start an AI-guided session that will ask you provocative questions to develop your document.
             Your answers will be merged into the document when you end the session.
           </p>
           {entries.length > 0 && (
@@ -97,7 +97,7 @@ export function InterviewPanel({
       {/* Header */}
       <div className="flex items-center gap-2 p-4 border-b">
         <MessageCircleQuestion className="w-5 h-5 text-primary" />
-        <h3 className="font-semibold">Interview</h3>
+        <h3 className="font-semibold">Provoke</h3>
         <Badge variant="outline" className="ml-auto">
           {entries.length} answered
         </Badge>
@@ -122,27 +122,10 @@ export function InterviewPanel({
         </Button>
       </div>
 
-      {/* Q&A History */}
+      {/* Current question on top, answered history below */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
-          {entries.map((entry) => (
-            <Card key={entry.id} className="opacity-80">
-              <CardHeader className="p-3 pb-1">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">{entry.topic}</Badge>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 ml-auto" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 pt-0 space-y-2">
-                <p className="text-sm font-medium">{entry.question}</p>
-                <p className="text-sm text-muted-foreground bg-muted/50 rounded p-2">
-                  {entry.answer}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-
-          {/* Current question */}
+          {/* Current question — always at top */}
           {isLoadingQuestion && (
             <Card className="border-primary/30">
               <CardContent className="p-4 flex items-center gap-3">
@@ -210,6 +193,24 @@ export function InterviewPanel({
               </CardContent>
             </Card>
           )}
+
+          {/* Q&A History — newest first, pushed to bottom */}
+          {[...entries].reverse().map((entry) => (
+            <Card key={entry.id} className="opacity-80">
+              <CardHeader className="p-3 pb-1">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">{entry.topic}</Badge>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 ml-auto" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0 space-y-2">
+                <p className="text-sm font-medium">{entry.question}</p>
+                <p className="text-sm text-muted-foreground bg-muted/50 rounded p-2">
+                  {entry.answer}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </ScrollArea>
     </div>

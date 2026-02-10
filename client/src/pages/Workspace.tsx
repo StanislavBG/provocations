@@ -1051,8 +1051,19 @@ export default function Workspace() {
               />
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
                 <TabsList className="w-full justify-start rounded-none border-b px-4 h-auto py-0 bg-transparent">
-                  <TabsTrigger 
-                    value="provocations" 
+                  <TabsTrigger
+                    value="interview"
+                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
+                    data-testid="tab-interview"
+                  >
+                    <MessageCircleQuestion className="w-4 h-4" />
+                    Provoke
+                    {isInterviewActive && (
+                      <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="provocations"
                     className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
                     data-testid="tab-provocations"
                   >
@@ -1062,17 +1073,6 @@ export default function Workspace() {
                       <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">
                         {(provocations ?? []).filter((p) => p.status === "pending").length}
                       </span>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="interview"
-                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
-                    data-testid="tab-interview"
-                  >
-                    <MessageCircleQuestion className="w-4 h-4" />
-                    Interview
-                    {isInterviewActive && (
-                      <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
                     )}
                   </TabsTrigger>
                   <TabsTrigger
@@ -1098,20 +1098,6 @@ export default function Workspace() {
                   </TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="provocations" className="flex-1 mt-0 overflow-hidden">
-                  <ProvocationsDisplay
-                    provocations={provocations}
-                    onUpdateStatus={handleUpdateProvocationStatus}
-                    onVoiceResponse={handleVoiceResponse}
-                    onTranscriptUpdate={handleTranscriptUpdate}
-                    onHoverProvocation={setHoveredProvocationId}
-                    onRegenerateProvocations={handleRegenerateProvocations}
-                    isLoading={analyzeMutation.isPending}
-                    isMerging={writeMutation.isPending}
-                    isRegenerating={regenerateProvocationsMutation.isPending}
-                  />
-                </TabsContent>
-                
                 <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
                   <InterviewPanel
                     isActive={isInterviewActive}
@@ -1123,6 +1109,20 @@ export default function Workspace() {
                     onStart={handleStartInterview}
                     onAnswer={handleInterviewAnswer}
                     onEnd={handleEndInterview}
+                  />
+                </TabsContent>
+
+                <TabsContent value="provocations" className="flex-1 mt-0 overflow-hidden">
+                  <ProvocationsDisplay
+                    provocations={provocations}
+                    onUpdateStatus={handleUpdateProvocationStatus}
+                    onVoiceResponse={handleVoiceResponse}
+                    onTranscriptUpdate={handleTranscriptUpdate}
+                    onHoverProvocation={setHoveredProvocationId}
+                    onRegenerateProvocations={handleRegenerateProvocations}
+                    isLoading={analyzeMutation.isPending}
+                    isMerging={writeMutation.isPending}
+                    isRegenerating={regenerateProvocationsMutation.isPending}
                   />
                 </TabsContent>
 
