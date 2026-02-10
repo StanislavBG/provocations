@@ -9,9 +9,10 @@ import {
   generateTemplateRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
-  saveEncryptedDocumentRequestSchema,
-  updateEncryptedDocumentRequestSchema,
-  listEncryptedDocumentsRequestSchema,
+  saveDocumentRequestSchema,
+  updateDocumentRequestSchema,
+  listDocumentsRequestSchema,
+  loadDocumentRequestSchema,
   provocationType,
   instructionTypes,
   type ProvocationType,
@@ -21,6 +22,7 @@ import {
   type ChangeEntry,
   type InterviewQuestionResponse,
 } from "@shared/schema";
+import { encrypt, decrypt, hashPassphrase } from "./crypto";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -1180,30 +1182,38 @@ Output only the instruction text. No meta-commentary.`
   });
 
   // ==========================================
-  // Encrypted Document Storage (E2EE)
+  // Document Storage (server-side encryption)
   // ==========================================
 
-  // Save an encrypted document
+  // Save a document (server encrypts)
   app.post("/api/documents/save", async (req, res) => {
     try {
-      const parsed = saveEncryptedDocumentRequestSchema.safeParse(req.body);
+      const parsed = saveDocumentRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { ownerHash, title, ciphertext, salt, iv } = parsed.data;
+      const { title, text, passphrase } = parsed.data;
+      const ownerHash = hashPassphrase(passphrase);
+      const encrypted = encrypt(text, passphrase);
 
-      const doc = await storage.saveEncryptedDocument({ ownerHash, title, ciphertext, salt, iv });
+      const doc = await storage.saveEncryptedDocument({
+        ownerHash,
+        title,
+        ciphertext: encrypted.ciphertext,
+        salt: encrypted.salt,
+        iv: encrypted.iv,
+      });
 
       res.json({ id: doc.id, createdAt: doc.createdAt });
     } catch (error) {
-      console.error("Save encrypted document error:", error);
+      console.error("Save document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to save document", details: errorMessage });
     }
   });
 
-  // Update an existing encrypted document
+  // Update an existing document (server re-encrypts)
   app.put("/api/documents/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -1211,12 +1221,20 @@ Output only the instruction text. No meta-commentary.`
         return res.status(400).json({ error: "Invalid document ID" });
       }
 
-      const parsed = updateEncryptedDocumentRequestSchema.safeParse(req.body);
+      const parsed = updateDocumentRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const result = await storage.updateEncryptedDocument(id, parsed.data);
+      const { title, text, passphrase } = parsed.data;
+      const encrypted = encrypt(text, passphrase);
+
+      const result = await storage.updateEncryptedDocument(id, {
+        title,
+        ciphertext: encrypted.ciphertext,
+        salt: encrypted.salt,
+        iv: encrypted.iv,
+      });
 
       if (!result) {
         return res.status(404).json({ error: "Document not found" });
@@ -1224,55 +1242,74 @@ Output only the instruction text. No meta-commentary.`
 
       res.json(result);
     } catch (error) {
-      console.error("Update encrypted document error:", error);
+      console.error("Update document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to update document", details: errorMessage });
     }
   });
 
-  // List encrypted documents for an owner
+  // List documents for a passphrase
   app.post("/api/documents/list", async (req, res) => {
     try {
-      const parsed = listEncryptedDocumentsRequestSchema.safeParse(req.body);
+      const parsed = listDocumentsRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { ownerHash } = parsed.data;
+      const { passphrase } = parsed.data;
+      const ownerHash = hashPassphrase(passphrase);
 
       const items = await storage.listEncryptedDocuments(ownerHash);
 
       res.json({ documents: items });
     } catch (error) {
-      console.error("List encrypted documents error:", error);
+      console.error("List documents error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to list documents", details: errorMessage });
     }
   });
 
-  // Load a single encrypted document
-  app.get("/api/documents/:id", async (req, res) => {
+  // Load and decrypt a document
+  app.post("/api/documents/:id/load", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid document ID" });
       }
 
-      const doc = await storage.getEncryptedDocument(id);
+      const parsed = loadDocumentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
 
+      const { passphrase } = parsed.data;
+
+      const doc = await storage.getEncryptedDocument(id);
       if (!doc) {
         return res.status(404).json({ error: "Document not found" });
       }
 
-      res.json(doc);
+      // Verify ownership via passphrase hash
+      const ownerHash = hashPassphrase(passphrase);
+      // We don't store ownerHash on the full doc response, so fetch and check
+      // For now, just attempt decryption - wrong passphrase will throw
+      try {
+        const text = decrypt(
+          { ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv },
+          passphrase,
+        );
+        res.json({ id: doc.id, title: doc.title, text });
+      } catch {
+        return res.status(403).json({ error: "Decryption failed — wrong passphrase" });
+      }
     } catch (error) {
-      console.error("Load encrypted document error:", error);
+      console.error("Load document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to load document", details: errorMessage });
     }
   });
 
-  // Delete an encrypted document
+  // Delete a document
   app.delete("/api/documents/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -1284,7 +1321,7 @@ Output only the instruction text. No meta-commentary.`
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Delete encrypted document error:", error);
+      console.error("Delete document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to delete document", details: errorMessage });
     }

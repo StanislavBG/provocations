@@ -228,31 +228,34 @@ export interface WorkspaceState {
   currentPhase: "input" | "blank-document" | "workspace";
 }
 
-// Encrypted document save/load schemas
-export const saveEncryptedDocumentRequestSchema = z.object({
-  ownerHash: z.string().min(1, "Owner hash is required"),
+// Document save/load schemas (server handles encryption)
+export const saveDocumentRequestSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
-  ciphertext: z.string().min(1, "Ciphertext is required"),
-  salt: z.string().min(1, "Salt is required"),
-  iv: z.string().min(1, "IV is required"),
+  text: z.string().min(1, "Text is required"),
+  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
 });
 
-export type SaveEncryptedDocumentRequest = z.infer<typeof saveEncryptedDocumentRequestSchema>;
+export type SaveDocumentRequest = z.infer<typeof saveDocumentRequestSchema>;
 
-export const updateEncryptedDocumentRequestSchema = z.object({
+export const updateDocumentRequestSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
-  ciphertext: z.string().min(1, "Ciphertext is required"),
-  salt: z.string().min(1, "Salt is required"),
-  iv: z.string().min(1, "IV is required"),
+  text: z.string().min(1, "Text is required"),
+  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
 });
 
-export type UpdateEncryptedDocumentRequest = z.infer<typeof updateEncryptedDocumentRequestSchema>;
+export type UpdateDocumentRequest = z.infer<typeof updateDocumentRequestSchema>;
 
-export const listEncryptedDocumentsRequestSchema = z.object({
-  ownerHash: z.string().min(1, "Owner hash is required"),
+export const listDocumentsRequestSchema = z.object({
+  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
 });
 
-export type ListEncryptedDocumentsRequest = z.infer<typeof listEncryptedDocumentsRequestSchema>;
+export type ListDocumentsRequest = z.infer<typeof listDocumentsRequestSchema>;
+
+export const loadDocumentRequestSchema = z.object({
+  passphrase: z.string().min(8, "Passphrase must be at least 8 characters"),
+});
+
+export type LoadDocumentRequest = z.infer<typeof loadDocumentRequestSchema>;
 
 export interface EncryptedDocumentListItem {
   id: number;
