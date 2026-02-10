@@ -12,9 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { encrypt, hashPassphrase } from "@/lib/crypto";
 import { apiRequest } from "@/lib/queryClient";
-import { Lock, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Lock, AlertTriangle } from "lucide-react";
 
 export interface SaveCredentials {
   documentId: number;
@@ -49,17 +48,10 @@ export function SaveDocumentDialog({
         throw new Error("Passphrase must be at least 8 characters");
       }
 
-      const [ownerHash, encrypted] = await Promise.all([
-        hashPassphrase(passphrase),
-        encrypt(documentText, passphrase),
-      ]);
-
       const response = await apiRequest("POST", "/api/documents/save", {
-        ownerHash,
         title: title.trim() || "Untitled Document",
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        text: documentText,
+        passphrase,
       });
 
       return await response.json();
@@ -68,7 +60,7 @@ export function SaveDocumentDialog({
       const savedTitle = title.trim() || "Untitled Document";
       toast({
         title: "Document Saved",
-        description: "Your document has been encrypted and saved. Remember your passphrase — it cannot be recovered.",
+        description: "Your document has been saved. Remember your passphrase — it cannot be recovered.",
       });
       onSaved?.({
         documentId: data.id,
@@ -100,29 +92,15 @@ export function SaveDocumentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="w-5 h-5" />
-            Save Encrypted Document
+            Save Document
           </DialogTitle>
           <DialogDescription>
-            Your document is encrypted in your browser before anything leaves
-            your device. The server only stores unreadable ciphertext.
+            Your document is encrypted on the server with your passphrase.
+            Only someone with the passphrase can load it.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5 font-medium text-foreground/80">
-              <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-              How your data is protected
-            </div>
-            <ul className="space-y-1 pl-5 list-disc marker:text-muted-foreground/50">
-              <li>Encryption happens entirely in your browser (AES-256-GCM)</li>
-              <li>Your passphrase never leaves your device</li>
-              <li>The server stores only encrypted data it cannot read</li>
-              <li>No account, no email, no tracking — the passphrase is the only key</li>
-              <li>Document titles are stored in plaintext so you can identify your files</li>
-            </ul>
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor="doc-title">Document Title</Label>
             <Input
@@ -131,9 +109,6 @@ export function SaveDocumentDialog({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Stored in plaintext so you can identify your documents.
-            </p>
           </div>
 
           <div className="space-y-2">
@@ -178,7 +153,7 @@ export function SaveDocumentDialog({
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
           >
-            {saveMutation.isPending ? "Encrypting..." : "Save"}
+            {saveMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

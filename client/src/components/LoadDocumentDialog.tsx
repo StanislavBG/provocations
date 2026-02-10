@@ -12,10 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { decrypt, hashPassphrase } from "@/lib/crypto";
 import { apiRequest } from "@/lib/queryClient";
-import { FolderOpen, Trash2, Loader2, ShieldCheck } from "lucide-react";
-import type { EncryptedDocumentListItem, EncryptedDocumentFull } from "@shared/schema";
+import { FolderOpen, Trash2, Loader2 } from "lucide-react";
+import type { EncryptedDocumentListItem } from "@shared/schema";
 
 interface LoadDocumentDialogProps {
   open: boolean;
@@ -38,8 +37,7 @@ export function LoadDocumentDialog({
       if (passphrase.length < 8) {
         throw new Error("Passphrase must be at least 8 characters");
       }
-      const ownerHash = await hashPassphrase(passphrase);
-      const response = await apiRequest("POST", "/api/documents/list", { ownerHash });
+      const response = await apiRequest("POST", "/api/documents/list", { passphrase });
       return await response.json() as { documents: EncryptedDocumentListItem[] };
     },
     onSuccess: (data) => {
@@ -62,32 +60,21 @@ export function LoadDocumentDialog({
 
   const loadMutation = useMutation({
     mutationFn: async (docId: number) => {
-      const response = await apiRequest("GET", `/api/documents/${docId}`);
-      const doc = await response.json() as EncryptedDocumentFull;
-
-      const plaintext = await decrypt(
-        {
-          ciphertext: doc.ciphertext,
-          salt: doc.salt,
-          iv: doc.iv,
-        },
-        passphrase
-      );
-
-      return { text: plaintext, title: doc.title };
+      const response = await apiRequest("POST", `/api/documents/${docId}/load`, { passphrase });
+      return await response.json() as { id: number; title: string; text: string };
     },
     onSuccess: (data, docId) => {
       onLoad(data.text, data.title, docId, passphrase);
       toast({
         title: "Document Loaded",
-        description: `"${data.title}" has been decrypted and loaded.`,
+        description: `"${data.title}" has been loaded.`,
       });
       handleClose();
     },
     onError: () => {
       toast({
-        title: "Decryption Failed",
-        description: "Wrong passphrase or corrupted data. The document could not be decrypted.",
+        title: "Load Failed",
+        description: "Wrong passphrase or corrupted data. The document could not be loaded.",
         variant: "destructive",
       });
     },
@@ -137,23 +124,14 @@ export function LoadDocumentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderOpen className="w-5 h-5" />
-            Load Encrypted Document
+            Load Document
           </DialogTitle>
           <DialogDescription>
-            Enter your passphrase to find and decrypt your saved documents.
+            Enter your passphrase to find and load your saved documents.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/30 p-2.5 text-xs text-muted-foreground">
-            <ShieldCheck className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-            <span>
-              Your documents are decrypted in your browser. The server never sees
-              your passphrase or plaintext — it only stores encrypted data it
-              cannot read.
-            </span>
-          </div>
-
           <div className="flex gap-2">
             <div className="flex-1 space-y-2">
               <Label htmlFor="load-passphrase">Passphrase</Label>
@@ -245,7 +223,7 @@ export function LoadDocumentDialog({
             }}
             disabled={selectedDocId === null || loadMutation.isPending}
           >
-            {loadMutation.isPending ? "Decrypting..." : "Load"}
+            {loadMutation.isPending ? "Loading..." : "Load"}
           </Button>
         </DialogFooter>
       </DialogContent>
