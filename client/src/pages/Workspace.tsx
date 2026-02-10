@@ -622,6 +622,50 @@ export default function Workspace() {
     // Don't auto-send anymore - user will click "Send to writer" after reviewing
   }, [document]);
 
+  // Open transcript overlay for provocation response (user will record from overlay)
+  const handleStartProvocationResponse = useCallback((provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
+    if (!document) return;
+
+    setPendingVoiceContext({
+      provocation: {
+        id: provocationId,
+        type: provocationData.type,
+        title: provocationData.title,
+        content: provocationData.content,
+        sourceExcerpt: provocationData.sourceExcerpt,
+      },
+      context: "provocation",
+    });
+
+    // Open overlay without transcript - user will start recording from the embedded VoiceRecorder
+    setRawTranscript("");
+    setShowTranscriptOverlay(true);
+    setTranscriptSummary("");
+    setCleanedTranscript(undefined);
+    setIsRecordingFromMain(false);
+  }, [document]);
+
+  // Add provocation insight directly to document (user agrees with the provocation)
+  const handleAddToDocument = useCallback((provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
+    if (!document) return;
+
+    writeMutation.mutate({
+      instruction: `The user agrees with this provocation and wants it reflected in the document. Incorporate the insight naturally:\n\nProvocation: ${provocationData.title}\nDetails: ${provocationData.content}\nRelevant excerpt: "${provocationData.sourceExcerpt}"`,
+      provocation: {
+        type: provocationData.type as ProvocationType,
+        title: provocationData.title,
+        content: provocationData.content,
+        sourceExcerpt: provocationData.sourceExcerpt,
+      },
+      description: `Added to document: ${provocationData.title}`,
+    });
+
+    // Mark the provocation as addressed
+    setProvocations((prev) =>
+      prev.map((p) => (p.id === provocationId ? { ...p, status: "addressed" as const } : p))
+    );
+  }, [document, writeMutation]);
+
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
   }, []);
@@ -743,6 +787,14 @@ export default function Workspace() {
   // Handle cleaned transcript from TranscriptOverlay
   const handleCleanTranscript = useCallback((cleaned: string) => {
     setCleanedTranscript(cleaned);
+  }, []);
+
+  // Handle final transcript from the embedded VoiceRecorder in TranscriptOverlay
+  const handleOverlayFinalTranscript = useCallback((transcript: string) => {
+    if (transcript.trim()) {
+      setRawTranscript(transcript);
+      setIsRecordingFromMain(false);
+    }
   }, []);
 
   // Handle loading a decrypted document from the LoadDocumentDialog
@@ -1047,6 +1099,13 @@ export default function Workspace() {
                 onClose={handleCloseTranscriptOverlay}
                 onSend={handleSendTranscript}
                 onCleanTranscript={handleCleanTranscript}
+                onTranscriptUpdate={handleTranscriptUpdate}
+                onFinalTranscript={handleOverlayFinalTranscript}
+                provocationContext={pendingVoiceContext?.provocation ? {
+                  type: pendingVoiceContext.provocation.type,
+                  title: pendingVoiceContext.provocation.title,
+                  content: pendingVoiceContext.provocation.content,
+                } : undefined}
                 context={pendingVoiceContext?.context || "document"}
               />
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
@@ -1103,6 +1162,8 @@ export default function Workspace() {
                     provocations={provocations}
                     onUpdateStatus={handleUpdateProvocationStatus}
                     onVoiceResponse={handleVoiceResponse}
+                    onStartResponse={handleStartProvocationResponse}
+                    onAddToDocument={handleAddToDocument}
                     onTranscriptUpdate={handleTranscriptUpdate}
                     onHoverProvocation={setHoveredProvocationId}
                     onRegenerateProvocations={handleRegenerateProvocations}
