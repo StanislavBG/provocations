@@ -20,7 +20,7 @@ import type { EncryptedDocumentListItem, EncryptedDocumentFull } from "@shared/s
 interface LoadDocumentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onLoad: (text: string, title: string) => void;
+  onLoad: (text: string, title: string, docId: number, passphrase: string) => void;
 }
 
 export function LoadDocumentDialog({
@@ -76,8 +76,8 @@ export function LoadDocumentDialog({
 
       return { text: plaintext, title: doc.title };
     },
-    onSuccess: (data) => {
-      onLoad(data.text, data.title);
+    onSuccess: (data, docId) => {
+      onLoad(data.text, data.title, docId, passphrase);
       toast({
         title: "Document Loaded",
         description: `"${data.title}" has been decrypted and loaded.`,

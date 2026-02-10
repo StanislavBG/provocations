@@ -2,6 +2,7 @@ import { useState, useCallback, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { encrypt } from "@/lib/crypto";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
@@ -20,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
-import { SaveDocumentDialog } from "@/components/SaveDocumentDialog";
+import { SaveDocumentDialog, type SaveCredentials } from "@/components/SaveDocumentDialog";
 import { LoadDocumentDialog } from "@/components/LoadDocumentDialog";
 import {
   Sparkles,
@@ -115,6 +116,8 @@ export default function Workspace() {
   // Save/Load dialogs
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [saveCredentials, setSaveCredentials] = useState<SaveCredentials | null>(null);
+  const [isQuickSaving, setIsQuickSaving] = useState(false);
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
@@ -562,6 +565,7 @@ export default function Workspace() {
     setInterviewEntries([]);
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
+    setSaveCredentials(null);
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -798,10 +802,51 @@ export default function Workspace() {
   }, []);
 
   // Handle loading a decrypted document from the LoadDocumentDialog
-  const handleLoadDocument = useCallback((text: string, title: string) => {
+  const handleLoadDocument = useCallback((text: string, title: string, docId: number, passphrase: string) => {
     setObjective(title);
+    setSaveCredentials({ documentId: docId, title, passphrase });
     analyzeMutation.mutate({ text, referenceDocuments });
   }, [analyzeMutation, referenceDocuments]);
+
+  // Quick save: re-encrypt and overwrite the existing saved document
+  const handleSaveClick = useCallback(async () => {
+    if (!document?.rawText) return;
+
+    if (!saveCredentials) {
+      // First save - show dialog
+      setShowSaveDialog(true);
+      return;
+    }
+
+    // Quick save - encrypt and PUT update
+    setIsQuickSaving(true);
+    try {
+      const encrypted = await encrypt(document.rawText, saveCredentials.passphrase);
+      await apiRequest("PUT", `/api/documents/${saveCredentials.documentId}`, {
+        title: saveCredentials.title,
+        ciphertext: encrypted.ciphertext,
+        salt: encrypted.salt,
+        iv: encrypted.iv,
+      });
+      toast({
+        title: "Saved",
+        description: `"${saveCredentials.title}" updated.`,
+      });
+    } catch {
+      toast({
+        title: "Save Failed",
+        description: "Could not save. Try again or use Save As.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsQuickSaving(false);
+    }
+  }, [document, saveCredentials, toast]);
+
+  // Callback after first save from dialog
+  const handleFirstSave = useCallback((credentials: SaveCredentials) => {
+    setSaveCredentials(credentials);
+  }, []);
 
   const hasOutlineContent = outline?.some((item) => item.content) ?? false;
   const canShowDiff = versions.length >= 2;
@@ -918,14 +963,18 @@ export default function Workspace() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowSaveDialog(true)}
+              onClick={handleSaveClick}
               className="gap-1.5"
-              disabled={!document?.rawText}
-              title="End-to-end encrypted — only you can read your saved documents"
+              disabled={!document?.rawText || isQuickSaving}
+              title={saveCredentials
+                ? `Save to "${saveCredentials.title}"`
+                : "End-to-end encrypted — only you can read your saved documents"}
             >
               <Save className="w-4 h-4" />
-              Save
-              <span className="text-[10px] text-muted-foreground font-normal hidden sm:inline">encrypted</span>
+              {isQuickSaving ? "Saving..." : "Save"}
+              {!saveCredentials && (
+                <span className="text-[10px] text-muted-foreground font-normal hidden sm:inline">encrypted</span>
+              )}
             </Button>
             <Button
               data-testid="button-reset"
@@ -1225,6 +1274,7 @@ export default function Workspace() {
         open={showSaveDialog}
         onOpenChange={setShowSaveDialog}
         documentText={document?.rawText || ""}
+        onSaved={handleFirstSave}
       />
       <LoadDocumentDialog
         open={showLoadDialog}

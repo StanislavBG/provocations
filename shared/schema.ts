@@ -239,6 +239,15 @@ export const saveEncryptedDocumentRequestSchema = z.object({
 
 export type SaveEncryptedDocumentRequest = z.infer<typeof saveEncryptedDocumentRequestSchema>;
 
+export const updateEncryptedDocumentRequestSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200),
+  ciphertext: z.string().min(1, "Ciphertext is required"),
+  salt: z.string().min(1, "Salt is required"),
+  iv: z.string().min(1, "IV is required"),
+});
+
+export type UpdateEncryptedDocumentRequest = z.infer<typeof updateEncryptedDocumentRequestSchema>;
+
 export const listEncryptedDocumentsRequestSchema = z.object({
   ownerHash: z.string().min(1, "Owner hash is required"),
 });
