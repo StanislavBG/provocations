@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { SmartTextPanel } from "./SmartTextPanel";
+import { BilkoTextForm } from "./BilkoTextForm";
 import {
   MessageCircleQuestion,
   Play,
@@ -144,7 +144,7 @@ export function InterviewPanel({
 
                 {/* Answer input */}
                 <div className="space-y-2">
-                  <SmartTextPanel
+                  <BilkoTextForm
                     placeholder="Type your answer or use the mic..."
                     value={answerText}
                     onChange={setAnswerText}

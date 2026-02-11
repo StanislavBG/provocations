@@ -19,10 +19,9 @@ import {
   Check,
   ChevronDown,
 } from "lucide-react";
-import { SmartTextPanel } from "@/components/SmartTextPanel";
-import type { SmartAction } from "@/components/SmartTextPanel";
+import { BilkoTextForm } from "@/components/BilkoTextForm";
+import type { BilkoAction } from "@/components/BilkoTextForm";
 import { apiRequest } from "@/lib/queryClient";
-import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument } from "@shared/schema";
 import { generateId } from "@/lib/utils";
@@ -285,7 +284,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
         </div>
 
         {/* ── OBJECTIVE ── Smart Text Component ── */}
-        <SmartTextPanel
+        <BilkoTextForm
           label="Your objective"
           labelIcon={Target}
           description={
@@ -335,7 +334,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               onClick: handleRestoreObjective,
               visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
             },
-          ] satisfies SmartAction[]}
+          ] satisfies BilkoAction[]}
         >
           {isRecordingObjective && (
             <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
@@ -346,7 +345,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
             </div>
           )}
-        </SmartTextPanel>
+        </BilkoTextForm>
 
         {/* ── DRAFT ── large, fills remaining space ── */}
         <div className="flex flex-col flex-1 min-h-0">
@@ -391,20 +390,14 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               </div>
             </div>
           ) : (
-            /* Expanded: large text area filling available space, with optional questions panel on left */
-            <div className="flex flex-1 min-h-0 gap-3">
-              {/* Questions panel — left side */}
-              {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
-                <DraftQuestionsPanel
-                  questions={activePrebuilt.draftQuestions}
-                  onResponse={handleDraftQuestionResponse}
-                />
-              )}
-              <SmartTextPanel
+            /* Expanded: large text area filling available space */
+            <BilkoTextForm
                 label="Your draft"
                 labelIcon={PenLine}
                 description="Paste your notes, transcripts, or source material — or use voice to speak your ideas."
                 containerClassName="flex-1 min-h-0 flex flex-col"
+                questions={activePrebuilt?.draftQuestions}
+                onQuestionResponse={handleDraftQuestionResponse}
                 data-testid="input-source-text"
                 placeholder="Paste your notes, transcript, or source material here..."
                 className="text-base leading-relaxed font-serif min-h-[200px]"
@@ -443,7 +436,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     onClick: handleRestoreText,
                     visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
                   },
-                ] satisfies SmartAction[]}
+                ] satisfies BilkoAction[]}
                 footer={
                   <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
                     <div className="text-sm text-muted-foreground">
@@ -494,8 +487,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
                   </div>
                 )}
-              </SmartTextPanel>
-            </div>
+              </BilkoTextForm>
           )}
         </div>
       </div>
