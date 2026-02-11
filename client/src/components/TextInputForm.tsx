@@ -204,53 +204,64 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </h2>
           </div>
 
-          {/* Mode cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {prebuiltTemplates.map((template) => {
-              const Icon = iconMap[template.icon] || PencilLine;
-              const isActive = activePrebuilt?.id === template.id;
-
+          {activePrebuilt ? (
+            /* ── Compact selected state ── */
+            (() => {
+              const SelectedIcon = iconMap[activePrebuilt.icon] || PencilLine;
               return (
-                <button
-                  key={template.id}
-                  onClick={() => {
-                    if (isActive) {
-                      handleClearPrebuilt();
-                    } else {
-                      handleSelectPrebuilt(template);
-                    }
-                  }}
-                  className={`group relative text-left p-5 rounded-xl border-2 transition-all duration-200 ${
-                    isActive
-                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/40 hover:bg-primary/5"
-                  }`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-primary bg-primary/5 ring-2 ring-primary/20">
+                  <div className="p-2 rounded-lg bg-primary/20">
+                    <SelectedIcon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-base">{activePrebuilt.title}</span>
+                    <span className="text-sm text-muted-foreground ml-2">{activePrebuilt.subtitle}</span>
+                  </div>
+                  <div className="p-1 rounded-full bg-primary mr-1">
+                    <Check className="w-3.5 h-3.5 text-primary-foreground" />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearPrebuilt}
+                    className="text-muted-foreground shrink-0"
+                  >
+                    Change
+                  </Button>
+                </div>
+              );
+            })()
+          ) : (
+            /* ── Full card grid ── */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              {prebuiltTemplates.map((template) => {
+                const Icon = iconMap[template.icon] || PencilLine;
+
+                return (
+                  <button
+                    key={template.id}
+                    onClick={() => handleSelectPrebuilt(template)}
+                    className="group relative text-left p-4 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all duration-200"
+                  >
+                    <div className="space-y-2">
                       <div className="flex items-center gap-2.5">
-                        <div className={`p-2 rounded-lg ${isActive ? "bg-primary/20" : "bg-primary/10"}`}>
-                          <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-primary/70"}`} />
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Icon className="w-5 h-5 text-primary/70" />
                         </div>
                         <div>
-                          <span className="font-semibold text-base block">{template.title}</span>
+                          <span className="font-semibold text-sm block">{template.title}</span>
                           <span className="text-xs text-muted-foreground">{template.subtitle}</span>
                         </div>
                       </div>
-                      {isActive && (
-                        <div className="p-1 rounded-full bg-primary">
-                          <Check className="w-3.5 h-3.5 text-primary-foreground" />
-                        </div>
-                      )}
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {template.description}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
-                      {template.description}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* ── OBJECTIVE ── Smart Text Component ── */}
