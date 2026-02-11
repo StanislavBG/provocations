@@ -22,6 +22,7 @@ import {
 import { BilkoTextForm } from "@/components/BilkoTextForm";
 import type { BilkoAction } from "@/components/BilkoTextForm";
 import { apiRequest } from "@/lib/queryClient";
+import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument } from "@shared/schema";
 import { generateId } from "@/lib/utils";
@@ -390,14 +391,20 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               </div>
             </div>
           ) : (
-            /* Expanded: large text area filling available space */
-            <BilkoTextForm
+            /* Expanded: large text area filling available space, with optional questions panel on left */
+            <div className="flex flex-1 min-h-0 gap-3">
+              {/* Questions panel — left side */}
+              {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
+                <DraftQuestionsPanel
+                  questions={activePrebuilt.draftQuestions}
+                  onResponse={handleDraftQuestionResponse}
+                />
+              )}
+              <BilkoTextForm
                 label="Your draft"
                 labelIcon={PenLine}
                 description="Paste your notes, transcripts, or source material — or use voice to speak your ideas."
                 containerClassName="flex-1 min-h-0 flex flex-col"
-                questions={activePrebuilt?.draftQuestions}
-                onQuestionResponse={handleDraftQuestionResponse}
                 data-testid="input-source-text"
                 placeholder="Paste your notes, transcript, or source material here..."
                 className="text-base leading-relaxed font-serif min-h-[200px]"
@@ -488,6 +495,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   </div>
                 )}
               </BilkoTextForm>
+            </div>
           )}
         </div>
       </div>
