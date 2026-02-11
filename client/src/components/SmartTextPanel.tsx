@@ -62,6 +62,23 @@ interface SmartTextPanelProps {
   id?: string;
   "data-testid"?: string;
   onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+
+  /* ── Container-mode props (Smart Text standard) ── */
+
+  /** Header label — when provided, renders the full bordered container */
+  label?: string;
+  /** Icon rendered next to the label */
+  labelIcon?: LucideIcon;
+  /** Description text below the label */
+  description?: React.ReactNode;
+  /** Extra elements in the header row (badges, download button, etc.) */
+  headerActions?: React.ReactNode;
+  /** Content rendered after the actions row (recording indicators, raw transcript, etc.) */
+  children?: React.ReactNode;
+  /** Footer rendered at the bottom of the container with a top border */
+  footer?: React.ReactNode;
+  /** Extra classes on the outer container */
+  containerClassName?: string;
 }
 
 export function SmartTextPanel({
@@ -88,6 +105,14 @@ export function SmartTextPanel({
   id,
   "data-testid": dataTestId,
   onKeyDown,
+  // Container-mode props
+  label,
+  labelIcon: LabelIcon,
+  description,
+  headerActions,
+  children,
+  footer,
+  containerClassName,
 }: SmartTextPanelProps) {
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
@@ -140,6 +165,127 @@ export function SmartTextPanel({
   const shouldShowMic = showMic && !!onVoiceTranscript;
   const visibleActions = actions?.filter((a) => a.visible !== false) ?? [];
 
+  // ── Container mode (when label is provided) ──
+  if (label) {
+    return (
+      <div className={cn("rounded-xl border-2 border-border bg-card overflow-hidden", containerClassName)}>
+        {/* Header bar */}
+        <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+          <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+            {LabelIcon && <LabelIcon className="w-5 h-5 text-primary" />}
+            <span>{label}</span>
+          </div>
+          <div className="flex items-center gap-1 ml-auto">
+            {headerActions}
+            {extraActions}
+            {showCopy && hasContent && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={handleCopy}
+                title="Copy text"
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            )}
+            {showClear && hasContent && !isRecording && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={handleClear}
+                title="Clear all"
+              >
+                <Eraser className="w-4 h-4" />
+              </Button>
+            )}
+            {shouldShowMic && (
+              <VoiceRecorder
+                onTranscript={handleTranscript}
+                onInterimTranscript={handleInterimTranscript}
+                onRecordingChange={handleRecordingChange}
+                size="icon"
+                variant={isRecording ? "destructive" : "ghost"}
+                className="h-8 w-8"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Description */}
+        {description && (
+          <div className="px-4 pb-2 text-sm text-muted-foreground ml-7">
+            {description}
+          </div>
+        )}
+
+        {/* Textarea — borderless since the container provides the chrome */}
+        <div className="px-4">
+          <AutoExpandTextarea
+            id={id}
+            data-testid={dataTestId}
+            placeholder={placeholder}
+            value={displayValue}
+            onChange={(e) => onChange(e.target.value)}
+            readOnly={isRecording || readOnly}
+            disabled={disabled}
+            minRows={minRows}
+            maxRows={maxRows}
+            className={cn(
+              "border-none shadow-none focus-visible:ring-0",
+              isRecording && "text-primary",
+              className
+            )}
+            autoFocus={autoFocus}
+            onKeyDown={onKeyDown}
+          />
+        </div>
+
+        {/* Agentic actions row */}
+        {visibleActions.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap px-4 pb-2">
+            {visibleActions.map((action) => (
+              <Tooltip key={action.key}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={action.variant ?? "ghost"}
+                    size="sm"
+                    onClick={action.onClick}
+                    disabled={action.disabled || action.loading}
+                    className="gap-1.5 text-xs h-7"
+                  >
+                    {action.loading ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        {action.loadingLabel ?? action.label}
+                      </>
+                    ) : (
+                      <>
+                        <action.icon className="w-3 h-3" />
+                        {action.label}
+                      </>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p>{action.description}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        )}
+
+        {/* Extra content (recording indicators, raw transcript, etc.) */}
+        {children}
+
+        {/* Footer */}
+        {footer}
+      </div>
+    );
+  }
+
+  // ── Inline mode (no label — backwards compatible) ──
   return (
     <div className={cn("relative", panelClassName)}>
       <AutoExpandTextarea
