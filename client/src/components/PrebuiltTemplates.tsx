@@ -4,6 +4,9 @@ import {
   ClipboardList,
   Rocket,
   Blocks,
+  GraduationCap,
+  BarChart3,
+  Clapperboard,
   Check,
 } from "lucide-react";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -13,6 +16,9 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "clipboard-list": ClipboardList,
   rocket: Rocket,
   blocks: Blocks,
+  "graduation-cap": GraduationCap,
+  "bar-chart-3": BarChart3,
+  clapperboard: Clapperboard,
 };
 
 interface PrebuiltTemplatesProps {
