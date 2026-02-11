@@ -170,12 +170,17 @@ export function SmartTextPanel({
     return (
       <div className={cn("rounded-xl border-2 border-border bg-card overflow-hidden", containerClassName)}>
         {/* Header bar */}
-        <div className="flex items-center gap-2 px-4 pt-4 pb-2">
-          <div className="flex items-center gap-2 text-base font-semibold text-foreground">
-            {LabelIcon && <LabelIcon className="w-5 h-5 text-primary" />}
-            <span>{label}</span>
+        <div className="flex items-start gap-2 px-4 pt-4 pb-2">
+          <div className="flex-1 min-w-0 flex items-baseline gap-x-2 flex-wrap">
+            <div className="flex items-center gap-2 text-base font-semibold text-foreground shrink-0">
+              {LabelIcon && <LabelIcon className="w-5 h-5 text-primary" />}
+              <span>{label}</span>
+            </div>
+            {description && (
+              <span className="text-sm text-muted-foreground line-clamp-2">{description}</span>
+            )}
           </div>
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex items-center gap-1 shrink-0">
             {headerActions}
             {extraActions}
             {showCopy && hasContent && (
@@ -212,13 +217,6 @@ export function SmartTextPanel({
             )}
           </div>
         </div>
-
-        {/* Description */}
-        {description && (
-          <div className="px-4 pb-2 text-sm text-muted-foreground ml-7">
-            {description}
-          </div>
-        )}
 
         {/* Textarea — borderless since the container provides the chrome */}
         <div className="px-4">
