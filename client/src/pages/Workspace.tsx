@@ -81,7 +81,7 @@ export default function Workspace() {
       id: string;
       heading: string;
     };
-    context: "selection" | "provocation" | "document" | "outline";
+    context: "selection" | "provocation" | "document";
   } | null>(null);
 
   // Edit history for coherent iteration
