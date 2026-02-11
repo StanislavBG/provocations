@@ -29,14 +29,13 @@ const openai = new OpenAI({
 });
 
 const provocationPrompts: Record<ProvocationType, string> = {
-  opportunity: "Identify potential opportunities for growth, innovation, or improvement that might be missed.",
-  fallacy: "Identify logical fallacies, weak arguments, unsupported claims, or gaps in reasoning.",
-  alternative: "Suggest alternative approaches, different perspectives, or lateral thinking opportunities.",
-  challenge: "Based on the user's objective, identify what's missing, incomplete, or underdeveloped. Push the user toward a more complete, well-rounded document by highlighting gaps in coverage, depth, or clarity.",
-  thinking_bigger: "Push the user to think bigger — challenge them to raise the ambition, scope, or impact of their ideas. Ask why they're settling for incremental when transformative is possible. Question small targets, safe assumptions, and limited vision.",
-  performance: "As a Performance Reviewer: Question scalability, throughput, and expected load. Clarify that the business requirements are translated into concrete technical expectations. Ask about bottlenecks, response times, data volumes, and what happens at scale.",
-  ux: "As a UX Reviewer: Question how users will discover, understand, and complete tasks. Ask 'how would a user know to do this?' and 'what happens if they get confused here?' Push for clarity on layout, flows, error states, and ease of use.",
-  architecture: "As an Architecture Reviewer: Question the clarity of system abstractions — frontend components, backend services, system-to-system communication. Push for well-defined boundaries, API contracts, data flow, and separation of concerns.",
+  architect: "As the System Architect: Question the clarity of system abstractions — frontend components, backend services, system-to-system communication. Push for well-defined boundaries, API contracts, data flow, and separation of concerns. Challenge technical debt and coupling.",
+  quality_engineer: "As the Quality Engineer: Question testing gaps, edge cases, error handling, and reliability. Ask about regression risks, acceptance criteria, and what happens when things fail. Push for observable, measurable quality and clear exit criteria.",
+  ux_designer: "As the UX Designer: Question how users will discover, understand, and complete tasks. Ask 'how would a user know to do this?' and 'what happens if they get confused here?' Push for clarity on layout, flows, error states, accessibility, and ease of use.",
+  tech_writer: "As the Technical Writer: Question whether documentation, naming, and UI copy are clear enough for someone with no prior context. Flag jargon, missing explanations, unclear labels, and areas where the reader would get lost. Push for self-explanatory interfaces and complete documentation.",
+  product_manager: "As the Product Manager: Question business value, user stories, and prioritization. Ask 'what problem does this solve?' and 'how will we measure success?' Push for clear acceptance criteria, user outcomes, and alignment with strategic goals.",
+  security_engineer: "As the Security Engineer: Question data privacy, authentication, authorization, and compliance. Ask about threat models, input validation, and what happens if an attacker targets this. Push for secure defaults, least-privilege access, and audit trails.",
+  thinking_bigger: "As the Think Big Advisor: Push the user to scale impact and outcomes — retention, cost-to-serve, accessibility, resilience — without changing the core idea. Propose bolder bets that respect constraints (time, budget, technical limitations, compliance, operational realities). Raise scale concerns early: what breaks, what becomes harder, and what must be simplified when designing for 100,000+ people. Suggest new workflows that better serve the user outcome, potential adjacent product lines as optional/iterative bets, and 'designed-for-100,000+' simplifications that reduce friction (fewer steps, clearer defaults, safer paths). Make the product easier at scale for both users and the team operating it.",
 };
 
 // Instruction classification patterns
@@ -238,55 +237,50 @@ function formatStyleGuidance(docs: ReferenceDocument[]): string {
   return lines.join("\n");
 }
 
-// Provocation response examples for better guidance
+// Persona response examples for better guidance
 const provocationResponseExamples: Record<ProvocationType, string> = {
-  opportunity: `Example good responses to opportunity provocations:
-- "Add a section about X to address this gap"
-- "Expand the benefits section to include Y"
-- "Include a case study showing Z"
-The goal is to enrich the document with new content that addresses the opportunity.`,
+  architect: `Example good responses to architecture feedback:
+- "I should define the API contract between the frontend and this service"
+- "Good catch — the boundary between X and Y components isn't clear"
+- "Let me add a section on how data flows from the client through to storage"
+The goal is to ensure system abstractions are well-defined and communication patterns are explicit.`,
 
-  fallacy: `Example good responses to fallacy provocations:
-- "Add evidence to support the claim about X"
-- "Soften the absolute language in paragraph Y"
-- "Add a counterargument and address it"
-The goal is to strengthen the argument with better reasoning or evidence.`,
+  quality_engineer: `Example good responses to quality engineering feedback:
+- "I need to add acceptance criteria for this feature"
+- "Good point — I haven't described the error handling when X fails"
+- "Let me clarify the testing strategy and edge cases"
+The goal is to make quality expectations explicit, measurable, and testable.`,
 
-  alternative: `Example good responses to alternative provocations:
-- "Acknowledge the alternative approach and explain why we chose this one"
-- "Add a comparison section weighing both options"
-- "Include the alternative as an option for different use cases"
-The goal is to show thoughtful consideration of alternatives.`,
-
-  challenge: `Example good responses to challenge provocations:
-- "You're right, I need to add a section covering X"
-- "Let me flesh out the Y section with more specifics"
-- "I should address Z to make this more complete"
-The goal is to fill gaps and push the document toward completeness based on the objective.`,
-
-  thinking_bigger: `Example good responses to thinking bigger provocations:
-- "You're right, I'm aiming too low — let me reframe X as a platform opportunity"
-- "Instead of targeting just Y, let me expand the vision to include Z"
-- "I should articulate a bolder 10x version of this strategy"
-The goal is to raise the ambition and scope of the document's ideas and proposals.`,
-
-  performance: `Example good responses to performance provocations:
-- "We expect 10k concurrent users at peak, I should specify that"
-- "Good point — I'll add expected response time targets for the API"
-- "Let me clarify the data volume expectations and caching strategy"
-The goal is to make performance expectations explicit and technically grounded.`,
-
-  ux: `Example good responses to UX provocations:
+  ux_designer: `Example good responses to UX design feedback:
 - "You're right, users won't know about that feature — I'll add onboarding guidance"
 - "I need to describe the error state when X fails"
 - "Let me clarify the navigation flow from A to B"
 The goal is to ensure every user-facing interaction is thought through.`,
 
-  architecture: `Example good responses to architecture provocations:
-- "I should define the API contract between the frontend and this service"
-- "Good catch — the boundary between X and Y components isn't clear"
-- "Let me add a section on how data flows from the client through to storage"
-The goal is to ensure system abstractions are well-defined and communication patterns are explicit.`,
+  tech_writer: `Example good responses to technical writing feedback:
+- "That label is jargon — let me rename it to something self-explanatory"
+- "I should add a getting-started section for new users"
+- "Good catch — the error message doesn't tell the user what to do next"
+The goal is to ensure the product and documentation are clear to someone with no prior context.`,
+
+  product_manager: `Example good responses to product management feedback:
+- "I should tie this feature to the business outcome we're targeting"
+- "Let me add success metrics so we know if this is working"
+- "Good point — the user story is missing the 'so that' clause"
+The goal is to ensure every feature has clear purpose, measurement, and user value.`,
+
+  security_engineer: `Example good responses to security engineering feedback:
+- "I need to add input validation for this user-submitted field"
+- "Good catch — I should describe the authorization model here"
+- "Let me add a threat model section for this integration"
+The goal is to ensure the system is secure by default and resilient to abuse.`,
+
+  thinking_bigger: `Example good responses to Think Big feedback:
+- "You're right — instead of just improving the UI, let me target a retention outcome"
+- "I should consider what breaks at 100k users and simplify the critical path"
+- "Let me frame this as a platform bet with an adjacent product extension"
+- "Good point — I should design for operational clarity, not just user delight"
+The goal is to scale impact and outcomes (retention, cost-to-serve, accessibility, resilience) while respecting constraints, and design for 100,000+ people.`,
 };
 
 // Strategy prompts for each instruction type

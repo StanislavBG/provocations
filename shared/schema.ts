@@ -1,15 +1,14 @@
 import { z } from "zod";
 
-// Provocation types
+// Persona types (each persona provides Advice and Challenge feedback)
 export const provocationType = [
-  "opportunity",
-  "fallacy",
-  "alternative",
-  "challenge",
+  "architect",
+  "quality_engineer",
+  "ux_designer",
+  "tech_writer",
+  "product_manager",
+  "security_engineer",
   "thinking_bigger",
-  "performance",
-  "ux",
-  "architecture",
 ] as const;
 
 export type ProvocationType = typeof provocationType[number];

@@ -245,108 +245,111 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           </div>
         </div>
 
-        {/* ── OBJECTIVE ── shown after mode selection or available for freeform ── */}
-        <div className="space-y-2">
-          <label
-            htmlFor="objective"
-            className="flex items-center gap-2 text-base font-medium text-muted-foreground"
-          >
-            <Target className="w-4 h-4 text-primary" />
-            Your objective
-          </label>
-          <SmartTextPanel
-            id="objective"
-            data-testid="input-objective"
-            placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-            className="text-base leading-relaxed font-serif"
-            value={objective}
-            onChange={(val) => setObjective(val)}
-            minRows={3}
-            maxRows={6}
-            onVoiceTranscript={handleObjectiveVoiceComplete}
-            onRecordingChange={setIsRecordingObjective}
-            voiceMode="replace"
-            actions={[
-              {
-                key: "clean-up-objective",
-                label: "Clean up",
-                loadingLabel: "Summarizing...",
-                description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your objective into clear, concise language.",
-                icon: Wand2,
-                onClick: handleSummarizeObjective,
-                disabled: isSummarizingObjective,
-                loading: isSummarizingObjective,
-                visible: objective.length > 50 && !isRecordingObjective,
-              },
-              {
-                key: "toggle-objective-raw",
-                label: showObjectiveRaw ? "Hide original" : "Show original",
-                description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
-                icon: showObjectiveRaw ? EyeOff : Eye,
-                onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
-                visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-              },
-              {
-                key: "restore-objective",
-                label: "Restore original",
-                description: "Discard the cleaned-up version and revert to your original voice transcript.",
-                icon: Eye,
-                onClick: handleRestoreObjective,
-                visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-              },
-            ] satisfies SmartAction[]}
-          />
+        {/* ── OBJECTIVE ── Smart Text Component ── */}
+        <SmartTextPanel
+          label="Your objective"
+          labelIcon={Target}
+          description={
+            <>
+              {activePrebuilt
+                ? "Auto-populated from the template you selected above — edit it to make it your own."
+                : "Describe what you're creating. This is auto-populated if you select a document type above."}
+              {" "}Once set, move on to your <span className="font-medium text-foreground">Draft</span> below.
+            </>
+          }
+          id="objective"
+          data-testid="input-objective"
+          placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
+          className="text-base leading-relaxed font-serif"
+          value={objective}
+          onChange={(val) => setObjective(val)}
+          minRows={3}
+          maxRows={6}
+          onVoiceTranscript={handleObjectiveVoiceComplete}
+          onRecordingChange={setIsRecordingObjective}
+          voiceMode="replace"
+          actions={[
+            {
+              key: "clean-up-objective",
+              label: "Clean up",
+              loadingLabel: "Summarizing...",
+              description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your objective into clear, concise language.",
+              icon: Wand2,
+              onClick: handleSummarizeObjective,
+              disabled: isSummarizingObjective,
+              loading: isSummarizingObjective,
+              visible: objective.length > 50 && !isRecordingObjective,
+            },
+            {
+              key: "toggle-objective-raw",
+              label: showObjectiveRaw ? "Hide original" : "Show original",
+              description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
+              icon: showObjectiveRaw ? EyeOff : Eye,
+              onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
+              visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+            },
+            {
+              key: "restore-objective",
+              label: "Restore original",
+              description: "Discard the cleaned-up version and revert to your original voice transcript.",
+              icon: Eye,
+              onClick: handleRestoreObjective,
+              visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+            },
+          ] satisfies SmartAction[]}
+        >
           {isRecordingObjective && (
-            <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
+            <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
           )}
           {showObjectiveRaw && objectiveRawTranscript && (
-            <div className="p-3 rounded-lg bg-muted/50 border text-sm">
+            <div className="mx-4 mb-3 p-3 rounded-lg bg-muted/50 border text-sm">
               <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
               <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
             </div>
           )}
-        </div>
+        </SmartTextPanel>
 
         {/* ── DRAFT ── large, fills remaining space ── */}
-        <div className="flex flex-col flex-1 min-h-0 space-y-2">
-          <label className="flex items-center gap-2 text-base font-medium text-muted-foreground">
-            <PenLine className="w-4 h-4 text-primary" />
-            Your draft
-          </label>
-
+        <div className="flex flex-col flex-1 min-h-0">
           {!isDraftExpanded ? (
             /* Collapsed: two action buttons */
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setIsDraftExpanded(true)}
-                className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-primary/10">
-                    <FileText className="w-5 h-5 text-primary" />
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <PenLine className="w-5 h-5 text-primary" />
+                Your draft
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => setIsDraftExpanded(true)}
+                  className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-primary/10">
+                      <FileText className="w-5 h-5 text-primary" />
+                    </div>
+                    <span className="font-medium text-base">Paste text</span>
                   </div>
-                  <span className="font-medium text-base">Paste text</span>
-                </div>
-                <p className="text-sm text-muted-foreground leading-snug">
-                  Notes, transcripts, reports — any raw material to shape.
-                </p>
-              </button>
+                  <p className="text-sm text-muted-foreground leading-snug">
+                    Notes, transcripts, reports — any raw material to shape.
+                  </p>
+                </button>
 
-              <button
-                onClick={handleBlankDocument}
-                disabled={isLoading}
-                className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-primary/10">
-                    <Mic className="w-5 h-5 text-primary" />
+                <button
+                  onClick={handleBlankDocument}
+                  disabled={isLoading}
+                  className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-primary/10">
+                      <Mic className="w-5 h-5 text-primary" />
+                    </div>
+                    <span className="font-medium text-base">Speak it</span>
                   </div>
-                  <span className="font-medium text-base">Speak it</span>
-                </div>
-                <p className="text-sm text-muted-foreground leading-snug">
-                  Talk through your ideas and we'll capture them as a draft.
-                </p>
-              </button>
+                  <p className="text-sm text-muted-foreground leading-snug">
+                    Talk through your ideas and we'll capture them as a draft.
+                  </p>
+                </button>
+              </div>
             </div>
           ) : (
             /* Expanded: large text area filling available space, with optional questions panel on left */
@@ -358,101 +361,101 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   onResponse={handleDraftQuestionResponse}
                 />
               )}
-              <div className="flex flex-col flex-1 min-h-0 rounded-lg border-2 bg-card">
-                <div className="flex-1 min-h-0 p-4">
-                  <SmartTextPanel
-                    data-testid="input-source-text"
-                    placeholder="Paste your notes, transcript, or source material here..."
-                    className="text-base leading-relaxed font-serif border-none shadow-none focus-visible:ring-0 min-h-[200px]"
-                    value={text}
-                    onChange={(val) => setText(val)}
-                    minRows={12}
-                    maxRows={40}
-                    autoFocus
-                    onVoiceTranscript={handleTextVoiceComplete}
-                    onRecordingChange={setIsRecordingText}
-                    actions={[
-                      {
-                        key: "clean-up-draft",
-                        label: "Clean up transcript",
-                        loadingLabel: "Cleaning up...",
-                        description: "Uses AI to clean your voice transcript — removes filler words, false starts, and grammatical errors while preserving your meaning.",
-                        icon: Wand2,
-                        onClick: handleSummarizeText,
-                        disabled: isSummarizingText,
-                        loading: isSummarizingText,
-                        visible: text.length > 200 && !isRecordingText,
-                      },
-                      {
-                        key: "toggle-draft-raw",
-                        label: showTextRaw ? "Hide original" : `Show original (${(textRawTranscript?.length ? (textRawTranscript.length / 1000).toFixed(1) : "0")}k chars)`,
-                        description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
-                        icon: showTextRaw ? EyeOff : Eye,
-                        onClick: () => setShowTextRaw(!showTextRaw),
-                        visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
-                      },
-                      {
-                        key: "restore-draft",
-                        label: "Restore original",
-                        description: "Discard the cleaned-up version and revert to your original voice transcript.",
-                        icon: Eye,
-                        onClick: handleRestoreText,
-                        visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
-                      },
-                    ] satisfies SmartAction[]}
-                  />
-                  {isRecordingText && (
-                    <p className="text-xs text-primary animate-pulse px-2 py-1 mt-1">
-                      Listening... speak your source material (up to 10 min)
-                    </p>
-                  )}
-                </div>
+              <SmartTextPanel
+                label="Your draft"
+                labelIcon={PenLine}
+                description="Paste your notes, transcripts, or source material — or use voice to speak your ideas."
+                containerClassName="flex-1 min-h-0 flex flex-col"
+                data-testid="input-source-text"
+                placeholder="Paste your notes, transcript, or source material here..."
+                className="text-base leading-relaxed font-serif min-h-[200px]"
+                value={text}
+                onChange={(val) => setText(val)}
+                minRows={12}
+                maxRows={40}
+                autoFocus
+                onVoiceTranscript={handleTextVoiceComplete}
+                onRecordingChange={setIsRecordingText}
+                actions={[
+                  {
+                    key: "clean-up-draft",
+                    label: "Clean up transcript",
+                    loadingLabel: "Cleaning up...",
+                    description: "Uses AI to clean your voice transcript — removes filler words, false starts, and grammatical errors while preserving your meaning.",
+                    icon: Wand2,
+                    onClick: handleSummarizeText,
+                    disabled: isSummarizingText,
+                    loading: isSummarizingText,
+                    visible: text.length > 200 && !isRecordingText,
+                  },
+                  {
+                    key: "toggle-draft-raw",
+                    label: showTextRaw ? "Hide original" : `Show original (${(textRawTranscript?.length ? (textRawTranscript.length / 1000).toFixed(1) : "0")}k chars)`,
+                    description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
+                    icon: showTextRaw ? EyeOff : Eye,
+                    onClick: () => setShowTextRaw(!showTextRaw),
+                    visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                  },
+                  {
+                    key: "restore-draft",
+                    label: "Restore original",
+                    description: "Discard the cleaned-up version and revert to your original voice transcript.",
+                    icon: Eye,
+                    onClick: handleRestoreText,
+                    visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                  },
+                ] satisfies SmartAction[]}
+                footer={
+                  <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
+                    <div className="text-sm text-muted-foreground">
+                      {text.length > 0 && (
+                        <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setIsDraftExpanded(false); }}
+                        className="text-muted-foreground"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        data-testid="button-analyze"
+                        onClick={handleSubmit}
+                        disabled={!text.trim() || isLoading}
+                        size="lg"
+                        className="gap-2"
+                      >
+                        {isLoading ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>
+                            Begin Analysis
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                }
+              >
+                {isRecordingText && (
+                  <p className="text-xs text-primary animate-pulse px-4 pb-2">
+                    Listening... speak your source material (up to 10 min)
+                  </p>
+                )}
                 {showTextRaw && textRawTranscript && (
                   <div className="mx-4 mb-2 p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
                     <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
                     <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
                   </div>
                 )}
-
-                {/* Action row */}
-                <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
-                  <div className="text-sm text-muted-foreground">
-                    {text.length > 0 && (
-                      <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setIsDraftExpanded(false); }}
-                      className="text-muted-foreground"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      data-testid="button-analyze"
-                      onClick={handleSubmit}
-                      disabled={!text.trim() || isLoading}
-                      size="lg"
-                      className="gap-2"
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          Analyzing...
-                        </>
-                      ) : (
-                        <>
-                          Begin Analysis
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
+              </SmartTextPanel>
             </div>
           )}
         </div>

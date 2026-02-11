@@ -7,9 +7,7 @@ import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
 import { InterviewPanel } from "@/components/InterviewPanel";
-import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
-import { DimensionsToolbar } from "@/components/DimensionsToolbar";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -28,8 +26,6 @@ import {
   RotateCcw,
   MessageSquareWarning,
   MessageCircleQuestion,
-  ListTree,
-  Settings2,
   GitCompare,
   Target,
   X,
@@ -41,8 +37,6 @@ import type {
   Document,
   Provocation,
   ProvocationType,
-  OutlineItem,
-  ToneOption,
   DocumentVersion,
   WriteRequest,
   WriteResponse,
@@ -59,11 +53,7 @@ export default function Workspace() {
   const [objective, setObjective] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
   const [provocations, setProvocations] = useState<Provocation[]>([]);
-  const [outline, setOutline] = useState<OutlineItem[]>([]);
-  const [selectedTone, setSelectedTone] = useState<ToneOption>("practical");
-  const [targetLength, setTargetLength] = useState<"shorter" | "same" | "longer">("same");
   const [activeTab, setActiveTab] = useState("provocations");
-  const [refinedPreview, setRefinedPreview] = useState<string | null>(null);
 
   // Voice and version tracking
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -91,7 +81,7 @@ export default function Workspace() {
       id: string;
       heading: string;
     };
-    context: "selection" | "provocation" | "document" | "outline";
+    context: "selection" | "provocation" | "document";
   } | null>(null);
 
   // Edit history for coherent iteration
@@ -241,51 +231,6 @@ export default function Workspace() {
     },
   });
 
-  const expandMutation = useMutation({
-    mutationFn: async ({ heading }: { heading: string }) => {
-      if (!document) throw new Error("No document context");
-      const response = await apiRequest("POST", "/api/write", {
-        document: document.rawText,
-        objective,
-        instruction: `Expand the section "${heading}" into well-developed paragraphs. Focus on this heading specifically.`,
-        tone: selectedTone,
-      });
-      const result = await response.json() as WriteResponse;
-      return { content: result.document };
-    },
-    onError: (error) => {
-      toast({
-        title: "Expansion Failed",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const refineMutation = useMutation({
-    mutationFn: async ({ text, tone, length }: { text: string; tone: ToneOption; length: "shorter" | "same" | "longer" }) => {
-      const response = await apiRequest("POST", "/api/write", {
-        document: text,
-        objective,
-        instruction: "Refine the document according to the specified tone and length preferences.",
-        tone,
-        targetLength: length,
-      });
-      const result = await response.json() as WriteResponse;
-      return { refined: result.document };
-    },
-    onSuccess: (data) => {
-      setRefinedPreview(data.refined);
-    },
-    onError: (error) => {
-      toast({
-        title: "Refinement Failed",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    },
-  });
-
   const regenerateProvocationsMutation = useMutation({
     mutationFn: async ({ guidance, types }: { guidance?: string; types?: string[] }) => {
       if (!document) throw new Error("No document");
@@ -407,96 +352,6 @@ export default function Workspace() {
     );
   }, []);
 
-  const handleAddOutlineItem = useCallback((item: OutlineItem) => {
-    setOutline((prev) => [...prev, item]);
-  }, []);
-
-  const handleUpdateOutlineItem = useCallback((id: string, updates: Partial<OutlineItem>) => {
-    setOutline((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
-    );
-  }, []);
-
-  const handleRemoveOutlineItem = useCallback((id: string) => {
-    setOutline((prev) => prev.filter((item) => item.id !== id));
-  }, []);
-
-  const handleReorderOutline = useCallback((items: OutlineItem[]) => {
-    setOutline(items);
-  }, []);
-
-  const handleExpandHeading = useCallback(async (id: string, heading: string): Promise<string> => {
-    const result = await expandMutation.mutateAsync({ heading });
-    return result.content;
-  }, [expandMutation]);
-
-  const handleRefine = useCallback(async () => {
-    const contentToRefine = outline
-      .filter((item) => item.content)
-      .map((item) => `## ${item.heading}\n\n${item.content}`)
-      .join("\n\n");
-    
-    if (!contentToRefine) {
-      toast({
-        title: "No Content to Refine",
-        description: "Add content to your outline sections first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    await refineMutation.mutateAsync({
-      text: contentToRefine,
-      tone: selectedTone,
-      length: targetLength,
-    });
-
-    toast({
-      title: "Refinement Complete",
-      description: "Review the refined content and apply to your outline.",
-    });
-  }, [outline, selectedTone, targetLength, refineMutation, toast]);
-
-  const handleApplyRefinement = useCallback(() => {
-    if (!refinedPreview) return;
-    
-    // Parse refined content back into outline sections
-    const sections = refinedPreview.split(/^## /m).filter(Boolean);
-    
-    setOutline((prev) => {
-      const updated = [...prev];
-      sections.forEach((section) => {
-        const lines = section.split("\n");
-        const heading = lines[0]?.trim();
-        const content = lines.slice(1).join("\n").trim();
-        
-        const existingIndex = updated.findIndex(
-          (item) => item.heading.toLowerCase() === heading?.toLowerCase()
-        );
-        
-        if (existingIndex !== -1) {
-          updated[existingIndex] = {
-            ...updated[existingIndex],
-            content,
-          };
-        }
-      });
-      return updated;
-    });
-    
-    setRefinedPreview(null);
-    setActiveTab("outline");
-    
-    toast({
-      title: "Refinement Applied",
-      description: "Your outline content has been updated with the refined text.",
-    });
-  }, [refinedPreview, toast]);
-
-  const handleDiscardRefinement = useCallback(() => {
-    setRefinedPreview(null);
-  }, []);
-
   const handleRegenerateProvocations = useCallback((guidance?: string, types?: string[]) => {
     regenerateProvocationsMutation.mutate({ guidance, types });
   }, [regenerateProvocationsMutation]);
@@ -535,8 +390,6 @@ export default function Workspace() {
     setObjective("");
     setReferenceDocuments([]);
     setProvocations([]);
-    setOutline([]);
-    setRefinedPreview(null);
     setVersions([]);
     setShowDiffView(false);
     setEditHistory([]);
@@ -683,34 +536,6 @@ export default function Workspace() {
     // Don't auto-send anymore - user will click "Send to writer" after reviewing
   }, [document]);
 
-  // Handle voice input from outline section
-  const handleOutlineVoiceInput = useCallback((sectionId: string, heading: string, transcript: string) => {
-    if (!document || !transcript.trim()) return;
-
-    setPendingVoiceContext({
-      outlineSection: { id: sectionId, heading },
-      context: "outline",
-    });
-
-    setRawTranscript(transcript);
-    setShowTranscriptOverlay(true);
-    setTranscriptSummary("");
-    setCleanedTranscript(undefined);
-    setIsRecordingFromMain(false);
-  }, [document]);
-
-  // Handle text instruction for outline section (goes directly through writer)
-  const handleOutlineTextInstruction = useCallback((sectionId: string, heading: string, instruction: string, currentContent: string) => {
-    if (!document) return;
-
-    const sectionDoc = currentContent || `## ${heading}\n\n(empty section)`;
-    writeMutation.mutate({
-      instruction: `For the section "${heading}": ${instruction}`,
-      selectedText: sectionDoc,
-      description: `Edit outline section: ${heading}`,
-    });
-  }, [document, writeMutation]);
-
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
     // Only update rawTranscript if there's content or recording is starting (clear for fresh start)
     // When isRecording=false and transcript is empty, preserve the existing transcript
@@ -758,15 +583,6 @@ export default function Workspace() {
       setProvocations((prev) =>
         prev.map((p) => (p.id === context.provocation!.id ? { ...p, status: "addressed" as const } : p))
       );
-    } else if (context?.outlineSection) {
-      // Sending as outline section edit
-      const section = outline.find(item => item.id === context.outlineSection!.id);
-      const sectionContent = section?.content || `## ${context.outlineSection.heading}\n\n(empty section)`;
-      writeMutation.mutate({
-        instruction: `For the section "${context.outlineSection.heading}": ${transcript}`,
-        selectedText: sectionContent,
-        description: `Voice edit on outline: ${context.outlineSection.heading}`,
-      });
     } else if (context?.selectedText) {
       // Sending as selection edit
       writeMutation.mutate({
@@ -807,7 +623,6 @@ export default function Workspace() {
 
     // Clear stale state from any previous document
     setProvocations([]);
-    setOutline([]);
     setEditHistory([]);
     setLastSuggestions([]);
     setShowDiffView(false);
@@ -868,7 +683,6 @@ export default function Workspace() {
     setSaveCredentials(credentials);
   }, []);
 
-  const hasOutlineContent = outline?.some((item) => item.content) ?? false;
   const canShowDiff = versions.length >= 2;
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
@@ -1130,27 +944,6 @@ export default function Workspace() {
                       </span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger
-                    value="outline"
-                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
-                    data-testid="tab-outline"
-                  >
-                    <ListTree className="w-4 h-4" />
-                    Outline
-                    {(outline ?? []).length > 0 && (
-                      <span className="ml-1 text-xs bg-muted text-muted-foreground rounded-full px-1.5">
-                        {(outline ?? []).length}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="dimensions" 
-                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
-                    data-testid="tab-dimensions"
-                  >
-                    <Settings2 className="w-4 h-4" />
-                    Dimensions
-                  </TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
@@ -1184,34 +977,6 @@ export default function Workspace() {
                   />
                 </TabsContent>
 
-                <TabsContent value="outline" className="flex-1 mt-0 overflow-hidden">
-                  <OutlineBuilder
-                    outline={outline}
-                    onAddItem={handleAddOutlineItem}
-                    onUpdateItem={handleUpdateOutlineItem}
-                    onRemoveItem={handleRemoveOutlineItem}
-                    onReorder={handleReorderOutline}
-                    onExpandHeading={handleExpandHeading}
-                    onVoiceInput={handleOutlineVoiceInput}
-                    onTranscriptUpdate={handleTranscriptUpdate}
-                    onTextInstruction={handleOutlineTextInstruction}
-                  />
-                </TabsContent>
-                
-                <TabsContent value="dimensions" className="flex-1 mt-0 overflow-auto p-4">
-                  <DimensionsToolbar
-                    selectedTone={selectedTone}
-                    onToneChange={setSelectedTone}
-                    targetLength={targetLength}
-                    onLengthChange={setTargetLength}
-                    onRefine={handleRefine}
-                    isRefining={refineMutation.isPending}
-                    hasContent={hasOutlineContent}
-                    refinedPreview={refinedPreview}
-                    onApplyRefinement={handleApplyRefinement}
-                    onDiscardRefinement={handleDiscardRefinement}
-                  />
-                </TabsContent>
               </Tabs>
             </div>
           </ResizablePanel>

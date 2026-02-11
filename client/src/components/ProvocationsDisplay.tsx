@@ -6,9 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SmartTextPanel } from "./SmartTextPanel";
 import {
-  Lightbulb,
-  AlertTriangle,
-  GitBranch,
   Check,
   X,
   Star,
@@ -22,60 +19,102 @@ import {
   Play,
   ChevronLeft,
   ChevronRight,
-  Gauge,
-  MousePointerClick,
-  Layers,
-  Rocket,
   Mic,
   Plus,
   Send,
+  Blocks,
+  ShieldCheck,
+  Palette,
+  BookText,
+  Briefcase,
+  Lock,
+  Rocket,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
 
-const provocationIcons: Record<ProvocationType, typeof Lightbulb> = {
-  opportunity: Lightbulb,
-  fallacy: AlertTriangle,
-  alternative: GitBranch,
-  challenge: Crosshair,
+// ── Persona metadata ──
+
+const personaIcons: Record<ProvocationType, typeof Blocks> = {
+  architect: Blocks,
+  quality_engineer: ShieldCheck,
+  ux_designer: Palette,
+  tech_writer: BookText,
+  product_manager: Briefcase,
+  security_engineer: Lock,
   thinking_bigger: Rocket,
-  performance: Gauge,
-  ux: MousePointerClick,
-  architecture: Layers,
 };
 
-const provocationColors: Record<ProvocationType, string> = {
-  opportunity: "text-emerald-600 dark:text-emerald-400",
-  fallacy: "text-amber-600 dark:text-amber-400",
-  alternative: "text-blue-600 dark:text-blue-400",
-  challenge: "text-violet-600 dark:text-violet-400",
+const personaColors: Record<ProvocationType, string> = {
+  architect: "text-cyan-600 dark:text-cyan-400",
+  quality_engineer: "text-rose-600 dark:text-rose-400",
+  ux_designer: "text-fuchsia-600 dark:text-fuchsia-400",
+  tech_writer: "text-amber-600 dark:text-amber-400",
+  product_manager: "text-blue-600 dark:text-blue-400",
+  security_engineer: "text-red-600 dark:text-red-400",
   thinking_bigger: "text-orange-600 dark:text-orange-400",
-  performance: "text-rose-600 dark:text-rose-400",
-  ux: "text-fuchsia-600 dark:text-fuchsia-400",
-  architecture: "text-cyan-600 dark:text-cyan-400",
 };
 
-const provocationBgColors: Record<ProvocationType, string> = {
-  opportunity: "bg-emerald-50 dark:bg-emerald-950/30",
-  fallacy: "bg-amber-50 dark:bg-amber-950/30",
-  alternative: "bg-blue-50 dark:bg-blue-950/30",
-  challenge: "bg-violet-50 dark:bg-violet-950/30",
+const personaBgColors: Record<ProvocationType, string> = {
+  architect: "bg-cyan-50 dark:bg-cyan-950/30",
+  quality_engineer: "bg-rose-50 dark:bg-rose-950/30",
+  ux_designer: "bg-fuchsia-50 dark:bg-fuchsia-950/30",
+  tech_writer: "bg-amber-50 dark:bg-amber-950/30",
+  product_manager: "bg-blue-50 dark:bg-blue-950/30",
+  security_engineer: "bg-red-50 dark:bg-red-950/30",
   thinking_bigger: "bg-orange-50 dark:bg-orange-950/30",
-  performance: "bg-rose-50 dark:bg-rose-950/30",
-  ux: "bg-fuchsia-50 dark:bg-fuchsia-950/30",
-  architecture: "bg-cyan-50 dark:bg-cyan-950/30",
 };
 
-const provocationLabels: Record<ProvocationType, string> = {
-  opportunity: "Opportunity",
-  fallacy: "Fallacy",
-  alternative: "Alternative",
-  challenge: "Challenge",
-  thinking_bigger: "Think Bigger",
-  performance: "Performance",
-  ux: "UX",
-  architecture: "Architecture",
+const personaLabels: Record<ProvocationType, string> = {
+  architect: "Architect",
+  quality_engineer: "QA Engineer",
+  ux_designer: "UX Designer",
+  tech_writer: "Tech Writer",
+  product_manager: "Product Manager",
+  security_engineer: "Security",
+  thinking_bigger: "Think Big",
 };
+
+const personaDescriptions: Record<ProvocationType, { role: string; advice: string; challenge: string }> = {
+  architect: {
+    role: "Reviews system design, boundaries, API contracts, and data flow.",
+    advice: "Suggests architectural improvements, cleaner abstractions, and better separation of concerns.",
+    challenge: "Pushes back on unclear boundaries, missing contracts, coupling, and technical debt.",
+  },
+  quality_engineer: {
+    role: "Reviews testing gaps, edge cases, error handling, and reliability.",
+    advice: "Suggests acceptance criteria, test strategies, and observable quality measures.",
+    challenge: "Pushes back on missing error handling, untested paths, and regression risks.",
+  },
+  ux_designer: {
+    role: "Reviews user flows, discoverability, accessibility, and error states.",
+    advice: "Suggests UI improvements, better onboarding, and clearer navigation paths.",
+    challenge: "Pushes back on confusing flows, missing states, and accessibility gaps.",
+  },
+  tech_writer: {
+    role: "Reviews documentation, naming, and UI copy for clarity.",
+    advice: "Suggests clearer labels, better explanations, and self-explanatory interfaces.",
+    challenge: "Pushes back on jargon, missing context, unclear error messages, and documentation gaps.",
+  },
+  product_manager: {
+    role: "Reviews business value, user stories, and prioritization.",
+    advice: "Suggests success metrics, clearer acceptance criteria, and stronger user value propositions.",
+    challenge: "Pushes back on features without clear outcomes, missing priorities, and vague user stories.",
+  },
+  security_engineer: {
+    role: "Reviews data privacy, authentication, authorization, and compliance.",
+    advice: "Suggests secure defaults, input validation, and audit trail improvements.",
+    challenge: "Pushes back on missing threat models, weak auth, and data exposure risks.",
+  },
+  thinking_bigger: {
+    role: "Scales impact and outcomes without changing the core idea.",
+    advice: "Suggests bolder bets within constraints — new workflows, adjacent product lines, and simplifications designed for 100,000+ people.",
+    challenge: "Pushes you to target outcome-level impact (retention, cost-to-serve, accessibility, resilience) and raise scale concerns early.",
+  },
+};
+
+// Re-export for TranscriptOverlay
+export { personaIcons, personaColors, personaBgColors, personaLabels };
 
 interface ProvocationsDisplayProps {
   provocations: Provocation[];
@@ -125,6 +164,23 @@ function ScaleIndicator({ scale }: { scale?: number }) {
   );
 }
 
+function PersonaTooltip({ type, children }: { type: ProvocationType; children: React.ReactNode }) {
+  const desc = personaDescriptions[type];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs space-y-1.5 p-3">
+        <p className="font-semibold text-sm">{personaLabels[type]}</p>
+        <p className="text-xs text-muted-foreground">{desc.role}</p>
+        <div className="text-xs space-y-0.5 pt-1 border-t">
+          <p><span className="font-medium text-emerald-600 dark:text-emerald-400">Advice:</span> {desc.advice}</p>
+          <p><span className="font-medium text-violet-600 dark:text-violet-400">Challenge:</span> {desc.challenge}</p>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function ProvocationCard({
   provocation,
   onUpdateStatus,
@@ -143,15 +199,22 @@ function ProvocationCard({
   isMerging?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const Icon = provocationIcons[provocation.type];
-  const colorClass = provocationColors[provocation.type];
-  const bgClass = provocationBgColors[provocation.type];
+  const Icon = personaIcons[provocation.type];
+  const colorClass = personaColors[provocation.type];
+  const bgClass = personaBgColors[provocation.type];
 
   const statusStyles: Record<Provocation["status"], string> = {
     pending: "",
     addressed: "opacity-60 border-emerald-300 dark:border-emerald-700",
     rejected: "opacity-40",
     highlighted: "ring-2 ring-primary",
+  };
+
+  const provData = {
+    type: provocation.type,
+    title: provocation.title,
+    content: provocation.content,
+    sourceExcerpt: provocation.sourceExcerpt,
   };
 
   return (
@@ -163,14 +226,18 @@ function ProvocationCard({
     >
       <CardHeader className="p-4 pb-2">
         <CardTitle className="flex items-start gap-2 text-base">
-          <div className={`p-1.5 rounded-md ${bgClass}`}>
-            <Icon className={`w-4 h-4 ${colorClass}`} />
-          </div>
+          <PersonaTooltip type={provocation.type}>
+            <div className={`p-1.5 rounded-md ${bgClass} cursor-help`}>
+              <Icon className={`w-4 h-4 ${colorClass}`} />
+            </div>
+          </PersonaTooltip>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className={`text-xs ${colorClass} border-current`}>
-                {provocationLabels[provocation.type]}
-              </Badge>
+              <PersonaTooltip type={provocation.type}>
+                <Badge variant="outline" className={`text-xs ${colorClass} border-current cursor-help`}>
+                  {personaLabels[provocation.type]}
+                </Badge>
+              </PersonaTooltip>
               <ScaleIndicator scale={provocation.scale} />
               {provocation.status !== "pending" && (
                 <Badge
@@ -186,49 +253,39 @@ function ProvocationCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-0 space-y-3">
-        {/* Action buttons at top - before content */}
+        {/* Action buttons — Advice / Challenge / secondary actions */}
         {provocation.status === "pending" && (
           <div className="flex items-center gap-2 flex-wrap">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  data-testid={`button-respond-${provocation.id}`}
+                  data-testid={`button-advice-${provocation.id}`}
                   size="sm"
                   variant="outline"
-                  className={`gap-1 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-                  onClick={() => onStartResponse?.({
-                    type: provocation.type,
-                    title: provocation.title,
-                    content: provocation.content,
-                    sourceExcerpt: provocation.sourceExcerpt,
-                  })}
+                  className={`gap-1 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+                  onClick={() => onAddToDocument?.(provData)}
                 >
-                  <Mic className="w-3.5 h-3.5" />
-                  Respond
+                  <Plus className="w-3.5 h-3.5" />
+                  Accept Advice
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Open voice recorder to respond to this provocation</TooltipContent>
+              <TooltipContent>Accept this persona's advice and incorporate it into your document</TooltipContent>
             </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  data-testid={`button-add-to-doc-${provocation.id}`}
+                  data-testid={`button-challenge-${provocation.id}`}
                   size="sm"
                   variant="outline"
-                  className={`gap-1 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-                  onClick={() => onAddToDocument?.({
-                    type: provocation.type,
-                    title: provocation.title,
-                    content: provocation.content,
-                    sourceExcerpt: provocation.sourceExcerpt,
-                  })}
+                  className={`gap-1 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+                  onClick={() => onStartResponse?.(provData)}
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add to Document
+                  <Mic className="w-3.5 h-3.5" />
+                  Challenge
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Agree with this provocation and incorporate it into your document</TooltipContent>
+              <TooltipContent>Push back — respond to this challenge with your own perspective</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -238,18 +295,13 @@ function ProvocationCard({
                   size="sm"
                   variant="outline"
                   className="gap-1"
-                  onClick={() => onSendToAuthor?.({
-                    type: provocation.type,
-                    title: provocation.title,
-                    content: provocation.content,
-                    sourceExcerpt: provocation.sourceExcerpt,
-                  })}
+                  onClick={() => onSendToAuthor?.(provData)}
                 >
                   <Send className="w-3.5 h-3.5" />
-                  Send to Author
+                  Note
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Append this provocation as a note in the document</TooltipContent>
+              <TooltipContent>Append as a note in the document for later</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -257,15 +309,14 @@ function ProvocationCard({
                 <Button
                   data-testid={`button-highlight-${provocation.id}`}
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   className="gap-1"
                   onClick={() => onUpdateStatus("highlighted")}
                 >
                   <Star className="w-3.5 h-3.5" />
-                  Highlight
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Mark as important for your outline</TooltipContent>
+              <TooltipContent>Highlight as important</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -278,10 +329,9 @@ function ProvocationCard({
                   onClick={() => onUpdateStatus("addressed")}
                 >
                   <Check className="w-3.5 h-3.5" />
-                  Addressed
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>You've considered this point</TooltipContent>
+              <TooltipContent>Mark as addressed</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -294,10 +344,9 @@ function ProvocationCard({
                   onClick={() => onUpdateStatus("rejected")}
                 >
                   <X className="w-3.5 h-3.5" />
-                  Dismiss
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>This doesn't apply to your work</TooltipContent>
+              <TooltipContent>Dismiss</TooltipContent>
             </Tooltip>
           </div>
         )}
@@ -329,7 +378,7 @@ function ProvocationCard({
   );
 }
 
-/** Focused view for resolving provocations one at a time via voice */
+/** Focused view for resolving provocations one at a time */
 function FocusMode({
   provocations,
   onStartResponse,
@@ -356,9 +405,9 @@ function FocusMode({
         <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center mb-4">
           <Check className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
         </div>
-        <h3 className="text-lg font-semibold mb-2">All Provocations Resolved</h3>
+        <h3 className="text-lg font-semibold mb-2">All Feedback Resolved</h3>
         <p className="text-sm text-muted-foreground mb-4 max-w-xs">
-          You've addressed all pending provocations. Generate more challenges to keep improving.
+          You've addressed all pending feedback. Generate more challenges to keep improving.
         </p>
         <Button onClick={onExit} variant="outline" className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
@@ -370,9 +419,9 @@ function FocusMode({
 
   const safeIndex = Math.min(currentIndex, pending.length - 1);
   const current = pending[safeIndex];
-  const Icon = provocationIcons[current.type];
-  const colorClass = provocationColors[current.type];
-  const bgClass = provocationBgColors[current.type];
+  const Icon = personaIcons[current.type];
+  const colorClass = personaColors[current.type];
+  const bgClass = personaBgColors[current.type];
 
   const goNext = () => {
     if (safeIndex < pending.length - 1) {
@@ -384,6 +433,13 @@ function FocusMode({
     if (safeIndex > 0) {
       setCurrentIndex(safeIndex - 1);
     }
+  };
+
+  const provData = {
+    type: current.type,
+    title: current.title,
+    content: current.content,
+    sourceExcerpt: current.sourceExcerpt,
   };
 
   return (
@@ -411,13 +467,17 @@ function FocusMode({
 
       {/* Current provocation */}
       <div className="flex-1 flex flex-col items-center justify-center p-6">
-        <div className={`p-3 rounded-xl ${bgClass} mb-4`}>
-          <Icon className={`w-8 h-8 ${colorClass}`} />
-        </div>
+        <PersonaTooltip type={current.type}>
+          <div className={`p-3 rounded-xl ${bgClass} mb-4 cursor-help`}>
+            <Icon className={`w-8 h-8 ${colorClass}`} />
+          </div>
+        </PersonaTooltip>
         <div className="flex items-center gap-2 mb-3">
-          <Badge variant="outline" className={`text-xs ${colorClass} border-current`}>
-            {provocationLabels[current.type]}
-          </Badge>
+          <PersonaTooltip type={current.type}>
+            <Badge variant="outline" className={`text-xs ${colorClass} border-current cursor-help`}>
+              {personaLabels[current.type]}
+            </Badge>
+          </PersonaTooltip>
           <ScaleIndicator scale={current.scale} />
         </div>
         <h3 className="text-xl font-semibold text-center mb-3 max-w-md">{current.title}</h3>
@@ -433,69 +493,46 @@ function FocusMode({
           </div>
         )}
 
-        {/* Response actions */}
+        {/* Response actions — Advice / Challenge */}
         <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-3">
             <Button
               size="default"
               variant="outline"
-              className={`gap-2 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-              onClick={() => {
-                onStartResponse?.(current.id, {
-                  type: current.type,
-                  title: current.title,
-                  content: current.content,
-                  sourceExcerpt: current.sourceExcerpt,
-                });
-              }}
+              className={`gap-2 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+              onClick={() => onAddToDocument?.(current.id, provData)}
             >
-              <Mic className="w-4 h-4" />
-              Respond
+              <Plus className="w-4 h-4" />
+              Accept Advice
             </Button>
             <Button
               size="default"
               variant="outline"
-              className={`gap-2 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-              onClick={() => {
-                onAddToDocument?.(current.id, {
-                  type: current.type,
-                  title: current.title,
-                  content: current.content,
-                  sourceExcerpt: current.sourceExcerpt,
-                });
-              }}
+              className={`gap-2 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
+              onClick={() => onStartResponse?.(current.id, provData)}
             >
-              <Plus className="w-4 h-4" />
-              Add to Document
+              <Mic className="w-4 h-4" />
+              Challenge
             </Button>
             <Button
               size="default"
               variant="outline"
               className="gap-2"
-              onClick={() => {
-                onSendToAuthor?.(current.id, {
-                  type: current.type,
-                  title: current.title,
-                  content: current.content,
-                  sourceExcerpt: current.sourceExcerpt,
-                });
-              }}
+              onClick={() => onSendToAuthor?.(current.id, provData)}
             >
               <Send className="w-4 h-4" />
-              Send to Author
+              Note
             </Button>
           </div>
         </div>
 
-        {/* Action buttons */}
+        {/* Skip / mark addressed */}
         <div className="flex items-center gap-2 mt-6">
           <Button
             size="sm"
             variant="ghost"
             className="gap-1"
-            onClick={() => {
-              onUpdateStatus(current.id, "addressed");
-            }}
+            onClick={() => onUpdateStatus(current.id, "addressed")}
           >
             <Check className="w-3.5 h-3.5" />
             Mark Addressed
@@ -504,9 +541,7 @@ function FocusMode({
             size="sm"
             variant="ghost"
             className="gap-1 text-muted-foreground"
-            onClick={() => {
-              onUpdateStatus(current.id, "rejected");
-            }}
+            onClick={() => onUpdateStatus(current.id, "rejected")}
           >
             <SkipForward className="w-3.5 h-3.5" />
             Skip
@@ -541,7 +576,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
   const [guidance, setGuidance] = useState("");
   const [isFocusMode, setIsFocusMode] = useState(false);
 
-  // Type selection for which provocation types to generate/answer (empty by default — user opts in)
+  // Persona selection for which types to generate (empty by default — user opts in)
   const [selectedTypes, setSelectedTypes] = useState<Set<ProvocationType>>(
     () => new Set<ProvocationType>()
   );
@@ -578,7 +613,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
       <div className="space-y-3 p-4">
         <div className="flex items-center gap-2 mb-4">
           <MessageSquareWarning className="w-5 h-5 text-muted-foreground" />
-          <h3 className="font-semibold">Generating Provocations...</h3>
+          <h3 className="font-semibold">Consulting Personas...</h3>
         </div>
         {[1, 2, 3].map((i) => (
           <Card key={i} className="p-4">
@@ -595,7 +630,6 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
   if (safeProvocations.length === 0) {
     return (
       <div className="h-full flex flex-col">
-        {/* Challenge input even when empty */}
         {onRegenerateProvocations && (
           <ChallengeInput
             guidance={guidance}
@@ -609,9 +643,9 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center space-y-3">
             <MessageSquareWarning className="w-12 h-12 text-muted-foreground/50 mx-auto" />
-            <h3 className="font-medium text-muted-foreground">No Provocations Yet</h3>
+            <h3 className="font-medium text-muted-foreground">No Feedback Yet</h3>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Use the challenge input above to generate thought-provoking insights targeted at your document.
+              Select personas above and generate feedback to get expert perspectives on your document.
             </p>
           </div>
         </div>
@@ -619,9 +653,8 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
     );
   }
 
-  // Focus mode: one-by-one voice interview
+  // Focus mode: one-by-one
   if (isFocusMode) {
-    // Filter to selected types for focus mode
     const focusProvocations = safeProvocations.filter(p => selectedTypes.has(p.type));
     return (
       <FocusMode
@@ -638,7 +671,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
 
   return (
     <div className="h-full flex flex-col">
-      {/* Challenge Input - prominent at top */}
+      {/* Challenge Input */}
       {onRegenerateProvocations && (
         <ChallengeInput
           guidance={guidance}
@@ -650,9 +683,9 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         />
       )}
 
-      {/* Provocations header with counts and focus mode */}
+      {/* Header with counts and focus mode */}
       <div className="flex items-center gap-2 px-4 py-2 border-b flex-wrap">
-        <h3 className="font-semibold text-sm">Provocations</h3>
+        <h3 className="font-semibold text-sm">Persona Feedback</h3>
         <div className="flex items-center gap-2 ml-auto">
           {pendingCount > 0 && (
             <>
@@ -669,7 +702,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
                     Resolve 1-by-1
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Address provocations one at a time via voice</TooltipContent>
+                <TooltipContent>Address feedback one at a time</TooltipContent>
               </Tooltip>
             </>
           )}
@@ -679,7 +712,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         </div>
       </div>
 
-      {/* View filter tabs */}
+      {/* Persona filter tabs */}
       <div className="flex items-center gap-1 px-4 py-2 flex-wrap">
         <Button
           data-testid="filter-all"
@@ -690,23 +723,24 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         >
           All
         </Button>
-        {(["challenge", "thinking_bigger", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
-          const Icon = provocationIcons[type];
+        {(["architect", "quality_engineer", "ux_designer", "tech_writer", "product_manager", "security_engineer", "thinking_bigger"] as ProvocationType[]).map((type) => {
+          const Icon = personaIcons[type];
           const count = safeProvocations.filter((p) => p.type === type).length;
-          if (count === 0 && type !== "challenge") return null;
+          if (count === 0) return null;
           return (
-            <Button
-              key={type}
-              data-testid={`filter-${type}`}
-              size="sm"
-              variant={viewFilter === type ? "default" : "ghost"}
-              className="gap-1 text-xs h-7 px-2"
-              onClick={() => setViewFilter(type)}
-            >
-              <Icon className="w-3 h-3" />
-              {provocationLabels[type]}
-              {count > 0 && <span className="opacity-70">({count})</span>}
-            </Button>
+            <PersonaTooltip key={type} type={type}>
+              <Button
+                data-testid={`filter-${type}`}
+                size="sm"
+                variant={viewFilter === type ? "default" : "ghost"}
+                className="gap-1 text-xs h-7 px-2"
+                onClick={() => setViewFilter(type)}
+              >
+                <Icon className="w-3 h-3" />
+                {personaLabels[type]}
+                <span className="opacity-70">({count})</span>
+              </Button>
+            </PersonaTooltip>
           );
         })}
       </div>
@@ -727,7 +761,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
           ))}
           {filteredProvocations.length === 0 && (
             <div className="text-center py-8 text-sm text-muted-foreground">
-              No {viewFilter === "all" ? "" : provocationLabels[viewFilter as ProvocationType].toLowerCase() + " "}provocations yet.
+              No {viewFilter === "all" ? "" : personaLabels[viewFilter as ProvocationType].toLowerCase() + " "}feedback yet.
             </div>
           )}
         </div>
@@ -736,7 +770,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
   );
 }
 
-/** Challenge input area - prominent at top of the provocations panel */
+/** Challenge input area — select personas and generate feedback */
 function ChallengeInput({
   guidance,
   setGuidance,
@@ -756,7 +790,6 @@ function ChallengeInput({
 
   return (
     <div className="border-b bg-muted/20 p-4 space-y-3">
-      {/* Challenge input with type toggles below */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Crosshair className="w-4 h-4 text-violet-600 dark:text-violet-400" />
@@ -785,21 +818,23 @@ function ChallengeInput({
         {isRecording && (
           <p className="text-xs text-primary animate-pulse">Listening... describe the direction for your challenges</p>
         )}
+        {/* Persona toggles */}
         <div className="flex items-center gap-1 flex-wrap">
-          {(["challenge", "thinking_bigger", "fallacy", "alternative", "performance", "ux", "architecture", "opportunity"] as ProvocationType[]).map((type) => {
-            const Icon = provocationIcons[type];
+          {(["architect", "quality_engineer", "ux_designer", "tech_writer", "product_manager", "security_engineer", "thinking_bigger"] as ProvocationType[]).map((type) => {
+            const Icon = personaIcons[type];
             const isSelected = selectedTypes.has(type);
             return (
-              <Button
-                key={type}
-                size="sm"
-                variant={isSelected ? "default" : "outline"}
-                className={`gap-1 text-xs h-6 px-1.5 ${isSelected ? "" : "opacity-50"}`}
-                onClick={() => toggleType(type)}
-              >
-                <Icon className="w-3 h-3" />
-                {provocationLabels[type]}
-              </Button>
+              <PersonaTooltip key={type} type={type}>
+                <Button
+                  size="sm"
+                  variant={isSelected ? "default" : "outline"}
+                  className={`gap-1 text-xs h-6 px-1.5 ${isSelected ? "" : "opacity-50"}`}
+                  onClick={() => toggleType(type)}
+                >
+                  <Icon className="w-3 h-3" />
+                  {personaLabels[type]}
+                </Button>
+              </PersonaTooltip>
             );
           })}
         </div>
@@ -817,7 +852,7 @@ function ChallengeInput({
         ) : (
           <RefreshCw className="w-3.5 h-3.5" />
         )}
-        {isRegenerating ? "Generating..." : "Generate Challenges"}
+        {isRegenerating ? "Generating..." : "Get Feedback"}
       </Button>
     </div>
   );
