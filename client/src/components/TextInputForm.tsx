@@ -245,62 +245,77 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           </div>
         </div>
 
-        {/* ── OBJECTIVE ── shown after mode selection or available for freeform ── */}
-        <div className="space-y-2">
-          <label
-            htmlFor="objective"
-            className="flex items-center gap-2 text-base font-medium text-muted-foreground"
-          >
-            <Target className="w-4 h-4 text-primary" />
-            Your objective
-          </label>
-          <SmartTextPanel
-            id="objective"
-            data-testid="input-objective"
-            placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-            className="text-base leading-relaxed font-serif"
-            value={objective}
-            onChange={(val) => setObjective(val)}
-            minRows={3}
-            maxRows={6}
-            onVoiceTranscript={handleObjectiveVoiceComplete}
-            onRecordingChange={setIsRecordingObjective}
-            voiceMode="replace"
-            actions={[
-              {
-                key: "clean-up-objective",
-                label: "Clean up",
-                loadingLabel: "Summarizing...",
-                description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your objective into clear, concise language.",
-                icon: Wand2,
-                onClick: handleSummarizeObjective,
-                disabled: isSummarizingObjective,
-                loading: isSummarizingObjective,
-                visible: objective.length > 50 && !isRecordingObjective,
-              },
-              {
-                key: "toggle-objective-raw",
-                label: showObjectiveRaw ? "Hide original" : "Show original",
-                description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
-                icon: showObjectiveRaw ? EyeOff : Eye,
-                onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
-                visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-              },
-              {
-                key: "restore-objective",
-                label: "Restore original",
-                description: "Discard the cleaned-up version and revert to your original voice transcript.",
-                icon: Eye,
-                onClick: handleRestoreObjective,
-                visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-              },
-            ] satisfies SmartAction[]}
-          />
+        {/* ── OBJECTIVE ── Smart Text Component ── */}
+        <div className="rounded-xl border-2 border-border bg-card overflow-hidden">
+          {/* Header */}
+          <div className="px-4 pt-4 pb-2">
+            <label
+              htmlFor="objective"
+              className="flex items-center gap-2 text-base font-semibold text-foreground"
+            >
+              <Target className="w-4 h-4 text-primary" />
+              Your objective
+            </label>
+            <p className="text-sm text-muted-foreground mt-1 ml-6">
+              {activePrebuilt
+                ? "Auto-populated from the template you selected above — edit it to make it your own."
+                : "Describe what you're creating. This is auto-populated if you select a document type above."}
+              {" "}Once set, move on to your <span className="font-medium text-foreground">Draft</span> below.
+            </p>
+          </div>
+
+          {/* Textarea */}
+          <div className="px-4 pb-2">
+            <SmartTextPanel
+              id="objective"
+              data-testid="input-objective"
+              placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
+              className="text-base leading-relaxed font-serif border-none shadow-none focus-visible:ring-0"
+              value={objective}
+              onChange={(val) => setObjective(val)}
+              minRows={3}
+              maxRows={6}
+              onVoiceTranscript={handleObjectiveVoiceComplete}
+              onRecordingChange={setIsRecordingObjective}
+              voiceMode="replace"
+              actions={[
+                {
+                  key: "clean-up-objective",
+                  label: "Clean up",
+                  loadingLabel: "Summarizing...",
+                  description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your objective into clear, concise language.",
+                  icon: Wand2,
+                  onClick: handleSummarizeObjective,
+                  disabled: isSummarizingObjective,
+                  loading: isSummarizingObjective,
+                  visible: objective.length > 50 && !isRecordingObjective,
+                },
+                {
+                  key: "toggle-objective-raw",
+                  label: showObjectiveRaw ? "Hide original" : "Show original",
+                  description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
+                  icon: showObjectiveRaw ? EyeOff : Eye,
+                  onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
+                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+                },
+                {
+                  key: "restore-objective",
+                  label: "Restore original",
+                  description: "Discard the cleaned-up version and revert to your original voice transcript.",
+                  icon: Eye,
+                  onClick: handleRestoreObjective,
+                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+                },
+              ] satisfies SmartAction[]}
+            />
+          </div>
+
+          {/* Status / supplementary info inside the component */}
           {isRecordingObjective && (
-            <p className="text-xs text-primary animate-pulse">Listening... speak your objective</p>
+            <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
           )}
           {showObjectiveRaw && objectiveRawTranscript && (
-            <div className="p-3 rounded-lg bg-muted/50 border text-sm">
+            <div className="mx-4 mb-3 p-3 rounded-lg bg-muted/50 border text-sm">
               <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
               <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
             </div>
