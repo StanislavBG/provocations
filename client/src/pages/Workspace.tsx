@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { encrypt, getOrCreateDeviceKey } from "@/lib/crypto";
 import { generateId } from "@/lib/utils";
+import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { OutlineBuilder } from "@/components/OutlineBuilder";
@@ -31,14 +32,11 @@ import {
   Settings2,
   GitCompare,
   Target,
-  BookCopy,
   X,
   Lightbulb,
   Save,
   FolderOpen,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
   Document,
   Provocation,
@@ -875,6 +873,56 @@ export default function Workspace() {
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
 
+  // Show the input form when there's no document content and no analysis in progress
+  const isInputPhase = !document.rawText && !analyzeMutation.isPending;
+
+  if (isInputPhase) {
+    return (
+      <div className="h-screen flex flex-col">
+        <header className="border-b bg-card">
+          <div className="flex items-center justify-between gap-4 px-4 py-2">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-primary" />
+              <h1 className="font-semibold text-lg">Provocations</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLoadDialog(true)}
+                className="gap-1.5"
+                title="Load a previously saved document"
+              >
+                <FolderOpen className="w-4 h-4" />
+                Load
+              </Button>
+              <ThemeToggle />
+            </div>
+          </div>
+        </header>
+        <div className="flex-1 overflow-hidden">
+          <TextInputForm
+            onSubmit={(text, obj, refs) => {
+              setDocument({ id: generateId("doc"), rawText: text });
+              setObjective(obj);
+              setReferenceDocuments(refs);
+              analyzeMutation.mutate({ text, referenceDocuments: refs });
+            }}
+            onBlankDocument={() => {
+              setDocument({ id: generateId("doc"), rawText: " " });
+            }}
+            isLoading={analyzeMutation.isPending}
+          />
+        </div>
+        <LoadDocumentDialog
+          open={showLoadDialog}
+          onOpenChange={setShowLoadDialog}
+          onLoad={handleLoadDocument}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col">
       <header className="border-b bg-card">
@@ -958,51 +1006,6 @@ export default function Workspace() {
             className="h-7 w-7 shrink-0"
           />
 
-          {/* Reference documents indicator */}
-          {referenceDocuments.length > 0 && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1.5 shrink-0">
-                  <BookCopy className="w-4 h-4" />
-                  <Badge variant="secondary" className="text-xs">{referenceDocuments.length}</Badge>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-80">
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm flex items-center gap-2">
-                    <BookCopy className="w-4 h-4" />
-                    Reference Documents
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    These guide style and inform completeness checks.
-                  </p>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {referenceDocuments.map((doc) => (
-                      <div key={doc.id} className="flex items-start gap-2 p-2 rounded border bg-muted/30">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-sm truncate">{doc.name}</span>
-                            <Badge variant="outline" className="text-xs capitalize">{doc.type}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {doc.content.slice(0, 100)}...
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5 shrink-0"
-                          onClick={() => setReferenceDocuments(prev => prev.filter(d => d.id !== doc.id))}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
         </div>
       </header>
       
