@@ -12,6 +12,10 @@ import {
   PencilLine,
   ClipboardList,
   Rocket,
+  Blocks,
+  GraduationCap,
+  BarChart3,
+  Clapperboard,
   Check,
 } from "lucide-react";
 import { SmartTextPanel } from "@/components/SmartTextPanel";
@@ -33,6 +37,10 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "pencil-line": PencilLine,
   "clipboard-list": ClipboardList,
   rocket: Rocket,
+  blocks: Blocks,
+  "graduation-cap": GraduationCap,
+  "bar-chart-3": BarChart3,
+  clapperboard: Clapperboard,
 };
 
 export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInputFormProps) {
@@ -197,7 +205,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           </div>
 
           {/* Mode cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {prebuiltTemplates.map((template) => {
               const Icon = iconMap[template.icon] || PencilLine;
               const isActive = activePrebuilt?.id === template.id;
