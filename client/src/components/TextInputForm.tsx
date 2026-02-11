@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   FileText,
@@ -17,6 +17,7 @@ import {
   BarChart3,
   Clapperboard,
   Check,
+  ChevronDown,
 } from "lucide-react";
 import { SmartTextPanel } from "@/components/SmartTextPanel";
 import type { SmartAction } from "@/components/SmartTextPanel";
@@ -63,9 +64,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
+  const [cardsExpanded, setCardsExpanded] = useState(false);
 
   // Draft section expanded state
   const [isDraftExpanded, setIsDraftExpanded] = useState(false);
+
+  // Ref for scrolling back to top on selection
+  const stepOneRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = () => {
     if (text.trim()) {
@@ -173,14 +178,24 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
       setText("");
     }
     setActivePrebuilt(template);
+    setCardsExpanded(false);
     setIsDraftExpanded(true);
   };
 
   const handleClearPrebuilt = () => {
     setActivePrebuilt(null);
+    setCardsExpanded(false);
     setObjective("");
     setText("");
     setIsDraftExpanded(false);
+  };
+
+  const handleChangeType = () => {
+    setCardsExpanded(true);
+    // Scroll the step-one section into view so the user sees the grid
+    requestAnimationFrame(() => {
+      stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   // Handle draft question response — merge the user's answer into the draft text
@@ -194,7 +209,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
       <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 gap-8">
 
         {/* ── STEP ONE: What type of document are you creating? ── */}
-        <div className="space-y-4">
+        <div className="space-y-4" ref={stepOneRef}>
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
               1
@@ -204,54 +219,59 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </h2>
           </div>
 
-          {activePrebuilt ? (
-            /* ── Compact selected state ── */
-            (() => {
-              const SelectedIcon = iconMap[activePrebuilt.icon] || PencilLine;
-              return (
-                <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-primary bg-primary/5 ring-2 ring-primary/20">
-                  <div className="p-2 rounded-lg bg-primary/20">
-                    <SelectedIcon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-base">{activePrebuilt.title}</span>
-                    <span className="text-sm text-muted-foreground ml-2">{activePrebuilt.subtitle}</span>
-                  </div>
-                  <div className="p-1 rounded-full bg-primary mr-1">
-                    <Check className="w-3.5 h-3.5 text-primary-foreground" />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearPrebuilt}
-                    className="text-muted-foreground shrink-0"
-                  >
-                    Change
-                  </Button>
-                </div>
-              );
-            })()
-          ) : (
-            /* ── Full card grid ── */
+          {/* Compact selected indicator — visible when a type is chosen and grid is collapsed */}
+          {activePrebuilt && !cardsExpanded && (
+            <button
+              onClick={handleChangeType}
+              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary bg-primary/5 ring-2 ring-primary/20 text-left transition-all hover:bg-primary/10"
+            >
+              <div className="p-2 rounded-lg bg-primary/20">
+                {(() => { const I = iconMap[activePrebuilt.icon] || PencilLine; return <I className="w-5 h-5 text-primary" />; })()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-base">{activePrebuilt.title}</span>
+                <span className="text-sm text-muted-foreground ml-2">{activePrebuilt.subtitle}</span>
+              </div>
+              <div className="p-1 rounded-full bg-primary mr-1">
+                <Check className="w-3.5 h-3.5 text-primary-foreground" />
+              </div>
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                Change <ChevronDown className="w-4 h-4" />
+              </span>
+            </button>
+          )}
+
+          {/* Full card grid — visible when nothing selected OR user clicked "Change" */}
+          {(!activePrebuilt || cardsExpanded) && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {prebuiltTemplates.map((template) => {
                 const Icon = iconMap[template.icon] || PencilLine;
+                const isActive = activePrebuilt?.id === template.id;
 
                 return (
                   <button
                     key={template.id}
                     onClick={() => handleSelectPrebuilt(template)}
-                    className="group relative text-left p-4 rounded-xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all duration-200"
+                    className={`group relative text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                      isActive
+                        ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                        : "border-border hover:border-primary/40 hover:bg-primary/5"
+                    }`}
                   >
                     <div className="space-y-2">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <Icon className="w-5 h-5 text-primary/70" />
+                        <div className={`p-2 rounded-lg ${isActive ? "bg-primary/20" : "bg-primary/10"}`}>
+                          <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-primary/70"}`} />
                         </div>
                         <div>
                           <span className="font-semibold text-sm block">{template.title}</span>
                           <span className="text-xs text-muted-foreground">{template.subtitle}</span>
                         </div>
+                        {isActive && (
+                          <div className="ml-auto p-1 rounded-full bg-primary">
+                            <Check className="w-3.5 h-3.5 text-primary-foreground" />
+                          </div>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
                         {template.description}
