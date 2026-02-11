@@ -311,8 +311,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             {
               key: "clean-up-objective",
               label: "Clean up",
-              loadingLabel: "Summarizing...",
-              description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your objective into clear, concise language.",
+              loadingLabel: "Cleaning up...",
+              description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
               icon: Wand2,
               onClick: handleSummarizeObjective,
               disabled: isSummarizingObjective,
@@ -418,9 +418,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 actions={[
                   {
                     key: "clean-up-draft",
-                    label: "Clean up transcript",
+                    label: "Clean up",
                     loadingLabel: "Cleaning up...",
-                    description: "Uses AI to clean your voice transcript — removes filler words, false starts, and grammatical errors while preserving your meaning.",
+                    description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
                     icon: Wand2,
                     onClick: handleSummarizeText,
                     disabled: isSummarizingText,
@@ -429,11 +429,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   },
                   {
                     key: "toggle-draft-raw",
-                    label: showTextRaw ? "Hide original" : `Show original (${(textRawTranscript?.length ? (textRawTranscript.length / 1000).toFixed(1) : "0")}k chars)`,
+                    label: showTextRaw ? "Hide original" : "Show original",
                     description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
                     icon: showTextRaw ? EyeOff : Eye,
                     onClick: () => setShowTextRaw(!showTextRaw),
-                    visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                    visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
                   },
                   {
                     key: "restore-draft",
@@ -441,7 +441,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     description: "Discard the cleaned-up version and revert to your original voice transcript.",
                     icon: Eye,
                     onClick: handleRestoreText,
-                    visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                    visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
                   },
                 ] satisfies SmartAction[]}
                 footer={
