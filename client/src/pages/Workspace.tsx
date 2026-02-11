@@ -2,16 +2,15 @@ import { useState, useCallback, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { encrypt, hashPassphrase, getOrCreateDeviceKey } from "@/lib/crypto";
+import { encrypt, getOrCreateDeviceKey } from "@/lib/crypto";
 import { generateId } from "@/lib/utils";
-import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { OutlineBuilder } from "@/components/OutlineBuilder";
 import { ReadingPane } from "@/components/ReadingPane";
 import { DimensionsToolbar } from "@/components/DimensionsToolbar";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
-import { VoiceRecorder, LargeVoiceRecorder } from "@/components/VoiceRecorder";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,13 +54,10 @@ import type {
   InterviewQuestionResponse,
 } from "@shared/schema";
 
-type AppPhase = "input" | "blank-document" | "workspace";
-
 export default function Workspace() {
   const { toast } = useToast();
-  
-  const [phase, setPhase] = useState<AppPhase>("input");
-  const [document, setDocument] = useState<Document | null>(null);
+
+  const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
   const [provocations, setProvocations] = useState<Provocation[]>([]);
@@ -70,9 +66,8 @@ export default function Workspace() {
   const [targetLength, setTargetLength] = useState<"shorter" | "same" | "longer">("same");
   const [activeTab, setActiveTab] = useState("provocations");
   const [refinedPreview, setRefinedPreview] = useState<string | null>(null);
-  
+
   // Voice and version tracking
-  const [isRecordingBlank, setIsRecordingBlank] = useState(false);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [showDiffView, setShowDiffView] = useState(false);
   const [hoveredProvocationId, setHoveredProvocationId] = useState<string | null>(null);
@@ -144,7 +139,6 @@ export default function Workspace() {
       const provocationsData = data.provocations ?? [];
       setDocument(data.document);
       setProvocations(provocationsData);
-      setPhase("workspace");
 
       // Create initial version
       const initialVersion: DocumentVersion = {
@@ -409,16 +403,6 @@ export default function Workspace() {
     },
   });
 
-  const handleAnalyze = useCallback((text: string, docObjective?: string, refs?: ReferenceDocument[]) => {
-    if (docObjective) {
-      setObjective(docObjective);
-    }
-    if (refs) {
-      setReferenceDocuments(refs);
-    }
-    analyzeMutation.mutate({ text, referenceDocuments: refs });
-  }, [analyzeMutation]);
-
   const handleUpdateProvocationStatus = useCallback((id: string, status: Provocation["status"]) => {
     setProvocations((prev) =>
       prev.map((p) => (p.id === id ? { ...p, status } : p))
@@ -549,8 +533,7 @@ export default function Workspace() {
   }, [interviewSummaryMutation]);
 
   const handleReset = useCallback(() => {
-    setPhase("input");
-    setDocument(null);
+    setDocument({ id: generateId("doc"), rawText: "" });
     setObjective("");
     setReferenceDocuments([]);
     setProvocations([]);
@@ -558,7 +541,6 @@ export default function Workspace() {
     setRefinedPreview(null);
     setVersions([]);
     setShowDiffView(false);
-    setIsRecordingBlank(false);
     setEditHistory([]);
     setLastSuggestions([]);
     setIsInterviewActive(false);
@@ -588,19 +570,6 @@ export default function Workspace() {
       setDocument({ ...document, rawText: newText });
     }
   }, [document]);
-
-  const handleBlankDocument = useCallback(() => {
-    setPhase("blank-document");
-  }, []);
-
-  const handleBlankDocumentTranscript = useCallback((transcript: string) => {
-    if (transcript.trim()) {
-      // Set a default objective for voice-started documents
-      setObjective("Create a compelling document from spoken ideas");
-      // Trigger analysis with transcribed text
-      analyzeMutation.mutate({ text: transcript });
-    }
-  }, [analyzeMutation]);
 
   const handleVoiceResponse = useCallback((provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
     if (!document || !transcript.trim()) return;
@@ -837,7 +806,6 @@ export default function Workspace() {
     // Immediately populate the document so it appears in the workspace
     const tempDoc: Document = { id: `loaded-${Date.now()}`, rawText: text };
     setDocument(tempDoc);
-    setPhase("workspace");
 
     // Clear stale state from any previous document
     setProvocations([]);
@@ -861,7 +829,7 @@ export default function Workspace() {
 
   // Quick save: encrypt client-side, then overwrite on server
   const handleSaveClick = useCallback(async () => {
-    if (!document?.rawText) return;
+    if (!document.rawText) return;
 
     if (!saveCredentials) {
       // First save - show dialog
@@ -907,90 +875,6 @@ export default function Workspace() {
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
 
-  if (phase === "input") {
-    return (
-      <div className="h-screen flex flex-col">
-        {/* Top bar: branding left, actions right */}
-        <header className="flex items-center justify-between px-5 py-3 border-b bg-card shrink-0">
-          <div className="flex items-center gap-2.5">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <h1 className="font-semibold text-lg">Provocations</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowLoadDialog(true)}
-              className="gap-1.5"
-              title="Load a previously saved document"
-            >
-              <FolderOpen className="w-4 h-4" />
-              Load Saved
-            </Button>
-            <ThemeToggle />
-          </div>
-        </header>
-        <div className="flex-1 overflow-hidden">
-          <TextInputForm
-            onSubmit={handleAnalyze}
-            onBlankDocument={handleBlankDocument}
-            isLoading={analyzeMutation.isPending}
-          />
-        </div>
-        <LoadDocumentDialog
-          open={showLoadDialog}
-          onOpenChange={setShowLoadDialog}
-          onLoad={handleLoadDocument}
-        />
-      </div>
-    );
-  }
-
-  if (phase === "blank-document") {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            className="gap-1.5"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Back
-          </Button>
-          <ThemeToggle />
-        </div>
-        <div className="flex-1 flex flex-col items-center justify-center p-6">
-          <div className="text-center space-y-4 mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-              <Sparkles className="w-8 h-8 text-primary" />
-            </div>
-            <h1 className="text-4xl font-serif font-bold tracking-tight">
-              Speak Your First Draft
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-xl mx-auto leading-relaxed">
-              Click the microphone and start speaking. Your words will become the foundation for analysis.
-            </p>
-          </div>
-          
-          <LargeVoiceRecorder
-            onTranscript={handleBlankDocumentTranscript}
-            isRecording={isRecordingBlank}
-            onToggleRecording={() => setIsRecordingBlank(!isRecordingBlank)}
-          />
-          
-          {analyzeMutation.isPending && (
-            <div className="mt-8 flex items-center gap-3 text-muted-foreground">
-              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              <span>Analyzing your draft...</span>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen flex flex-col">
       <header className="border-b bg-card">
@@ -1018,13 +902,23 @@ export default function Workspace() {
               size="sm"
               onClick={handleSaveClick}
               className="gap-1.5"
-              disabled={!document?.rawText || isQuickSaving}
+              disabled={!document.rawText || isQuickSaving}
               title={saveCredentials
                 ? `Save to "${saveCredentials.title}"`
                 : "Save your document with a passphrase"}
             >
               <Save className="w-4 h-4" />
               {isQuickSaving ? "Saving..." : "Save"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLoadDialog(true)}
+              className="gap-1.5"
+              title="Load a previously saved document"
+            >
+              <FolderOpen className="w-4 h-4" />
+              Load
             </Button>
             <Button
               data-testid="button-reset"
@@ -1173,7 +1067,7 @@ export default function Workspace() {
               </Suspense>
             ) : (
               <ReadingPane
-                text={document?.rawText || ""}
+                text={document.rawText}
                 onTextChange={handleDocumentTextChange}
                 highlightText={hoveredProvocationContext}
                 onVoiceMerge={handleSelectionVoiceMerge}
@@ -1324,7 +1218,7 @@ export default function Workspace() {
       <SaveDocumentDialog
         open={showSaveDialog}
         onOpenChange={setShowSaveDialog}
-        documentText={document?.rawText || ""}
+        documentText={document.rawText}
         onSaved={handleFirstSave}
       />
       <LoadDocumentDialog
