@@ -11,6 +11,7 @@ import { ReadingPane } from "@/components/ReadingPane";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -711,6 +712,7 @@ export default function Workspace() {
                 Load
               </Button>
               <ThemeToggle />
+              <UserButton data-testid="button-user-menu" />
             </div>
           </div>
         </header>
@@ -793,6 +795,7 @@ export default function Workspace() {
               New
             </Button>
             <ThemeToggle />
+            <UserButton data-testid="button-user-menu-main" />
           </div>
         </div>
 

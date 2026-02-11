@@ -2,11 +2,28 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { clerkMiddleware, requireAuth } from "@clerk/express";
 
 const app = express();
 const httpServer = createServer(app);
 
 app.use(express.json());
+app.use(clerkMiddleware());
+
+app.get("/api/clerk-config", (_req, res) => {
+  const key = process.env.CLERK_PUBLISHABLE_KEY;
+  if (!key) {
+    return res.status(500).json({ error: "Clerk publishable key not configured" });
+  }
+  res.json({ publishableKey: key });
+});
+
+app.use("/api", (req, _res, next) => {
+  if (req.path === "/clerk-config") {
+    return next();
+  }
+  return requireAuth()(req, _res, next);
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
