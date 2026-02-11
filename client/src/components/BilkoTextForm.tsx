@@ -1,21 +1,9 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import {
-  Copy,
-  Eraser,
-  Loader2,
-  MessageCircleQuestion,
-  Mic,
-  PenLine,
-  Send,
-  Check,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+import { Copy, Eraser, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -120,295 +108,7 @@ export interface BilkoTextFormProps {
   description?: React.ReactNode;
   /** Extra classes on the outer container */
   containerClassName?: string;
-
-  /* ── Questions feature ── */
-
-  /** List of guided questions rendered as expandable prompts inside the container */
-  questions?: string[];
-  /** Called when the user responds to a guided question */
-  onQuestionResponse?: (question: string, response: string) => void;
 }
-
-/* ── Internal: Questions Section ── */
-
-interface QuestionInputState {
-  expandedIndex: number | null;
-  inputMode: "voice" | "text" | null;
-  textValue: string;
-  isRecording: boolean;
-  interimTranscript: string;
-  responded: Set<number>;
-}
-
-function QuestionsSection({
-  questions,
-  onQuestionResponse,
-}: {
-  questions: string[];
-  onQuestionResponse?: (question: string, response: string) => void;
-}) {
-  const [minimized, setMinimized] = useState(false);
-  const [state, setState] = useState<QuestionInputState>({
-    expandedIndex: null,
-    inputMode: null,
-    textValue: "",
-    isRecording: false,
-    interimTranscript: "",
-    responded: new Set(),
-  });
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleExpand = (index: number) => {
-    if (state.expandedIndex === index) {
-      setState((prev) => ({
-        ...prev,
-        expandedIndex: null,
-        inputMode: null,
-        textValue: "",
-        isRecording: false,
-        interimTranscript: "",
-      }));
-    } else {
-      setState((prev) => ({
-        ...prev,
-        expandedIndex: index,
-        inputMode: null,
-        textValue: "",
-        isRecording: false,
-        interimTranscript: "",
-      }));
-    }
-  };
-
-  const handleStartText = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setState((prev) => ({ ...prev, inputMode: "text", textValue: "" }));
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  };
-
-  const handleStartVoice = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setState((prev) => ({ ...prev, inputMode: "voice", interimTranscript: "" }));
-  };
-
-  const handleVoiceTranscript = (transcript: string) => {
-    if (state.expandedIndex === null || !transcript.trim()) return;
-    const question = questions[state.expandedIndex];
-    onQuestionResponse?.(question, transcript.trim());
-    setState((prev) => ({
-      ...prev,
-      inputMode: null,
-      isRecording: false,
-      interimTranscript: "",
-      responded: new Set(prev.responded).add(prev.expandedIndex!),
-      expandedIndex: null,
-    }));
-  };
-
-  const handleSubmitText = () => {
-    if (state.expandedIndex === null || !state.textValue.trim()) return;
-    const question = questions[state.expandedIndex];
-    onQuestionResponse?.(question, state.textValue.trim());
-    setState((prev) => ({
-      ...prev,
-      inputMode: null,
-      textValue: "",
-      responded: new Set(prev.responded).add(prev.expandedIndex!),
-      expandedIndex: null,
-    }));
-  };
-
-  const handleCancelInput = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setState((prev) => ({
-      ...prev,
-      inputMode: null,
-      textValue: "",
-      isRecording: false,
-      interimTranscript: "",
-    }));
-  };
-
-  const handleTextKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmitText();
-    }
-    if (e.key === "Escape") {
-      setState((prev) => ({ ...prev, inputMode: null, textValue: "" }));
-    }
-  };
-
-  const respondedCount = state.responded.size;
-
-  return (
-    <div className="border-t">
-      {/* Collapsible header */}
-      <button
-        onClick={() => setMinimized(!minimized)}
-        className="flex items-center gap-2 w-full px-4 py-2.5 hover:bg-muted/50 transition-colors text-left"
-      >
-        <MessageCircleQuestion className="w-4 h-4 text-primary" />
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Think about
-        </span>
-        <Badge variant="outline" className="text-[10px]">
-          {respondedCount}/{questions.length}
-        </Badge>
-        <span className="ml-auto text-muted-foreground">
-          {minimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-        </span>
-      </button>
-
-      {/* Question list */}
-      {!minimized && (
-        <div className="px-4 pb-3 flex flex-col gap-2">
-          {questions.map((question, index) => {
-            const isExpanded = state.expandedIndex === index;
-            const isResponded = state.responded.has(index);
-
-            return (
-              <div key={index}>
-                {isExpanded ? (
-                  <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
-                    <button
-                      onClick={() => handleExpand(index)}
-                      className="w-full text-left"
-                    >
-                      <p className="text-sm font-medium leading-relaxed">
-                        {question}
-                      </p>
-                    </button>
-
-                    {state.inputMode === "text" ? (
-                      <div className="space-y-2">
-                        <AutoExpandTextarea
-                          ref={textareaRef}
-                          value={state.textValue}
-                          onChange={(e) =>
-                            setState((prev) => ({
-                              ...prev,
-                              textValue: e.target.value,
-                            }))
-                          }
-                          placeholder="Type your response..."
-                          minRows={2}
-                          maxRows={6}
-                          className="text-sm bg-background/80"
-                          onKeyDown={handleTextKeyDown}
-                        />
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={handleCancelInput}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs gap-1"
-                            onClick={handleSubmitText}
-                            disabled={!state.textValue.trim()}
-                          >
-                            <Send className="w-3 h-3" />
-                            Add to draft
-                          </Button>
-                        </div>
-                      </div>
-                    ) : state.inputMode === "voice" ? (
-                      <div className="space-y-2">
-                        {state.interimTranscript && (
-                          <p className="text-xs text-muted-foreground italic px-1 leading-relaxed">
-                            {state.interimTranscript}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <VoiceRecorder
-                            onTranscript={handleVoiceTranscript}
-                            onInterimTranscript={(interim) =>
-                              setState((prev) => ({
-                                ...prev,
-                                interimTranscript: interim,
-                              }))
-                            }
-                            onRecordingChange={(recording) =>
-                              setState((prev) => ({
-                                ...prev,
-                                isRecording: recording,
-                              }))
-                            }
-                            size="sm"
-                            variant={state.isRecording ? "destructive" : "default"}
-                            className="gap-1.5"
-                            label={state.isRecording ? "Stop" : "Record"}
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={handleCancelInput}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                        {state.isRecording && (
-                          <p className="text-xs text-primary animate-pulse px-1">
-                            Listening...
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 gap-1.5 text-xs flex-1 bg-background/60"
-                          onClick={handleStartVoice}
-                        >
-                          <Mic className="w-3.5 h-3.5" />
-                          Speak
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 gap-1.5 text-xs flex-1 bg-background/60"
-                          onClick={handleStartText}
-                        >
-                          <PenLine className="w-3.5 h-3.5" />
-                          Type
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handleExpand(index)}
-                    className={`w-full text-left text-sm p-2.5 rounded-lg border transition-all leading-relaxed ${
-                      isResponded
-                        ? "border-primary/20 bg-primary/5 text-muted-foreground"
-                        : "border-border hover:border-primary/30 hover:bg-primary/5"
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="flex-1">{question}</span>
-                      {isResponded && (
-                        <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                      )}
-                    </div>
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Main Component ── */
 
 export function BilkoTextForm({
   value,
@@ -442,9 +142,6 @@ export function BilkoTextForm({
   children,
   footer,
   containerClassName,
-  // Questions feature
-  questions,
-  onQuestionResponse,
 }: BilkoTextFormProps) {
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
@@ -496,7 +193,6 @@ export function BilkoTextForm({
   const hasContent = value.length > 0;
   const shouldShowMic = showMic && !!onVoiceTranscript;
   const visibleActions = actions?.filter((a) => a.visible !== false) ?? [];
-  const hasQuestions = questions && questions.length > 0;
 
   // ── Container mode (when label is provided) ──
   if (label) {
@@ -609,14 +305,6 @@ export function BilkoTextForm({
 
         {/* Extra content (recording indicators, raw transcript, etc.) */}
         {children}
-
-        {/* Questions section */}
-        {hasQuestions && (
-          <QuestionsSection
-            questions={questions}
-            onQuestionResponse={onQuestionResponse}
-          />
-        )}
 
         {/* Footer */}
         {footer}
