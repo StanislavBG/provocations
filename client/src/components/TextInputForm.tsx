@@ -19,8 +19,8 @@ import {
   Check,
   ChevronDown,
 } from "lucide-react";
-import { SmartTextPanel } from "@/components/SmartTextPanel";
-import type { SmartAction } from "@/components/SmartTextPanel";
+import { BilkoTextForm } from "@/components/BilkoTextForm";
+import type { BilkoAction } from "@/components/BilkoTextForm";
 import { apiRequest } from "@/lib/queryClient";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -285,7 +285,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
         </div>
 
         {/* ── OBJECTIVE ── Smart Text Component ── */}
-        <SmartTextPanel
+        <BilkoTextForm
           label="Your objective"
           labelIcon={Target}
           description={
@@ -311,8 +311,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             {
               key: "clean-up-objective",
               label: "Clean up",
-              loadingLabel: "Summarizing...",
-              description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your objective into clear, concise language.",
+              loadingLabel: "Cleaning up...",
+              description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
               icon: Wand2,
               onClick: handleSummarizeObjective,
               disabled: isSummarizingObjective,
@@ -335,7 +335,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               onClick: handleRestoreObjective,
               visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
             },
-          ] satisfies SmartAction[]}
+          ] satisfies BilkoAction[]}
         >
           {isRecordingObjective && (
             <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
@@ -346,7 +346,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
             </div>
           )}
-        </SmartTextPanel>
+        </BilkoTextForm>
 
         {/* ── DRAFT ── large, fills remaining space ── */}
         <div className="flex flex-col flex-1 min-h-0">
@@ -400,7 +400,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   onResponse={handleDraftQuestionResponse}
                 />
               )}
-              <SmartTextPanel
+              <BilkoTextForm
                 label="Your draft"
                 labelIcon={PenLine}
                 description="Paste your notes, transcripts, or source material — or use voice to speak your ideas."
@@ -418,9 +418,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 actions={[
                   {
                     key: "clean-up-draft",
-                    label: "Clean up transcript",
+                    label: "Clean up",
                     loadingLabel: "Cleaning up...",
-                    description: "Uses AI to clean your voice transcript — removes filler words, false starts, and grammatical errors while preserving your meaning.",
+                    description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
                     icon: Wand2,
                     onClick: handleSummarizeText,
                     disabled: isSummarizingText,
@@ -429,11 +429,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   },
                   {
                     key: "toggle-draft-raw",
-                    label: showTextRaw ? "Hide original" : `Show original (${(textRawTranscript?.length ? (textRawTranscript.length / 1000).toFixed(1) : "0")}k chars)`,
+                    label: showTextRaw ? "Hide original" : "Show original",
                     description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
                     icon: showTextRaw ? EyeOff : Eye,
                     onClick: () => setShowTextRaw(!showTextRaw),
-                    visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                    visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
                   },
                   {
                     key: "restore-draft",
@@ -441,9 +441,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     description: "Discard the cleaned-up version and revert to your original voice transcript.",
                     icon: Eye,
                     onClick: handleRestoreText,
-                    visible: text.length > 200 && !isRecordingText && !!textRawTranscript && textRawTranscript !== text,
+                    visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
                   },
-                ] satisfies SmartAction[]}
+                ] satisfies BilkoAction[]}
                 footer={
                   <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
                     <div className="text-sm text-muted-foreground">
@@ -494,7 +494,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
                   </div>
                 )}
-              </SmartTextPanel>
+              </BilkoTextForm>
             </div>
           )}
         </div>

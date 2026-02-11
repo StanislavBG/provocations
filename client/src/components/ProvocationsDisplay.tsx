@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { SmartTextPanel } from "./SmartTextPanel";
+import { BilkoTextForm } from "./BilkoTextForm";
 import {
   Check,
   X,
@@ -797,7 +797,7 @@ function ChallengeInput({
             Challenge Me On...
           </label>
         </div>
-        <SmartTextPanel
+        <BilkoTextForm
           placeholder="e.g. 'Push me on pricing strategy' or 'Find gaps in my competitive analysis'"
           value={guidance}
           onChange={setGuidance}

@@ -8,7 +8,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
-export interface SmartAction {
+/* ── Public types ── */
+
+export interface BilkoAction {
   /** Unique key for React rendering */
   key: string;
   /** Button label text */
@@ -31,14 +33,38 @@ export interface SmartAction {
   visible?: boolean;
 }
 
-interface SmartTextPanelProps {
+export interface BilkoTextFormProps {
+  /* ── Core ── */
+
+  /** Current text value */
   value: string;
+  /** Change handler */
   onChange: (value: string) => void;
+  /** Placeholder text */
   placeholder?: string;
+  /** Minimum visible rows (default: 3) */
   minRows?: number;
+  /** Maximum visible rows before scroll (default: 20) */
   maxRows?: number;
+  /** Extra classes on the textarea element */
   className?: string;
+  /** Extra classes on the outer wrapper (inline mode only) */
   panelClassName?: string;
+  /** Auto-focus the textarea on mount */
+  autoFocus?: boolean;
+  /** Make the textarea read-only */
+  readOnly?: boolean;
+  /** Disable the textarea */
+  disabled?: boolean;
+  /** HTML id attribute */
+  id?: string;
+  /** Test id for testing frameworks */
+  "data-testid"?: string;
+  /** Key-down handler on the textarea */
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+
+  /* ── Voice ── */
+
   /** Called when voice recording completes with the final transcript */
   onVoiceTranscript?: (transcript: string) => void;
   /** Called during recording with interim speech text */
@@ -49,39 +75,42 @@ interface SmartTextPanelProps {
   voiceInline?: boolean;
   /** How voice input is displayed during recording: "append" adds to existing text, "replace" shows only the new speech (default: "append") */
   voiceMode?: "append" | "replace";
+
+  /* ── Toolbar toggles ── */
+
+  /** Show mic button in the toolbar (default: true) */
   showMic?: boolean;
+  /** Show clear/eraser button in the toolbar (default: true) */
   showClear?: boolean;
+  /** Show copy button in the toolbar (default: true) */
   showCopy?: boolean;
-  /** Additional action buttons rendered in the icon toolbar */
+
+  /* ── Actions & slots ── */
+
+  /** Additional custom elements rendered in the icon toolbar */
   extraActions?: React.ReactNode;
   /** AI action buttons rendered below the textarea with tooltip descriptions */
-  actions?: SmartAction[];
-  autoFocus?: boolean;
-  readOnly?: boolean;
-  disabled?: boolean;
-  id?: string;
-  "data-testid"?: string;
-  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
-
-  /* ── Container-mode props (Smart Text standard) ── */
-
-  /** Header label — when provided, renders the full bordered container */
-  label?: string;
-  /** Icon rendered next to the label */
-  labelIcon?: LucideIcon;
-  /** Description text below the label */
-  description?: React.ReactNode;
-  /** Extra elements in the header row (badges, download button, etc.) */
+  actions?: BilkoAction[];
+  /** Extra elements in the header row (badges, download button, etc.) — container mode only */
   headerActions?: React.ReactNode;
   /** Content rendered after the actions row (recording indicators, raw transcript, etc.) */
   children?: React.ReactNode;
   /** Footer rendered at the bottom of the container with a top border */
   footer?: React.ReactNode;
+
+  /* ── Container-mode props ── */
+
+  /** Header label — when provided, renders the full bordered container */
+  label?: string;
+  /** Icon rendered next to the label */
+  labelIcon?: LucideIcon;
+  /** Description text rendered inline with the label */
+  description?: React.ReactNode;
   /** Extra classes on the outer container */
   containerClassName?: string;
 }
 
-export function SmartTextPanel({
+export function BilkoTextForm({
   value,
   onChange,
   placeholder,
@@ -113,7 +142,7 @@ export function SmartTextPanel({
   children,
   footer,
   containerClassName,
-}: SmartTextPanelProps) {
+}: BilkoTextFormProps) {
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [interimText, setInterimText] = useState("");
@@ -283,7 +312,7 @@ export function SmartTextPanel({
     );
   }
 
-  // ── Inline mode (no label — backwards compatible) ──
+  // ── Inline mode (no label) ──
   return (
     <div className={cn("relative", panelClassName)}>
       <AutoExpandTextarea

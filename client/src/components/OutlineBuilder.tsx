@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoiceRecorder } from "./VoiceRecorder";
-import { SmartTextPanel } from "./SmartTextPanel";
+import { BilkoTextForm } from "./BilkoTextForm";
 import {
   ListTree,
   Plus,
@@ -201,7 +201,7 @@ function OutlineItemCard({
             )}
           </div>
 
-          <SmartTextPanel
+          <BilkoTextForm
             data-testid={`textarea-content-${item.id}`}
             placeholder="Write your content here, or use voice / AI to generate..."
             value={item.content}
