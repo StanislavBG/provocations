@@ -284,8 +284,17 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
           )}
         </div>
 
-        {/* ── OBJECTIVE ── Smart Text Component ── */}
-        <BilkoTextForm
+        {/* ── STEP TWO: Goal or Objective ── */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              2
+            </div>
+            <h2 className="text-xl font-semibold">
+              What is the goal or objective?
+            </h2>
+          </div>
+          <BilkoTextForm
           label="Your objective"
           labelIcon={Target}
           description={
@@ -347,17 +356,21 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </div>
           )}
         </BilkoTextForm>
+        </div>
 
-        {/* ── DRAFT ── large, fills remaining space ── */}
-        <div className="flex flex-col flex-1 min-h-0">
+        {/* ── STEP THREE: Draft ── */}
+        <div className="flex flex-col flex-1 min-h-0 gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              3
+            </div>
+            <h2 className="text-xl font-semibold">
+              Add your draft, notes, or rough thoughts — we'll iterate together
+            </h2>
+          </div>
           {!isDraftExpanded ? (
             /* Collapsed: two action buttons */
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-base font-semibold text-foreground">
-                <PenLine className="w-5 h-5 text-primary" />
-                Your draft
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => setIsDraftExpanded(true)}
                   className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
@@ -388,7 +401,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     Talk through your ideas and we'll capture them as a draft.
                   </p>
                 </button>
-              </div>
             </div>
           ) : (
             /* Expanded: large text area filling available space, with optional questions panel on left */
