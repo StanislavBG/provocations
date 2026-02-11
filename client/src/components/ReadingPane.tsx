@@ -276,11 +276,13 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   };
 
   return (
-    <div className="h-full flex flex-col bg-card">
-      <div className="flex items-center gap-2 p-4 border-b flex-wrap">
-        <BookOpen className="w-5 h-5 text-primary" />
-        <h3 className="font-semibold">Document</h3>
-        <div className="flex items-center gap-2 ml-auto">
+    <div className="h-full flex flex-col bg-card rounded-xl border-2 border-border overflow-hidden">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-2 flex-wrap">
+        <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+          <BookOpen className="w-5 h-5 text-primary" />
+          <span>Document</span>
+        </div>
+        <div className="flex items-center gap-1 ml-auto">
           <Badge variant="outline">{wordCount.toLocaleString()} words</Badge>
           <Badge variant="secondary">{readingTime} min read</Badge>
           <VoiceRecorder
@@ -300,6 +302,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={async () => {
               if (text) {
                 try {
@@ -318,6 +321,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             data-testid="button-download-document"
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={handleDownload}
             title="Download document"
           >
