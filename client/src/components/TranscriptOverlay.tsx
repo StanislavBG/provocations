@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, Mic, Loader2, Sparkles, Wand2, Send, RotateCcw, Crosshair, Rocket, AlertTriangle, GitBranch, Lightbulb, Gauge, MousePointerClick, Layers } from "lucide-react";
+import { X, Mic, Loader2, Sparkles, Wand2, Send, RotateCcw, Crosshair } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { apiRequest } from "@/lib/queryClient";
+import { personaIcons, personaColors, personaLabels } from "./ProvocationsDisplay";
 
 interface ProvocationContextInfo {
   type: string;
@@ -32,30 +33,11 @@ interface TranscriptOverlayProps {
   // Provocation context display
   provocationContext?: ProvocationContextInfo;
   // Context for cleaning
-  context?: "selection" | "provocation" | "document" | "outline";
+  context?: "selection" | "provocation" | "document";
 }
 
-const provocationTypeIcons: Record<string, typeof Lightbulb> = {
-  opportunity: Lightbulb,
-  fallacy: AlertTriangle,
-  alternative: GitBranch,
-  challenge: Crosshair,
-  thinking_bigger: Rocket,
-  performance: Gauge,
-  ux: MousePointerClick,
-  architecture: Layers,
-};
-
-const provocationTypeColors: Record<string, string> = {
-  opportunity: "text-emerald-600 dark:text-emerald-400",
-  fallacy: "text-amber-600 dark:text-amber-400",
-  alternative: "text-blue-600 dark:text-blue-400",
-  challenge: "text-violet-600 dark:text-violet-400",
-  thinking_bigger: "text-orange-600 dark:text-orange-400",
-  performance: "text-rose-600 dark:text-rose-400",
-  ux: "text-fuchsia-600 dark:text-fuchsia-400",
-  architecture: "text-cyan-600 dark:text-cyan-400",
-};
+const provocationTypeIcons = personaIcons as Record<string, typeof import("lucide-react").Rocket>;
+const provocationTypeColors = personaColors as Record<string, string>;
 
 export function TranscriptOverlay({
   isVisible,
