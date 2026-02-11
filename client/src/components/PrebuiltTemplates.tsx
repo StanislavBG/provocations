@@ -3,6 +3,7 @@ import {
   PencilLine,
   ClipboardList,
   Rocket,
+  Blocks,
   Check,
 } from "lucide-react";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -11,6 +12,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "pencil-line": PencilLine,
   "clipboard-list": ClipboardList,
   rocket: Rocket,
+  blocks: Blocks,
 };
 
 interface PrebuiltTemplatesProps {
