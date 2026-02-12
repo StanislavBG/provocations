@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Mic,
   Target,
-  Wand2,
   Eye,
   EyeOff,
   PenLine,
@@ -58,7 +57,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [showObjectiveRaw, setShowObjectiveRaw] = useState(false);
   const [showTextRaw, setShowTextRaw] = useState(false);
 
-  // Summarization state
+  // Clean loading state (tidy up filler words, grammar)
+  const [isCleaningObjective, setIsCleaningObjective] = useState(false);
+  const [isCleaningText, setIsCleaningText] = useState(false);
+
+  // Summarize loading state (condense to key points)
   const [isSummarizingObjective, setIsSummarizingObjective] = useState(false);
   const [isSummarizingText, setIsSummarizingText] = useState(false);
 
@@ -110,14 +113,37 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     }
   };
 
-  // Summarize objective transcript
+  // Clean objective transcript (remove filler, fix grammar)
+  const handleCleanObjective = async () => {
+    if (!objective.trim()) return;
+    setIsCleaningObjective(true);
+    try {
+      const response = await apiRequest("POST", "/api/summarize-intent", {
+        transcript: objective,
+        context: "objective",
+      });
+      const data = await response.json();
+      if (data.summary) {
+        if (!objectiveRawTranscript) {
+          setObjectiveRawTranscript(objective);
+        }
+        setObjective(data.summary);
+      }
+    } catch (error) {
+      console.error("Failed to clean objective:", error);
+    } finally {
+      setIsCleaningObjective(false);
+    }
+  };
+
+  // Summarize objective (condense to key intent)
   const handleSummarizeObjective = async () => {
     if (!objective.trim()) return;
     setIsSummarizingObjective(true);
     try {
       const response = await apiRequest("POST", "/api/summarize-intent", {
         transcript: objective,
-        context: "objective",
+        context: "summarize",
       });
       const data = await response.json();
       if (data.summary) {
@@ -133,14 +159,37 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     }
   };
 
-  // Summarize source text transcript
+  // Clean source text transcript
+  const handleCleanText = async () => {
+    if (!text.trim()) return;
+    setIsCleaningText(true);
+    try {
+      const response = await apiRequest("POST", "/api/summarize-intent", {
+        transcript: text,
+        context: "source",
+      });
+      const data = await response.json();
+      if (data.summary) {
+        if (!textRawTranscript) {
+          setTextRawTranscript(text);
+        }
+        setText(data.summary);
+      }
+    } catch (error) {
+      console.error("Failed to clean text:", error);
+    } finally {
+      setIsCleaningText(false);
+    }
+  };
+
+  // Summarize source text (condense to key points)
   const handleSummarizeText = async () => {
     if (!text.trim()) return;
     setIsSummarizingText(true);
     try {
       const response = await apiRequest("POST", "/api/summarize-intent", {
         transcript: text,
-        context: "source",
+        context: "summarize",
       });
       const data = await response.json();
       if (data.summary) {
@@ -367,18 +416,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               voice={{ mode: "replace" }}
               onVoiceTranscript={handleObjectiveVoiceComplete}
               onRecordingChange={setIsRecordingObjective}
+              onClean={handleCleanObjective}
+              isCleanLoading={isCleaningObjective}
+              onSummarize={handleSummarizeObjective}
+              isSummarizeLoading={isSummarizingObjective}
               actions={[
-                {
-                  key: "clean-up-objective",
-                  label: "Clean up",
-                  loadingLabel: "Cleaning up...",
-                  description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
-                  icon: Wand2,
-                  onClick: handleSummarizeObjective,
-                  disabled: isSummarizingObjective,
-                  loading: isSummarizingObjective,
-                  visible: objective.length > 50 && !isRecordingObjective,
-                },
                 {
                   key: "toggle-objective-raw",
                   label: showObjectiveRaw ? "Hide original" : "Show original",
@@ -481,18 +523,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 voice={{ mode: "append" }}
                 onVoiceTranscript={handleTextVoiceComplete}
                 onRecordingChange={setIsRecordingText}
+                onClean={handleCleanText}
+                isCleanLoading={isCleaningText}
+                onSummarize={handleSummarizeText}
+                isSummarizeLoading={isSummarizingText}
                 actions={[
-                  {
-                    key: "clean-up-draft",
-                    label: "Clean up",
-                    loadingLabel: "Cleaning up...",
-                    description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
-                    icon: Wand2,
-                    onClick: handleSummarizeText,
-                    disabled: isSummarizingText,
-                    loading: isSummarizingText,
-                    visible: text.length > 200 && !isRecordingText,
-                  },
                   {
                     key: "toggle-draft-raw",
                     label: showTextRaw ? "Hide original" : "Show original",
@@ -510,8 +545,14 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
                   },
                 ] satisfies ProvokeAction[]}
-                footer={
-                  <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
+                showCharCount
+                /* ── External actions ──
+                 * Cancel and Begin Analysis are page-level workflow buttons,
+                 * not part of ProvokeText's own functionality. They live in
+                 * the externalActions slot so the boundary is explicit.
+                 */
+                externalActions={
+                  <>
                     <div className="text-sm text-muted-foreground">
                       {text.length > 0 && (
                         <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
@@ -546,7 +587,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                         )}
                       </Button>
                     </div>
-                  </div>
+                  </>
                 }
               >
                 {isRecordingText && (

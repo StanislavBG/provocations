@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Copy, Eraser, Loader2 } from "lucide-react";
+import { Copy, Eraser, Loader2, Wand2, ListCollapse } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -76,6 +76,21 @@ export interface ProvokeTextProps {
   /* ── Smart buttons (AI actions) ── */
   actions?: ProvokeAction[];
 
+  /* ── Built-in smart buttons ──
+   * These are standard AI-powered actions that ProvokeText renders
+   * automatically when the corresponding callback is provided.
+   * They appear in the actions row alongside any custom `actions`.
+   *
+   *   - **Clean**: Tidies up voice transcripts — removes filler words,
+   *     fixes grammar, and distils text into clear, concise language.
+   *   - **Summarize**: Condenses the text into a shorter summary,
+   *     keeping the core meaning intact.
+   */
+  onClean?: () => void;
+  isCleanLoading?: boolean;
+  onSummarize?: () => void;
+  isSummarizeLoading?: boolean;
+
   /* ── Submit ── */
   onSubmit?: () => void;
   submitIcon?: LucideIcon;
@@ -99,6 +114,37 @@ export interface ProvokeTextProps {
   footer?: React.ReactNode;
   containerClassName?: string;
   panelClassName?: string;
+
+  /**
+   * **External Actions** — a clearly delineated section at the bottom of
+   * the component for buttons that belong to the *page/feature* rather
+   * than to ProvokeText itself.
+   *
+   * Use this for navigation, submission, or workflow buttons (e.g.
+   * "Cancel", "Begin Analysis", "Next Step") that sit visually inside
+   * the ProvokeText card but are owned and wired by the parent.
+   *
+   * ### Why this exists
+   * ProvokeText owns its own toolbar (copy, clear, mic) and smart-button
+   * row (Clean, Summarize, custom actions). Anything outside that domain
+   * — page-level navigation, form submission, workflow transitions —
+   * should go here so the separation is explicit in code and on screen.
+   *
+   * ### Example
+   * ```tsx
+   * <ProvokeText
+   *   value={text}
+   *   onChange={setText}
+   *   externalActions={
+   *     <>
+   *       <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+   *       <Button onClick={onSubmit}>Begin Analysis</Button>
+   *     </>
+   *   }
+   * />
+   * ```
+   */
+  externalActions?: React.ReactNode;
 }
 
 /* ── Component ── */
@@ -136,6 +182,11 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
       actions,
 
+      onClean,
+      isCleanLoading,
+      onSummarize,
+      isSummarizeLoading,
+
       onSubmit,
       submitIcon: SubmitIcon,
 
@@ -153,6 +204,8 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       footer,
       containerClassName,
       panelClassName,
+
+      externalActions,
     },
     ref,
   ) {
@@ -238,6 +291,38 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     const wordCount = value.split(/\s+/).filter(Boolean).length;
     const readingTime = Math.ceil(wordCount / 200);
 
+    /* ── Built-in smart buttons ── */
+
+    const builtInActions: ProvokeAction[] = [];
+
+    if (onClean) {
+      builtInActions.push({
+        key: "_builtin-clean",
+        label: "Clean",
+        loadingLabel: "Cleaning...",
+        description: "Tidy up the text — removes filler words, fixes grammar, and distils into clear, concise language.",
+        icon: Wand2,
+        onClick: onClean,
+        disabled: !hasContent || isCleanLoading,
+        loading: isCleanLoading,
+      });
+    }
+
+    if (onSummarize) {
+      builtInActions.push({
+        key: "_builtin-summarize",
+        label: "Summarize",
+        loadingLabel: "Summarizing...",
+        description: "Condense the text into a shorter summary, keeping the core meaning intact.",
+        icon: ListCollapse,
+        onClick: onSummarize,
+        disabled: !hasContent || isSummarizeLoading,
+        loading: isSummarizeLoading,
+      });
+    }
+
+    const allActions = [...builtInActions, ...visibleActions];
+
     /* ── Metrics badge ── */
 
     const metricsEl =
@@ -249,30 +334,36 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
         </span>
       ) : null;
 
-    /* ── Toolbar buttons (copy, clear, mic) ── */
+    /* ── Toolbar buttons (copy, clear, mic) ──
+     * Icons are always rendered (when their prop is enabled) but
+     * disabled when there's no content. This ensures the toolbar
+     * is always visible so users know the features exist.
+     */
 
     const toolbarSize = chrome === "container" ? { btn: "h-8 w-8", icon: "w-4 h-4" } : { btn: "h-7 w-7", icon: "w-3.5 h-3.5" };
 
     const toolbarButtons = (
       <>
         {extraActions}
-        {showCopy && hasContent && (
+        {showCopy && (
           <Button
             size="icon"
             variant="ghost"
             className={cn(toolbarSize.btn, "text-muted-foreground hover:text-foreground")}
             onClick={handleCopy}
+            disabled={!hasContent}
             title="Copy text"
           >
             <Copy className={toolbarSize.icon} />
           </Button>
         )}
-        {showClear && hasContent && !isRecording && (
+        {showClear && !isRecording && (
           <Button
             size="icon"
             variant="ghost"
             className={cn(toolbarSize.btn, "text-muted-foreground hover:text-foreground")}
             onClick={handleClear}
+            disabled={!hasContent}
             title="Clear all"
           >
             <Eraser className={toolbarSize.icon} />
@@ -303,12 +394,12 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       </>
     );
 
-    /* ── Actions row ── */
+    /* ── Actions row (built-in smart buttons + custom actions) ── */
 
     const actionsRow =
-      visibleActions.length > 0 ? (
+      allActions.length > 0 ? (
         <div className="flex items-center gap-2 flex-wrap">
-          {visibleActions.map((action) => (
+          {allActions.map((action) => (
             <Tooltip key={action.key}>
               <TooltipTrigger asChild>
                 <Button
@@ -338,6 +429,21 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           ))}
         </div>
       ) : null;
+
+    /* ── External actions section ──
+     * Renders page/feature-level buttons (navigation, form submit, etc.)
+     * in a visually separated area at the bottom of the component.
+     * See the `externalActions` prop docs for usage guidance.
+     */
+
+    const externalActionsSection = externalActions ? (
+      <div
+        className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2"
+        data-section="external-actions"
+      >
+        {externalActions}
+      </div>
+    ) : null;
 
     /* ── Build the input control ── */
 
@@ -420,7 +526,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           {/* Input */}
           <div className="px-4">{inputControl}</div>
 
-          {/* Actions row */}
+          {/* Actions row (built-in smart buttons + custom actions) */}
           {actionsRow && <div className="px-4 pb-2">{actionsRow}</div>}
 
           {/* Children slot (recording indicators, raw transcript, etc.) */}
@@ -436,6 +542,13 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
           {/* Footer */}
           {footer}
+
+          {/* ── External actions ──
+           * Page-level buttons (Cancel, Submit, navigation) go here.
+           * This section is visually separated from the ProvokeText
+           * component's own controls by a top border.
+           */}
+          {externalActionsSection}
         </div>
       );
     }
@@ -469,6 +582,9 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           {metricsEl && <div className="mt-1">{metricsEl}</div>}
 
           {footer}
+
+          {/* ── External actions (inline chrome) ── */}
+          {externalActionsSection}
         </div>
       );
     }
