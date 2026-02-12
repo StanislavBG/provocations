@@ -5,9 +5,6 @@ import {
   ArrowRight,
   Mic,
   Target,
-  Wand2,
-  Eye,
-  EyeOff,
   PenLine,
   PencilLine,
   ClipboardList,
@@ -20,7 +17,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
-import type { ProvokeAction } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -44,23 +40,27 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   clapperboard: Clapperboard,
 };
 
+/**
+ * Shared text processor that calls `/api/summarize-intent`.
+ * Maps the ProvokeText `mode` to the API's `context` parameter.
+ */
+async function processText(
+  text: string,
+  mode: string,
+  contextOverride?: string,
+): Promise<string> {
+  const context = contextOverride ?? mode;
+  const response = await apiRequest("POST", "/api/summarize-intent", {
+    transcript: text,
+    context,
+  });
+  const data = await response.json();
+  return data.summary ?? text;
+}
+
 export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
-
-  // Voice input state
-  const [isRecordingObjective, setIsRecordingObjective] = useState(false);
-  const [isRecordingText, setIsRecordingText] = useState(false);
-
-  // Raw transcript storage for "show original"
-  const [objectiveRawTranscript, setObjectiveRawTranscript] = useState<string | null>(null);
-  const [textRawTranscript, setTextRawTranscript] = useState<string | null>(null);
-  const [showObjectiveRaw, setShowObjectiveRaw] = useState(false);
-  const [showTextRaw, setShowTextRaw] = useState(false);
-
-  // Summarization state
-  const [isSummarizingObjective, setIsSummarizingObjective] = useState(false);
-  const [isSummarizingText, setIsSummarizingText] = useState(false);
 
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
@@ -75,7 +75,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   const handleSubmit = () => {
     if (text.trim()) {
-      // Build reference documents from template content if applicable
       const referenceDocuments: ReferenceDocument[] = [];
       if (activePrebuilt?.templateContent) {
         referenceDocuments.push({
@@ -86,88 +85,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
         });
       }
       onSubmit(text.trim(), objective.trim() || "Create a compelling, well-structured document", referenceDocuments);
-    }
-  };
-
-  const handleBlankDocument = () => {
-    onBlankDocument?.();
-  };
-
-  // Handle objective voice transcript
-  const handleObjectiveVoiceComplete = (transcript: string) => {
-    setObjective(transcript);
-    if (transcript.length > 50) {
-      setObjectiveRawTranscript(transcript);
-    }
-  };
-
-  // Handle source text voice transcript
-  const handleTextVoiceComplete = (transcript: string) => {
-    const newText = text ? text + " " + transcript : transcript;
-    setText(newText);
-    if (transcript.length > 100) {
-      setTextRawTranscript((prev) => prev ? prev + " " + transcript : transcript);
-    }
-  };
-
-  // Summarize objective transcript
-  const handleSummarizeObjective = async () => {
-    if (!objective.trim()) return;
-    setIsSummarizingObjective(true);
-    try {
-      const response = await apiRequest("POST", "/api/summarize-intent", {
-        transcript: objective,
-        context: "objective",
-      });
-      const data = await response.json();
-      if (data.summary) {
-        if (!objectiveRawTranscript) {
-          setObjectiveRawTranscript(objective);
-        }
-        setObjective(data.summary);
-      }
-    } catch (error) {
-      console.error("Failed to summarize objective:", error);
-    } finally {
-      setIsSummarizingObjective(false);
-    }
-  };
-
-  // Summarize source text transcript
-  const handleSummarizeText = async () => {
-    if (!text.trim()) return;
-    setIsSummarizingText(true);
-    try {
-      const response = await apiRequest("POST", "/api/summarize-intent", {
-        transcript: text,
-        context: "source",
-      });
-      const data = await response.json();
-      if (data.summary) {
-        if (!textRawTranscript) {
-          setTextRawTranscript(text);
-        }
-        setText(data.summary);
-      }
-    } catch (error) {
-      console.error("Failed to summarize text:", error);
-    } finally {
-      setIsSummarizingText(false);
-    }
-  };
-
-  // Restore original transcript
-  const handleRestoreObjective = () => {
-    if (objectiveRawTranscript) {
-      setObjective(objectiveRawTranscript);
-      setShowObjectiveRaw(false);
-    }
-  };
-
-  const handleRestoreText = () => {
-    if (textRawTranscript) {
-      setText(textRawTranscript);
-      setShowTextRaw(false);
     }
   };
 
@@ -192,24 +109,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     setIsDraftExpanded(false);
   };
 
-  const handleClearPrebuilt = () => {
-    setActivePrebuilt(null);
-    setIsCustomObjective(false);
-    setCardsExpanded(false);
-    setObjective("");
-    setText("");
-    setIsDraftExpanded(false);
-  };
-
   const handleChangeType = () => {
     setCardsExpanded(true);
-    // Scroll the step-one section into view so the user sees the grid
     requestAnimationFrame(() => {
       stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
-  // Handle draft question response — merge the user's answer into the draft text
   const handleDraftQuestionResponse = (question: string, response: string) => {
     const entry = `[${question}]\n${response}`;
     setText((prev) => (prev ? prev + "\n\n" + entry : entry));
@@ -252,7 +158,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </button>
           )}
 
-          {/* Compact indicator for custom objective — visible when "Type Your Own" is chosen and grid is collapsed */}
+          {/* Compact indicator for custom objective */}
           {isCustomObjective && !activePrebuilt && !cardsExpanded && (
             <button
               onClick={handleChangeType}
@@ -276,7 +182,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </button>
           )}
 
-          {/* Full card grid — visible when nothing selected OR user clicked "Change" */}
+          {/* Full card grid */}
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {prebuiltTemplates.map((template) => {
@@ -316,7 +222,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 );
               })}
 
-              {/* "Type Your Own" card — custom objective entry */}
+              {/* "Type Your Own" card */}
               <button
                 onClick={handleSelectCustom}
                 className={`group relative text-left p-4 rounded-xl border-2 border-dashed transition-all duration-200 ${
@@ -348,7 +254,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </div>
           )}
 
-          {/* Custom objective text form — visible when "Type Your Own" is selected */}
+          {/* Custom objective — ProvokeText with textProcessor handles everything */}
           {isCustomObjective && (
             <ProvokeText
               chrome="container"
@@ -360,53 +266,16 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
               className="text-base leading-relaxed font-serif"
               value={objective}
-              onChange={(val) => setObjective(val)}
+              onChange={setObjective}
               minRows={3}
               maxRows={6}
               autoFocus
               voice={{ mode: "replace" }}
-              onVoiceTranscript={handleObjectiveVoiceComplete}
-              onRecordingChange={setIsRecordingObjective}
-              actions={[
-                {
-                  key: "clean-up-objective",
-                  label: "Clean up",
-                  loadingLabel: "Cleaning up...",
-                  description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
-                  icon: Wand2,
-                  onClick: handleSummarizeObjective,
-                  disabled: isSummarizingObjective,
-                  loading: isSummarizingObjective,
-                  visible: objective.length > 50 && !isRecordingObjective,
-                },
-                {
-                  key: "toggle-objective-raw",
-                  label: showObjectiveRaw ? "Hide original" : "Show original",
-                  description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
-                  icon: showObjectiveRaw ? EyeOff : Eye,
-                  onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
-                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-                },
-                {
-                  key: "restore-objective",
-                  label: "Restore original",
-                  description: "Discard the cleaned-up version and revert to your original voice transcript.",
-                  icon: Eye,
-                  onClick: handleRestoreObjective,
-                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-                },
-              ] satisfies ProvokeAction[]}
-            >
-              {isRecordingObjective && (
-                <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
-              )}
-              {showObjectiveRaw && objectiveRawTranscript && (
-                <div className="mx-4 mb-3 p-3 rounded-lg bg-muted/50 border text-sm">
-                  <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
-                </div>
-              )}
-            </ProvokeText>
+              onVoiceTranscript={setObjective}
+              textProcessor={(text, mode) =>
+                processText(text, mode, mode === "clean" ? "objective" : undefined)
+              }
+            />
           )}
         </div>
 
@@ -421,7 +290,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </h2>
           </div>
           {!isDraftExpanded ? (
-            /* Collapsed: two action buttons */
             <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => setIsDraftExpanded(true)}
@@ -439,7 +307,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 </button>
 
                 <button
-                  onClick={handleBlankDocument}
+                  onClick={() => onBlankDocument?.()}
                   disabled={isLoading}
                   className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
                 >
@@ -455,9 +323,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 </button>
             </div>
           ) : (
-            /* Expanded: large text area filling available space, with optional questions panel on left */
             <div className="flex flex-1 min-h-0 gap-3">
-              {/* Questions panel — left side */}
               {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
                 <DraftQuestionsPanel
                   questions={activePrebuilt.draftQuestions}
@@ -474,54 +340,26 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 placeholder="Paste your notes, transcript, or source material here..."
                 className="text-base leading-relaxed font-serif min-h-[200px]"
                 value={text}
-                onChange={(val) => setText(val)}
+                onChange={setText}
                 minRows={12}
                 maxRows={40}
                 autoFocus
                 voice={{ mode: "append" }}
-                onVoiceTranscript={handleTextVoiceComplete}
-                onRecordingChange={setIsRecordingText}
-                actions={[
-                  {
-                    key: "clean-up-draft",
-                    label: "Clean up",
-                    loadingLabel: "Cleaning up...",
-                    description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
-                    icon: Wand2,
-                    onClick: handleSummarizeText,
-                    disabled: isSummarizingText,
-                    loading: isSummarizingText,
-                    visible: text.length > 200 && !isRecordingText,
-                  },
-                  {
-                    key: "toggle-draft-raw",
-                    label: showTextRaw ? "Hide original" : "Show original",
-                    description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
-                    icon: showTextRaw ? EyeOff : Eye,
-                    onClick: () => setShowTextRaw(!showTextRaw),
-                    visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
-                  },
-                  {
-                    key: "restore-draft",
-                    label: "Restore original",
-                    description: "Discard the cleaned-up version and revert to your original voice transcript.",
-                    icon: Eye,
-                    onClick: handleRestoreText,
-                    visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
-                  },
-                ] satisfies ProvokeAction[]}
-                footer={
-                  <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
-                    <div className="text-sm text-muted-foreground">
-                      {text.length > 0 && (
-                        <span data-testid="text-char-count">{text.length.toLocaleString()} characters</span>
-                      )}
-                    </div>
+                onVoiceTranscript={(transcript) =>
+                  setText((prev) => (prev ? prev + " " + transcript : transcript))
+                }
+                textProcessor={(t, mode) =>
+                  processText(t, mode, mode === "clean" ? "source" : undefined)
+                }
+                showCharCount
+                externalActions={
+                  <>
+                    <div />
                     <div className="flex items-center gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => { setIsDraftExpanded(false); }}
+                        onClick={() => setIsDraftExpanded(false)}
                         className="text-muted-foreground"
                       >
                         Cancel
@@ -546,21 +384,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                         )}
                       </Button>
                     </div>
-                  </div>
+                  </>
                 }
-              >
-                {isRecordingText && (
-                  <p className="text-xs text-primary animate-pulse px-4 pb-2">
-                    Listening... speak your source material (up to 10 min)
-                  </p>
-                )}
-                {showTextRaw && textRawTranscript && (
-                  <div className="mx-4 mb-2 p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
-                    <p className="text-xs text-muted-foreground mb-1">Original transcript ({textRawTranscript.length.toLocaleString()} characters):</p>
-                    <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
-                  </div>
-                )}
-              </ProvokeText>
+              />
             </div>
           )}
         </div>
