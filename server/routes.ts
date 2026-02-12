@@ -5,7 +5,6 @@ import OpenAI from "openai";
 import {
   writeRequestSchema,
   generateProvocationsRequestSchema,
-  generateTemplateRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
   saveDocumentRequestSchema,
@@ -861,55 +860,6 @@ Be faithful to their intent - don't add information they didn't mention.`
       console.error("Summarize intent error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize", details: errorMessage });
-    }
-  });
-
-  // Generate a document template from an objective
-  app.post("/api/generate-template", async (req, res) => {
-    try {
-      const parsed = generateTemplateRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { objective } = parsed.data;
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        max_completion_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert document strategist. Given a document objective, generate a comprehensive template that serves as a blueprint for the document the user needs to create.
-
-The template should:
-1. Include all key sections/headings the document should have
-2. Under each section, provide brief guidance on what content belongs there
-3. Include placeholder prompts that help the user think about what to write
-4. Be structured with markdown headings and bullet points
-5. Cover completeness — include sections that are commonly forgotten
-
-The template is NOT the final document. It's a guide that helps the user know what to cover and in what order.
-
-Output only the template content in markdown format. No meta-commentary.`
-          },
-          {
-            role: "user",
-            content: `Generate a comprehensive document template for this objective:\n\n${objective}`
-          }
-        ],
-      });
-
-      const template = response.choices[0]?.message?.content?.trim() || "";
-
-      res.json({
-        template,
-        name: `Template: ${objective.slice(0, 50)}${objective.length > 50 ? "..." : ""}`,
-      });
-    } catch (error) {
-      console.error("Generate template error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to generate template", details: errorMessage });
     }
   });
 
