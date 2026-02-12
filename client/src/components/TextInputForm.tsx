@@ -65,6 +65,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
   const [cardsExpanded, setCardsExpanded] = useState(false);
+  const [isCustomObjective, setIsCustomObjective] = useState(false);
 
   // Draft section expanded state
   const [isDraftExpanded, setIsDraftExpanded] = useState(false);
@@ -178,12 +179,22 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
       setText("");
     }
     setActivePrebuilt(template);
+    setIsCustomObjective(false);
     setCardsExpanded(false);
     setIsDraftExpanded(true);
   };
 
+  const handleSelectCustom = () => {
+    setActivePrebuilt(null);
+    setIsCustomObjective(true);
+    setObjective("");
+    setCardsExpanded(false);
+    setIsDraftExpanded(false);
+  };
+
   const handleClearPrebuilt = () => {
     setActivePrebuilt(null);
+    setIsCustomObjective(false);
     setCardsExpanded(false);
     setObjective("");
     setText("");
@@ -219,7 +230,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </h2>
           </div>
 
-          {/* Compact selected indicator — visible when a type is chosen and grid is collapsed */}
+          {/* Compact selected indicator — visible when a preset is chosen and grid is collapsed */}
           {activePrebuilt && !cardsExpanded && (
             <button
               onClick={handleChangeType}
@@ -241,8 +252,32 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
             </button>
           )}
 
+          {/* Compact indicator for custom objective — visible when "Type Your Own" is chosen and grid is collapsed */}
+          {isCustomObjective && !activePrebuilt && !cardsExpanded && (
+            <button
+              onClick={handleChangeType}
+              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary bg-primary/5 ring-2 ring-primary/20 text-left transition-all hover:bg-primary/10"
+            >
+              <div className="p-2 rounded-lg bg-primary/20">
+                <PenLine className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-base">Custom Objective</span>
+                {objective && (
+                  <span className="text-sm text-muted-foreground ml-2 truncate">{objective.slice(0, 60)}{objective.length > 60 ? "..." : ""}</span>
+                )}
+              </div>
+              <div className="p-1 rounded-full bg-primary mr-1">
+                <Check className="w-3.5 h-3.5 text-primary-foreground" />
+              </div>
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                Change <ChevronDown className="w-4 h-4" />
+              </span>
+            </button>
+          )}
+
           {/* Full card grid — visible when nothing selected OR user clicked "Change" */}
-          {(!activePrebuilt || cardsExpanded) && (
+          {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {prebuiltTemplates.map((template) => {
                 const Icon = iconMap[template.icon] || PencilLine;
@@ -280,89 +315,105 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   </button>
                 );
               })}
+
+              {/* "Type Your Own" card — custom objective entry */}
+              <button
+                onClick={handleSelectCustom}
+                className={`group relative text-left p-4 rounded-xl border-2 border-dashed transition-all duration-200 ${
+                  isCustomObjective
+                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                    : "border-border hover:border-primary/40 hover:bg-primary/5"
+                }`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-2 rounded-lg ${isCustomObjective ? "bg-primary/20" : "bg-primary/10"}`}>
+                      <PenLine className={`w-5 h-5 ${isCustomObjective ? "text-primary" : "text-primary/70"}`} />
+                    </div>
+                    <div>
+                      <span className="font-semibold text-sm block">Type Your Own</span>
+                      <span className="text-xs text-muted-foreground">Custom objective</span>
+                    </div>
+                    {isCustomObjective && (
+                      <div className="ml-auto p-1 rounded-full bg-primary">
+                        <Check className="w-3.5 h-3.5 text-primary-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                    Have something specific in mind? Write your own objective and we'll provoke your thinking from there.
+                  </p>
+                </div>
+              </button>
             </div>
+          )}
+
+          {/* Custom objective text form — visible when "Type Your Own" is selected */}
+          {isCustomObjective && (
+            <BilkoTextForm
+              label="Your objective"
+              labelIcon={Target}
+              description="Describe what you're creating — be as specific or broad as you like."
+              id="objective"
+              data-testid="input-objective"
+              placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
+              className="text-base leading-relaxed font-serif"
+              value={objective}
+              onChange={(val) => setObjective(val)}
+              minRows={3}
+              maxRows={6}
+              autoFocus
+              onVoiceTranscript={handleObjectiveVoiceComplete}
+              onRecordingChange={setIsRecordingObjective}
+              voiceMode="replace"
+              actions={[
+                {
+                  key: "clean-up-objective",
+                  label: "Clean up",
+                  loadingLabel: "Cleaning up...",
+                  description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
+                  icon: Wand2,
+                  onClick: handleSummarizeObjective,
+                  disabled: isSummarizingObjective,
+                  loading: isSummarizingObjective,
+                  visible: objective.length > 50 && !isRecordingObjective,
+                },
+                {
+                  key: "toggle-objective-raw",
+                  label: showObjectiveRaw ? "Hide original" : "Show original",
+                  description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
+                  icon: showObjectiveRaw ? EyeOff : Eye,
+                  onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
+                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+                },
+                {
+                  key: "restore-objective",
+                  label: "Restore original",
+                  description: "Discard the cleaned-up version and revert to your original voice transcript.",
+                  icon: Eye,
+                  onClick: handleRestoreObjective,
+                  visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
+                },
+              ] satisfies BilkoAction[]}
+            >
+              {isRecordingObjective && (
+                <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
+              )}
+              {showObjectiveRaw && objectiveRawTranscript && (
+                <div className="mx-4 mb-3 p-3 rounded-lg bg-muted/50 border text-sm">
+                  <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
+                </div>
+              )}
+            </BilkoTextForm>
           )}
         </div>
 
-        {/* ── STEP TWO: Goal or Objective ── */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
-              2
-            </div>
-            <h2 className="text-xl font-semibold">
-              What is the goal or objective?
-            </h2>
-          </div>
-          <BilkoTextForm
-          label="Your objective"
-          labelIcon={Target}
-          description={
-            <>
-              {activePrebuilt
-                ? "Auto-populated from the template you selected above — edit it to make it your own."
-                : "Describe what you're creating. This is auto-populated if you select a document type above."}
-              {" "}Once set, move on to your <span className="font-medium text-foreground">Draft</span> below.
-            </>
-          }
-          id="objective"
-          data-testid="input-objective"
-          placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-          className="text-base leading-relaxed font-serif"
-          value={objective}
-          onChange={(val) => setObjective(val)}
-          minRows={3}
-          maxRows={6}
-          onVoiceTranscript={handleObjectiveVoiceComplete}
-          onRecordingChange={setIsRecordingObjective}
-          voiceMode="replace"
-          actions={[
-            {
-              key: "clean-up-objective",
-              label: "Clean up",
-              loadingLabel: "Cleaning up...",
-              description: "Uses AI to tidy up your voice transcript — removes filler words, fixes grammar, and distills your text into clear, concise language.",
-              icon: Wand2,
-              onClick: handleSummarizeObjective,
-              disabled: isSummarizingObjective,
-              loading: isSummarizingObjective,
-              visible: objective.length > 50 && !isRecordingObjective,
-            },
-            {
-              key: "toggle-objective-raw",
-              label: showObjectiveRaw ? "Hide original" : "Show original",
-              description: "Toggle between the cleaned-up version and the original voice transcript so you can compare what changed.",
-              icon: showObjectiveRaw ? EyeOff : Eye,
-              onClick: () => setShowObjectiveRaw(!showObjectiveRaw),
-              visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-            },
-            {
-              key: "restore-objective",
-              label: "Restore original",
-              description: "Discard the cleaned-up version and revert to your original voice transcript.",
-              icon: Eye,
-              onClick: handleRestoreObjective,
-              visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
-            },
-          ] satisfies BilkoAction[]}
-        >
-          {isRecordingObjective && (
-            <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
-          )}
-          {showObjectiveRaw && objectiveRawTranscript && (
-            <div className="mx-4 mb-3 p-3 rounded-lg bg-muted/50 border text-sm">
-              <p className="text-xs text-muted-foreground mb-1">Original transcript:</p>
-              <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
-            </div>
-          )}
-        </BilkoTextForm>
-        </div>
-
-        {/* ── STEP THREE: Draft ── */}
+        {/* ── STEP TWO: Draft ── */}
         <div className="flex flex-col flex-1 min-h-0 gap-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
-              3
+              2
             </div>
             <h2 className="text-xl font-semibold">
               Add your draft, notes, or rough thoughts — we'll iterate together
