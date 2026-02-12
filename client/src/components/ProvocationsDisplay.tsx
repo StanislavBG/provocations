@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { BilkoTextForm } from "./BilkoTextForm";
+import { ProvokeText } from "./ProvokeText";
 import {
   Check,
   X,
@@ -797,7 +797,8 @@ function ChallengeInput({
             Challenge Me On...
           </label>
         </div>
-        <BilkoTextForm
+        <ProvokeText
+          chrome="inline"
           placeholder="e.g. 'Push me on pricing strategy' or 'Find gaps in my competitive analysis'"
           value={guidance}
           onChange={setGuidance}
@@ -811,9 +812,9 @@ function ChallengeInput({
               onGenerate();
             }
           }}
+          voice={{ mode: "replace" }}
           onVoiceTranscript={(transcript) => setGuidance(transcript)}
           onRecordingChange={setIsRecording}
-          voiceMode="replace"
         />
         {isRecording && (
           <p className="text-xs text-primary animate-pulse">Listening... describe the direction for your challenges</p>

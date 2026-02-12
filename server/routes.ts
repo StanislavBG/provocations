@@ -3,10 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import OpenAI from "openai";
 import {
-  analyzeTextRequestSchema,
   writeRequestSchema,
   generateProvocationsRequestSchema,
-  generateTemplateRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
   saveDocumentRequestSchema,
@@ -313,124 +311,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
-  // Main analysis endpoint - generates lenses and provocations
-  // Optimized: 2 batched API calls instead of 9 individual calls
-  app.post("/api/analyze", async (req, res) => {
-    try {
-      const parsed = analyzeTextRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
 
-      const { text, referenceDocuments } = parsed.data;
-
-      // Check if text will be truncated for analysis
-      const MAX_ANALYSIS_LENGTH = 8000;
-      const wasTextTruncated = text.length > MAX_ANALYSIS_LENGTH;
-      const analysisText = text.slice(0, MAX_ANALYSIS_LENGTH);
-
-      // Prepare reference document summary for prompts
-      const refDocSummary = referenceDocuments && referenceDocuments.length > 0
-        ? referenceDocuments.map(d => `[${d.type.toUpperCase()}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`).join("\n\n")
-        : null;
-
-      // Create document (stores full text)
-      const document = await storage.createDocument(text);
-
-      // Generate all provocations in a single API call
-      const provocations: Provocation[] = await (async (): Promise<Provocation[]> => {
-        try {
-          const refContext = refDocSummary
-            ? `\n\nThe user has provided reference documents that represent their target quality:\n${refDocSummary}\n\nCompare the source text against these references to identify gaps.`
-            : "";
-
-          const provDescriptions = provocationType.map(t => `- ${t}: ${provocationPrompts[t]}`).join("\n");
-
-          const response = await openai.chat.completions.create({
-            model: "gpt-5.2",
-            max_completion_tokens: 4096,
-            messages: [
-              {
-                role: "system",
-                content: `You are a critical thinking partner. Challenge assumptions and push thinking deeper.
-
-Generate provocations in these categories:
-${provDescriptions}
-${refContext}
-
-Respond with a JSON object containing a "provocations" array. Generate 1-2 provocations per category.
-For each provocation:
-- type: The category (one of: ${provocationType.join(", ")})
-- title: A punchy headline (max 60 chars)
-- content: A 2-3 sentence explanation
-- sourceExcerpt: A relevant quote from the source text (max 150 chars)
-- scale: Impact level from 1-5 (1=minor tweak, 2=small improvement, 3=moderate gap, 4=significant issue, 5=critical flaw)
-
-Output only valid JSON, no markdown.`
-              },
-              {
-                role: "user",
-                content: `Generate provocations across all categories for this text:\n\n${analysisText}`
-              }
-            ],
-            response_format: { type: "json_object" },
-          });
-
-          const content = response.choices[0]?.message?.content || "{}";
-          let parsedResponse: Record<string, unknown> = {};
-          try {
-            parsedResponse = JSON.parse(content);
-          } catch {
-            console.error("Failed to parse provocations JSON:", content);
-            return [];
-          }
-
-          const provocationsArray = Array.isArray(parsedResponse.provocations)
-            ? parsedResponse.provocations
-            : [];
-
-          return provocationsArray.map((p: unknown, idx: number): Provocation => {
-            const item = p as Record<string, unknown>;
-            const provType = provocationType.includes(item?.type as ProvocationType)
-              ? item.type as ProvocationType
-              : provocationType[idx % provocationType.length];
-
-            const rawScale = typeof item?.scale === 'number' ? item.scale : 3;
-            const scale = Math.max(1, Math.min(5, Math.round(rawScale)));
-
-            return {
-              id: `${provType}-${Date.now()}-${idx}`,
-              type: provType,
-              title: typeof item?.title === 'string' ? item.title : "Untitled Provocation",
-              content: typeof item?.content === 'string' ? item.content : "",
-              sourceExcerpt: typeof item?.sourceExcerpt === 'string' ? item.sourceExcerpt : "",
-              status: "pending",
-              scale,
-            };
-          });
-        } catch (error) {
-          console.error("Error generating provocations:", error);
-          return [];
-        }
-      })();
-
-      res.json({
-        document,
-        provocations,
-        warnings: wasTextTruncated ? [{
-          type: "text_truncated",
-          message: `Your text (${text.length.toLocaleString()} characters) was truncated to ${MAX_ANALYSIS_LENGTH.toLocaleString()} characters for analysis. The full document is preserved.`
-        }] : undefined
-      });
-    } catch (error) {
-      console.error("Analysis error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to analyze text", details: errorMessage });
-    }
-  });
-
-  // Generate new provocations for an existing document
+  // Generate provocations for a document (on-demand)
   app.post("/api/generate-provocations", async (req, res) => {
     try {
       const parsed = generateProvocationsRequestSchema.safeParse(req.body);
@@ -978,55 +860,6 @@ Be faithful to their intent - don't add information they didn't mention.`
       console.error("Summarize intent error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize", details: errorMessage });
-    }
-  });
-
-  // Generate a document template from an objective
-  app.post("/api/generate-template", async (req, res) => {
-    try {
-      const parsed = generateTemplateRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { objective } = parsed.data;
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        max_completion_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert document strategist. Given a document objective, generate a comprehensive template that serves as a blueprint for the document the user needs to create.
-
-The template should:
-1. Include all key sections/headings the document should have
-2. Under each section, provide brief guidance on what content belongs there
-3. Include placeholder prompts that help the user think about what to write
-4. Be structured with markdown headings and bullet points
-5. Cover completeness — include sections that are commonly forgotten
-
-The template is NOT the final document. It's a guide that helps the user know what to cover and in what order.
-
-Output only the template content in markdown format. No meta-commentary.`
-          },
-          {
-            role: "user",
-            content: `Generate a comprehensive document template for this objective:\n\n${objective}`
-          }
-        ],
-      });
-
-      const template = response.choices[0]?.message?.content?.trim() || "";
-
-      res.json({
-        template,
-        name: `Template: ${objective.slice(0, 50)}${objective.length > 50 ? "..." : ""}`,
-      });
-    } catch (error) {
-      console.error("Generate template error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to generate template", details: errorMessage });
     }
   });
 

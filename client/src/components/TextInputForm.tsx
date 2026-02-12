@@ -19,8 +19,8 @@ import {
   Check,
   ChevronDown,
 } from "lucide-react";
-import { BilkoTextForm } from "@/components/BilkoTextForm";
-import type { BilkoAction } from "@/components/BilkoTextForm";
+import { ProvokeText } from "@/components/ProvokeText";
+import type { ProvokeAction } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -350,7 +350,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
           {/* Custom objective text form — visible when "Type Your Own" is selected */}
           {isCustomObjective && (
-            <BilkoTextForm
+            <ProvokeText
+              chrome="container"
               label="Your objective"
               labelIcon={Target}
               description="Describe what you're creating — be as specific or broad as you like."
@@ -363,9 +364,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
               minRows={3}
               maxRows={6}
               autoFocus
+              voice={{ mode: "replace" }}
               onVoiceTranscript={handleObjectiveVoiceComplete}
               onRecordingChange={setIsRecordingObjective}
-              voiceMode="replace"
               actions={[
                 {
                   key: "clean-up-objective",
@@ -394,7 +395,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   onClick: handleRestoreObjective,
                   visible: !!objectiveRawTranscript && objectiveRawTranscript !== objective && !isRecordingObjective,
                 },
-              ] satisfies BilkoAction[]}
+              ] satisfies ProvokeAction[]}
             >
               {isRecordingObjective && (
                 <p className="text-xs text-primary animate-pulse px-4 pb-3">Listening... speak your objective</p>
@@ -405,7 +406,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   <p className="text-muted-foreground whitespace-pre-wrap">{objectiveRawTranscript}</p>
                 </div>
               )}
-            </BilkoTextForm>
+            </ProvokeText>
           )}
         </div>
 
@@ -463,7 +464,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   onResponse={handleDraftQuestionResponse}
                 />
               )}
-              <BilkoTextForm
+              <ProvokeText
+                chrome="container"
                 label="Your draft"
                 labelIcon={PenLine}
                 description="Paste your notes, transcripts, or source material — or use voice to speak your ideas."
@@ -476,6 +478,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 minRows={12}
                 maxRows={40}
                 autoFocus
+                voice={{ mode: "append" }}
                 onVoiceTranscript={handleTextVoiceComplete}
                 onRecordingChange={setIsRecordingText}
                 actions={[
@@ -506,7 +509,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     onClick: handleRestoreText,
                     visible: !!textRawTranscript && textRawTranscript !== text && !isRecordingText,
                   },
-                ] satisfies BilkoAction[]}
+                ] satisfies ProvokeAction[]}
                 footer={
                   <div className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2">
                     <div className="text-sm text-muted-foreground">
@@ -557,7 +560,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                     <p className="text-muted-foreground whitespace-pre-wrap font-serif">{textRawTranscript}</p>
                   </div>
                 )}
-              </BilkoTextForm>
+              </ProvokeText>
             </div>
           )}
         </div>

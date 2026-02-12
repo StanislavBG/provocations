@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BilkoTextForm } from "./BilkoTextForm";
+import { ProvokeText } from "./ProvokeText";
 import {
   MessageCircleQuestion,
   Play,
@@ -144,7 +144,8 @@ export function InterviewPanel({
 
                 {/* Answer input */}
                 <div className="space-y-2">
-                  <BilkoTextForm
+                  <ProvokeText
+                    chrome="inline"
                     placeholder="Type your answer or use the mic..."
                     value={answerText}
                     onChange={setAnswerText}
@@ -157,20 +158,11 @@ export function InterviewPanel({
                         handleSubmitAnswer();
                       }
                     }}
+                    voice={{ mode: "replace" }}
                     onVoiceTranscript={handleVoiceAnswer}
                     onRecordingChange={setIsRecordingAnswer}
-                    voiceMode="replace"
-                    extraActions={
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={handleSubmitAnswer}
-                        disabled={!answerText.trim() || isRecordingAnswer}
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                      </Button>
-                    }
+                    onSubmit={handleSubmitAnswer}
+                    submitIcon={Send}
                   />
                   {isRecordingAnswer && (
                     <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
