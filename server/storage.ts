@@ -3,13 +3,13 @@ import fs from "fs";
 import path from "path";
 import type {
   Document,
-  EncryptedDocumentListItem,
-  EncryptedDocumentFull,
+  DocumentListItem,
+  DocumentPayload,
 } from "@shared/schema";
 
-interface StoredEncryptedDocument {
+interface StoredDocument {
   id: number;
-  ownerHash: string;
+  userId: string;
   title: string;
   ciphertext: string;
   salt: string;
@@ -23,33 +23,33 @@ const DOCS_FILE = path.join(DATA_DIR, "documents.json");
 
 export interface IStorage {
   createDocument(rawText: string): Promise<Document>;
-  saveEncryptedDocument(data: {
-    ownerHash: string;
+  saveDocument(data: {
+    userId: string;
     title: string;
     ciphertext: string;
     salt: string;
     iv: string;
   }): Promise<{ id: number; createdAt: string }>;
-  listEncryptedDocuments(ownerHash: string): Promise<EncryptedDocumentListItem[]>;
-  getEncryptedDocument(id: number): Promise<EncryptedDocumentFull | null>;
-  updateEncryptedDocument(
+  listDocuments(userId: string): Promise<DocumentListItem[]>;
+  getDocument(id: number): Promise<StoredDocument | null>;
+  updateDocument(
     id: number,
     data: { title: string; ciphertext: string; salt: string; iv: string }
   ): Promise<{ id: number; updatedAt: string } | null>;
-  deleteEncryptedDocument(id: number): Promise<void>;
+  deleteDocument(id: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
   // Transient workspace documents (in-memory only)
   private documents: Map<string, Document>;
   // Persistent encrypted documents (file-backed)
-  private encryptedDocuments: Map<number, StoredEncryptedDocument>;
-  private nextEncryptedId: number;
+  private storedDocuments: Map<number, StoredDocument>;
+  private nextDocId: number;
 
   constructor() {
     this.documents = new Map();
-    this.encryptedDocuments = new Map();
-    this.nextEncryptedId = 1;
+    this.storedDocuments = new Map();
+    this.nextDocId = 1;
     this.loadFromDisk();
   }
 
@@ -59,11 +59,11 @@ export class MemStorage implements IStorage {
         const raw = fs.readFileSync(DOCS_FILE, "utf8");
         const data = JSON.parse(raw) as {
           nextId: number;
-          documents: StoredEncryptedDocument[];
+          documents: StoredDocument[];
         };
-        this.nextEncryptedId = data.nextId;
+        this.nextDocId = data.nextId;
         for (const doc of data.documents) {
-          this.encryptedDocuments.set(doc.id, doc);
+          this.storedDocuments.set(doc.id, doc);
         }
       }
     } catch (err) {
@@ -77,8 +77,8 @@ export class MemStorage implements IStorage {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
       const data = {
-        nextId: this.nextEncryptedId,
-        documents: Array.from(this.encryptedDocuments.values()),
+        nextId: this.nextDocId,
+        documents: Array.from(this.storedDocuments.values()),
       };
       fs.writeFileSync(DOCS_FILE, JSON.stringify(data, null, 2), "utf8");
     } catch (err) {
@@ -93,18 +93,18 @@ export class MemStorage implements IStorage {
     return document;
   }
 
-  async saveEncryptedDocument(data: {
-    ownerHash: string;
+  async saveDocument(data: {
+    userId: string;
     title: string;
     ciphertext: string;
     salt: string;
     iv: string;
   }): Promise<{ id: number; createdAt: string }> {
-    const id = this.nextEncryptedId++;
+    const id = this.nextDocId++;
     const now = new Date().toISOString();
-    const doc: StoredEncryptedDocument = {
+    const doc: StoredDocument = {
       id,
-      ownerHash: data.ownerHash,
+      userId: data.userId,
       title: data.title,
       ciphertext: data.ciphertext,
       salt: data.salt,
@@ -112,14 +112,14 @@ export class MemStorage implements IStorage {
       createdAt: now,
       updatedAt: now,
     };
-    this.encryptedDocuments.set(id, doc);
+    this.storedDocuments.set(id, doc);
     this.saveToDisk();
     return { id, createdAt: now };
   }
 
-  async listEncryptedDocuments(ownerHash: string): Promise<EncryptedDocumentListItem[]> {
-    return Array.from(this.encryptedDocuments.values())
-      .filter((d) => d.ownerHash === ownerHash)
+  async listDocuments(userId: string): Promise<DocumentListItem[]> {
+    return Array.from(this.storedDocuments.values())
+      .filter((d) => d.userId === userId)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .map((d) => ({
         id: d.id,
@@ -129,29 +129,18 @@ export class MemStorage implements IStorage {
       }));
   }
 
-  async getEncryptedDocument(id: number): Promise<EncryptedDocumentFull | null> {
-    const doc = this.encryptedDocuments.get(id);
-    if (!doc) return null;
-    return {
-      id: doc.id,
-      ownerHash: doc.ownerHash,
-      title: doc.title,
-      ciphertext: doc.ciphertext,
-      salt: doc.salt,
-      iv: doc.iv,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-    };
+  async getDocument(id: number): Promise<StoredDocument | null> {
+    return this.storedDocuments.get(id) ?? null;
   }
 
-  async updateEncryptedDocument(
+  async updateDocument(
     id: number,
     data: { title: string; ciphertext: string; salt: string; iv: string }
   ): Promise<{ id: number; updatedAt: string } | null> {
-    const existing = this.encryptedDocuments.get(id);
+    const existing = this.storedDocuments.get(id);
     if (!existing) return null;
     const now = new Date().toISOString();
-    const updated: StoredEncryptedDocument = {
+    const updated: StoredDocument = {
       ...existing,
       title: data.title,
       ciphertext: data.ciphertext,
@@ -159,13 +148,13 @@ export class MemStorage implements IStorage {
       iv: data.iv,
       updatedAt: now,
     };
-    this.encryptedDocuments.set(id, updated);
+    this.storedDocuments.set(id, updated);
     this.saveToDisk();
     return { id, updatedAt: now };
   }
 
-  async deleteEncryptedDocument(id: number): Promise<void> {
-    this.encryptedDocuments.delete(id);
+  async deleteDocument(id: number): Promise<void> {
+    this.storedDocuments.delete(id);
     this.saveToDisk();
   }
 }
