@@ -4,13 +4,21 @@ import { Input } from "@/components/ui/input";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Copy, Eraser, Loader2 } from "lucide-react";
+import { Copy, Eraser, Loader2, Wand2, ListCollapse, Eye, EyeOff, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
-/* ── Public types ── */
+/* ══════════════════════════════════════════════════════════════
+   Public types
+   ══════════════════════════════════════════════════════════════ */
 
+/**
+ * A custom action button rendered in the smart-button row.
+ *
+ * Use this for actions specific to your page/feature that don't fit the
+ * built-in text-processing pattern (Clean / Summarize).
+ */
 export interface ProvokeAction {
   key: string;
   label: string;
@@ -73,7 +81,45 @@ export interface ProvokeTextProps {
   onVoiceInterimTranscript?: (interim: string) => void;
   onRecordingChange?: (isRecording: boolean) => void;
 
-  /* ── Smart buttons (AI actions) ── */
+  /* ── Text processor (smart actions) ──────────────────────────
+   *
+   * When provided, ProvokeText automatically renders **Clean** and
+   * **Summarize** buttons and manages the full lifecycle:
+   *
+   *   1. User clicks a smart button (e.g. "Clean")
+   *   2. ProvokeText saves a snapshot of the current text
+   *   3. Calls `textProcessor(currentText, "clean")`
+   *   4. Replaces the value with the returned string
+   *   5. Shows "Show original" / "Restore original" actions
+   *   6. Renders the raw snapshot in a collapsible panel
+   *
+   * The parent only needs to provide this one async function.
+   * ProvokeText owns all loading states, snapshot storage, and undo UI.
+   *
+   * ### Example
+   * ```tsx
+   * <ProvokeText
+   *   value={text}
+   *   onChange={setText}
+   *   textProcessor={async (text, mode) => {
+   *     const res = await fetch("/api/process-text", {
+   *       method: "POST",
+   *       headers: { "Content-Type": "application/json" },
+   *       body: JSON.stringify({ text, mode }),
+   *     });
+   *     const data = await res.json();
+   *     return data.result;
+   *   }}
+   * />
+   * ```
+   *
+   * Built-in modes passed to `textProcessor`:
+   *   - `"clean"` — tidy up filler words, fix grammar, clarify language
+   *   - `"summarize"` — condense to a shorter summary
+   */
+  textProcessor?: (text: string, mode: string) => Promise<string>;
+
+  /* ── Custom actions ── */
   actions?: ProvokeAction[];
 
   /* ── Submit ── */
@@ -99,9 +145,42 @@ export interface ProvokeTextProps {
   footer?: React.ReactNode;
   containerClassName?: string;
   panelClassName?: string;
+
+  /**
+   * **External Actions** — a clearly delineated section at the bottom of
+   * the component for buttons that belong to the *page/feature* rather
+   * than to ProvokeText itself.
+   *
+   * Use this for navigation, submission, or workflow buttons (e.g.
+   * "Cancel", "Begin Analysis", "Next Step") that sit visually inside
+   * the ProvokeText card but are owned and wired by the parent.
+   *
+   * ### Why this exists
+   * ProvokeText owns its own toolbar (copy, clear, mic) and smart-button
+   * row (Clean, Summarize, custom actions). Anything outside that domain
+   * — page-level navigation, form submission, workflow transitions —
+   * should go here so the separation is explicit in code and on screen.
+   *
+   * ### Example
+   * ```tsx
+   * <ProvokeText
+   *   value={text}
+   *   onChange={setText}
+   *   externalActions={
+   *     <>
+   *       <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+   *       <Button onClick={onSubmit}>Begin Analysis</Button>
+   *     </>
+   *   }
+   * />
+   * ```
+   */
+  externalActions?: React.ReactNode;
 }
 
-/* ── Component ── */
+/* ══════════════════════════════════════════════════════════════
+   Component
+   ══════════════════════════════════════════════════════════════ */
 
 export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, ProvokeTextProps>(
   function ProvokeText(
@@ -134,6 +213,8 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       onVoiceInterimTranscript,
       onRecordingChange: onRecordingChangeProp,
 
+      textProcessor,
+
       actions,
 
       onSubmit,
@@ -153,13 +234,22 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       footer,
       containerClassName,
       panelClassName,
+
+      externalActions,
     },
     ref,
   ) {
     const { toast } = useToast();
+
+    /* ── Voice state ── */
     const [isRecording, setIsRecording] = useState(false);
     const [interimText, setInterimText] = useState("");
     const internalRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+
+    /* ── Smart action state (owned by ProvokeText) ── */
+    const [processingMode, setProcessingMode] = useState<string | null>(null);
+    const [rawSnapshot, setRawSnapshot] = useState<string | null>(null);
+    const [showRawSnapshot, setShowRawSnapshot] = useState(false);
 
     const voiceMode = voice?.mode ?? "append";
     const voiceInline = voice?.inline !== false;
@@ -192,6 +282,45 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       [onVoiceTranscript],
     );
 
+    /* ── Smart action handler ──
+     * Runs the textProcessor for any mode (clean, summarize, etc.).
+     * Manages the full lifecycle: snapshot → process → update value.
+     */
+
+    const handleSmartAction = useCallback(
+      async (mode: string) => {
+        if (!value.trim() || !textProcessor || processingMode) return;
+        setProcessingMode(mode);
+        try {
+          // Save snapshot before the first processing operation
+          if (!rawSnapshot) {
+            setRawSnapshot(value);
+          }
+          const result = await textProcessor(value, mode);
+          onChange(result);
+        } catch (error) {
+          console.error(`ProvokeText: "${mode}" action failed:`, error);
+          toast({
+            title: "Processing failed",
+            description: error instanceof Error ? error.message : "Something went wrong",
+            variant: "destructive",
+          });
+        } finally {
+          setProcessingMode(null);
+        }
+      },
+      [value, textProcessor, processingMode, rawSnapshot, onChange, toast],
+    );
+
+    /* ── Restore snapshot ── */
+
+    const handleRestore = useCallback(() => {
+      if (rawSnapshot) {
+        onChange(rawSnapshot);
+        setShowRawSnapshot(false);
+      }
+    }, [rawSnapshot, onChange]);
+
     /* ── Clipboard / clear ── */
 
     const handleCopy = useCallback(async () => {
@@ -204,7 +333,11 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       }
     }, [value, toast]);
 
-    const handleClear = useCallback(() => onChange(""), [onChange]);
+    const handleClear = useCallback(() => {
+      onChange("");
+      setRawSnapshot(null);
+      setShowRawSnapshot(false);
+    }, [onChange]);
 
     /* ── Key handling (submit on Enter for input variant) ── */
 
@@ -234,9 +367,67 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     /* ── Derived ── */
 
     const hasContent = value.length > 0;
+    const isProcessing = !!processingMode;
+    const hasSnapshot = !!rawSnapshot && rawSnapshot !== value;
     const visibleActions = actions?.filter((a) => a.visible !== false) ?? [];
     const wordCount = value.split(/\s+/).filter(Boolean).length;
     const readingTime = Math.ceil(wordCount / 200);
+
+    /* ── Built-in smart action buttons ──
+     * Rendered automatically when `textProcessor` is provided.
+     * Order: Clean → Summarize → Show/Restore original → custom actions
+     */
+
+    const smartActions: ProvokeAction[] = textProcessor
+      ? [
+          {
+            key: "_smart-clean",
+            label: "Clean",
+            loadingLabel: "Cleaning...",
+            description:
+              "Tidy up the text — removes filler words, fixes grammar, and distils into clear, concise language.",
+            icon: Wand2,
+            onClick: () => handleSmartAction("clean"),
+            disabled: !hasContent || isProcessing,
+            loading: processingMode === "clean",
+          },
+          {
+            key: "_smart-summarize",
+            label: "Summarize",
+            loadingLabel: "Summarizing...",
+            description:
+              "Condense the text into a shorter summary, keeping the core meaning intact.",
+            icon: ListCollapse,
+            onClick: () => handleSmartAction("summarize"),
+            disabled: !hasContent || isProcessing,
+            loading: processingMode === "summarize",
+          },
+        ]
+      : [];
+
+    const snapshotActions: ProvokeAction[] =
+      hasSnapshot && !isRecording
+        ? [
+            {
+              key: "_smart-show-original",
+              label: showRawSnapshot ? "Hide original" : "Show original",
+              description:
+                "Toggle between the processed version and the original text so you can compare what changed.",
+              icon: showRawSnapshot ? EyeOff : Eye,
+              onClick: () => setShowRawSnapshot(!showRawSnapshot),
+            },
+            {
+              key: "_smart-restore",
+              label: "Restore original",
+              description:
+                "Discard the processed version and revert to the original text.",
+              icon: RotateCcw,
+              onClick: handleRestore,
+            },
+          ]
+        : [];
+
+    const allActions = [...smartActions, ...snapshotActions, ...visibleActions];
 
     /* ── Metrics badge ── */
 
@@ -249,30 +440,38 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
         </span>
       ) : null;
 
-    /* ── Toolbar buttons (copy, clear, mic) ── */
+    /* ── Toolbar buttons (copy, clear, mic) ──
+     * Icons are always rendered (when their prop is enabled) but
+     * disabled when there's no content, so users know the features exist.
+     */
 
-    const toolbarSize = chrome === "container" ? { btn: "h-8 w-8", icon: "w-4 h-4" } : { btn: "h-7 w-7", icon: "w-3.5 h-3.5" };
+    const toolbarSize =
+      chrome === "container"
+        ? { btn: "h-8 w-8", icon: "w-4 h-4" }
+        : { btn: "h-7 w-7", icon: "w-3.5 h-3.5" };
 
     const toolbarButtons = (
       <>
         {extraActions}
-        {showCopy && hasContent && (
+        {showCopy && (
           <Button
             size="icon"
             variant="ghost"
             className={cn(toolbarSize.btn, "text-muted-foreground hover:text-foreground")}
             onClick={handleCopy}
+            disabled={!hasContent}
             title="Copy text"
           >
             <Copy className={toolbarSize.icon} />
           </Button>
         )}
-        {showClear && hasContent && !isRecording && (
+        {showClear && !isRecording && (
           <Button
             size="icon"
             variant="ghost"
             className={cn(toolbarSize.btn, "text-muted-foreground hover:text-foreground")}
             onClick={handleClear}
+            disabled={!hasContent}
             title="Clear all"
           >
             <Eraser className={toolbarSize.icon} />
@@ -303,12 +502,12 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       </>
     );
 
-    /* ── Actions row ── */
+    /* ── Actions row (smart buttons + snapshot buttons + custom actions) ── */
 
     const actionsRow =
-      visibleActions.length > 0 ? (
+      allActions.length > 0 ? (
         <div className="flex items-center gap-2 flex-wrap">
-          {visibleActions.map((action) => (
+          {allActions.map((action) => (
             <Tooltip key={action.key}>
               <TooltipTrigger asChild>
                 <Button
@@ -338,6 +537,37 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           ))}
         </div>
       ) : null;
+
+    /* ── Internal rendered sections ──
+     * These are owned by ProvokeText and render automatically based on state.
+     * They appear after the actions row, before any `children` slot.
+     */
+
+    const recordingIndicator =
+      isRecording && hasVoice ? (
+        <p className="text-xs text-primary animate-pulse px-4 pb-2">
+          Listening...
+        </p>
+      ) : null;
+
+    const rawSnapshotPanel =
+      showRawSnapshot && rawSnapshot ? (
+        <div className="mx-4 mb-2 p-3 rounded-lg bg-muted/50 border text-sm max-h-60 overflow-y-auto">
+          <p className="text-xs text-muted-foreground mb-1">Original text:</p>
+          <p className="text-muted-foreground whitespace-pre-wrap">{rawSnapshot}</p>
+        </div>
+      ) : null;
+
+    /* ── External actions section ── */
+
+    const externalActionsSection = externalActions ? (
+      <div
+        className="flex items-center justify-between px-4 py-3 border-t flex-wrap gap-2"
+        data-section="external-actions"
+      >
+        {externalActions}
+      </div>
+    ) : null;
 
     /* ── Build the input control ── */
 
@@ -377,7 +607,8 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           onSelect={onSelect}
           className={cn(
             chrome === "container" && "border-none shadow-none focus-visible:ring-0",
-            chrome === "bare" && "border-none shadow-none focus-visible:ring-0 resize-none bg-transparent outline-none",
+            chrome === "bare" &&
+              "border-none shadow-none focus-visible:ring-0 resize-none bg-transparent outline-none",
             variant === "editor" && "min-h-[600px] font-serif text-base leading-[1.8]",
             isRecording && (chrome === "container" ? "text-primary" : "border-primary"),
             className,
@@ -420,22 +651,27 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           {/* Input */}
           <div className="px-4">{inputControl}</div>
 
-          {/* Actions row */}
+          {/* Actions row (smart + snapshot + custom actions) */}
           {actionsRow && <div className="px-4 pb-2">{actionsRow}</div>}
 
-          {/* Children slot (recording indicators, raw transcript, etc.) */}
+          {/* Internal sections (recording indicator, raw snapshot) */}
+          {recordingIndicator}
+          {rawSnapshotPanel}
+
+          {/* Children slot (additional content from parent) */}
           {children}
 
           {/* Metrics */}
-          {metricsEl && (
-            <div className="px-4 pb-2">{metricsEl}</div>
-          )}
+          {metricsEl && <div className="px-4 pb-2">{metricsEl}</div>}
 
           {/* Footer extra */}
           {footerExtra}
 
           {/* Footer */}
           {footer}
+
+          {/* External actions (page-level buttons) */}
+          {externalActionsSection}
         </div>
       );
     }
@@ -448,7 +684,6 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       return (
         <div className={cn("relative", panelClassName)}>
           {variant === "input" ? (
-            /* input variant rendered inline with toolbar next to it */
             <div className="flex items-center gap-1">
               {inputControl}
               {toolbarButtons}
@@ -464,11 +699,16 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
           {actionsRow && <div className="mt-1">{actionsRow}</div>}
 
+          {recordingIndicator}
+          {rawSnapshotPanel}
+
           {children}
 
           {metricsEl && <div className="mt-1">{metricsEl}</div>}
 
           {footer}
+
+          {externalActionsSection}
         </div>
       );
     }
