@@ -165,14 +165,6 @@ export interface DocumentVersion {
   description: string;
 }
 
-// Workspace state for context provider
-// Generate template request - creates a document template from an objective
-export const generateTemplateRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
-});
-
-export type GenerateTemplateRequest = z.infer<typeof generateTemplateRequestSchema>;
-
 // Interview entry - a single Q&A pair from the interview flow
 export const interviewEntrySchema = z.object({
   id: z.string(),
