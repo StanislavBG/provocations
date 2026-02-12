@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { BilkoTextForm } from "./BilkoTextForm";
+import { ProvokeText } from "./ProvokeText";
 import {
   MessageCircleQuestion,
   Send,
@@ -92,7 +91,7 @@ export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPan
           return (
             <div key={index}>
               {isExpanded ? (
-                /* Expanded: orange highlight box with BilkoTextForm input */
+                /* Expanded: orange highlight box with ProvokeText input */
                 <Card className="border-primary/30 bg-primary/5 shadow-sm transition-all duration-200">
                   <CardContent className="p-3 space-y-3">
                     <button
@@ -104,7 +103,8 @@ export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPan
                       </p>
                     </button>
 
-                    <BilkoTextForm
+                    <ProvokeText
+                      chrome="inline"
                       placeholder="Type your response or use the mic..."
                       value={state.textValue}
                       onChange={(val) =>
@@ -123,20 +123,11 @@ export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPan
                           handleExpand(index);
                         }
                       }}
+                      voice={{ mode: "replace" }}
                       onVoiceTranscript={handleVoiceTranscript}
-                      voiceMode="replace"
                       showCopy={false}
-                      extraActions={
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={handleSubmitText}
-                          disabled={!state.textValue.trim()}
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                        </Button>
-                      }
+                      onSubmit={handleSubmitText}
+                      submitIcon={Send}
                     />
                   </CardContent>
                 </Card>

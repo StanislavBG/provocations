@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { VoiceRecorder } from "./VoiceRecorder";
-import { BilkoTextForm } from "./BilkoTextForm";
+import { ProvokeText } from "./ProvokeText";
 import {
   ListTree,
   Plus,
@@ -96,14 +94,19 @@ function OutlineItemCard({
           </button>
 
           {isEditing ? (
-            <Input
+            <ProvokeText
+              variant="input"
+              chrome="bare"
               data-testid={`input-heading-${item.id}`}
               value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={handleSaveHeading}
-              onKeyDown={(e) => e.key === "Enter" && handleSaveHeading()}
+              onChange={setEditValue}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveHeading();
+              }}
               className="h-7 text-sm font-medium flex-1"
               autoFocus
+              showCopy={false}
+              showClear={false}
             />
           ) : (
             <span
@@ -150,9 +153,11 @@ function OutlineItemCard({
           <div className="flex items-center gap-1">
             {showInstruction ? (
               <div className="flex items-center gap-1 flex-1">
-                <Input
+                <ProvokeText
+                  variant="input"
+                  chrome="bare"
                   value={instructionText}
-                  onChange={(e) => setInstructionText(e.target.value)}
+                  onChange={setInstructionText}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -165,28 +170,19 @@ function OutlineItemCard({
                   placeholder={`How to modify "${item.heading}"...`}
                   className="h-7 text-sm flex-1"
                   autoFocus
-                />
-                <VoiceRecorder
-                  onTranscript={(transcript) => {
+                  showCopy={false}
+                  showClear={false}
+                  voice={{ mode: "replace" }}
+                  onVoiceTranscript={(transcript) => {
                     if (onTextInstruction) {
                       onTextInstruction(transcript);
                     }
                     setShowInstruction(false);
                     setInstructionText("");
                   }}
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 shrink-0"
+                  onSubmit={handleSubmitInstruction}
+                  submitIcon={Send}
                 />
-                <Button
-                  size="icon"
-                  variant="default"
-                  className="h-7 w-7 shrink-0"
-                  onClick={handleSubmitInstruction}
-                  disabled={!instructionText.trim()}
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </Button>
               </div>
             ) : (
               <Button
@@ -201,7 +197,8 @@ function OutlineItemCard({
             )}
           </div>
 
-          <BilkoTextForm
+          <ProvokeText
+            chrome="inline"
             data-testid={`textarea-content-${item.id}`}
             placeholder="Write your content here, or use voice / AI to generate..."
             value={item.content}
@@ -209,10 +206,10 @@ function OutlineItemCard({
             className="text-sm min-h-[100px]"
             minRows={4}
             maxRows={20}
+            voice={{ mode: "append", inline: false }}
             onVoiceTranscript={(transcript) => onVoiceInput?.(transcript)}
             onVoiceInterimTranscript={(interim) => onTranscriptUpdate?.(interim, true)}
             onRecordingChange={(isRecording) => onTranscriptUpdate?.("", isRecording)}
-            voiceInline={false}
           />
           {item.content && (
             <div className="flex items-center justify-end gap-2">
@@ -298,22 +295,20 @@ export function OutlineBuilder({
       
       <div className="p-4 border-b">
         <div className="flex items-center gap-2">
-          <Input
+          <ProvokeText
+            variant="input"
+            chrome="bare"
             data-testid="input-new-heading"
             placeholder="Add a section heading..."
             value={newHeading}
-            onChange={(e) => setNewHeading(e.target.value)}
+            onChange={setNewHeading}
             onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
             className="flex-1"
+            showCopy={false}
+            showClear={false}
+            onSubmit={handleAddItem}
+            submitIcon={Plus}
           />
-          <Button
-            data-testid="button-add-section"
-            size="sm"
-            onClick={handleAddItem}
-            disabled={!newHeading.trim()}
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
           Build your argument structure. AI can help expand, but the structure is yours.

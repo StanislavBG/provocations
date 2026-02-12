@@ -9,11 +9,10 @@ import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { ReadingPane } from "@/components/ReadingPane";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
-import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -758,24 +757,23 @@ export default function Workspace() {
         <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/30">
           <Target className="w-4 h-4 text-primary shrink-0" />
           <span className="text-sm text-muted-foreground shrink-0">Objective:</span>
-          <Input
+          <ProvokeText
+            variant="input"
+            chrome="bare"
             data-testid="input-objective-header"
-            value={isRecordingObjective ? objectiveInterimTranscript || objective : objective}
-            onChange={(e) => setObjective(e.target.value)}
+            value={objective}
+            onChange={setObjective}
             placeholder="What are you creating?"
-            className={`h-7 text-sm bg-transparent border-none shadow-none focus-visible:ring-0 px-1 flex-1 ${isRecordingObjective ? "text-primary" : ""}`}
-            readOnly={isRecordingObjective}
-          />
-          <VoiceRecorder
-            onTranscript={(text) => {
+            className="h-7 text-sm bg-transparent px-1 flex-1"
+            showCopy={false}
+            showClear={false}
+            voice={{ mode: "replace" }}
+            onVoiceTranscript={(text) => {
               setObjective(text);
               setObjectiveInterimTranscript("");
             }}
-            onInterimTranscript={setObjectiveInterimTranscript}
+            onVoiceInterimTranscript={setObjectiveInterimTranscript}
             onRecordingChange={setIsRecordingObjective}
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 shrink-0"
           />
 
         </div>
