@@ -112,56 +112,6 @@ export default function Workspace() {
     ? provocations.find(p => p.id === hoveredProvocationId)?.sourceExcerpt 
     : undefined;
 
-  const analyzeMutation = useMutation({
-    mutationFn: async ({ text, referenceDocuments }: { text: string; referenceDocuments?: ReferenceDocument[] }) => {
-      const response = await apiRequest("POST", "/api/analyze", {
-        text,
-        referenceDocuments,
-      });
-      return await response.json() as {
-        document: Document;
-        provocations: Provocation[];
-        warnings?: Array<{ type: string; message: string }>;
-      };
-    },
-    onSuccess: (data) => {
-      const provocationsData = data.provocations ?? [];
-      setDocument(data.document);
-      setProvocations(provocationsData);
-
-      // Create initial version
-      const initialVersion: DocumentVersion = {
-        id: generateId("v"),
-        text: data.document.rawText,
-        timestamp: Date.now(),
-        description: "Original document"
-      };
-      setVersions([initialVersion]);
-
-      // Show truncation warning if applicable
-      if (data.warnings?.some(w => w.type === "text_truncated")) {
-        const warning = data.warnings.find(w => w.type === "text_truncated");
-        toast({
-          title: "Text Truncated for Analysis",
-          description: warning?.message || "Some text was truncated during analysis.",
-          variant: "default",
-        });
-      }
-
-      toast({
-        title: "Analysis Complete",
-        description: `Generated ${provocationsData.length} provocations.`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    },
-  });
-
   const writeMutation = useMutation({
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
@@ -638,7 +588,7 @@ export default function Workspace() {
     setVersions([initialVersion]);
 
     // Provocations are generated on-demand via the Provocations tab
-  }, [analyzeMutation, referenceDocuments]);
+  }, [referenceDocuments]);
 
   // Quick save: encrypt client-side, then overwrite on server
   const handleSaveClick = useCallback(async () => {
@@ -688,7 +638,7 @@ export default function Workspace() {
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
 
   // Show the input form when there's no document content and no analysis in progress
-  const isInputPhase = !document.rawText && !analyzeMutation.isPending;
+  const isInputPhase = !document.rawText;
 
   if (isInputPhase) {
     return (
@@ -733,7 +683,6 @@ export default function Workspace() {
             onBlankDocument={() => {
               setDocument({ id: generateId("doc"), rawText: " " });
             }}
-            isLoading={analyzeMutation.isPending}
           />
         </div>
         <LoadDocumentDialog
@@ -980,7 +929,6 @@ export default function Workspace() {
                     onTranscriptUpdate={handleTranscriptUpdate}
                     onHoverProvocation={setHoveredProvocationId}
                     onRegenerateProvocations={handleRegenerateProvocations}
-                    isLoading={analyzeMutation.isPending}
                     isMerging={writeMutation.isPending}
                     isRegenerating={regenerateProvocationsMutation.isPending}
                   />

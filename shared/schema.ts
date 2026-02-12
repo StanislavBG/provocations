@@ -69,14 +69,8 @@ export const referenceDocumentSchema = z.object({
 export type ReferenceDocument = z.infer<typeof referenceDocumentSchema>;
 
 // API request schemas - used by both frontend and backend
-export const analyzeTextRequestSchema = z.object({
-  text: z.string().min(1, "Text is required"),
-  referenceDocuments: z.array(referenceDocumentSchema).optional(),
-});
 
-export type AnalyzeTextRequest = z.infer<typeof analyzeTextRequestSchema>;
-
-// Generate provocations request (for regeneration with optional guidance)
+// Generate provocations request
 export const generateProvocationsRequestSchema = z.object({
   text: z.string().min(1, "Text is required"),
   guidance: z.string().optional(),
