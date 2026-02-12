@@ -2,10 +2,10 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { BookOpen, Copy, Download, Mic, Square, Send, X, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ProvokeText } from "@/components/ProvokeText";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 interface ReadingPaneProps {
@@ -333,28 +333,30 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-6 max-w-3xl mx-auto">
-            <textarea
-              ref={editorRef}
-              data-testid="editor-document"
-              value={text}
-              onChange={handleTextChange}
-              onSelect={handleSelect}
-              onClick={() => {
+            <div onClick={() => {
                 // Clear toolbar if clicking without selection
                 if (!isRecordingRef.current && !showPromptInputRef.current) {
-                  const textarea = editorRef.current;
+                  const textarea = editorRef.current as HTMLTextAreaElement | null;
                   if (textarea && textarea.selectionStart === textarea.selectionEnd) {
                     setSelectedText("");
                     setSelectionPosition(null);
                   }
                 }
-              }}
-              className="w-full min-h-[600px] bg-transparent border-none outline-none resize-none font-serif text-base leading-[1.8] text-foreground/90 placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0"
-              placeholder="Start typing your document..."
-              style={{
-                caretColor: 'hsl(var(--primary))',
-              }}
-            />
+              }}>
+              <ProvokeText
+                ref={editorRef}
+                variant="editor"
+                chrome="bare"
+                data-testid="editor-document"
+                value={text}
+                onChange={(val) => onTextChange?.(val)}
+                onSelect={handleSelect}
+                className="w-full text-foreground/90"
+                placeholder="Start typing your document..."
+                showCopy={false}
+                showClear={false}
+              />
+            </div>
           </div>
         </ScrollArea>
 
@@ -372,48 +374,37 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
           >
             {showPromptInput ? (
               <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
-                <Input
-                  ref={promptInputRef}
+                <ProvokeText
+                  variant="input"
+                  chrome="bare"
                   data-testid="input-edit-instruction"
                   value={promptText}
-                  onChange={(e) => setPromptText(e.target.value)}
+                  onChange={setPromptText}
                   onKeyDown={handlePromptKeyDown}
                   placeholder="How to modify this text..."
                   className="min-w-[200px] h-8 text-sm"
                   disabled={isProcessingEdit}
+                  autoFocus
+                  showCopy={false}
+                  showClear={false}
+                  voice={{ mode: "replace" }}
+                  onVoiceTranscript={(transcript) => setPromptText(transcript)}
+                  onSubmit={handleSubmitEdit}
+                  submitIcon={Send}
+                  extraActions={
+                    <Button
+                      data-testid="button-close-edit"
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleClosePrompt}
+                      disabled={isProcessingEdit}
+                      className="h-8 w-8"
+                      title="Cancel"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  }
                 />
-                <VoiceRecorder
-                  onTranscript={(transcript) => setPromptText(transcript)}
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
-                />
-                <Button
-                  data-testid="button-submit-edit"
-                  size="icon"
-                  variant="default"
-                  onClick={handleSubmitEdit}
-                  disabled={!promptText.trim() || isProcessingEdit}
-                  className="h-8 w-8"
-                  title="Apply modification"
-                >
-                  {isProcessingEdit ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </Button>
-                <Button
-                  data-testid="button-close-edit"
-                  size="icon"
-                  variant="ghost"
-                  onClick={handleClosePrompt}
-                  disabled={isProcessingEdit}
-                  className="h-8 w-8"
-                  title="Cancel"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
               </div>
             ) : (
               <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
