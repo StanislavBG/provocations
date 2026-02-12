@@ -213,48 +213,32 @@ export interface WorkspaceState {
   currentPhase: "input" | "blank-document" | "workspace";
 }
 
-// Document save/load schemas (client handles all encryption — server is dumb storage)
-// The server never sees passphrases, device keys, or plaintext.
+// Document save/load schemas (server-side encryption, Clerk auth for ownership)
 export const saveDocumentRequestSchema = z.object({
-  ownerHash: z.string().min(1, "Owner hash is required"),
   title: z.string().min(1, "Title is required").max(200),
-  ciphertext: z.string().min(1, "Ciphertext is required"),
-  salt: z.string().min(1, "Salt is required"),
-  iv: z.string().min(1, "IV is required"),
+  content: z.string().min(1, "Content is required"),
 });
 
 export type SaveDocumentRequest = z.infer<typeof saveDocumentRequestSchema>;
 
 export const updateDocumentRequestSchema = z.object({
-  ownerHash: z.string().min(1, "Owner hash is required"),
   title: z.string().min(1, "Title is required").max(200),
-  ciphertext: z.string().min(1, "Ciphertext is required"),
-  salt: z.string().min(1, "Salt is required"),
-  iv: z.string().min(1, "IV is required"),
+  content: z.string().min(1, "Content is required"),
 });
 
 export type UpdateDocumentRequest = z.infer<typeof updateDocumentRequestSchema>;
 
-export const listDocumentsRequestSchema = z.object({
-  ownerHash: z.string().min(1, "Owner hash is required"),
-});
-
-export type ListDocumentsRequest = z.infer<typeof listDocumentsRequestSchema>;
-
-export interface EncryptedDocumentListItem {
+export interface DocumentListItem {
   id: number;
   title: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface EncryptedDocumentFull {
+export interface DocumentPayload {
   id: number;
-  ownerHash: string;
   title: string;
-  ciphertext: string;
-  salt: string;
-  iv: string;
+  content: string;
   createdAt: string;
   updatedAt: string;
 }
