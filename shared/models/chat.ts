@@ -32,12 +32,12 @@ export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
-// Encrypted documents - server stores only encrypted blobs
-export const encryptedDocuments = pgTable("encrypted_documents", {
+// Documents - server-side encrypted at rest, owned by Clerk userId
+export const documents = pgTable("documents", {
   id: serial("id").primaryKey(),
-  // SHA-256 hash of the passphrase - used to group docs by "user"
-  ownerHash: varchar("owner_hash", { length: 64 }).notNull(),
-  // User-provided title (plaintext, non-sensitive metadata)
+  // Clerk user ID - identifies the document owner
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  // User-provided title (plaintext metadata)
   title: text("title").notNull(),
   // AES-GCM encrypted document content (base64)
   ciphertext: text("ciphertext").notNull(),
@@ -49,12 +49,12 @@ export const encryptedDocuments = pgTable("encrypted_documents", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-export const insertEncryptedDocumentSchema = createInsertSchema(encryptedDocuments).omit({
+export const insertDocumentSchema = createInsertSchema(documents).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export type EncryptedDocument = typeof encryptedDocuments.$inferSelect;
-export type InsertEncryptedDocument = z.infer<typeof insertEncryptedDocumentSchema>;
+export type StoredDocument = typeof documents.$inferSelect;
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 
