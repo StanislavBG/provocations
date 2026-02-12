@@ -1,8 +1,7 @@
-import { useState, useCallback, lazy, Suspense } from "react";
+import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { encrypt, getOrCreateDeviceKey } from "@/lib/crypto";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
@@ -19,8 +18,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
-import { SaveDocumentDialog, type SaveCredentials } from "@/components/SaveDocumentDialog";
-import { LoadDocumentDialog } from "@/components/LoadDocumentDialog";
 import {
   Sparkles,
   RotateCcw,
@@ -31,7 +28,8 @@ import {
   X,
   Lightbulb,
   Save,
-  FolderOpen,
+  FileText,
+  Trash2,
 } from "lucide-react";
 import type {
   Document,
@@ -44,6 +42,7 @@ import type {
   EditHistoryEntry,
   InterviewEntry,
   InterviewQuestionResponse,
+  DocumentListItem,
 } from "@shared/schema";
 
 export default function Workspace() {
@@ -59,7 +58,7 @@ export default function Workspace() {
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [showDiffView, setShowDiffView] = useState(false);
   const [hoveredProvocationId, setHoveredProvocationId] = useState<string | null>(null);
-  
+
   // Transcript overlay state
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(false);
   const [rawTranscript, setRawTranscript] = useState("");
@@ -96,20 +95,34 @@ export default function Workspace() {
   const [currentInterviewQuestion, setCurrentInterviewQuestion] = useState<string | null>(null);
   const [currentInterviewTopic, setCurrentInterviewTopic] = useState<string | null>(null);
 
-  // Save/Load dialogs
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showLoadDialog, setShowLoadDialog] = useState(false);
-  const [saveCredentials, setSaveCredentials] = useState<SaveCredentials | null>(null);
-  const [isQuickSaving, setIsQuickSaving] = useState(false);
+  // Server-backed save/restore
+  const [savedDocuments, setSavedDocuments] = useState<DocumentListItem[]>([]);
+  const [currentDocId, setCurrentDocId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
   const [objectiveInterimTranscript, setObjectiveInterimTranscript] = useState("");
-  
+
   // Get the source excerpt of the currently hovered provocation
-  const hoveredProvocationContext = hoveredProvocationId 
-    ? provocations.find(p => p.id === hoveredProvocationId)?.sourceExcerpt 
+  const hoveredProvocationContext = hoveredProvocationId
+    ? provocations.find(p => p.id === hoveredProvocationId)?.sourceExcerpt
     : undefined;
+
+  // Fetch saved documents on mount
+  const fetchSavedDocuments = useCallback(async () => {
+    try {
+      const response = await apiRequest("GET", "/api/documents");
+      const data = await response.json() as { documents: DocumentListItem[] };
+      setSavedDocuments(data.documents);
+    } catch {
+      // Silently fail - documents list just won't show
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSavedDocuments();
+  }, [fetchSavedDocuments]);
 
   const writeMutation = useMutation({
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory"> & { description?: string }) => {
@@ -348,7 +361,7 @@ export default function Workspace() {
     setInterviewEntries([]);
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
-    setSaveCredentials(null);
+    setCurrentDocId(null);
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -562,79 +575,129 @@ export default function Workspace() {
     }
   }, []);
 
-  // Handle loading a decrypted document from the LoadDocumentDialog
-  const handleLoadDocument = useCallback((text: string, title: string, docId: number, passphrase: string, ownerHash: string) => {
-    setObjective(title);
-    setSaveCredentials({ documentId: docId, title, passphrase, ownerHash });
-
-    // Immediately populate the document so it appears in the workspace
-    const tempDoc: Document = { id: `loaded-${Date.now()}`, rawText: text };
-    setDocument(tempDoc);
-
-    // Clear stale state from any previous document
-    setProvocations([]);
-    setEditHistory([]);
-    setLastSuggestions([]);
-    setShowDiffView(false);
-
-    // Create initial version
-    const initialVersion: DocumentVersion = {
-      id: generateId("v"),
-      text,
-      timestamp: Date.now(),
-      description: "Loaded document",
-    };
-    setVersions([initialVersion]);
-
-    // Provocations are generated on-demand via the Provocations tab
-  }, [referenceDocuments]);
-
-  // Quick save: encrypt client-side, then overwrite on server
-  const handleSaveClick = useCallback(async () => {
-    if (!document.rawText) return;
-
-    if (!saveCredentials) {
-      // First save - show dialog
-      setShowSaveDialog(true);
-      return;
-    }
-
-    // Quick save - encrypt in browser, then update server
-    setIsQuickSaving(true);
+  // Load a saved document from the server
+  const handleLoadSavedDocument = useCallback(async (docId: number) => {
     try {
-      const deviceKey = getOrCreateDeviceKey();
-      const encrypted = await encrypt(document.rawText, saveCredentials.passphrase, deviceKey);
+      const response = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await response.json() as { id: number; title: string; content: string; createdAt: string; updatedAt: string };
 
-      await apiRequest("PUT", `/api/documents/${saveCredentials.documentId}`, {
-        ownerHash: saveCredentials.ownerHash,
-        title: saveCredentials.title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
-      });
+      let loadedObjective = data.title;
+      let loadedText = data.content;
+
+      // Try parsing content as JSON (objective + documentText)
+      try {
+        const parsed = JSON.parse(data.content) as { objective?: string; documentText?: string };
+        if (parsed.documentText) {
+          loadedText = parsed.documentText;
+          loadedObjective = parsed.objective || data.title;
+        }
+      } catch {
+        // Content is plain text, use as-is
+      }
+
+      setObjective(loadedObjective);
+      setCurrentDocId(docId);
+
+      const tempDoc: Document = { id: `loaded-${Date.now()}`, rawText: loadedText };
+      setDocument(tempDoc);
+
+      // Clear stale state from any previous document
+      setProvocations([]);
+      setEditHistory([]);
+      setLastSuggestions([]);
+      setShowDiffView(false);
+
+      // Create initial version
+      const initialVersion: DocumentVersion = {
+        id: generateId("v"),
+        text: loadedText,
+        timestamp: Date.now(),
+        description: "Loaded document",
+      };
+      setVersions([initialVersion]);
+
       toast({
-        title: "Saved",
-        description: `"${saveCredentials.title}" updated.`,
+        title: "Document Loaded",
+        description: `"${loadedObjective}" loaded.`,
       });
     } catch {
       toast({
+        title: "Load Failed",
+        description: "Could not load document. Try again.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  // Delete a saved document
+  const handleDeleteSavedDocument = useCallback(async (docId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await apiRequest("DELETE", `/api/documents/${docId}`);
+      setSavedDocuments(prev => prev.filter(d => d.id !== docId));
+      if (currentDocId === docId) {
+        setCurrentDocId(null);
+      }
+      toast({ title: "Document Deleted" });
+    } catch {
+      toast({
+        title: "Delete Failed",
+        description: "Could not delete document.",
+        variant: "destructive",
+      });
+    }
+  }, [currentDocId, toast]);
+
+  // Save document to server (server handles encryption)
+  const handleSaveClick = useCallback(async () => {
+    if (!document.rawText) return;
+
+    setIsSaving(true);
+    try {
+      const title = objective || "Untitled Document";
+      const content = JSON.stringify({ objective, documentText: document.rawText });
+
+      if (currentDocId) {
+        // Update existing document
+        await apiRequest("PUT", `/api/documents/${currentDocId}`, { title, content });
+        toast({
+          title: "Saved",
+          description: `"${title}" updated.`,
+        });
+      } else {
+        // Create new document
+        const response = await apiRequest("POST", "/api/documents", { title, content });
+        const data = await response.json() as { id: number; createdAt: string };
+        setCurrentDocId(data.id);
+        toast({
+          title: "Saved",
+          description: `"${title}" saved.`,
+        });
+      }
+      fetchSavedDocuments();
+    } catch {
+      toast({
         title: "Save Failed",
-        description: "Could not save. Try again or use Save As.",
+        description: "Could not save. Try again.",
         variant: "destructive",
       });
     } finally {
-      setIsQuickSaving(false);
+      setIsSaving(false);
     }
-  }, [document, saveCredentials, toast]);
-
-  // Callback after first save from dialog
-  const handleFirstSave = useCallback((credentials: SaveCredentials) => {
-    setSaveCredentials(credentials);
-  }, []);
+  }, [document, objective, currentDocId, toast, fetchSavedDocuments]);
 
   const canShowDiff = versions.length >= 2;
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
+
+  const formatDate = (iso: string) => {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   // Show the input form when there's no document content and no analysis in progress
   const isInputPhase = !document.rawText;
@@ -649,21 +712,39 @@ export default function Workspace() {
               <h1 className="font-semibold text-lg">Provocations</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowLoadDialog(true)}
-                className="gap-1.5"
-                title="Load a previously saved document"
-              >
-                <FolderOpen className="w-4 h-4" />
-                Load
-              </Button>
               <ThemeToggle />
               <UserButton data-testid="button-user-menu" />
             </div>
           </div>
         </header>
+        {savedDocuments.length > 0 && (
+          <div className="border-b px-4 py-3 bg-muted/20">
+            <p className="text-sm font-medium text-muted-foreground mb-2">Your Documents</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {savedDocuments.map(doc => (
+                <div
+                  key={doc.id}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md border bg-card hover:bg-accent/50 cursor-pointer transition-colors shrink-0 group"
+                  onClick={() => handleLoadSavedDocument(doc.id)}
+                >
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate max-w-[200px]">{doc.title}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(doc.updatedAt)}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                    onClick={(e) => handleDeleteSavedDocument(doc.id, e)}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-hidden">
           <TextInputForm
             onSubmit={(text, obj, refs) => {
@@ -684,11 +765,6 @@ export default function Workspace() {
             }}
           />
         </div>
-        <LoadDocumentDialog
-          open={showLoadDialog}
-          onOpenChange={setShowLoadDialog}
-          onLoad={handleLoadDocument}
-        />
       </div>
     );
   }
@@ -720,23 +796,11 @@ export default function Workspace() {
               size="sm"
               onClick={handleSaveClick}
               className="gap-1.5"
-              disabled={!document.rawText || isQuickSaving}
-              title={saveCredentials
-                ? `Save to "${saveCredentials.title}"`
-                : "Save your document with a passphrase"}
+              disabled={!document.rawText || isSaving}
+              title={currentDocId ? "Save changes" : "Save your document"}
             >
               <Save className="w-4 h-4" />
-              {isQuickSaving ? "Saving..." : "Save"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowLoadDialog(true)}
-              className="gap-1.5"
-              title="Load a previously saved document"
-            >
-              <FolderOpen className="w-4 h-4" />
-              Load
+              {isSaving ? "Saving..." : "Save"}
             </Button>
             <Button
               data-testid="button-reset"
@@ -778,7 +842,7 @@ export default function Workspace() {
 
         </div>
       </header>
-      
+
       {writeMutation.isPending && (
         <div className="bg-primary/10 border-b px-4 py-2 flex items-center gap-2 text-sm">
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -820,7 +884,7 @@ export default function Workspace() {
           </Button>
         </div>
       )}
-      
+
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal">
           <ResizablePanel defaultSize={55} minSize={35}>
@@ -850,9 +914,9 @@ export default function Workspace() {
               />
             )}
           </ResizablePanel>
-          
+
           <ResizableHandle withHandle />
-          
+
           <ResizablePanel defaultSize={45} minSize={25}>
             <div className="h-full flex flex-col relative">
               <TranscriptOverlay
@@ -901,7 +965,7 @@ export default function Workspace() {
                     )}
                   </TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
                   <InterviewPanel
                     isActive={isInterviewActive}
@@ -937,18 +1001,6 @@ export default function Workspace() {
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
-
-      <SaveDocumentDialog
-        open={showSaveDialog}
-        onOpenChange={setShowSaveDialog}
-        documentText={document.rawText}
-        onSaved={handleFirstSave}
-      />
-      <LoadDocumentDialog
-        open={showLoadDialog}
-        onOpenChange={setShowLoadDialog}
-        onLoad={handleLoadDocument}
-      />
     </div>
   );
 }
