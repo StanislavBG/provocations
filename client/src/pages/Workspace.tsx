@@ -637,8 +637,7 @@ export default function Workspace() {
     };
     setVersions([initialVersion]);
 
-    // Run analysis in background to generate provocations
-    analyzeMutation.mutate({ text, referenceDocuments });
+    // Provocations are generated on-demand via the Provocations tab
   }, [analyzeMutation, referenceDocuments]);
 
   // Quick save: encrypt client-side, then overwrite on server
@@ -722,7 +721,14 @@ export default function Workspace() {
               setDocument({ id: generateId("doc"), rawText: text });
               setObjective(obj);
               setReferenceDocuments(refs);
-              analyzeMutation.mutate({ text, referenceDocuments: refs });
+              // Create initial version — provocations are generated on-demand via the Provocations tab
+              const initialVersion: DocumentVersion = {
+                id: generateId("v"),
+                text,
+                timestamp: Date.now(),
+                description: "Original document",
+              };
+              setVersions([initialVersion]);
             }}
             onBlankDocument={() => {
               setDocument({ id: generateId("doc"), rawText: " " });
