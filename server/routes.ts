@@ -1132,10 +1132,20 @@ Output only the instruction text. No meta-commentary.`
         return res.status(403).json({ error: "Not authorized to access this document" });
       }
 
-      const content = decrypt(
-        { ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv },
-        getEncryptionKey(),
-      );
+      let content: string;
+      try {
+        content = decrypt(
+          { ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv },
+          getEncryptionKey(),
+        );
+      } catch {
+        // Document may have been encrypted with old client-side encryption
+        // (passphrase + device key) and cannot be decrypted with server key
+        return res.status(422).json({
+          error: "Unable to decrypt document",
+          details: "This document was saved with an older encryption method and cannot be opened. You can delete it and create a new one.",
+        });
+      }
 
       res.json({
         id: doc.id,
