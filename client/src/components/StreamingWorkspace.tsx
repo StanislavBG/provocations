@@ -7,18 +7,8 @@ import { ReadingPane } from "./ReadingPane";
 import { StreamingDialogue } from "./StreamingDialogue";
 import { StreamingWireframePanel } from "./StreamingWireframePanel";
 import { BrowserExplorer } from "./BrowserExplorer";
-import { ScreenCaptureButton, type CaptureRegion } from "./ScreenCaptureButton";
+import type { CaptureRegion } from "./ScreenCaptureButton";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Layers,
-  Component,
-  Lightbulb,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-} from "lucide-react";
 import type {
   Document,
   DocumentVersion,
@@ -62,7 +52,6 @@ export function StreamingWorkspace({
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [wireframeNotes, setWireframeNotes] = useState("");
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
-  const [isAnalysisLogOpen, setIsAnalysisLogOpen] = useState(true);
 
   // Track last analyzed URL to avoid duplicate triggers
   const lastAnalyzedUrl = useRef<string>("");
@@ -315,7 +304,7 @@ export function StreamingWorkspace({
       {/* Top: Context panels + Dialogue + Document */}
       <ResizablePanel defaultSize={50} minSize={20}>
         <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* Panel A: Website Analysis (left) — URL, objective, wireframe view */}
+          {/* Panel A: Website Wireframe (left) — URL, wireframe, capture, analysis log */}
           <ResizablePanel
             defaultSize={30}
             minSize={10}
@@ -330,6 +319,9 @@ export function StreamingWorkspace({
                 onWireframeNotesChange={setWireframeNotes}
                 isAnalyzing={analysisMutation.isPending}
                 hasAnalysis={wireframeAnalysis !== null}
+                wireframeAnalysis={wireframeAnalysis}
+                onCapture={handleScreenCapture}
+                captureDisabled={refineMutation.isPending}
               />
             </div>
           </ResizablePanel>
@@ -364,7 +356,7 @@ export function StreamingWorkspace({
 
           <ResizableHandle withHandle />
 
-          {/* Panel C: Requirement Draft / Document (right) */}
+          {/* Panel C: Requirement Draft / Document (right) — clean reading pane */}
           <ResizablePanel
             defaultSize={35}
             minSize={10}
@@ -372,88 +364,6 @@ export function StreamingWorkspace({
             collapsedSize={0}
           >
             <div className="h-full flex flex-col">
-              {/* Screen capture toolbar for wireframe mode */}
-              <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/20 shrink-0">
-                <ScreenCaptureButton
-                  onCapture={handleScreenCapture}
-                  disabled={refineMutation.isPending}
-                />
-                <span className="text-xs text-muted-foreground">Capture wireframe state</span>
-              </div>
-
-              {/* Log: Site Analyze — background context panel */}
-              {(wireframeAnalysis || analysisMutation.isPending) && (
-                <div className="border-b shrink-0">
-                  <button
-                    onClick={() => setIsAnalysisLogOpen(!isAnalysisLogOpen)}
-                    className="w-full flex items-center gap-2 px-3 py-2 bg-muted/10 hover:bg-muted/20 transition-colors text-left"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1">
-                      Log: Site Analyze
-                    </span>
-                    {analysisMutation.isPending && (
-                      <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
-                    )}
-                    {wireframeAnalysis && (
-                      <Badge variant="outline" className="text-[10px] h-5">
-                        {wireframeAnalysis.components.length} components
-                      </Badge>
-                    )}
-                    {isAnalysisLogOpen ? (
-                      <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                    )}
-                  </button>
-                  {isAnalysisLogOpen && wireframeAnalysis && (
-                    <ScrollArea className="max-h-[200px]">
-                      <div className="px-3 py-2 space-y-2 text-xs">
-                        <p className="text-muted-foreground leading-relaxed">
-                          {wireframeAnalysis.analysis}
-                        </p>
-                        {wireframeAnalysis.components.length > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1">
-                              <Component className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
-                              <span className="font-medium text-muted-foreground">Components</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {wireframeAnalysis.components.map((comp, idx) => (
-                                <Badge key={idx} variant="outline" className="text-[10px]">
-                                  {comp}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {wireframeAnalysis.suggestions.length > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1">
-                              <Lightbulb className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                              <span className="font-medium text-muted-foreground">Notes</span>
-                            </div>
-                            <ul className="text-muted-foreground space-y-0.5 pl-1">
-                              {wireframeAnalysis.suggestions.map((sug, idx) => (
-                                <li key={idx} className="pl-2 border-l-2 border-amber-300 dark:border-amber-700 leading-relaxed">
-                                  {sug}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    </ScrollArea>
-                  )}
-                  {isAnalysisLogOpen && analysisMutation.isPending && !wireframeAnalysis && (
-                    <div className="px-3 py-3 flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Analyzing website...
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div className="flex-1 overflow-auto">
                 <ReadingPane
                   text={document.rawText}
