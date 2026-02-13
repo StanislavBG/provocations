@@ -1422,10 +1422,11 @@ Output only the instruction text. No meta-commentary.`
             content: `You are a requirements discovery agent helping a user write crystal-clear requirements for a website or application. The user knows WHAT they want but not HOW to express it as implementable requirements.
 
 Your behavior:
-- You are NOT proactive. The user drives the session.
-- You ask ONE sequential clarifying question at a time.
-- ${isFirstQuestion ? 'This is the FIRST interaction. Ask: "What do you want me to do here?"' : 'Continue with follow-up questions like "What is next?" or ask about specifics based on the conversation so far.'}
-- Build a sequence of requirements until each requirement is crystal clear.
+- You ONLY respond to what the user says. You do NOT proactively ask for clarification or list areas that need attention.
+- The user is in control. You respond and help based on what they tell you.
+- ${isFirstQuestion ? 'The user has not spoken yet. Simply greet them briefly and wait. Say something like: "Ready when you are." Do NOT ask questions or list clarification areas.' : 'Respond to what the user just said. Acknowledge their input, extract any requirements, and if you genuinely need one piece of clarification to proceed, ask it. Do NOT volunteer lists of questions or areas needing clarification.'}
+- Keep responses concise and focused on what the user shared.
+- If the user\'s message implies a requirement, extract it as suggestedRequirement.
 - Your output should help produce requirements that an application or calling agent can implement.
 
 OBJECTIVE: ${objective}
@@ -1434,9 +1435,9 @@ ${websiteContext}${wireframeContext}${requirementsContext}
 ${previousContext ? `CONVERSATION SO FAR:\n${previousContext}` : ""}
 
 Respond with a JSON object:
-- question: Your next question to the user (conversational, direct, max 300 chars)
-- topic: A short label for what this question covers (max 40 chars)
-- suggestedRequirement: If the user's last answer implies a requirement, state it clearly here (optional, max 200 chars)
+- question: Your response to the user (conversational, direct, max 300 chars). This is your reply, not necessarily a question.
+- topic: A short label for what this exchange covers (max 40 chars)
+- suggestedRequirement: If the user's message implies a requirement, state it clearly here (optional, max 200 chars)
 
 Output only valid JSON, no markdown.`
           },
@@ -1490,22 +1491,24 @@ Output only valid JSON, no markdown.`
         messages: [
           {
             role: "system",
-            content: `You are a website/application analysis expert. Analyze the wireframe description and identify key components, interactions, and areas that need requirement specifications.
+            content: `You are a website/application analysis expert. Analyze the website or wireframe description and identify key components, interactions, and structural patterns. This analysis is background context for the agent — it will NOT be shown directly to the user.
 
 OBJECTIVE: ${objective}
 ${websiteUrl ? `TARGET WEBSITE: ${websiteUrl}` : ""}
 ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 2000)}` : ""}
 
 Respond with a JSON object:
-- analysis: A brief analysis of the wireframe/website structure (max 500 chars)
+- analysis: A brief analysis of the website/wireframe structure (max 500 chars)
 - components: An array of identified UI components or sections (strings, max 10 items)
-- suggestions: An array of areas that need requirement clarification (strings, max 5 items)
+- suggestions: An array of notable patterns or areas the agent should be aware of (strings, max 5 items)
 
 Output only valid JSON, no markdown.`
           },
           {
             role: "user",
-            content: `Analyze this wireframe:\n\n${wireframeNotes.slice(0, 3000)}`
+            content: wireframeNotes
+              ? `Analyze this wireframe:\n\n${wireframeNotes.slice(0, 3000)}`
+              : `Analyze the website${websiteUrl ? ` at ${websiteUrl}` : ""}. Identify its key components, structure, and areas that would need requirement specification based on the objective.`
           }
         ],
         response_format: { type: "json_object" },

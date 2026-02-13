@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -8,6 +8,16 @@ import { StreamingDialogue } from "./StreamingDialogue";
 import { StreamingWireframePanel } from "./StreamingWireframePanel";
 import { ScreenCaptureButton } from "./ScreenCaptureButton";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Layers,
+  Component,
+  Lightbulb,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+} from "lucide-react";
 import type {
   Document,
   DocumentVersion,
@@ -51,16 +61,26 @@ export function StreamingWorkspace({
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [wireframeNotes, setWireframeNotes] = useState("");
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
+  const [isAnalysisLogOpen, setIsAnalysisLogOpen] = useState(true);
+
+  // Track last analyzed URL to avoid duplicate triggers
+  const lastAnalyzedUrl = useRef<string>("");
 
   // Generate streaming question mutation
   const questionMutation = useMutation({
     mutationFn: async (overrideEntries?: StreamingDialogueEntry[]) => {
       const entries = overrideEntries ?? dialogueEntries;
+      // Enrich wireframe notes with analysis context so the agent has background knowledge
+      const enrichedNotes = [
+        wireframeNotes || "",
+        wireframeAnalysis ? `\n[SITE ANALYSIS]: ${wireframeAnalysis.analysis}\nComponents: ${wireframeAnalysis.components.join(", ")}` : "",
+      ].filter(Boolean).join("\n") || undefined;
+
       const response = await apiRequest("POST", "/api/streaming/question", {
         objective,
         document: document.rawText || undefined,
         websiteUrl: websiteUrl || undefined,
-        wireframeNotes: wireframeNotes || undefined,
+        wireframeNotes: enrichedNotes,
         previousEntries: entries.length > 0 ? entries : undefined,
         requirements: requirements.length > 0 ? requirements : undefined,
       });
@@ -111,37 +131,8 @@ export function StreamingWorkspace({
     },
     onSuccess: (data) => {
       setWireframeAnalysis(data);
-
-      // Build a summary message from the analysis to inject into the dialogue
-      const parts: string[] = [];
-      if (data.analysis) {
-        parts.push(data.analysis);
-      }
-      if (data.components.length > 0) {
-        parts.push(`\nI identified these components: ${data.components.join(", ")}.`);
-      }
-      if (data.suggestions.length > 0) {
-        parts.push(`\nAreas that need clarification:\n${data.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
-      }
-      parts.push("\nWhat would you like to do here? Tell me what you need and I'll help you shape it into requirements.");
-
-      const analysisEntry: StreamingDialogueEntry = {
-        id: generateId("se"),
-        role: "agent",
-        content: parts.join(""),
-        timestamp: Date.now(),
-      };
-
-      // Inject the analysis into the dialogue and activate it
-      setDialogueEntries(prev => [...prev, analysisEntry]);
-      setCurrentQuestion(parts.join(""));
-      setCurrentTopic("Website Analysis");
+      // Activate dialogue so user can start typing — analysis stays in the log panel
       setIsDialogueActive(true);
-
-      toast({
-        title: "Website Analyzed",
-        description: `Found ${data.components.length} components. The dialogue is ready — tell the agent what you want to do.`,
-      });
     },
     onError: (error) => {
       toast({
@@ -202,11 +193,32 @@ export function StreamingWorkspace({
     },
   });
 
+  // Auto-trigger site analysis when a valid URL is entered
+  useEffect(() => {
+    const trimmedUrl = websiteUrl.trim();
+    if (!trimmedUrl) return;
+
+    // Basic URL validation
+    const urlPattern = /^https?:\/\/\S+\.\S+/;
+    if (!urlPattern.test(trimmedUrl)) return;
+
+    // Don't re-analyze the same URL
+    if (trimmedUrl === lastAnalyzedUrl.current) return;
+
+    const timer = setTimeout(() => {
+      lastAnalyzedUrl.current = trimmedUrl;
+      analysisMutation.mutate();
+    }, 800);
+
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [websiteUrl]);
+
   // Start the streaming dialogue (manual start without analysis)
   const handleStartDialogue = useCallback(() => {
     setIsDialogueActive(true);
-    questionMutation.mutate(undefined);
-  }, [questionMutation]);
+    // Don't auto-generate a question — user drives the conversation
+  }, []);
 
   // Handle user answer — add to dialogue and fetch next question
   const handleAnswer = useCallback((answer: string) => {
@@ -304,10 +316,8 @@ export function StreamingWorkspace({
             onWebsiteUrlChange={setWebsiteUrl}
             wireframeNotes={wireframeNotes}
             onWireframeNotesChange={setWireframeNotes}
-            analysis={wireframeAnalysis}
             isAnalyzing={analysisMutation.isPending}
-            onAnalyze={() => analysisMutation.mutate()}
-            objective={objective}
+            hasAnalysis={wireframeAnalysis !== null}
           />
         </div>
       </ResizablePanel>
@@ -358,6 +368,80 @@ export function StreamingWorkspace({
             />
             <span className="text-xs text-muted-foreground">Capture wireframe state</span>
           </div>
+
+          {/* Log: Site Analyze — background context panel */}
+          {(wireframeAnalysis || analysisMutation.isPending) && (
+            <div className="border-b shrink-0">
+              <button
+                onClick={() => setIsAnalysisLogOpen(!isAnalysisLogOpen)}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-muted/10 hover:bg-muted/20 transition-colors text-left"
+              >
+                <Layers className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1">
+                  Log: Site Analyze
+                </span>
+                {analysisMutation.isPending && (
+                  <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
+                )}
+                {wireframeAnalysis && (
+                  <Badge variant="outline" className="text-[10px] h-5">
+                    {wireframeAnalysis.components.length} components
+                  </Badge>
+                )}
+                {isAnalysisLogOpen ? (
+                  <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                )}
+              </button>
+              {isAnalysisLogOpen && wireframeAnalysis && (
+                <ScrollArea className="max-h-[200px]">
+                  <div className="px-3 py-2 space-y-2 text-xs">
+                    <p className="text-muted-foreground leading-relaxed">
+                      {wireframeAnalysis.analysis}
+                    </p>
+                    {wireframeAnalysis.components.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1">
+                          <Component className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+                          <span className="font-medium text-muted-foreground">Components</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {wireframeAnalysis.components.map((comp, idx) => (
+                            <Badge key={idx} variant="outline" className="text-[10px]">
+                              {comp}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {wireframeAnalysis.suggestions.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1">
+                          <Lightbulb className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                          <span className="font-medium text-muted-foreground">Notes</span>
+                        </div>
+                        <ul className="text-muted-foreground space-y-0.5 pl-1">
+                          {wireframeAnalysis.suggestions.map((sug, idx) => (
+                            <li key={idx} className="pl-2 border-l-2 border-amber-300 dark:border-amber-700 leading-relaxed">
+                              {sug}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              )}
+              {isAnalysisLogOpen && analysisMutation.isPending && !wireframeAnalysis && (
+                <div className="px-3 py-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Analyzing website...
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex-1 overflow-auto">
             <ReadingPane
               text={document.rawText}
