@@ -1,12 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Copy, Download, Mic, Square, Send, X, Loader2 } from "lucide-react";
+import { Download, Mic, Square, Send, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
-import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 interface ReadingPaneProps {
   text: string;
@@ -37,12 +35,6 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   // Keep refs in sync with state for use in event handlers
   isRecordingRef.current = isRecording;
   showPromptInputRef.current = showPromptInput;
-
-  // Handle direct text changes (Google Docs style - always editable)
-  const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value;
-    onTextChange?.(newText);
-  }, [onTextChange]);
 
   // Handle text selection in the editor
   const handleSelect = useCallback(() => {
@@ -276,176 +268,147 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   };
 
   return (
-    <div className="h-full flex flex-col bg-card rounded-xl border-2 border-border overflow-hidden">
-      <div className="flex items-center gap-2 px-4 pt-4 pb-2 flex-wrap">
-        <div className="flex items-center gap-2 text-base font-semibold text-foreground">
-          <BookOpen className="w-5 h-5 text-primary" />
-          <span>Document</span>
-        </div>
-        <div className="flex items-center gap-1 ml-auto">
-          <Badge variant="outline">{wordCount.toLocaleString()} words</Badge>
-          <Badge variant="secondary">{readingTime} min read</Badge>
-          <VoiceRecorder
-            onTranscript={(transcript) => {
-              onTranscriptUpdate?.(transcript, false);
-            }}
-            onInterimTranscript={(interim) => {
-              onTranscriptUpdate?.(interim, true);
-            }}
-            onRecordingChange={(recording) => {
-              onTranscriptUpdate?.("", recording);
-            }}
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={async () => {
-              if (text) {
-                try {
-                  await navigator.clipboard.writeText(text);
-                  toast({ title: "Copied to clipboard" });
-                } catch {
-                  toast({ title: "Failed to copy", variant: "destructive" });
-                }
-              }
-            }}
-            title="Copy document text"
-          >
-            <Copy className="w-4 h-4" />
-          </Button>
-          <Button
-            data-testid="button-download-document"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={handleDownload}
-            title="Download document"
-          >
-            <Download className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
+    <div
+      ref={containerRef}
+      className="h-full relative"
+      onClick={() => {
+        // Clear toolbar if clicking without selection
+        if (!isRecordingRef.current && !showPromptInputRef.current) {
+          const textarea = editorRef.current as HTMLTextAreaElement | null;
+          if (textarea && textarea.selectionStart === textarea.selectionEnd) {
+            setSelectedText("");
+            setSelectionPosition(null);
+          }
+        }
+      }}
+    >
+      <ProvokeText
+        ref={editorRef}
+        variant="editor"
+        chrome="container"
+        containerClassName="h-full"
+        data-testid="editor-document"
+        value={text}
+        onChange={(val) => onTextChange?.(val)}
+        onSelect={handleSelect}
+        className="w-full text-foreground/90"
+        placeholder="Start typing your document..."
+        showCopy={true}
+        showClear={false}
+        voice={{ mode: "append", inline: false }}
+        onVoiceTranscript={(transcript) => {
+          onTranscriptUpdate?.(transcript, false);
+        }}
+        onVoiceInterimTranscript={(interim) => {
+          onTranscriptUpdate?.(interim, true);
+        }}
+        onRecordingChange={(recording) => {
+          onTranscriptUpdate?.("", recording);
+        }}
+        headerActions={
+          <>
+            <Badge variant="outline" className="text-xs">{wordCount.toLocaleString()} words</Badge>
+            <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
+            <div className="w-px h-5 bg-border mx-1" />
+            <Button
+              data-testid="button-download-document"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={handleDownload}
+              title="Download document"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+          </>
+        }
+      />
 
-      <div ref={containerRef} className="flex-1 relative overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-6 max-w-3xl mx-auto">
-            <div onClick={() => {
-                // Clear toolbar if clicking without selection
-                if (!isRecordingRef.current && !showPromptInputRef.current) {
-                  const textarea = editorRef.current as HTMLTextAreaElement | null;
-                  if (textarea && textarea.selectionStart === textarea.selectionEnd) {
-                    setSelectedText("");
-                    setSelectionPosition(null);
-                  }
-                }
-              }}>
+      {/* Floating toolbar on text selection */}
+      {selectedText && selectionPosition && (
+        <div
+          data-selection-toolbar
+          className="absolute z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          style={{
+            left: `${Math.max(24, selectionPosition.x)}px`,
+            top: `${Math.max(60, selectionPosition.y + 60)}px`,
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {showPromptInput ? (
+            <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
               <ProvokeText
-                ref={editorRef}
-                variant="editor"
+                variant="input"
                 chrome="bare"
-                data-testid="editor-document"
-                value={text}
-                onChange={(val) => onTextChange?.(val)}
-                onSelect={handleSelect}
-                className="w-full text-foreground/90"
-                placeholder="Start typing your document..."
+                data-testid="input-edit-instruction"
+                value={promptText}
+                onChange={setPromptText}
+                onKeyDown={handlePromptKeyDown}
+                placeholder="How to modify this text..."
+                className="min-w-[200px] h-8 text-sm"
+                disabled={isProcessingEdit}
+                autoFocus
                 showCopy={false}
                 showClear={false}
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={(transcript) => setPromptText(transcript)}
+                onSubmit={handleSubmitEdit}
+                submitIcon={Send}
+                extraActions={
+                  <Button
+                    data-testid="button-close-edit"
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleClosePrompt}
+                    disabled={isProcessingEdit}
+                    className="h-8 w-8"
+                    title="Cancel"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                }
               />
             </div>
-          </div>
-        </ScrollArea>
-
-        {/* Floating toolbar on text selection */}
-        {selectedText && selectionPosition && (
-          <div
-            data-selection-toolbar
-            className="absolute z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"
-            style={{
-              left: `${Math.max(24, selectionPosition.x)}px`,
-              top: `${Math.max(60, selectionPosition.y + 60)}px`,
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {showPromptInput ? (
-              <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
-                <ProvokeText
-                  variant="input"
-                  chrome="bare"
-                  data-testid="input-edit-instruction"
-                  value={promptText}
-                  onChange={setPromptText}
-                  onKeyDown={handlePromptKeyDown}
-                  placeholder="How to modify this text..."
-                  className="min-w-[200px] h-8 text-sm"
-                  disabled={isProcessingEdit}
-                  autoFocus
-                  showCopy={false}
-                  showClear={false}
-                  voice={{ mode: "replace" }}
-                  onVoiceTranscript={(transcript) => setPromptText(transcript)}
-                  onSubmit={handleSubmitEdit}
-                  submitIcon={Send}
-                  extraActions={
-                    <Button
-                      data-testid="button-close-edit"
-                      size="icon"
-                      variant="ghost"
-                      onClick={handleClosePrompt}
-                      disabled={isProcessingEdit}
-                      className="h-8 w-8"
-                      title="Cancel"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  }
-                />
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
-                <Button
-                  data-testid="button-selection-voice"
-                  size="sm"
-                  variant={isRecording ? "destructive" : "default"}
-                  onClick={toggleRecording}
-                  disabled={isMerging || isProcessingEdit}
-                  className={`gap-1.5 ${isRecording ? "animate-pulse" : ""}`}
-                  title={isRecording ? "Stop recording" : "Speak feedback about selection"}
-                >
-                  {isRecording ? (
-                    <>
-                      <Square className="w-3 h-3" />
-                      Stop
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-3 h-3" />
-                      Voice
-                    </>
-                  )}
-                </Button>
-                <Button
-                  data-testid="button-selection-edit"
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleShowPrompt}
-                  disabled={isMerging || isProcessingEdit || isRecording}
-                  className="gap-1.5"
-                  title="Type instruction to modify"
-                >
-                  <Send className="w-3 h-3" />
-                  Edit
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
+              <Button
+                data-testid="button-selection-voice"
+                size="sm"
+                variant={isRecording ? "destructive" : "default"}
+                onClick={toggleRecording}
+                disabled={isMerging || isProcessingEdit}
+                className={`gap-1.5 ${isRecording ? "animate-pulse" : ""}`}
+                title={isRecording ? "Stop recording" : "Speak feedback about selection"}
+              >
+                {isRecording ? (
+                  <>
+                    <Square className="w-3 h-3" />
+                    Stop
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-3 h-3" />
+                    Voice
+                  </>
+                )}
+              </Button>
+              <Button
+                data-testid="button-selection-edit"
+                size="sm"
+                variant="secondary"
+                onClick={handleShowPrompt}
+                disabled={isMerging || isProcessingEdit || isRecording}
+                className="gap-1.5"
+                title="Type instruction to modify"
+              >
+                <Send className="w-3 h-3" />
+                Edit
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

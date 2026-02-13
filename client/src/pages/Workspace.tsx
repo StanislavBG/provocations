@@ -30,6 +30,8 @@ import {
   Save,
   FileText,
   Trash2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type {
   Document,
@@ -113,6 +115,9 @@ export default function Workspace() {
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
   const [objectiveInterimTranscript, setObjectiveInterimTranscript] = useState("");
+
+  // Objective panel collapsed state (minimized by default)
+  const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
 
   // Get the source excerpt of the currently hovered provocation
   const hoveredProvocationContext = hoveredProvocationId
@@ -832,30 +837,57 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* Objective bar */}
-        <div className="border-t px-4 py-3">
-          <ProvokeText
-            chrome="container"
-            variant="textarea"
-            data-testid="input-objective-header"
-            label="Objective"
-            labelIcon={Target}
-            value={objective}
-            onChange={setObjective}
-            placeholder="What are you creating? Describe your objective..."
-            className="text-sm leading-relaxed font-serif"
-            minRows={2}
-            maxRows={4}
-            voice={{ mode: "replace" }}
-            onVoiceTranscript={(text) => {
-              setObjective(text);
-              setObjectiveInterimTranscript("");
-            }}
-            onVoiceInterimTranscript={setObjectiveInterimTranscript}
-            onRecordingChange={setIsRecordingObjective}
-            textProcessor={processObjectiveText}
-          />
-        </div>
+        {/* Objective bar (collapsible, minimized by default) */}
+        {isObjectiveCollapsed ? (
+          <button
+            className="border-t px-4 py-2 flex items-center gap-2 w-full text-left hover:bg-muted/50 transition-colors"
+            onClick={() => setIsObjectiveCollapsed(false)}
+          >
+            <Target className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm text-muted-foreground truncate flex-1">
+              {objective || "Set your objective..."}
+            </span>
+            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+          </button>
+        ) : (
+          <div className="border-t px-4 py-3">
+            <ProvokeText
+              chrome="container"
+              variant="textarea"
+              data-testid="input-objective-header"
+              label="Objective"
+              labelIcon={Target}
+              value={objective}
+              onChange={setObjective}
+              placeholder="What are you creating? Describe your objective..."
+              className="text-sm leading-relaxed font-serif"
+              minRows={2}
+              maxRows={4}
+              voice={{ mode: "replace" }}
+              onVoiceTranscript={(text) => {
+                setObjective(text);
+                setObjectiveInterimTranscript("");
+              }}
+              onVoiceInterimTranscript={setObjectiveInterimTranscript}
+              onRecordingChange={setIsRecordingObjective}
+              textProcessor={processObjectiveText}
+              headerActions={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsObjectiveCollapsed(true);
+                  }}
+                  title="Minimize objective"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </Button>
+              }
+            />
+          </div>
+        )}
       </header>
 
       {writeMutation.isPending && (
