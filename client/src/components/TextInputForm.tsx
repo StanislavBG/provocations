@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   FileText,
@@ -15,8 +15,10 @@ import {
   Clapperboard,
   Check,
   ChevronDown,
+  Crosshair,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
+import type { SmartModeDef } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -72,6 +74,24 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
 
   // Ref for scrolling back to top on selection
   const stepOneRef = useRef<HTMLDivElement>(null);
+
+  // AIM smart mode — shown only when "Write a Prompt" template is active
+  const aimSmartModes = useMemo<SmartModeDef[]>(
+    () =>
+      activePrebuilt?.id === "write-a-prompt"
+        ? [
+            {
+              mode: "aim",
+              label: "Apply AIM",
+              loadingLabel: "Applying AIM...",
+              description:
+                "Restructure your draft using the AIM framework — Actor (who the AI should be), Input (context you're providing), Mission (what it should do).",
+              icon: Crosshair,
+            },
+          ]
+        : [],
+    [activePrebuilt?.id],
+  );
 
   const handleSubmit = () => {
     if (text.trim()) {
@@ -351,6 +371,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 textProcessor={(t, mode) =>
                   processText(t, mode, mode === "clean" ? "source" : undefined)
                 }
+                extraSmartModes={aimSmartModes}
                 showCharCount
                 externalActions={
                   <>
