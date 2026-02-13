@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
+import { StreamingWorkspace } from "@/components/StreamingWorkspace";
 import {
   Sparkles,
   RotateCcw,
@@ -32,6 +33,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  Radio,
 } from "lucide-react";
 import type {
   Document,
@@ -45,6 +47,7 @@ import type {
   InterviewEntry,
   InterviewQuestionResponse,
   DocumentListItem,
+  WorkspaceMode,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -65,6 +68,7 @@ export default function Workspace() {
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
   const [provocations, setProvocations] = useState<Provocation[]>([]);
   const [activeTab, setActiveTab] = useState("provocations");
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("standard");
 
   // Voice and version tracking
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -377,6 +381,7 @@ export default function Workspace() {
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
     setCurrentDocId(null);
+    setWorkspaceMode("standard");
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -783,6 +788,18 @@ export default function Workspace() {
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
             }}
+            onStreamingMode={(obj) => {
+              setDocument({ id: generateId("doc"), rawText: " " });
+              setObjective(obj);
+              setWorkspaceMode("streaming");
+              const initialVersion: DocumentVersion = {
+                id: generateId("v"),
+                text: " ",
+                timestamp: Date.now(),
+                description: "Streaming workspace initialized",
+              };
+              setVersions([initialVersion]);
+            }}
           />
         </div>
       </div>
@@ -796,10 +813,16 @@ export default function Workspace() {
           <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-primary" />
             <h1 className="font-semibold text-lg">Provocations</h1>
+            {workspaceMode === "streaming" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                <Radio className="w-3 h-3" />
+                Streaming
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            {canShowDiff && (
+            {canShowDiff && workspaceMode === "standard" && (
               <Button
                 data-testid="button-versions"
                 variant={showDiffView ? "default" : "outline"}
@@ -933,120 +956,132 @@ export default function Workspace() {
       )}
 
       <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={55} minSize={35}>
-            {showDiffView && previousVersion && currentVersion ? (
-              <Suspense fallback={
-                <div className="h-full flex flex-col p-4 space-y-4">
-                  <Skeleton className="h-8 w-48" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-5/6" />
-                </div>
-              }>
-                <DiffView
-                  previousVersion={previousVersion}
-                  currentVersion={currentVersion}
+        {workspaceMode === "streaming" ? (
+          <StreamingWorkspace
+            document={document}
+            objective={objective}
+            versions={versions}
+            editHistory={editHistory}
+            onDocumentChange={setDocument}
+            onVersionAdd={(version) => setVersions(prev => [...prev, version])}
+            onEditHistoryAdd={(entry) => setEditHistory(prev => [...prev.slice(-9), entry])}
+          />
+        ) : (
+          <ResizablePanelGroup direction="horizontal">
+            <ResizablePanel defaultSize={55} minSize={35}>
+              {showDiffView && previousVersion && currentVersion ? (
+                <Suspense fallback={
+                  <div className="h-full flex flex-col p-4 space-y-4">
+                    <Skeleton className="h-8 w-48" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-5/6" />
+                  </div>
+                }>
+                  <DiffView
+                    previousVersion={previousVersion}
+                    currentVersion={currentVersion}
+                  />
+                </Suspense>
+              ) : (
+                <ReadingPane
+                  text={document.rawText}
+                  onTextChange={handleDocumentTextChange}
+                  highlightText={hoveredProvocationContext}
+                  onVoiceMerge={handleSelectionVoiceMerge}
+                  isMerging={writeMutation.isPending}
+                  onTranscriptUpdate={handleTranscriptUpdate}
+                  onTextEdit={handleTextEdit}
                 />
-              </Suspense>
-            ) : (
-              <ReadingPane
-                text={document.rawText}
-                onTextChange={handleDocumentTextChange}
-                highlightText={hoveredProvocationContext}
-                onVoiceMerge={handleSelectionVoiceMerge}
-                isMerging={writeMutation.isPending}
-                onTranscriptUpdate={handleTranscriptUpdate}
-                onTextEdit={handleTextEdit}
-              />
-            )}
-          </ResizablePanel>
+              )}
+            </ResizablePanel>
 
-          <ResizableHandle withHandle />
+            <ResizableHandle withHandle />
 
-          <ResizablePanel defaultSize={45} minSize={25}>
-            <div className="h-full flex flex-col relative">
-              <TranscriptOverlay
-                isVisible={showTranscriptOverlay}
-                isRecording={isRecordingFromMain}
-                rawTranscript={rawTranscript}
-                cleanedTranscript={cleanedTranscript}
-                resultSummary={transcriptSummary}
-                isProcessing={writeMutation.isPending}
-                onClose={handleCloseTranscriptOverlay}
-                onSend={handleSendTranscript}
-                onCleanTranscript={handleCleanTranscript}
-                onTranscriptUpdate={handleTranscriptUpdate}
-                onFinalTranscript={handleOverlayFinalTranscript}
-                provocationContext={pendingVoiceContext?.provocation ? {
-                  type: pendingVoiceContext.provocation.type,
-                  title: pendingVoiceContext.provocation.title,
-                  content: pendingVoiceContext.provocation.content,
-                } : undefined}
-                context={pendingVoiceContext?.context || "document"}
-              />
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-                <TabsList className="w-full justify-start rounded-none border-b px-4 h-auto py-0 bg-transparent">
-                  <TabsTrigger
-                    value="interview"
-                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
-                    data-testid="tab-interview"
-                  >
-                    <MessageCircleQuestion className="w-4 h-4" />
-                    Provoke
-                    {isInterviewActive && (
-                      <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="provocations"
-                    className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
-                    data-testid="tab-provocations"
-                  >
-                    <MessageSquareWarning className="w-4 h-4" />
-                    Provocations
-                    {(provocations ?? []).filter((p) => p.status === "pending").length > 0 && (
-                      <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">
-                        {(provocations ?? []).filter((p) => p.status === "pending").length}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
+            <ResizablePanel defaultSize={45} minSize={25}>
+              <div className="h-full flex flex-col relative">
+                <TranscriptOverlay
+                  isVisible={showTranscriptOverlay}
+                  isRecording={isRecordingFromMain}
+                  rawTranscript={rawTranscript}
+                  cleanedTranscript={cleanedTranscript}
+                  resultSummary={transcriptSummary}
+                  isProcessing={writeMutation.isPending}
+                  onClose={handleCloseTranscriptOverlay}
+                  onSend={handleSendTranscript}
+                  onCleanTranscript={handleCleanTranscript}
+                  onTranscriptUpdate={handleTranscriptUpdate}
+                  onFinalTranscript={handleOverlayFinalTranscript}
+                  provocationContext={pendingVoiceContext?.provocation ? {
+                    type: pendingVoiceContext.provocation.type,
+                    title: pendingVoiceContext.provocation.title,
+                    content: pendingVoiceContext.provocation.content,
+                  } : undefined}
+                  context={pendingVoiceContext?.context || "document"}
+                />
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                  <TabsList className="w-full justify-start rounded-none border-b px-4 h-auto py-0 bg-transparent">
+                    <TabsTrigger
+                      value="interview"
+                      className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
+                      data-testid="tab-interview"
+                    >
+                      <MessageCircleQuestion className="w-4 h-4" />
+                      Provoke
+                      {isInterviewActive && (
+                        <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="provocations"
+                      className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
+                      data-testid="tab-provocations"
+                    >
+                      <MessageSquareWarning className="w-4 h-4" />
+                      Provocations
+                      {(provocations ?? []).filter((p) => p.status === "pending").length > 0 && (
+                        <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">
+                          {(provocations ?? []).filter((p) => p.status === "pending").length}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
 
-                <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
-                  <InterviewPanel
-                    isActive={isInterviewActive}
-                    entries={interviewEntries}
-                    currentQuestion={currentInterviewQuestion}
-                    currentTopic={currentInterviewTopic}
-                    isLoadingQuestion={interviewQuestionMutation.isPending}
-                    isMerging={interviewSummaryMutation.isPending}
-                    onStart={handleStartInterview}
-                    onAnswer={handleInterviewAnswer}
-                    onEnd={handleEndInterview}
-                  />
-                </TabsContent>
+                  <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
+                    <InterviewPanel
+                      isActive={isInterviewActive}
+                      entries={interviewEntries}
+                      currentQuestion={currentInterviewQuestion}
+                      currentTopic={currentInterviewTopic}
+                      isLoadingQuestion={interviewQuestionMutation.isPending}
+                      isMerging={interviewSummaryMutation.isPending}
+                      onStart={handleStartInterview}
+                      onAnswer={handleInterviewAnswer}
+                      onEnd={handleEndInterview}
+                    />
+                  </TabsContent>
 
-                <TabsContent value="provocations" className="flex-1 mt-0 overflow-hidden">
-                  <ProvocationsDisplay
-                    provocations={provocations}
-                    onUpdateStatus={handleUpdateProvocationStatus}
-                    onVoiceResponse={handleVoiceResponse}
-                    onStartResponse={handleStartProvocationResponse}
-                    onAddToDocument={handleAddToDocument}
-                    onSendToAuthor={handleSendToAuthor}
-                    onTranscriptUpdate={handleTranscriptUpdate}
-                    onHoverProvocation={setHoveredProvocationId}
-                    onRegenerateProvocations={handleRegenerateProvocations}
-                    isMerging={writeMutation.isPending}
-                    isRegenerating={regenerateProvocationsMutation.isPending}
-                  />
-                </TabsContent>
+                  <TabsContent value="provocations" className="flex-1 mt-0 overflow-hidden">
+                    <ProvocationsDisplay
+                      provocations={provocations}
+                      onUpdateStatus={handleUpdateProvocationStatus}
+                      onVoiceResponse={handleVoiceResponse}
+                      onStartResponse={handleStartProvocationResponse}
+                      onAddToDocument={handleAddToDocument}
+                      onSendToAuthor={handleSendToAuthor}
+                      onTranscriptUpdate={handleTranscriptUpdate}
+                      onHoverProvocation={setHoveredProvocationId}
+                      onRegenerateProvocations={handleRegenerateProvocations}
+                      isMerging={writeMutation.isPending}
+                      isRegenerating={regenerateProvocationsMutation.isPending}
+                    />
+                  </TabsContent>
 
-              </Tabs>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+                </Tabs>
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
       </div>
     </div>
   );
