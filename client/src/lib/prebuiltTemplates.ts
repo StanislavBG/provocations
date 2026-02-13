@@ -182,89 +182,29 @@ Key endpoints the backend needs:
     ],
   },
   {
-    id: "web-component",
-    title: "Web Component",
-    shortLabel: "Component Doc",
-    subtitle: "Embeddable widget, multi-site ready",
+    id: "streaming",
+    title: "Streaming",
+    shortLabel: "Streaming",
+    subtitle: "Requirements via dynamic web exploration",
     description:
-      "For documenting a web component designed to be embedded across multiple websites. Covers features, configuration parameters, integration mechanics, and what makes it uniquely portable. Provocations come from the people who will integrate, maintain, and depend on your component.",
-    icon: "blocks",
+      "Discover requirements while referencing a live website or wireframe. An agent asks sequential questions — exploring pages, flows, and interactions — until your spec is crystal clear. The output is a markdown requirements document.",
+    icon: "radio",
     objective:
-      "Write a comprehensive document describing a web component — its features, configuration parameters, integration approach, and what makes it uniquely embeddable across hundreds of websites",
+      "Discover and refine requirements for a website through dynamic exploration and iterative questioning",
     starterText: "",
-    draftQuestions: [
-      "What does this component do?",
-      "What parameters does it accept for configuration?",
-      "How does it get embedded into a host website?",
-      "What makes it work across different websites and environments?",
-    ],
-    templateContent: `# Web Component Specification
-
-## Overview
-What is this component? One paragraph describing what it does, the problem it solves, and why it exists as a standalone embeddable unit.
-
-## Features
-### Core Features
-- Feature with clear description of what it does for the end user
-
-### Advanced Features
-- Feature that power users or specific integrations leverage
-
-## Configuration Parameters
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| param | type | default | What it controls |
-
-### Required Parameters
-- Parameters that must be set for the component to function
-
-### Optional Parameters
-- Parameters that customize behavior or appearance
-
-## Functionality
-### How It Works
-Step-by-step description of the component's behavior from initialization to user interaction.
-
-### User Interactions
-- What can users do with the component?
-- What events does it emit or respond to?
-
-### Data Flow
-- Where does data come from?
-- What does the component send back to the host?
-
-## Integration Guide
-### Embedding
-How does a website owner add this component to their site? Code snippets, script tags, or package installation.
-
-### Styling & Theming
-How does the component adapt to the host site's look and feel?
-
-### Cross-Site Compatibility
-What makes this component work reliably across hundreds of different websites, frameworks, and environments?
-
-## Uniqueness & Differentiation
-- What makes this component different from alternatives?
-- Why is it particularly suited for multi-site deployment?
-- What architectural decisions enable its portability?
-
-## Constraints & Limitations
-- Browser support
-- Performance considerations
-- Known limitations`,
+    draftQuestions: [],
+    templateContent: "",
     provocationSources: [
-      "Integration Engineer",
-      "Site Owner",
+      "UX Researcher",
+      "Product Manager",
+      "Developer",
       "End User",
-      "Security Reviewer",
-      "Platform Architect",
+      "Accessibility Expert",
     ],
     provocationExamples: [
-      "I need to drop this into a React app and a WordPress site. How different is the integration? — Integration Engineer",
-      "What happens when your component's CSS conflicts with my site's styles? — Site Owner",
-      "I clicked the widget but nothing loaded. Is it broken or still initializing? — End User",
-      "Your component loads a third-party script on my domain. What data does it collect? — Security Reviewer",
-      "You say it works on hundreds of sites, but what happens when two instances load on the same page? — Platform Architect",
+      "You've described the layout but not the user flow. What happens when someone clicks 'Sign Up'? — UX Researcher",
+      "Which of these requirements are MVP vs. nice-to-have? Everything can't be P0. — Product Manager",
+      "The wireframe shows a search bar but the requirements don't mention search. Is it functional or decorative? — Developer",
     ],
   },
   {

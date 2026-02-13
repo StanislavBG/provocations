@@ -9,7 +9,6 @@ import {
   PencilLine,
   ClipboardList,
   Rocket,
-  Blocks,
   GraduationCap,
   BarChart3,
   Clapperboard,
@@ -38,7 +37,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "pencil-line": PencilLine,
   "clipboard-list": ClipboardList,
   rocket: Rocket,
-  blocks: Blocks,
+  radio: Radio,
   "graduation-cap": GraduationCap,
   "bar-chart-3": BarChart3,
   clapperboard: Clapperboard,
@@ -70,9 +69,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
   const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
-
-  // Streaming mode selection flag
-  const [isStreamingSelected, setIsStreamingSelected] = useState(false);
 
   // Draft section expanded state
   const [isDraftExpanded, setIsDraftExpanded] = useState(false);
@@ -125,7 +121,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
     }
     setActivePrebuilt(template);
     setIsCustomObjective(false);
-    setIsStreamingSelected(false);
+
     setCardsExpanded(false);
     setIsDraftExpanded(true);
   };
@@ -133,7 +129,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   const handleSelectCustom = () => {
     setActivePrebuilt(null);
     setIsCustomObjective(true);
-    setIsStreamingSelected(false);
+
     setObjective("");
     setCardsExpanded(false);
     setIsDraftExpanded(false);
@@ -282,44 +278,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 </div>
               </button>
 
-              {/* Streaming mode card */}
-              {onStreamingMode && (
-                <button
-                  onClick={() => {
-                    setIsStreamingSelected(true);
-                    setIsCustomObjective(false);
-                    setActivePrebuilt(null);
-                    setCardsExpanded(false);
-                    setIsDraftExpanded(false);
-                  }}
-                  className={`group relative text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                    isStreamingSelected
-                      ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 ring-2 ring-indigo-300/40"
-                      : "border-dashed border-indigo-300 dark:border-indigo-700 hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
-                  }`}
-                  data-streaming-mode
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950/30">
-                        <Radio className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <div>
-                        <span className="font-semibold text-sm block">Streaming</span>
-                        <span className="text-xs text-muted-foreground">Wireframe + Requirements</span>
-                      </div>
-                      {isStreamingSelected && (
-                        <div className="ml-auto p-1 rounded-full bg-indigo-600">
-                          <Check className="w-3.5 h-3.5 text-white" />
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                      Discover requirements while referencing a website wireframe. Agent asks sequential questions until your spec is crystal clear.
-                    </p>
-                  </div>
-                </button>
-              )}
             </div>
           )}
 
@@ -347,31 +305,22 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             />
           )}
 
-          {/* Streaming mode objective + start */}
-          {isStreamingSelected && onStreamingMode && (
-            <div className="space-y-4">
-              {/* Collapsed streaming indicator */}
-              {!cardsExpanded && (
-                <button
-                  onClick={handleChangeType}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 ring-2 ring-indigo-300/40 text-left transition-all hover:bg-indigo-100/50 dark:hover:bg-indigo-950/30"
-                >
-                  <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950/30">
-                    <Radio className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-base">Streaming</span>
-                    <span className="text-sm text-muted-foreground ml-2">Wireframe + Requirements</span>
-                  </div>
-                  <div className="p-1 rounded-full bg-indigo-600 mr-1">
-                    <Check className="w-3.5 h-3.5 text-white" />
-                  </div>
-                  <span className="text-sm text-muted-foreground flex items-center gap-1">
-                    Change <ChevronDown className="w-4 h-4" />
-                  </span>
-                </button>
-              )}
+        </div>
 
+        {/* ── STEP TWO: Draft ── */}
+        <div className="flex flex-col flex-1 min-h-0 gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              2
+            </div>
+            <h2 className="text-xl font-semibold">
+              {activePrebuilt?.id === "streaming"
+                ? "Describe what you're exploring, then start"
+                : "Add your draft, notes, or rough thoughts — we'll iterate together"}
+            </h2>
+          </div>
+          {activePrebuilt?.id === "streaming" && onStreamingMode ? (
+            <div className="space-y-4">
               <ProvokeText
                 chrome="container"
                 label="Objective"
@@ -396,27 +345,14 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 onClick={() => onStreamingMode(objective.trim() || "Discover and refine requirements for a website")}
                 disabled={isLoading}
                 size="lg"
-                className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                className="w-full gap-2"
               >
                 <Radio className="w-4 h-4" />
                 Start Streaming Workspace
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
-          )}
-        </div>
-
-        {/* ── STEP TWO: Draft ── */}
-        <div className="flex flex-col flex-1 min-h-0 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
-              2
-            </div>
-            <h2 className="text-xl font-semibold">
-              Add your draft, notes, or rough thoughts — we'll iterate together
-            </h2>
-          </div>
-          {!isDraftExpanded ? (
+          ) : !isDraftExpanded ? (
             <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => setIsDraftExpanded(true)}
