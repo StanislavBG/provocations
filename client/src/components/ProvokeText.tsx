@@ -626,16 +626,19 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
         <div
           className={cn(
             "rounded-xl border-2 border-border bg-card overflow-hidden",
+            variant === "editor" && "flex flex-col",
             containerClassName,
           )}
         >
           {/* Header */}
           <div className="flex items-start gap-2 px-4 pt-4 pb-2">
             <div className="flex-1 min-w-0 flex items-baseline gap-x-2 flex-wrap">
-              <div className="flex items-center gap-2 text-base font-semibold text-foreground shrink-0">
-                {LabelIcon && <LabelIcon className="w-5 h-5 text-primary" />}
-                <span>{label}</span>
-              </div>
+              {(LabelIcon || label) && (
+                <div className="flex items-center gap-2 text-base font-semibold text-foreground shrink-0">
+                  {LabelIcon && <LabelIcon className="w-5 h-5 text-primary" />}
+                  {label && <span>{label}</span>}
+                </div>
+              )}
               {description && (
                 <span className="text-sm text-muted-foreground line-clamp-2">
                   {description}
@@ -649,7 +652,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           </div>
 
           {/* Input */}
-          <div className="px-4">{inputControl}</div>
+          <div className={cn("px-4", variant === "editor" && "flex-1 overflow-y-auto")}>{inputControl}</div>
 
           {/* Actions row (smart + snapshot + custom actions) */}
           {actionsRow && <div className="px-4 pb-2">{actionsRow}</div>}
