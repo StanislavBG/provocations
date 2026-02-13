@@ -11,6 +11,9 @@ import {
   interviewSummaryRequestSchema,
   saveDocumentRequestSchema,
   updateDocumentRequestSchema,
+  streamingQuestionRequestSchema,
+  wireframeAnalysisRequestSchema,
+  streamingRefineRequestSchema,
   provocationType,
   instructionTypes,
   type ProvocationType,
@@ -19,6 +22,10 @@ import {
   type ReferenceDocument,
   type ChangeEntry,
   type InterviewQuestionResponse,
+  type StreamingQuestionResponse,
+  type WireframeAnalysisResponse,
+  type StreamingRefineResponse,
+  type StreamingRequirement,
 } from "@shared/schema";
 
 function getEncryptionKey(): string {
@@ -1233,6 +1240,234 @@ Output only the instruction text. No meta-commentary.`
       console.error("Delete document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to delete document", details: errorMessage });
+    }
+  });
+
+  // ==========================================
+  // Streaming Provocation Type Endpoints
+  // Agent-guided sequential question dialogue for requirement discovery
+  // ==========================================
+
+  // Generate next streaming question (agent asks sequential clarifying questions)
+  app.post("/api/streaming/question", async (req, res) => {
+    try {
+      const parsed = streamingQuestionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, document: docText, websiteUrl, wireframeNotes, previousEntries, requirements } = parsed.data;
+
+      const previousContext = previousEntries && previousEntries.length > 0
+        ? previousEntries.map(e => `[${e.role}]: ${e.content}`).join("\n")
+        : "";
+
+      const requirementsContext = requirements && requirements.length > 0
+        ? `\n\nEXISTING REQUIREMENTS:\n${requirements.map((r, i) => `${i + 1}. [${r.status}] ${r.text}`).join("\n")}`
+        : "";
+
+      const wireframeContext = wireframeNotes
+        ? `\n\nWIREFRAME NOTES:\n${wireframeNotes.slice(0, 2000)}`
+        : "";
+
+      const websiteContext = websiteUrl
+        ? `\n\nTARGET WEBSITE: ${websiteUrl}`
+        : "";
+
+      const isFirstQuestion = !previousEntries || previousEntries.length === 0;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 1024,
+        messages: [
+          {
+            role: "system",
+            content: `You are a requirements discovery agent helping a user write crystal-clear requirements for a website or application. The user knows WHAT they want but not HOW to express it as implementable requirements.
+
+Your behavior:
+- You are NOT proactive. The user drives the session.
+- You ask ONE sequential clarifying question at a time.
+- ${isFirstQuestion ? 'This is the FIRST interaction. Ask: "What do you want me to do here?"' : 'Continue with follow-up questions like "What is next?" or ask about specifics based on the conversation so far.'}
+- Build a sequence of requirements until each requirement is crystal clear.
+- Your output should help produce requirements that an application or calling agent can implement.
+
+OBJECTIVE: ${objective}
+${websiteContext}${wireframeContext}${requirementsContext}
+
+${previousContext ? `CONVERSATION SO FAR:\n${previousContext}` : ""}
+
+Respond with a JSON object:
+- question: Your next question to the user (conversational, direct, max 300 chars)
+- topic: A short label for what this question covers (max 40 chars)
+- suggestedRequirement: If the user's last answer implies a requirement, state it clearly here (optional, max 200 chars)
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: isFirstQuestion
+              ? "I'm ready to start describing what I need."
+              : "Generate the next question based on our conversation."
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result: StreamingQuestionResponse;
+      try {
+        const parsed = JSON.parse(content);
+        result = {
+          question: typeof parsed.question === "string" ? parsed.question : "What do you want me to do here?",
+          topic: typeof parsed.topic === "string" ? parsed.topic : "Getting Started",
+          suggestedRequirement: typeof parsed.suggestedRequirement === "string" ? parsed.suggestedRequirement : undefined,
+        };
+      } catch {
+        result = {
+          question: "What do you want me to do here?",
+          topic: "Getting Started",
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Streaming question error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate streaming question", details: errorMessage });
+    }
+  });
+
+  // Analyze wireframe components for requirement discovery
+  app.post("/api/streaming/wireframe-analysis", async (req, res) => {
+    try {
+      const parsed = wireframeAnalysisRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, websiteUrl, wireframeNotes, document: docText } = parsed.data;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 2048,
+        messages: [
+          {
+            role: "system",
+            content: `You are a website/application analysis expert. Analyze the wireframe description and identify key components, interactions, and areas that need requirement specifications.
+
+OBJECTIVE: ${objective}
+${websiteUrl ? `TARGET WEBSITE: ${websiteUrl}` : ""}
+${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 2000)}` : ""}
+
+Respond with a JSON object:
+- analysis: A brief analysis of the wireframe/website structure (max 500 chars)
+- components: An array of identified UI components or sections (strings, max 10 items)
+- suggestions: An array of areas that need requirement clarification (strings, max 5 items)
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: `Analyze this wireframe:\n\n${wireframeNotes.slice(0, 3000)}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result: WireframeAnalysisResponse;
+      try {
+        const parsed = JSON.parse(content);
+        result = {
+          analysis: typeof parsed.analysis === "string" ? parsed.analysis : "Unable to analyze wireframe.",
+          components: Array.isArray(parsed.components) ? parsed.components.filter((c: unknown) => typeof c === "string").slice(0, 10) : [],
+          suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.filter((s: unknown) => typeof s === "string").slice(0, 5) : [],
+        };
+      } catch {
+        result = {
+          analysis: "Unable to parse analysis.",
+          components: [],
+          suggestions: [],
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Wireframe analysis error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to analyze wireframe", details: errorMessage });
+    }
+  });
+
+  // Refine requirements from streaming dialogue entries
+  app.post("/api/streaming/refine", async (req, res) => {
+    try {
+      const parsed = streamingRefineRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, dialogueEntries, existingRequirements, document: docText } = parsed.data;
+
+      const dialogueText = dialogueEntries.map(e => `[${e.role}]: ${e.content}`).join("\n");
+      const existingReqText = existingRequirements && existingRequirements.length > 0
+        ? `\n\nEXISTING REQUIREMENTS:\n${existingRequirements.map((r, i) => `${i + 1}. [${r.status}] ${r.text}`).join("\n")}`
+        : "";
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 4096,
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert requirements writer. Given a dialogue between a user and an agent, extract and refine clear, implementable requirements. Each requirement should be specific enough that a developer or AI agent can implement it without ambiguity.
+
+OBJECTIVE: ${objective}
+${existingReqText}
+
+DIALOGUE:
+${dialogueText}
+
+${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 2000)}` : ""}
+
+Respond with a JSON object:
+- requirements: Array of requirement objects, each with: id (string), text (string - the requirement), status ("draft" | "confirmed" | "revised")
+- updatedDocument: The full document text with requirements integrated as a structured list
+- summary: Brief description of what was refined (max 200 chars)
+
+Preserve existing confirmed requirements. Update draft requirements with new information. Add new requirements discovered in the dialogue.
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: "Refine the requirements based on our dialogue."
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result: StreamingRefineResponse;
+      try {
+        const parsed = JSON.parse(content);
+        result = {
+          requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
+          updatedDocument: typeof parsed.updatedDocument === "string" ? parsed.updatedDocument : docText || "",
+          summary: typeof parsed.summary === "string" ? parsed.summary : "Requirements refined.",
+        };
+      } catch {
+        result = {
+          requirements: [],
+          updatedDocument: docText || "",
+          summary: "Failed to parse refinement results.",
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Streaming refine error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to refine requirements", details: errorMessage });
     }
   });
 
