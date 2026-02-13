@@ -290,46 +290,65 @@ export function StreamingWorkspace({
   }, [document, onDocumentChange, onVersionAdd, onEditHistoryAdd, toast]);
 
   return (
-    <ResizablePanelGroup direction="horizontal">
+    <ResizablePanelGroup direction="horizontal" className="h-full">
       {/* Panel A: Website Analysis (left) — URL, objective, wireframe view */}
-      <ResizablePanel defaultSize={30} minSize={20}>
-        <StreamingWireframePanel
-          websiteUrl={websiteUrl}
-          onWebsiteUrlChange={setWebsiteUrl}
-          wireframeNotes={wireframeNotes}
-          onWireframeNotesChange={setWireframeNotes}
-          analysis={wireframeAnalysis}
-          isAnalyzing={analysisMutation.isPending}
-          onAnalyze={() => analysisMutation.mutate()}
-          objective={objective}
-        />
+      <ResizablePanel
+        defaultSize={30}
+        minSize={10}
+        collapsible
+        collapsedSize={0}
+      >
+        <div className="h-full overflow-auto">
+          <StreamingWireframePanel
+            websiteUrl={websiteUrl}
+            onWebsiteUrlChange={setWebsiteUrl}
+            wireframeNotes={wireframeNotes}
+            onWireframeNotesChange={setWireframeNotes}
+            analysis={wireframeAnalysis}
+            isAnalyzing={analysisMutation.isPending}
+            onAnalyze={() => analysisMutation.mutate()}
+            objective={objective}
+          />
+        </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
       {/* Panel B: Requirement Dialogue (center) — agent Q&A populated from analysis */}
-      <ResizablePanel defaultSize={35} minSize={20}>
-        <StreamingDialogue
-          entries={dialogueEntries}
-          requirements={requirements}
-          currentQuestion={currentQuestion}
-          currentTopic={currentTopic}
-          isLoadingQuestion={questionMutation.isPending}
-          isRefining={refineMutation.isPending}
-          onAnswer={handleAnswer}
-          onStart={handleStartDialogue}
-          onRefineRequirements={() => refineMutation.mutate()}
-          onUpdateRequirement={handleUpdateRequirement}
-          onConfirmRequirement={handleConfirmRequirement}
-          isActive={isDialogueActive}
-          hasAnalysis={wireframeAnalysis !== null}
-        />
+      <ResizablePanel
+        defaultSize={35}
+        minSize={10}
+        collapsible
+        collapsedSize={0}
+      >
+        <div className="h-full overflow-hidden">
+          <StreamingDialogue
+            entries={dialogueEntries}
+            requirements={requirements}
+            currentQuestion={currentQuestion}
+            currentTopic={currentTopic}
+            isLoadingQuestion={questionMutation.isPending}
+            isRefining={refineMutation.isPending}
+            onAnswer={handleAnswer}
+            onStart={handleStartDialogue}
+            onRefineRequirements={() => refineMutation.mutate()}
+            onUpdateRequirement={handleUpdateRequirement}
+            onConfirmRequirement={handleConfirmRequirement}
+            isActive={isDialogueActive}
+            hasAnalysis={wireframeAnalysis !== null}
+          />
+        </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
       {/* Panel C: Requirement Draft / Document (right) */}
-      <ResizablePanel defaultSize={35} minSize={20}>
+      <ResizablePanel
+        defaultSize={35}
+        minSize={10}
+        collapsible
+        collapsedSize={0}
+      >
         <div className="h-full flex flex-col">
           {/* Screen capture toolbar for wireframe mode */}
           <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/20 shrink-0">
@@ -339,7 +358,7 @@ export function StreamingWorkspace({
             />
             <span className="text-xs text-muted-foreground">Capture wireframe state</span>
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-auto">
             <ReadingPane
               text={document.rawText}
               onTextChange={handleDocumentTextChange}
