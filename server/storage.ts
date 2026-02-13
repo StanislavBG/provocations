@@ -36,6 +36,7 @@ export interface IStorage {
     id: number,
     data: { title: string; ciphertext: string; salt: string; iv: string }
   ): Promise<{ id: number; updatedAt: string } | null>;
+  renameDocument(id: number, title: string): Promise<{ id: number; title: string; updatedAt: string } | null>;
   deleteDocument(id: number): Promise<void>;
 }
 
@@ -183,6 +184,16 @@ export class MemStorage implements IStorage {
     this.storedDocuments.set(id, updated);
     this.saveToDisk();
     return { id, updatedAt: now };
+  }
+
+  async renameDocument(id: number, title: string): Promise<{ id: number; title: string; updatedAt: string } | null> {
+    const existing = this.storedDocuments.get(id);
+    if (!existing) return null;
+    const now = new Date().toISOString();
+    const updated: StoredDocument = { ...existing, title, updatedAt: now };
+    this.storedDocuments.set(id, updated);
+    this.saveToDisk();
+    return { id, title, updatedAt: now };
   }
 
   async deleteDocument(id: number): Promise<void> {

@@ -226,6 +226,12 @@ export const updateDocumentRequestSchema = z.object({
   content: z.string().min(1, "Content is required"),
 });
 
+export const renameDocumentRequestSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200),
+});
+
+export type RenameDocumentRequest = z.infer<typeof renameDocumentRequestSchema>;
+
 export type UpdateDocumentRequest = z.infer<typeof updateDocumentRequestSchema>;
 
 export interface DocumentListItem {
