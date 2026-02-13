@@ -93,6 +93,8 @@ export interface ProvokeTextProps {
   onVoiceTranscript?: (transcript: string) => void;
   onVoiceInterimTranscript?: (interim: string) => void;
   onRecordingChange?: (isRecording: boolean) => void;
+  /** When true, automatically starts voice recording on mount. Resets after triggering. */
+  autoRecord?: boolean;
 
   /* ── Text processor (smart actions) ──────────────────────────
    *
@@ -232,6 +234,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       onVoiceTranscript,
       onVoiceInterimTranscript,
       onRecordingChange: onRecordingChangeProp,
+      autoRecord,
 
       textProcessor,
       extraSmartModes,
@@ -522,6 +525,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
             size="icon"
             variant={isRecording ? "destructive" : "ghost"}
             className={toolbarSize.btn}
+            autoStart={autoRecord}
           />
         )}
         {SubmitIcon && onSubmit && (

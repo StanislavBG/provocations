@@ -72,6 +72,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   // Draft section expanded state
   const [isDraftExpanded, setIsDraftExpanded] = useState(false);
 
+  // Auto-record flag: set when user clicks "Speak it", cleared after ProvokeText picks it up
+  const [autoRecordDraft, setAutoRecordDraft] = useState(false);
+
   // Ref for scrolling back to top on selection
   const stepOneRef = useRef<HTMLDivElement>(null);
 
@@ -327,7 +330,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 </button>
 
                 <button
-                  onClick={() => onBlankDocument?.(objective.trim() || "Create a compelling, well-structured document")}
+                  onClick={() => {
+                    setIsDraftExpanded(true);
+                    setAutoRecordDraft(true);
+                  }}
                   disabled={isLoading}
                   className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
                 >
@@ -368,6 +374,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 onVoiceTranscript={(transcript) =>
                   setText((prev) => (prev ? prev + " " + transcript : transcript))
                 }
+                onRecordingChange={(recording) => {
+                  // Clear auto-record flag once recording actually starts
+                  if (recording && autoRecordDraft) {
+                    setAutoRecordDraft(false);
+                  }
+                }}
+                autoRecord={autoRecordDraft}
                 textProcessor={(t, mode) =>
                   processText(t, mode, mode === "clean" ? "source" : undefined)
                 }
