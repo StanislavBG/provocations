@@ -10,6 +10,7 @@ import { ReadingPane } from "@/components/ReadingPane";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Drawler } from "@/components/Drawler";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,8 +30,6 @@ import {
   X,
   Lightbulb,
   Save,
-  FileText,
-  Trash2,
   ChevronDown,
   ChevronUp,
   Radio,
@@ -653,25 +652,6 @@ export default function Workspace() {
     }
   }, [toast]);
 
-  // Delete a saved document
-  const handleDeleteSavedDocument = useCallback(async (docId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await apiRequest("DELETE", `/api/documents/${docId}`);
-      setSavedDocuments(prev => prev.filter(d => d.id !== docId));
-      if (currentDocId === docId) {
-        setCurrentDocId(null);
-      }
-      toast({ title: "Document Deleted" });
-    } catch {
-      toast({
-        title: "Delete Failed",
-        description: "Could not delete document.",
-        variant: "destructive",
-      });
-    }
-  }, [currentDocId, toast]);
-
   // Save document to server (server handles encryption)
   const handleSaveClick = useCallback(async () => {
     if (!document.rawText) return;
@@ -714,15 +694,6 @@ export default function Workspace() {
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
 
-  const formatDate = (iso: string) => {
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   // Show the input form when there's no document content and no analysis in progress
   const isInputPhase = !document.rawText;
 
@@ -736,39 +707,18 @@ export default function Workspace() {
               <h1 className="font-semibold text-lg">Provocations</h1>
             </div>
             <div className="flex items-center gap-2">
+              <Drawler
+                documents={savedDocuments}
+                currentDocId={currentDocId}
+                onLoad={handleLoadSavedDocument}
+                onDocumentsChange={setSavedDocuments}
+                onCurrentDocIdChange={setCurrentDocId}
+              />
               <ThemeToggle />
               <UserButton data-testid="button-user-menu" />
             </div>
           </div>
         </header>
-        {savedDocuments.length > 0 && (
-          <div className="border-b px-4 py-3 bg-muted/20">
-            <p className="text-sm font-medium text-muted-foreground mb-2">Your Documents</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {savedDocuments.map(doc => (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-2 px-3 py-2 rounded-md border bg-card hover:bg-accent/50 cursor-pointer transition-colors shrink-0 group"
-                  onClick={() => handleLoadSavedDocument(doc.id)}
-                >
-                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate max-w-[200px]">{doc.title}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(doc.updatedAt)}</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                    onClick={(e) => handleDeleteSavedDocument(doc.id, e)}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         <div className="flex-1 overflow-hidden">
           <TextInputForm
             onSubmit={(text, obj, refs) => {
@@ -845,6 +795,13 @@ export default function Workspace() {
               <Save className="w-4 h-4" />
               {isSaving ? "Saving..." : "Save"}
             </Button>
+            <Drawler
+              documents={savedDocuments}
+              currentDocId={currentDocId}
+              onLoad={handleLoadSavedDocument}
+              onDocumentsChange={setSavedDocuments}
+              onCurrentDocIdChange={setCurrentDocId}
+            />
             <Button
               data-testid="button-reset"
               variant="ghost"
