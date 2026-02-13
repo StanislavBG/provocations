@@ -275,51 +275,72 @@ export function StreamingWorkspace({
   }, [wireframeDialogueMutation]);
 
   return (
-    <ResizablePanelGroup direction="horizontal">
+    <ResizablePanelGroup direction="horizontal" className="h-full">
       {/* Panel A: Requirement Draft (document) */}
-      <ResizablePanel defaultSize={30} minSize={20}>
-        <ReadingPane
-          text={document.rawText}
-          onTextChange={handleDocumentTextChange}
-        />
+      <ResizablePanel
+        defaultSize={30}
+        minSize={10}
+        collapsible
+        collapsedSize={0}
+      >
+        <div className="h-full overflow-auto">
+          <ReadingPane
+            text={document.rawText}
+            onTextChange={handleDocumentTextChange}
+          />
+        </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
       {/* Panel B: Provocation Dialogue (agent Q&A) */}
-      <ResizablePanel defaultSize={35} minSize={20}>
-        <StreamingDialogue
-          entries={dialogueEntries}
-          requirements={requirements}
-          currentQuestion={currentQuestion}
-          currentTopic={currentTopic}
-          isLoadingQuestion={questionMutation.isPending}
-          isRefining={refineMutation.isPending}
-          onAnswer={handleAnswer}
-          onStart={handleStartDialogue}
-          onRefineRequirements={() => refineMutation.mutate()}
-          onUpdateRequirement={handleUpdateRequirement}
-          onConfirmRequirement={handleConfirmRequirement}
-          isActive={isDialogueActive}
-        />
+      <ResizablePanel
+        defaultSize={35}
+        minSize={10}
+        collapsible
+        collapsedSize={0}
+      >
+        <div className="h-full overflow-hidden">
+          <StreamingDialogue
+            entries={dialogueEntries}
+            requirements={requirements}
+            currentQuestion={currentQuestion}
+            currentTopic={currentTopic}
+            isLoadingQuestion={questionMutation.isPending}
+            isRefining={refineMutation.isPending}
+            onAnswer={handleAnswer}
+            onStart={handleStartDialogue}
+            onRefineRequirements={() => refineMutation.mutate()}
+            onUpdateRequirement={handleUpdateRequirement}
+            onConfirmRequirement={handleConfirmRequirement}
+            isActive={isDialogueActive}
+          />
+        </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
       {/* Panel C: Website Wireframe Panel */}
-      <ResizablePanel defaultSize={35} minSize={20}>
-        <StreamingWireframePanel
-          websiteUrl={websiteUrl}
-          onWebsiteUrlChange={setWebsiteUrl}
-          wireframeNotes={wireframeNotes}
-          onWireframeNotesChange={setWireframeNotes}
-          analysis={wireframeAnalysis}
-          isAnalyzing={analysisMutation.isPending}
-          onAnalyze={() => analysisMutation.mutate()}
-          wireframeDialogue={wireframeDialogue}
-          onWireframeDialogueSubmit={handleWireframeDialogueSubmit}
-          isWireframeDialogueLoading={wireframeDialogueMutation.isPending}
-        />
+      <ResizablePanel
+        defaultSize={35}
+        minSize={10}
+        collapsible
+        collapsedSize={0}
+      >
+        <div className="h-full overflow-hidden">
+          <StreamingWireframePanel
+            websiteUrl={websiteUrl}
+            onWebsiteUrlChange={setWebsiteUrl}
+            wireframeNotes={wireframeNotes}
+            onWireframeNotesChange={setWireframeNotes}
+            analysis={wireframeAnalysis}
+            isAnalyzing={analysisMutation.isPending}
+            onAnalyze={() => analysisMutation.mutate()}
+            wireframeDialogue={wireframeDialogue}
+            onWireframeDialogueSubmit={handleWireframeDialogueSubmit}
+            isWireframeDialogueLoading={wireframeDialogueMutation.isPending}
+          />
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );
