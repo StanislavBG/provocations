@@ -319,7 +319,7 @@ export interface StreamingQuestionResponse {
 export const wireframeAnalysisRequestSchema = z.object({
   objective: z.string().min(1, "Objective is required"),
   websiteUrl: z.string().optional(),
-  wireframeNotes: z.string().min(1, "Wireframe notes are required"),
+  wireframeNotes: z.string().optional(),
   document: z.string().optional(),
 });
 

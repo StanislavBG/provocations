@@ -12,7 +12,6 @@ import {
   Check,
   Pencil,
   Mic,
-  Globe,
 } from "lucide-react";
 import type {
   StreamingDialogueEntry,
@@ -91,7 +90,7 @@ export function StreamingDialogue({
     }
   }, [editingReqId, editingText, onUpdateRequirement]);
 
-  // Not started yet — show guidance
+  // Not started yet — show simple guidance
   if (!isActive) {
     return (
       <div className="h-full flex flex-col">
@@ -101,26 +100,14 @@ export function StreamingDialogue({
         </div>
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center space-y-4 max-w-sm">
-            <MessageCircleQuestion className="w-12 h-12 text-muted-foreground/50 mx-auto" />
-            <h3 className="font-medium text-muted-foreground">Waiting for Website Analysis</h3>
+            <MessageCircleQuestion className="w-10 h-10 text-muted-foreground/40 mx-auto" />
             <p className="text-sm text-muted-foreground">
-              Use the Website Analysis panel on the left to enter a URL, describe the website,
-              and click <strong>Analyze Website</strong>. The agent will review the site and
-              start asking you questions here.
+              Enter a website URL on the left to get started, or start a dialogue directly.
             </p>
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
-              <Globe className="w-3.5 h-3.5" />
-              <span>Analyze the website first, then respond here</span>
-            </div>
-            <div className="pt-2 border-t">
-              <p className="text-xs text-muted-foreground mb-2">
-                Or start a dialogue without a website:
-              </p>
-              <Button variant="outline" size="sm" onClick={onStart} className="gap-2">
-                <MessageCircleQuestion className="w-3.5 h-3.5" />
-                Start Dialogue Manually
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" onClick={onStart} className="gap-2">
+              <MessageCircleQuestion className="w-3.5 h-3.5" />
+              Start Dialogue
+            </Button>
           </div>
         </div>
       </div>
@@ -250,6 +237,13 @@ export function StreamingDialogue({
       {/* Dialogue messages */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
+          {entries.length === 0 && !isLoadingQuestion && (
+            <div className="text-center py-8">
+              <p className="text-sm text-muted-foreground">
+                Type below to tell the agent what you need.
+              </p>
+            </div>
+          )}
           {entries.map((entry) => (
             <div
               key={entry.id}
@@ -283,7 +277,7 @@ export function StreamingDialogue({
             <Card className="border-violet-200 dark:border-violet-800">
               <CardContent className="p-3 flex items-center gap-3">
                 <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
-                <span className="text-sm text-muted-foreground">Thinking of the next question...</span>
+                <span className="text-sm text-muted-foreground">Agent is thinking...</span>
               </CardContent>
             </Card>
           )}
@@ -314,13 +308,13 @@ export function StreamingDialogue({
           <div className="space-y-2">
             <ProvokeText
               chrome="inline"
-              placeholder={currentQuestion ? "Type your response..." : "Waiting for agent..."}
+              placeholder={entries.length === 0 ? "Tell the agent what you need..." : "Type your response..."}
               value={answerText}
               onChange={setAnswerText}
               className="text-sm"
               minRows={2}
               maxRows={6}
-              disabled={!currentQuestion || isLoadingQuestion}
+              disabled={isLoadingQuestion}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
