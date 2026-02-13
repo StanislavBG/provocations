@@ -45,6 +45,16 @@ import type {
   DocumentListItem,
 } from "@shared/schema";
 
+async function processObjectiveText(text: string, mode: string): Promise<string> {
+  const context = mode === "clean" ? "objective" : mode;
+  const response = await apiRequest("POST", "/api/summarize-intent", {
+    transcript: text,
+    context,
+  });
+  const data = (await response.json()) as { summary?: string };
+  return data.summary ?? text;
+}
+
 export default function Workspace() {
   const { toast } = useToast();
 
@@ -760,8 +770,9 @@ export default function Workspace() {
               };
               setVersions([initialVersion]);
             }}
-            onBlankDocument={() => {
+            onBlankDocument={(obj) => {
               setDocument({ id: generateId("doc"), rawText: " " });
+              setObjective(obj);
             }}
           />
         </div>
@@ -818,19 +829,19 @@ export default function Workspace() {
         </div>
 
         {/* Objective bar */}
-        <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/30">
-          <Target className="w-4 h-4 text-primary shrink-0" />
-          <span className="text-sm text-muted-foreground shrink-0">Objective:</span>
+        <div className="border-t px-4 py-3">
           <ProvokeText
-            variant="input"
-            chrome="bare"
+            chrome="container"
+            variant="textarea"
             data-testid="input-objective-header"
+            label="Objective"
+            labelIcon={Target}
             value={objective}
             onChange={setObjective}
-            placeholder="What are you creating?"
-            className="h-7 text-sm bg-transparent px-1 flex-1"
-            showCopy={false}
-            showClear={false}
+            placeholder="What are you creating? Describe your objective..."
+            className="text-sm leading-relaxed font-serif"
+            minRows={2}
+            maxRows={4}
             voice={{ mode: "replace" }}
             onVoiceTranscript={(text) => {
               setObjective(text);
@@ -838,8 +849,8 @@ export default function Workspace() {
             }}
             onVoiceInterimTranscript={setObjectiveInterimTranscript}
             onRecordingChange={setIsRecordingObjective}
+            textProcessor={processObjectiveText}
           />
-
         </div>
       </header>
 

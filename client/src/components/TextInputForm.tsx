@@ -26,7 +26,7 @@ import { generateId } from "@/lib/utils";
 
 interface TextInputFormProps {
   onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[]) => void;
-  onBlankDocument?: () => void;
+  onBlankDocument?: (objective: string) => void;
   isLoading?: boolean;
 }
 
@@ -307,7 +307,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 </button>
 
                 <button
-                  onClick={() => onBlankDocument?.()}
+                  onClick={() => onBlankDocument?.(objective.trim() || "Create a compelling, well-structured document")}
                   disabled={isLoading}
                   className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
                 >
