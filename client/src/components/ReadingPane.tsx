@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, Mic, Square, Send, X } from "lucide-react";
+import { Download, Mic, Square, Send, X, Eye, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 interface ReadingPaneProps {
   text: string;
@@ -24,6 +25,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [promptText, setPromptText] = useState("");
   const [isProcessingEdit, setIsProcessingEdit] = useState(false);
+  const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -36,7 +38,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   isRecordingRef.current = isRecording;
   showPromptInputRef.current = showPromptInput;
 
-  // Handle text selection in the editor
+  // Handle text selection in edit mode
   const handleSelect = useCallback(() => {
     if (!editorRef.current || !containerRef.current) return;
 
@@ -59,21 +61,30 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     setSelectedText(selected);
 
     // Position the toolbar near the selection
-    // Get textarea position and calculate approximate position
     const textareaRect = textarea.getBoundingClientRect();
-    const containerRect = containerRef.current.getBoundingClientRect();
 
-    // Estimate position based on character position
     const textBeforeSelection = text.substring(0, start);
     const lines = textBeforeSelection.split('\n');
-    const lineHeight = 28; // approximate line height
+    const lineHeight = 28;
     const y = Math.min(lines.length * lineHeight, textareaRect.height - 50);
-
-    // Position toolbar to the right
     const x = Math.min(textareaRect.width - 120, 400);
 
     setSelectionPosition({ x, y });
   }, [text]);
+
+  // Handle text selection in preview mode (from MarkdownRenderer)
+  const handlePreviewSelect = useCallback((selected: string, position: { x: number; y: number }) => {
+    if (isRecordingRef.current || showPromptInputRef.current) return;
+    setSelectedText(selected);
+    // Adjust position relative to container
+    if (containerRef.current) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      setSelectionPosition({
+        x: Math.min(position.x - containerRect.left, containerRect.width - 120),
+        y: Math.max(position.y - containerRect.top - 10, 60),
+      });
+    }
+  }, []);
 
   // Store callbacks in refs to avoid re-initializing recognition
   const onVoiceMergeRef = useRef(onVoiceMerge);
@@ -256,73 +267,115 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const readingTime = Math.ceil(wordCount / 200);
 
   const handleDownload = () => {
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `document-${new Date().toISOString().split("T")[0]}.txt`;
+    link.download = `document-${new Date().toISOString().split("T")[0]}.md`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
+  // Clear selection toolbar when clicking outside in preview mode
+  const handleContainerClick = useCallback(() => {
+    if (!isRecordingRef.current && !showPromptInputRef.current) {
+      if (viewMode === "preview") {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) {
+          setSelectedText("");
+          setSelectionPosition(null);
+        }
+      } else {
+        const textarea = editorRef.current as HTMLTextAreaElement | null;
+        if (textarea && textarea.selectionStart === textarea.selectionEnd) {
+          setSelectedText("");
+          setSelectionPosition(null);
+        }
+      }
+    }
+  }, [viewMode]);
+
   return (
     <div
       ref={containerRef}
-      className="h-full relative"
-      onClick={() => {
-        // Clear toolbar if clicking without selection
-        if (!isRecordingRef.current && !showPromptInputRef.current) {
-          const textarea = editorRef.current as HTMLTextAreaElement | null;
-          if (textarea && textarea.selectionStart === textarea.selectionEnd) {
-            setSelectedText("");
-            setSelectionPosition(null);
-          }
-        }
-      }}
+      className="h-full relative flex flex-col"
+      onClick={handleContainerClick}
     >
-      <ProvokeText
-        ref={editorRef}
-        variant="editor"
-        chrome="container"
-        containerClassName="h-full"
-        data-testid="editor-document"
-        value={text}
-        onChange={(val) => onTextChange?.(val)}
-        onSelect={handleSelect}
-        className="w-full text-foreground/90"
-        placeholder="Start typing your document..."
-        showCopy={true}
-        showClear={false}
-        voice={{ mode: "append", inline: false }}
-        onVoiceTranscript={(transcript) => {
-          onTranscriptUpdate?.(transcript, false);
-        }}
-        onVoiceInterimTranscript={(interim) => {
-          onTranscriptUpdate?.(interim, true);
-        }}
-        onRecordingChange={(recording) => {
-          onTranscriptUpdate?.("", recording);
-        }}
-        headerActions={
-          <>
-            <Badge variant="outline" className="text-xs">{wordCount.toLocaleString()} words</Badge>
-            <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
-            <div className="w-px h-5 bg-border mx-1" />
-            <Button
-              data-testid="button-download-document"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={handleDownload}
-              title="Download document"
-            >
-              <Download className="w-4 h-4" />
-            </Button>
-          </>
-        }
-      />
+      {/* Header bar with word count, mode toggle, download */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b bg-card/50 shrink-0">
+        <Badge variant="outline" className="text-xs">{wordCount.toLocaleString()} words</Badge>
+        <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
+        <Badge variant="outline" className="text-xs font-mono">MD</Badge>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+          <Button
+            variant={viewMode === "preview" ? "default" : "ghost"}
+            size="sm"
+            className="h-6 px-2 text-xs gap-1"
+            onClick={() => setViewMode("preview")}
+          >
+            <Eye className="w-3 h-3" />
+            Preview
+          </Button>
+          <Button
+            variant={viewMode === "edit" ? "default" : "ghost"}
+            size="sm"
+            className="h-6 px-2 text-xs gap-1"
+            onClick={() => setViewMode("edit")}
+          >
+            <Pencil className="w-3 h-3" />
+            Edit
+          </Button>
+        </div>
+        <div className="w-px h-5 bg-border mx-1" />
+        <Button
+          data-testid="button-download-document"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={handleDownload}
+          title="Download as markdown"
+        >
+          <Download className="w-4 h-4" />
+        </Button>
+      </div>
+
+      {/* Content area — either markdown preview or raw editor */}
+      <div className="flex-1 overflow-hidden relative">
+        {viewMode === "preview" ? (
+          <MarkdownRenderer
+            content={text}
+            onSelectText={handlePreviewSelect}
+            className="font-serif"
+          />
+        ) : (
+          <ProvokeText
+            ref={editorRef}
+            variant="editor"
+            chrome="bare"
+            data-testid="editor-document"
+            value={text}
+            onChange={(val) => onTextChange?.(val)}
+            onSelect={handleSelect}
+            className="w-full text-foreground/90 font-mono text-sm"
+            placeholder="Start typing your markdown document..."
+            showCopy={true}
+            showClear={false}
+            voice={{ mode: "append", inline: false }}
+            onVoiceTranscript={(transcript) => {
+              onTranscriptUpdate?.(transcript, false);
+            }}
+            onVoiceInterimTranscript={(interim) => {
+              onTranscriptUpdate?.(interim, true);
+            }}
+            onRecordingChange={(recording) => {
+              onTranscriptUpdate?.("", recording);
+            }}
+          />
+        )}
+      </div>
 
       {/* Floating toolbar on text selection */}
       {selectedText && selectionPosition && (

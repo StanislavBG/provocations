@@ -6,6 +6,7 @@ import { generateId } from "@/lib/utils";
 import { ReadingPane } from "./ReadingPane";
 import { StreamingDialogue } from "./StreamingDialogue";
 import { StreamingWireframePanel } from "./StreamingWireframePanel";
+import { ScreenCaptureButton } from "./ScreenCaptureButton";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type {
   Document,
@@ -244,6 +245,50 @@ export function StreamingWorkspace({
     );
   }, []);
 
+  // Handle screen capture: embed image + commentary into the requirement markdown doc
+  const handleScreenCapture = useCallback((imageDataUrl: string, commentary: string) => {
+    const timestamp = new Date().toLocaleString();
+    const captionText = commentary || "Screen capture";
+
+    const markdownSnippet = [
+      "",
+      `---`,
+      "",
+      `### Screenshot (${timestamp})`,
+      "",
+      `![${captionText}](${imageDataUrl})`,
+      "",
+      commentary ? `> ${commentary.split("\n").join("\n> ")}` : "",
+      "",
+      `---`,
+      "",
+    ].filter(Boolean).join("\n");
+
+    // Append directly to the document for the streaming workspace
+    const updatedText = document.rawText.trim() + "\n" + markdownSnippet;
+    const newVersion: DocumentVersion = {
+      id: generateId("v"),
+      text: updatedText,
+      timestamp: Date.now(),
+      description: "Screen capture added",
+    };
+    onVersionAdd(newVersion);
+    onDocumentChange({ ...document, rawText: updatedText });
+
+    const historyEntry: EditHistoryEntry = {
+      instruction: "Added screen capture with commentary",
+      instructionType: "expand",
+      summary: `Screenshot added: ${captionText.slice(0, 60)}`,
+      timestamp: Date.now(),
+    };
+    onEditHistoryAdd(historyEntry);
+
+    toast({
+      title: "Screenshot Added",
+      description: "Screen capture and commentary appended to the document.",
+    });
+  }, [document, onDocumentChange, onVersionAdd, onEditHistoryAdd, toast]);
+
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full">
       {/* Panel A: Website Analysis (left) — URL, objective, wireframe view */}
@@ -304,11 +349,21 @@ export function StreamingWorkspace({
         collapsible
         collapsedSize={0}
       >
-        <div className="h-full overflow-auto">
-          <ReadingPane
-            text={document.rawText}
-            onTextChange={handleDocumentTextChange}
-          />
+        <div className="h-full flex flex-col">
+          {/* Screen capture toolbar for wireframe mode */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/20 shrink-0">
+            <ScreenCaptureButton
+              onCapture={handleScreenCapture}
+              disabled={refineMutation.isPending}
+            />
+            <span className="text-xs text-muted-foreground">Capture wireframe state</span>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <ReadingPane
+              text={document.rawText}
+              onTextChange={handleDocumentTextChange}
+            />
+          </div>
         </div>
       </ResizablePanel>
     </ResizablePanelGroup>
