@@ -325,11 +325,32 @@ export const wireframeAnalysisRequestSchema = z.object({
 
 export type WireframeAnalysisRequest = z.infer<typeof wireframeAnalysisRequestSchema>;
 
+// Structured content discovery item
+export interface SiteMapEntry {
+  url: string;
+  title: string;
+  depth: number; // 0 = landing page, 1 = direct child, etc.
+}
+
+export interface DiscoveredMedia {
+  url: string;
+  title: string;
+  type?: string; // e.g. "mp4", "webm", "mp3", "rss+xml"
+}
+
 // Response from wireframe analysis
 export interface WireframeAnalysisResponse {
   analysis: string;
   components: string[];
   suggestions: string[];
+  // Structured content discovery (populated async)
+  siteMap?: SiteMapEntry[];
+  videos?: DiscoveredMedia[];
+  audioContent?: DiscoveredMedia[];
+  rssFeeds?: DiscoveredMedia[];
+  images?: DiscoveredMedia[];
+  primaryContent?: string; // Main textual content extracted from the site
+  contentScanStatus?: "pending" | "scanning" | "complete";
 }
 
 // Request to refine requirements from streaming dialogue
