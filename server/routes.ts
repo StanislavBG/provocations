@@ -624,7 +624,7 @@ The user's response should be integrated thoughtfully - don't just append it, we
         messages: [
           {
             role: "system",
-            content: `You are an expert document editor helping a user iteratively shape their document.
+            content: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
 
 DOCUMENT OBJECTIVE: ${objective}
 
@@ -636,15 +636,27 @@ APPROACH:
 3. Execute those changes precisely
 4. Verify you haven't made unintended changes
 
+OUTPUT FORMAT: The document MUST be valid Markdown. Use:
+- # / ## / ### for headings (use heading hierarchy consistently)
+- **bold** and *italic* for emphasis
+- - or * for unordered lists, 1. for ordered lists
+- > for blockquotes
+- \`code\` for inline code, \`\`\` for code blocks
+- [text](url) for links
+- ![alt](url) for images (preserve any existing image embeds exactly as-is)
+- --- for horizontal rules / section breaks
+- | col | col | for tables when presenting structured data
+
 Guidelines:
 1. ${focusInstruction}
 2. Preserve the document's voice and structure unless explicitly asked to change it
 3. Make targeted improvements, not wholesale rewrites
 4. The output should be the complete evolved document (not just the changed parts)
-5. Use markdown formatting for structure (headers, lists, emphasis) where appropriate
+5. ALL output must be valid markdown — never output raw HTML
+6. When the document contains embedded images (![...](data:...)), preserve them exactly without modification
 ${contextSection}${preservationSection}
 
-Output only the evolved document text. No explanations or meta-commentary.`
+Output only the evolved markdown document text. No explanations or meta-commentary.`
           },
           {
             role: "user",
@@ -823,13 +835,15 @@ STRATEGY: ${strategy}`);
 
 ${contextSection}
 
+OUTPUT FORMAT: The document MUST be valid Markdown. Use headings (#/##/###), lists, bold/italic, blockquotes, code blocks, tables, and image embeds as appropriate. Preserve any existing embedded images (![...](data:...)) exactly.
+
 Guidelines:
 1. ${focusInstruction}
 2. Preserve voice and structure unless asked otherwise
-3. Output the complete evolved document
-4. Use markdown formatting where appropriate
+3. Output the complete evolved document in valid markdown
+4. When the document contains embedded images, preserve them without modification
 
-Output only the evolved document. No explanations.`
+Output only the evolved markdown document. No explanations.`
           },
           {
             role: "user",
@@ -1134,6 +1148,7 @@ The instruction should:
 2. Specify where new content should be added or what should be modified
 3. Include all key points from the user's answers
 4. Be written as a clear directive to a document editor
+5. Remind the editor that the output document must be valid Markdown format
 
 Output only the instruction text. No meta-commentary.`
           },
@@ -1554,11 +1569,11 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 2000)}` : ""}
 
 Respond with a JSON object:
 - requirements: Array of requirement objects, each with: id (string), text (string - the requirement), status ("draft" | "confirmed" | "revised")
-- updatedDocument: The full document text with requirements integrated as a structured list
+- updatedDocument: The full document text in valid MARKDOWN format with requirements integrated as a structured list. Use markdown headings, lists, bold, and other formatting. If the document contains embedded images (![...](data:...)), preserve them exactly.
 - summary: Brief description of what was refined (max 200 chars)
 
 Preserve existing confirmed requirements. Update draft requirements with new information. Add new requirements discovered in the dialogue.
-Output only valid JSON, no markdown.`
+Output only valid JSON, no markdown wrapping.`
           },
           {
             role: "user",
