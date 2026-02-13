@@ -826,6 +826,53 @@ Output only the evolved document. No explanations.`
         return res.status(400).json({ error: "Transcript is required" });
       }
 
+      // AIM mode uses a dedicated prompt and higher-capability model
+      if (context === "aim") {
+        const aimResponse = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert prompt engineer. The user has written a rough draft of a prompt for an AI tool. Your job is to restructure it using the AIM framework while preserving every bit of their original intent.
+
+The AIM framework:
+- **Actor**: Who should the AI be? Define the role, expertise, and persona.
+- **Input**: What context, data, constraints, or background is the AI given?
+- **Mission**: What exactly should the AI do? The task, output format, and success criteria.
+
+## Rules
+1. Be faithful to the user's intent — do NOT add information, requirements, or constraints they didn't mention.
+2. If a part of the AIM framework is clearly missing from their draft, add a brief placeholder like "[Define the actor — what role should the AI take?]" so the user knows what to fill in.
+3. Restructure and sharpen the language for clarity, but don't change the meaning.
+4. Output the restructured prompt as a single cohesive instruction the user can copy-paste into an AI tool. Use the AIM sections as organizing headers.
+
+## Output format
+**Actor**
+[Role description extracted/inferred from the draft]
+
+**Input**
+[Context, constraints, and data extracted from the draft]
+
+**Mission**
+[Clear task description with expected output]`
+            },
+            {
+              role: "user",
+              content: `Restructure this draft into an AIM-structured prompt:\n\n${transcript}`
+            }
+          ],
+          max_tokens: 4000,
+          temperature: 0.3,
+        });
+
+        const summary = aimResponse.choices[0]?.message?.content?.trim() || transcript;
+        return res.json({
+          summary,
+          originalLength: transcript.length,
+          summaryLength: summary.length,
+        });
+      }
+
       const contextLabel = context === "objective"
         ? "document objective/goal"
         : context === "source"
