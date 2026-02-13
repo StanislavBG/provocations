@@ -25,6 +25,8 @@ import {
   type InterviewQuestionResponse,
   type StreamingQuestionResponse,
   type WireframeAnalysisResponse,
+  type SiteMapEntry,
+  type DiscoveredMedia,
   type StreamingRefineResponse,
   type StreamingRequirement,
 } from "@shared/schema";
@@ -1487,28 +1489,46 @@ Output only valid JSON, no markdown.`
 
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
-        max_completion_tokens: 2048,
+        max_completion_tokens: 4096,
         messages: [
           {
             role: "system",
-            content: `You are a website/application analysis expert. Analyze the website or wireframe description and identify key components, interactions, and structural patterns. This analysis is background context for the agent — it will NOT be shown directly to the user.
+            content: `You are a website/application analysis expert. Analyze the website or wireframe description and identify key components, interactions, structural patterns, AND proactively discover content assets on the site.
 
 OBJECTIVE: ${objective}
 ${websiteUrl ? `TARGET WEBSITE: ${websiteUrl}` : ""}
 ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 2000)}` : ""}
 
+You must do TWO things:
+1. STRUCTURAL ANALYSIS — Identify UI components, navigation patterns, page structure
+2. CONTENT DISCOVERY — Proactively look for and catalog:
+   - Site map / page tree (landing page and key sub-pages with their hierarchy)
+   - Video content (embedded videos, video players, YouTube/Vimeo embeds, video galleries)
+   - Audio content (podcasts, audio players, music, sound files)
+   - RSS/Atom feeds (blog feeds, news feeds, content syndication)
+   - Images worth capturing (hero images, product photos, infographics, diagrams — NOT icons/buttons/ads)
+   - Primary textual content (main body text, articles, descriptions — NOT navigation labels, button text, or ad copy)
+
+Focus on the SUBSTANCE of the site — what a user or analyst would want to capture for reference.
+
 Respond with a JSON object:
 - analysis: A brief analysis of the website/wireframe structure (max 500 chars)
 - components: An array of identified UI components or sections (strings, max 10 items)
 - suggestions: An array of notable patterns or areas the agent should be aware of (strings, max 5 items)
+- siteMap: An array of page entries, each with: url (string, full or relative URL), title (string, page name), depth (number, 0=landing page, 1=direct child, 2=deeper). Include the landing page and key navigable pages (max 15 items).
+- videos: An array of discovered video assets, each with: url (string), title (string, descriptive name), type (string, e.g. "mp4", "youtube", "vimeo"). Empty array if none found.
+- audioContent: An array of discovered audio assets, each with: url (string), title (string), type (string, e.g. "mp3", "podcast"). Empty array if none found.
+- rssFeeds: An array of discovered RSS/Atom feed URLs, each with: url (string), title (string, feed name), type (string, e.g. "rss+xml", "atom+xml"). Empty array if none found.
+- images: An array of significant images worth capturing, each with: url (string), title (string, descriptive name), type (string, e.g. "hero", "product", "infographic"). NOT icons, buttons, or ad images. Max 10 items.
+- primaryContent: A concise extract of the main textual content on the site — the substance, not chrome. Max 1000 chars. If the site is primarily visual, describe what the visual content conveys.
 
 Output only valid JSON, no markdown.`
           },
           {
             role: "user",
             content: wireframeNotes
-              ? `Analyze this wireframe:\n\n${wireframeNotes.slice(0, 3000)}`
-              : `Analyze the website${websiteUrl ? ` at ${websiteUrl}` : ""}. Identify its key components, structure, and areas that would need requirement specification based on the objective.`
+              ? `Analyze this wireframe and discover its content:\n\n${wireframeNotes.slice(0, 3000)}`
+              : `Analyze the website${websiteUrl ? ` at ${websiteUrl}` : ""}. Identify its key components, structure, content assets (video, audio, RSS, images, text), and areas that would need requirement specification based on the objective.`
           }
         ],
         response_format: { type: "json_object" },
@@ -1518,16 +1538,44 @@ Output only valid JSON, no markdown.`
       let result: WireframeAnalysisResponse;
       try {
         const parsed = JSON.parse(content);
+
+        // Parse site map entries
+        const siteMap: SiteMapEntry[] = Array.isArray(parsed.siteMap)
+          ? parsed.siteMap.filter((e: unknown) => e && typeof e === "object").map((e: Record<string, unknown>) => ({
+              url: typeof e.url === "string" ? e.url : "",
+              title: typeof e.title === "string" ? e.title : "Untitled",
+              depth: typeof e.depth === "number" ? e.depth : 0,
+            })).slice(0, 15)
+          : [];
+
+        // Parse media arrays
+        const parseMedia = (arr: unknown): DiscoveredMedia[] =>
+          Array.isArray(arr)
+            ? arr.filter((e: unknown) => e && typeof e === "object").map((e: Record<string, unknown>) => ({
+                url: typeof e.url === "string" ? e.url : "",
+                title: typeof e.title === "string" ? e.title : "Untitled",
+                type: typeof e.type === "string" ? e.type : undefined,
+              })).slice(0, 10)
+            : [];
+
         result = {
           analysis: typeof parsed.analysis === "string" ? parsed.analysis : "Unable to analyze wireframe.",
           components: Array.isArray(parsed.components) ? parsed.components.filter((c: unknown) => typeof c === "string").slice(0, 10) : [],
           suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.filter((s: unknown) => typeof s === "string").slice(0, 5) : [],
+          siteMap,
+          videos: parseMedia(parsed.videos),
+          audioContent: parseMedia(parsed.audioContent),
+          rssFeeds: parseMedia(parsed.rssFeeds),
+          images: parseMedia(parsed.images),
+          primaryContent: typeof parsed.primaryContent === "string" ? parsed.primaryContent.slice(0, 1000) : undefined,
+          contentScanStatus: "complete",
         };
       } catch {
         result = {
           analysis: "Unable to parse analysis.",
           components: [],
           suggestions: [],
+          contentScanStatus: "complete",
         };
       }
 
