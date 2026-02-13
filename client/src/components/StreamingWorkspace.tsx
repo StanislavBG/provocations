@@ -6,6 +6,7 @@ import { generateId } from "@/lib/utils";
 import { ReadingPane } from "./ReadingPane";
 import { StreamingDialogue } from "./StreamingDialogue";
 import { StreamingWireframePanel } from "./StreamingWireframePanel";
+import { BrowserExplorer } from "./BrowserExplorer";
 import type { CaptureRegion } from "./ScreenCaptureButton";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type {
@@ -293,75 +294,95 @@ export function StreamingWorkspace({
     });
   }, [document, onDocumentChange, onVersionAdd, onEditHistoryAdd, toast]);
 
+  // Handle URL changes from Browser Explorer address bar back to the context panel
+  const handleBrowserUrlChange = useCallback((url: string) => {
+    setWebsiteUrl(url);
+  }, []);
+
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full">
-      {/* Panel A: Website Wireframe (left) — URL, wireframe, capture, analysis log */}
-      <ResizablePanel
-        defaultSize={30}
-        minSize={10}
-        collapsible
-        collapsedSize={0}
-      >
-        <div className="h-full overflow-auto">
-          <StreamingWireframePanel
-            websiteUrl={websiteUrl}
-            onWebsiteUrlChange={setWebsiteUrl}
-            wireframeNotes={wireframeNotes}
-            onWireframeNotesChange={setWireframeNotes}
-            isAnalyzing={analysisMutation.isPending}
-            hasAnalysis={wireframeAnalysis !== null}
-            wireframeAnalysis={wireframeAnalysis}
-            onCapture={handleScreenCapture}
-            captureDisabled={refineMutation.isPending}
-          />
-        </div>
+    <ResizablePanelGroup direction="vertical" className="h-full">
+      {/* Top: Context panels + Dialogue + Document */}
+      <ResizablePanel defaultSize={50} minSize={20}>
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Panel A: Website Wireframe (left) — URL, wireframe, capture, analysis log */}
+          <ResizablePanel
+            defaultSize={30}
+            minSize={10}
+            collapsible
+            collapsedSize={0}
+          >
+            <div className="h-full overflow-auto">
+              <StreamingWireframePanel
+                websiteUrl={websiteUrl}
+                onWebsiteUrlChange={setWebsiteUrl}
+                wireframeNotes={wireframeNotes}
+                onWireframeNotesChange={setWireframeNotes}
+                isAnalyzing={analysisMutation.isPending}
+                hasAnalysis={wireframeAnalysis !== null}
+                wireframeAnalysis={wireframeAnalysis}
+                onCapture={handleScreenCapture}
+                captureDisabled={refineMutation.isPending}
+              />
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Panel B: Requirement Dialogue (center) — agent Q&A populated from analysis */}
+          <ResizablePanel
+            defaultSize={35}
+            minSize={10}
+            collapsible
+            collapsedSize={0}
+          >
+            <div className="h-full overflow-hidden">
+              <StreamingDialogue
+                entries={dialogueEntries}
+                requirements={requirements}
+                currentQuestion={currentQuestion}
+                currentTopic={currentTopic}
+                isLoadingQuestion={questionMutation.isPending}
+                isRefining={refineMutation.isPending}
+                onAnswer={handleAnswer}
+                onStart={handleStartDialogue}
+                onRefineRequirements={() => refineMutation.mutate()}
+                onUpdateRequirement={handleUpdateRequirement}
+                onConfirmRequirement={handleConfirmRequirement}
+                isActive={isDialogueActive}
+                hasAnalysis={wireframeAnalysis !== null}
+              />
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Panel C: Requirement Draft / Document (right) — clean reading pane */}
+          <ResizablePanel
+            defaultSize={35}
+            minSize={10}
+            collapsible
+            collapsedSize={0}
+          >
+            <div className="h-full flex flex-col">
+              <div className="flex-1 overflow-auto">
+                <ReadingPane
+                  text={document.rawText}
+                  onTextChange={handleDocumentTextChange}
+                />
+              </div>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
-      {/* Panel B: Requirement Dialogue (center) — agent Q&A populated from analysis */}
-      <ResizablePanel
-        defaultSize={35}
-        minSize={10}
-        collapsible
-        collapsedSize={0}
-      >
-        <div className="h-full overflow-hidden">
-          <StreamingDialogue
-            entries={dialogueEntries}
-            requirements={requirements}
-            currentQuestion={currentQuestion}
-            currentTopic={currentTopic}
-            isLoadingQuestion={questionMutation.isPending}
-            isRefining={refineMutation.isPending}
-            onAnswer={handleAnswer}
-            onStart={handleStartDialogue}
-            onRefineRequirements={() => refineMutation.mutate()}
-            onUpdateRequirement={handleUpdateRequirement}
-            onConfirmRequirement={handleConfirmRequirement}
-            isActive={isDialogueActive}
-            hasAnalysis={wireframeAnalysis !== null}
-          />
-        </div>
-      </ResizablePanel>
-
-      <ResizableHandle withHandle />
-
-      {/* Panel C: Requirement Draft / Document (right) */}
-      <ResizablePanel
-        defaultSize={35}
-        minSize={10}
-        collapsible
-        collapsedSize={0}
-      >
-        <div className="h-full flex flex-col">
-          <div className="flex-1 overflow-auto">
-            <ReadingPane
-              text={document.rawText}
-              onTextChange={handleDocumentTextChange}
-            />
-          </div>
-        </div>
+      {/* Bottom: Browser Explorer — embedded iframe for side-by-side site exploration */}
+      <ResizablePanel defaultSize={50} minSize={15} collapsible collapsedSize={0}>
+        <BrowserExplorer
+          websiteUrl={websiteUrl}
+          onUrlChange={handleBrowserUrlChange}
+        />
       </ResizablePanel>
     </ResizablePanelGroup>
   );
