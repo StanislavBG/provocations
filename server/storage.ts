@@ -59,11 +59,31 @@ export class MemStorage implements IStorage {
         const raw = fs.readFileSync(DOCS_FILE, "utf8");
         const data = JSON.parse(raw) as {
           nextId: number;
-          documents: StoredDocument[];
+          documents: Array<Record<string, unknown>>;
         };
         this.nextDocId = data.nextId;
-        for (const doc of data.documents) {
+        let needsMigration = false;
+        for (const raw of data.documents) {
+          // Migrate old documents that have ownerHash instead of userId
+          const userId = (raw.userId as string) || "";
+          if (!raw.userId && raw.ownerHash) {
+            needsMigration = true;
+          }
+          const doc: StoredDocument = {
+            id: raw.id as number,
+            userId,
+            title: raw.title as string,
+            ciphertext: raw.ciphertext as string,
+            salt: raw.salt as string,
+            iv: raw.iv as string,
+            createdAt: raw.createdAt as string,
+            updatedAt: raw.updatedAt as string,
+          };
           this.storedDocuments.set(doc.id, doc);
+        }
+        if (needsMigration) {
+          console.log("Migrating old documents from ownerHash to userId format");
+          this.saveToDisk();
         }
       }
     } catch (err) {
@@ -118,6 +138,18 @@ export class MemStorage implements IStorage {
   }
 
   async listDocuments(userId: string): Promise<DocumentListItem[]> {
+    // Claim unclaimed documents (migrated from old ownerHash format)
+    let claimed = false;
+    Array.from(this.storedDocuments.values()).forEach((doc) => {
+      if (!doc.userId) {
+        doc.userId = userId;
+        claimed = true;
+      }
+    });
+    if (claimed) {
+      this.saveToDisk();
+    }
+
     return Array.from(this.storedDocuments.values())
       .filter((d) => d.userId === userId)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
