@@ -4,7 +4,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
-import { ProvocationsDisplay } from "@/components/ProvocationsDisplay";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { ReadingPane } from "@/components/ReadingPane";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
@@ -12,7 +11,6 @@ import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -22,7 +20,6 @@ import { StreamingWorkspace } from "@/components/StreamingWorkspace";
 import {
   Sparkles,
   RotateCcw,
-  MessageSquareWarning,
   MessageCircleQuestion,
   GitCompare,
   Target,
@@ -37,8 +34,9 @@ import {
 } from "lucide-react";
 import type {
   Document,
-  Provocation,
   ProvocationType,
+  DirectionMode,
+  ThinkBigVector,
   DocumentVersion,
   WriteRequest,
   WriteResponse,
@@ -66,14 +64,11 @@ export default function Workspace() {
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
-  const [provocations, setProvocations] = useState<Provocation[]>([]);
-  const [activeTab, setActiveTab] = useState("provocations");
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("standard");
 
   // Voice and version tracking
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [showDiffView, setShowDiffView] = useState(false);
-  const [hoveredProvocationId, setHoveredProvocationId] = useState<string | null>(null);
 
   // Transcript overlay state
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(false);
@@ -85,18 +80,7 @@ export default function Workspace() {
   // Pending voice context for deferred sending (holds selectedText until user reviews transcript)
   const [pendingVoiceContext, setPendingVoiceContext] = useState<{
     selectedText?: string;
-    provocation?: {
-      id: string;
-      type: string;
-      title: string;
-      content: string;
-      sourceExcerpt: string;
-    };
-    outlineSection?: {
-      id: string;
-      heading: string;
-    };
-    context: "selection" | "provocation" | "document";
+    context: "selection" | "document";
   } | null>(null);
 
   // Edit history for coherent iteration
@@ -111,6 +95,14 @@ export default function Workspace() {
   const [currentInterviewQuestion, setCurrentInterviewQuestion] = useState<string | null>(null);
   const [currentInterviewTopic, setCurrentInterviewTopic] = useState<string | null>(null);
 
+  // Direction state for the provoke panel
+  const [interviewDirection, setInterviewDirection] = useState<{
+    mode: DirectionMode;
+    personas: ProvocationType[];
+    guidance?: string;
+    thinkBigVectors?: ThinkBigVector[];
+  } | null>(null);
+
   // Server-backed save/restore
   const [savedDocuments, setSavedDocuments] = useState<DocumentListItem[]>([]);
   const [currentDocId, setCurrentDocId] = useState<number | null>(null);
@@ -122,11 +114,6 @@ export default function Workspace() {
 
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
-
-  // Get the source excerpt of the currently hovered provocation
-  const hoveredProvocationContext = hoveredProvocationId
-    ? provocations.find(p => p.id === hoveredProvocationId)?.sourceExcerpt
-    : undefined;
 
   // Fetch saved documents on mount
   const fetchSavedDocuments = useCallback(async () => {
@@ -213,46 +200,24 @@ export default function Workspace() {
     },
   });
 
-  const regenerateProvocationsMutation = useMutation({
-    mutationFn: async ({ guidance, types }: { guidance?: string; types?: string[] }) => {
-      if (!document) throw new Error("No document");
-      const response = await apiRequest("POST", "/api/generate-provocations", {
-        text: document.rawText,
-        guidance,
-        objective: objective || undefined,
-        types: types && types.length > 0 ? types : undefined,
-        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
-      });
-      return await response.json() as { provocations: Provocation[] };
-    },
-    onSuccess: (data) => {
-      const newProvocations = data.provocations ?? [];
-      setProvocations(prev => [...prev, ...newProvocations]);
-      toast({
-        title: "New Provocations Generated",
-        description: `Added ${newProvocations.length} new provocations.`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Generation Failed",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    },
-  });
-
   const interviewQuestionMutation = useMutation({
-    mutationFn: async ({ overrideEntries }: { overrideEntries?: InterviewEntry[] } = {}) => {
+    mutationFn: async ({ overrideEntries, direction }: { overrideEntries?: InterviewEntry[]; direction?: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string; thinkBigVectors?: ThinkBigVector[] } } = {}) => {
       if (!document) throw new Error("No document");
       const templateDoc = referenceDocuments.find(d => d.type === "template");
       const entries = overrideEntries ?? interviewEntries;
+      const dir = direction ?? interviewDirection;
       const response = await apiRequest("POST", "/api/interview/question", {
         objective,
         document: document.rawText,
         template: templateDoc?.content,
         previousEntries: entries.length > 0 ? entries : undefined,
-        provocations: provocations.length > 0 ? provocations : undefined,
+        // Pass direction params for persona + challenge/advise context
+        directionMode: dir?.mode,
+        directionPersonas: dir?.personas && dir.personas.length > 0
+          ? dir.personas : undefined,
+        directionGuidance: dir?.guidance,
+        thinkBigVectors: dir?.thinkBigVectors && dir.thinkBigVectors.length > 0
+          ? dir.thinkBigVectors : undefined,
       });
       return await response.json() as InterviewQuestionResponse;
     },
@@ -328,20 +293,10 @@ export default function Workspace() {
     },
   });
 
-  const handleUpdateProvocationStatus = useCallback((id: string, status: Provocation["status"]) => {
-    setProvocations((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status } : p))
-    );
-  }, []);
-
-  const handleRegenerateProvocations = useCallback((guidance?: string, types?: string[]) => {
-    regenerateProvocationsMutation.mutate({ guidance, types });
-  }, [regenerateProvocationsMutation]);
-
-  const handleStartInterview = useCallback(() => {
+  const handleStartInterview = useCallback((direction: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string; thinkBigVectors?: ThinkBigVector[] }) => {
+    setInterviewDirection(direction);
     setIsInterviewActive(true);
-    setActiveTab("interview");
-    interviewQuestionMutation.mutate({});
+    interviewQuestionMutation.mutate({ direction });
   }, [interviewQuestionMutation]);
 
   const handleInterviewAnswer = useCallback((answer: string) => {
@@ -371,7 +326,6 @@ export default function Workspace() {
     setDocument({ id: generateId("doc"), rawText: "" });
     setObjective("");
     setReferenceDocuments([]);
-    setProvocations([]);
     setVersions([]);
     setShowDiffView(false);
     setEditHistory([]);
@@ -380,6 +334,7 @@ export default function Workspace() {
     setInterviewEntries([]);
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
+    setInterviewDirection(null);
     setCurrentDocId(null);
     setWorkspaceMode("standard");
   }, []);
@@ -405,101 +360,6 @@ export default function Workspace() {
     }
   }, [document]);
 
-  const handleVoiceResponse = useCallback((provocationId: string, transcript: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
-    if (!document || !transcript.trim()) return;
-
-    // Store the context for deferred sending - user will review and click "Send to writer"
-    setPendingVoiceContext({
-      provocation: {
-        id: provocationId,
-        type: provocationData.type,
-        title: provocationData.title,
-        content: provocationData.content,
-        sourceExcerpt: provocationData.sourceExcerpt,
-      },
-      context: "provocation",
-    });
-
-    // Show the transcript overlay for review
-    setRawTranscript(transcript);
-    setShowTranscriptOverlay(true);
-    setTranscriptSummary("");
-    setCleanedTranscript(undefined);
-    setIsRecordingFromMain(false);
-    // Don't auto-send anymore - user will click "Send to writer" after reviewing
-  }, [document]);
-
-  // Open transcript overlay for provocation response (user will record from overlay)
-  const handleStartProvocationResponse = useCallback((provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
-    if (!document) return;
-
-    setPendingVoiceContext({
-      provocation: {
-        id: provocationId,
-        type: provocationData.type,
-        title: provocationData.title,
-        content: provocationData.content,
-        sourceExcerpt: provocationData.sourceExcerpt,
-      },
-      context: "provocation",
-    });
-
-    // Open overlay without transcript - user will start recording from the embedded VoiceRecorder
-    setRawTranscript("");
-    setShowTranscriptOverlay(true);
-    setTranscriptSummary("");
-    setCleanedTranscript(undefined);
-    setIsRecordingFromMain(false);
-  }, [document]);
-
-  // Add provocation insight directly to document (user agrees with the provocation)
-  const handleAddToDocument = useCallback((provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
-    if (!document) return;
-
-    writeMutation.mutate({
-      instruction: `The user agrees with this provocation and wants it reflected in the document. Incorporate the insight naturally:\n\nProvocation: ${provocationData.title}\nDetails: ${provocationData.content}\nRelevant excerpt: "${provocationData.sourceExcerpt}"`,
-      provocation: {
-        type: provocationData.type as ProvocationType,
-        title: provocationData.title,
-        content: provocationData.content,
-        sourceExcerpt: provocationData.sourceExcerpt,
-      },
-      description: `Added to document: ${provocationData.title}`,
-    });
-
-    // Mark the provocation as addressed
-    setProvocations((prev) =>
-      prev.map((p) => (p.id === provocationId ? { ...p, status: "addressed" as const } : p))
-    );
-  }, [document, writeMutation]);
-
-  // Send provocation content directly to the document as a note for the author
-  const handleSendToAuthor = useCallback((provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => {
-    if (!document) return;
-
-    const typeLabel = provocationData.type.charAt(0).toUpperCase() + provocationData.type.slice(1).replace(/_/g, " ");
-    const note = `\n\n---\n[${typeLabel}] ${provocationData.title}\n${provocationData.content}\n---`;
-    const newText = document.rawText + note;
-
-    const newVersion: DocumentVersion = {
-      id: generateId("v"),
-      text: newText,
-      timestamp: Date.now(),
-      description: `Sent to author: ${provocationData.title}`,
-    };
-    setVersions(prev => [...prev, newVersion]);
-    setDocument({ ...document, rawText: newText });
-
-    // Mark the provocation as addressed
-    setProvocations((prev) =>
-      prev.map((p) => (p.id === provocationId ? { ...p, status: "addressed" as const } : p))
-    );
-
-    toast({
-      title: "Sent to Author",
-      description: `"${provocationData.title}" has been added as a note in the document.`,
-    });
-  }, [document, toast]);
 
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
@@ -549,24 +409,7 @@ export default function Workspace() {
     // Use the pending context if available
     const context = pendingVoiceContext;
 
-    if (context?.provocation) {
-      // Sending as provocation response
-      writeMutation.mutate({
-        instruction: transcript,
-        provocation: {
-          type: context.provocation.type as ProvocationType,
-          title: context.provocation.title,
-          content: context.provocation.content,
-          sourceExcerpt: context.provocation.sourceExcerpt,
-        },
-        description: `Addressed provocation: ${context.provocation.title}`,
-      });
-
-      // Mark the provocation as addressed
-      setProvocations((prev) =>
-        prev.map((p) => (p.id === context.provocation!.id ? { ...p, status: "addressed" as const } : p))
-      );
-    } else if (context?.selectedText) {
+    if (context?.selectedText) {
       // Sending as selection edit
       writeMutation.mutate({
         instruction: transcript,
@@ -622,7 +465,6 @@ export default function Workspace() {
       setDocument(tempDoc);
 
       // Clear stale state from any previous document
-      setProvocations([]);
       setEditHistory([]);
       setLastSuggestions([]);
       setShowDiffView(false);
@@ -987,7 +829,6 @@ export default function Workspace() {
                 <ReadingPane
                   text={document.rawText}
                   onTextChange={handleDocumentTextChange}
-                  highlightText={hoveredProvocationContext}
                   onVoiceMerge={handleSelectionVoiceMerge}
                   isMerging={writeMutation.isPending}
                   onTranscriptUpdate={handleTranscriptUpdate}
@@ -1012,72 +853,29 @@ export default function Workspace() {
                   onCleanTranscript={handleCleanTranscript}
                   onTranscriptUpdate={handleTranscriptUpdate}
                   onFinalTranscript={handleOverlayFinalTranscript}
-                  provocationContext={pendingVoiceContext?.provocation ? {
-                    type: pendingVoiceContext.provocation.type,
-                    title: pendingVoiceContext.provocation.title,
-                    content: pendingVoiceContext.provocation.content,
-                  } : undefined}
                   context={pendingVoiceContext?.context || "document"}
                 />
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-                  <TabsList className="w-full justify-start rounded-none border-b px-4 h-auto py-0 bg-transparent">
-                    <TabsTrigger
-                      value="interview"
-                      className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
-                      data-testid="tab-interview"
-                    >
-                      <MessageCircleQuestion className="w-4 h-4" />
-                      Provoke
-                      {isInterviewActive && (
-                        <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="provocations"
-                      className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none py-3"
-                      data-testid="tab-provocations"
-                    >
-                      <MessageSquareWarning className="w-4 h-4" />
-                      Provocations
-                      {(provocations ?? []).filter((p) => p.status === "pending").length > 0 && (
-                        <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">
-                          {(provocations ?? []).filter((p) => p.status === "pending").length}
-                        </span>
-                      )}
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="interview" className="flex-1 mt-0 overflow-hidden">
-                    <InterviewPanel
-                      isActive={isInterviewActive}
-                      entries={interviewEntries}
-                      currentQuestion={currentInterviewQuestion}
-                      currentTopic={currentInterviewTopic}
-                      isLoadingQuestion={interviewQuestionMutation.isPending}
-                      isMerging={interviewSummaryMutation.isPending}
-                      onStart={handleStartInterview}
-                      onAnswer={handleInterviewAnswer}
-                      onEnd={handleEndInterview}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="provocations" className="flex-1 mt-0 overflow-hidden">
-                    <ProvocationsDisplay
-                      provocations={provocations}
-                      onUpdateStatus={handleUpdateProvocationStatus}
-                      onVoiceResponse={handleVoiceResponse}
-                      onStartResponse={handleStartProvocationResponse}
-                      onAddToDocument={handleAddToDocument}
-                      onSendToAuthor={handleSendToAuthor}
-                      onTranscriptUpdate={handleTranscriptUpdate}
-                      onHoverProvocation={setHoveredProvocationId}
-                      onRegenerateProvocations={handleRegenerateProvocations}
-                      isMerging={writeMutation.isPending}
-                      isRegenerating={regenerateProvocationsMutation.isPending}
-                    />
-                  </TabsContent>
-
-                </Tabs>
+                {/* Single Provoke panel — no tabs */}
+                <div className="border-b px-4 py-3 flex items-center gap-2">
+                  <MessageCircleQuestion className="w-4 h-4 text-primary" />
+                  <span className="font-semibold text-sm">Provoke</span>
+                  {isInterviewActive && (
+                    <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+                  )}
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <InterviewPanel
+                    isActive={isInterviewActive}
+                    entries={interviewEntries}
+                    currentQuestion={currentInterviewQuestion}
+                    currentTopic={currentInterviewTopic}
+                    isLoadingQuestion={interviewQuestionMutation.isPending}
+                    isMerging={interviewSummaryMutation.isPending}
+                    onStart={handleStartInterview}
+                    onAnswer={handleInterviewAnswer}
+                    onEnd={handleEndInterview}
+                  />
+                </div>
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>

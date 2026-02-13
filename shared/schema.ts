@@ -165,6 +165,22 @@ export interface DocumentVersion {
   description: string;
 }
 
+// Direction mode for provoke panel (challenge = push back, advise = suggest improvements)
+export const directionModes = ["challenge", "advise"] as const;
+export type DirectionMode = typeof directionModes[number];
+
+// Think Big vectors — high-impact dimensions for scaling products
+export const thinkBigVectors = [
+  "tenancy_topology",
+  "api_surface",
+  "scaling_horizon",
+  "data_residency",
+  "integration_philosophy",
+  "identity_access",
+  "observability",
+] as const;
+export type ThinkBigVector = typeof thinkBigVectors[number];
+
 // Interview entry - a single Q&A pair from the interview flow
 export const interviewEntrySchema = z.object({
   id: z.string(),
@@ -183,6 +199,11 @@ export const interviewQuestionRequestSchema = z.object({
   template: z.string().optional(),
   previousEntries: z.array(interviewEntrySchema).optional(),
   provocations: z.array(provocationSchema).optional(),
+  // Direction parameters for the provoke panel
+  directionMode: z.enum(directionModes).optional(),
+  directionPersonas: z.array(z.enum(provocationType)).optional(),
+  directionGuidance: z.string().optional(),
+  thinkBigVectors: z.array(z.enum(thinkBigVectors)).optional(),
 });
 
 export type InterviewQuestionRequest = z.infer<typeof interviewQuestionRequestSchema>;
