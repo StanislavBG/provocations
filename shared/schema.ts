@@ -242,3 +242,81 @@ export interface DocumentPayload {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Streaming provocation type ──
+// Streaming supports requirement discovery through a side-by-side wireframe + dialogue experience.
+
+export const workspaceMode = ["standard", "streaming"] as const;
+export type WorkspaceMode = typeof workspaceMode[number];
+
+// A single entry in the streaming dialogue (agent question + user answer)
+export const streamingDialogueEntrySchema = z.object({
+  id: z.string(),
+  role: z.enum(["agent", "user"]),
+  content: z.string(),
+  timestamp: z.number(),
+});
+
+export type StreamingDialogueEntry = z.infer<typeof streamingDialogueEntrySchema>;
+
+// A single requirement extracted from the streaming dialogue
+export const streamingRequirementSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  status: z.enum(["draft", "confirmed", "revised"]),
+  timestamp: z.number(),
+});
+
+export type StreamingRequirement = z.infer<typeof streamingRequirementSchema>;
+
+// Request to generate the next streaming question
+export const streamingQuestionRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+  document: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  wireframeNotes: z.string().optional(),
+  previousEntries: z.array(streamingDialogueEntrySchema).optional(),
+  requirements: z.array(streamingRequirementSchema).optional(),
+});
+
+export type StreamingQuestionRequest = z.infer<typeof streamingQuestionRequestSchema>;
+
+// Response from streaming question endpoint
+export interface StreamingQuestionResponse {
+  question: string;
+  topic: string;
+  suggestedRequirement?: string;
+}
+
+// Request to analyze wireframe components
+export const wireframeAnalysisRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+  websiteUrl: z.string().optional(),
+  wireframeNotes: z.string().min(1, "Wireframe notes are required"),
+  document: z.string().optional(),
+});
+
+export type WireframeAnalysisRequest = z.infer<typeof wireframeAnalysisRequestSchema>;
+
+// Response from wireframe analysis
+export interface WireframeAnalysisResponse {
+  analysis: string;
+  components: string[];
+  suggestions: string[];
+}
+
+// Request to refine requirements from streaming dialogue
+export const streamingRefineRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+  dialogueEntries: z.array(streamingDialogueEntrySchema).min(1, "At least one dialogue entry is required"),
+  existingRequirements: z.array(streamingRequirementSchema).optional(),
+  document: z.string().optional(),
+});
+
+export type StreamingRefineRequest = z.infer<typeof streamingRefineRequestSchema>;
+
+export interface StreamingRefineResponse {
+  requirements: StreamingRequirement[];
+  updatedDocument: string;
+  summary: string;
+}

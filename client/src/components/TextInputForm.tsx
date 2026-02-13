@@ -16,6 +16,7 @@ import {
   Check,
   ChevronDown,
   Crosshair,
+  Radio,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import type { SmartModeDef } from "@/components/ProvokeText";
@@ -29,6 +30,7 @@ import { generateId } from "@/lib/utils";
 interface TextInputFormProps {
   onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[]) => void;
   onBlankDocument?: (objective: string) => void;
+  onStreamingMode?: (objective: string) => void;
   isLoading?: boolean;
 }
 
@@ -60,7 +62,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
 
@@ -68,6 +70,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
   const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
+
+  // Streaming mode selection flag
+  const [isStreamingSelected, setIsStreamingSelected] = useState(false);
 
   // Draft section expanded state
   const [isDraftExpanded, setIsDraftExpanded] = useState(false);
@@ -120,6 +125,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
     }
     setActivePrebuilt(template);
     setIsCustomObjective(false);
+    setIsStreamingSelected(false);
     setCardsExpanded(false);
     setIsDraftExpanded(true);
   };
@@ -127,6 +133,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
   const handleSelectCustom = () => {
     setActivePrebuilt(null);
     setIsCustomObjective(true);
+    setIsStreamingSelected(false);
     setObjective("");
     setCardsExpanded(false);
     setIsDraftExpanded(false);
@@ -274,6 +281,45 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                   </p>
                 </div>
               </button>
+
+              {/* Streaming mode card */}
+              {onStreamingMode && (
+                <button
+                  onClick={() => {
+                    setIsStreamingSelected(true);
+                    setIsCustomObjective(false);
+                    setActivePrebuilt(null);
+                    setCardsExpanded(false);
+                    setIsDraftExpanded(false);
+                  }}
+                  className={`group relative text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                    isStreamingSelected
+                      ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 ring-2 ring-indigo-300/40"
+                      : "border-dashed border-indigo-300 dark:border-indigo-700 hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
+                  }`}
+                  data-streaming-mode
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950/30">
+                        <Radio className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div>
+                        <span className="font-semibold text-sm block">Streaming</span>
+                        <span className="text-xs text-muted-foreground">Wireframe + Requirements</span>
+                      </div>
+                      {isStreamingSelected && (
+                        <div className="ml-auto p-1 rounded-full bg-indigo-600">
+                          <Check className="w-3.5 h-3.5 text-white" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                      Discover requirements while referencing a website wireframe. Agent asks sequential questions until your spec is crystal clear.
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
           )}
 
@@ -299,6 +345,64 @@ export function TextInputForm({ onSubmit, onBlankDocument, isLoading }: TextInpu
                 processText(text, mode, mode === "clean" ? "objective" : undefined)
               }
             />
+          )}
+
+          {/* Streaming mode objective + start */}
+          {isStreamingSelected && onStreamingMode && (
+            <div className="space-y-4">
+              {/* Collapsed streaming indicator */}
+              {!cardsExpanded && (
+                <button
+                  onClick={handleChangeType}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 ring-2 ring-indigo-300/40 text-left transition-all hover:bg-indigo-100/50 dark:hover:bg-indigo-950/30"
+                >
+                  <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950/30">
+                    <Radio className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-base">Streaming</span>
+                    <span className="text-sm text-muted-foreground ml-2">Wireframe + Requirements</span>
+                  </div>
+                  <div className="p-1 rounded-full bg-indigo-600 mr-1">
+                    <Check className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    Change <ChevronDown className="w-4 h-4" />
+                  </span>
+                </button>
+              )}
+
+              <ProvokeText
+                chrome="container"
+                label="Objective"
+                labelIcon={Target}
+                description="Describe the website or feature you're writing requirements for."
+                id="streaming-objective"
+                placeholder="Write requirements for an e-commerce checkout flow... Redesign the user profile page..."
+                className="text-base leading-relaxed font-serif"
+                value={objective}
+                onChange={setObjective}
+                minRows={3}
+                maxRows={6}
+                autoFocus
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setObjective}
+                textProcessor={(text, mode) =>
+                  processText(text, mode, mode === "clean" ? "objective" : undefined)
+                }
+              />
+
+              <Button
+                onClick={() => onStreamingMode(objective.trim() || "Discover and refine requirements for a website")}
+                disabled={isLoading}
+                size="lg"
+                className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                <Radio className="w-4 h-4" />
+                Start Streaming Workspace
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
           )}
         </div>
 
