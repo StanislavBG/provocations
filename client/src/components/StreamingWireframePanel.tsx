@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Globe,
   Layout,
-  ExternalLink,
   Loader2,
   Check,
   Camera,
@@ -88,26 +87,13 @@ export function StreamingWireframePanel({
               <Globe className="w-3 h-3 text-muted-foreground" />
               <label className="text-xs font-medium text-muted-foreground">Target Website URL</label>
             </div>
-            <div className="flex gap-1.5">
-              <input
-                type="url"
-                value={websiteUrl}
-                onChange={(e) => onWebsiteUrlChange(e.target.value)}
-                placeholder="https://example.com"
-                className="flex-1 text-sm px-3 py-1.5 border rounded-md bg-background"
-              />
-              {websiteUrl && (
-                <a
-                  href={websiteUrl.startsWith("http") ? websiteUrl : `https://${websiteUrl}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border bg-background hover:bg-muted transition-colors shrink-0"
-                  title="Open website in new tab"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-                </a>
-              )}
-            </div>
+            <input
+              type="url"
+              value={websiteUrl}
+              onChange={(e) => onWebsiteUrlChange(e.target.value)}
+              placeholder="https://example.com"
+              className="text-sm px-3 py-1.5 border rounded-md bg-background"
+            />
             {isAnalyzing && (
               <p className="text-[10px] text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
                 <Loader2 className="w-2.5 h-2.5 animate-spin" />
