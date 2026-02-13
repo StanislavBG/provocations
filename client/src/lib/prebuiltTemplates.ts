@@ -15,27 +15,27 @@ export interface PrebuiltTemplate {
 
 export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
-    id: "incremental-development",
-    title: "Incremental Development",
-    shortLabel: "Dev Iteration",
-    subtitle: "Save typing, any format",
+    id: "write-a-prompt",
+    title: "Write a Prompt",
+    shortLabel: "Prompt",
+    subtitle: "AIM framework, any format",
     description:
-      "For when you already have a project and need to describe the next change. No rigid template — just get your intent across clearly. Write in whatever format feels natural: bullet points, stream of consciousness, pseudo-code, or plain English. The AI will push you on clarity and precision so Claude Code (or any AI tool) can act on it.",
+      "For when you need to write a clear, high-quality prompt for an AI tool. Uses the AIM framework (Actor, Input, Mission) to structure your thinking. Write in whatever format feels natural — the AI will push you on clarity and structure so the resulting prompt gets the best possible output.",
     icon: "pencil-line",
     objective:
-      "Write a clear, unambiguous description of an incremental change to an existing codebase that an AI coding agent can execute",
+      "Write a clear, structured prompt using the AIM framework (Actor, Input, Mission) that an AI can execute with precision",
     starterText: "",
     draftQuestions: [
-      "What's the change?",
-      "Where in the codebase?",
-      "What should it look like when it's done?",
+      "What should the AI act as? (Actor)",
+      "What context or data are you providing? (Input)",
+      "What exactly do you want it to do? (Mission)",
     ],
     templateContent: "", // No template — freeform is the point
     provocationSources: ["Clarity Coach", "Intent Detector"],
     provocationExamples: [
       "Is it clear enough for an AI to act on without asking follow-up questions?",
-      "What are you really saying here? Can you state it in one sentence?",
-      "You said 'fix the layout' — which layout, what's broken, what does fixed look like?",
+      "Who is the Actor here? You haven't defined what role the AI should take.",
+      "What's the Mission? I see context but no clear task or expected output.",
     ],
   },
   {
