@@ -16,15 +16,7 @@ import type {
   StreamingQuestionResponse,
   WireframeAnalysisResponse,
   StreamingRefineResponse,
-  WriteResponse,
 } from "@shared/schema";
-
-interface WireframeDialogueEntry {
-  id: string;
-  role: "user" | "agent";
-  content: string;
-  timestamp: number;
-}
 
 interface StreamingWorkspaceProps {
   document: Document;
@@ -54,11 +46,10 @@ export function StreamingWorkspace({
   const [currentTopic, setCurrentTopic] = useState<string | null>(null);
   const [isDialogueActive, setIsDialogueActive] = useState(false);
 
-  // Wireframe panel state
+  // Website context panel state
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [wireframeNotes, setWireframeNotes] = useState("");
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
-  const [wireframeDialogue, setWireframeDialogue] = useState<WireframeDialogueEntry[]>([]);
 
   // Generate streaming question mutation
   const questionMutation = useMutation({
@@ -106,7 +97,7 @@ export function StreamingWorkspace({
     },
   });
 
-  // Wireframe analysis mutation
+  // Wireframe analysis mutation — feeds results into the dialogue
   const analysisMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/streaming/wireframe-analysis", {
@@ -119,58 +110,42 @@ export function StreamingWorkspace({
     },
     onSuccess: (data) => {
       setWireframeAnalysis(data);
+
+      // Build a summary message from the analysis to inject into the dialogue
+      const parts: string[] = [];
+      if (data.analysis) {
+        parts.push(data.analysis);
+      }
+      if (data.components.length > 0) {
+        parts.push(`\nI identified these components: ${data.components.join(", ")}.`);
+      }
+      if (data.suggestions.length > 0) {
+        parts.push(`\nAreas that need clarification:\n${data.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
+      }
+      parts.push("\nWhat would you like to do here? Tell me what you need and I'll help you shape it into requirements.");
+
+      const analysisEntry: StreamingDialogueEntry = {
+        id: generateId("se"),
+        role: "agent",
+        content: parts.join(""),
+        timestamp: Date.now(),
+      };
+
+      // Inject the analysis into the dialogue and activate it
+      setDialogueEntries(prev => [...prev, analysisEntry]);
+      setCurrentQuestion(parts.join(""));
+      setCurrentTopic("Website Analysis");
+      setIsDialogueActive(true);
+
       toast({
-        title: "Wireframe Analyzed",
-        description: `Found ${data.components.length} components and ${data.suggestions.length} areas for clarification.`,
+        title: "Website Analyzed",
+        description: `Found ${data.components.length} components. The dialogue is ready — tell the agent what you want to do.`,
       });
     },
     onError: (error) => {
       toast({
         title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Failed to analyze wireframe",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Wireframe dialogue mutation (reuses wireframe analysis endpoint with dialogue context)
-  const wireframeDialogueMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const fullNotes = wireframeNotes + "\n\nUser question: " + message;
-      const response = await apiRequest("POST", "/api/streaming/wireframe-analysis", {
-        objective,
-        websiteUrl: websiteUrl || undefined,
-        wireframeNotes: fullNotes,
-        document: document.rawText || undefined,
-      });
-      return await response.json() as WireframeAnalysisResponse;
-    },
-    onSuccess: (data, message) => {
-      // Add user message
-      const userEntry: WireframeDialogueEntry = {
-        id: generateId("wd"),
-        role: "user",
-        content: message,
-        timestamp: Date.now(),
-      };
-      // Add agent response
-      const agentEntry: WireframeDialogueEntry = {
-        id: generateId("wd"),
-        role: "agent",
-        content: data.analysis,
-        timestamp: Date.now(),
-      };
-      setWireframeDialogue(prev => [...prev, userEntry, agentEntry]);
-
-      // Update analysis if components or suggestions changed
-      if (data.components.length > 0 || data.suggestions.length > 0) {
-        setWireframeAnalysis(data);
-      }
-    },
-    onError: (error) => {
-      toast({
-        title: "Dialogue Error",
-        description: error instanceof Error ? error.message : "Failed to process",
+        description: error instanceof Error ? error.message : "Failed to analyze website",
         variant: "destructive",
       });
     },
@@ -226,13 +201,13 @@ export function StreamingWorkspace({
     },
   });
 
-  // Start the streaming dialogue
+  // Start the streaming dialogue (manual start without analysis)
   const handleStartDialogue = useCallback(() => {
     setIsDialogueActive(true);
     questionMutation.mutate(undefined);
   }, [questionMutation]);
 
-  // Handle user answer
+  // Handle user answer — add to dialogue and fetch next question
   const handleAnswer = useCallback((answer: string) => {
     // Add user answer to dialogue
     const userEntry: StreamingDialogueEntry = {
@@ -269,14 +244,9 @@ export function StreamingWorkspace({
     );
   }, []);
 
-  // Handle wireframe dialogue submit
-  const handleWireframeDialogueSubmit = useCallback((message: string) => {
-    wireframeDialogueMutation.mutate(message);
-  }, [wireframeDialogueMutation]);
-
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full">
-      {/* Panel A: Requirement Draft (document) */}
+      {/* Panel A: Website Analysis (left) — URL, objective, wireframe view */}
       <ResizablePanel
         defaultSize={30}
         minSize={10}
@@ -284,16 +254,22 @@ export function StreamingWorkspace({
         collapsedSize={0}
       >
         <div className="h-full overflow-auto">
-          <ReadingPane
-            text={document.rawText}
-            onTextChange={handleDocumentTextChange}
+          <StreamingWireframePanel
+            websiteUrl={websiteUrl}
+            onWebsiteUrlChange={setWebsiteUrl}
+            wireframeNotes={wireframeNotes}
+            onWireframeNotesChange={setWireframeNotes}
+            analysis={wireframeAnalysis}
+            isAnalyzing={analysisMutation.isPending}
+            onAnalyze={() => analysisMutation.mutate()}
+            objective={objective}
           />
         </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
-      {/* Panel B: Provocation Dialogue (agent Q&A) */}
+      {/* Panel B: Requirement Dialogue (center) — agent Q&A populated from analysis */}
       <ResizablePanel
         defaultSize={35}
         minSize={10}
@@ -314,31 +290,24 @@ export function StreamingWorkspace({
             onUpdateRequirement={handleUpdateRequirement}
             onConfirmRequirement={handleConfirmRequirement}
             isActive={isDialogueActive}
+            hasAnalysis={wireframeAnalysis !== null}
           />
         </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
-      {/* Panel C: Website Wireframe Panel */}
+      {/* Panel C: Requirement Draft / Document (right) */}
       <ResizablePanel
         defaultSize={35}
         minSize={10}
         collapsible
         collapsedSize={0}
       >
-        <div className="h-full overflow-hidden">
-          <StreamingWireframePanel
-            websiteUrl={websiteUrl}
-            onWebsiteUrlChange={setWebsiteUrl}
-            wireframeNotes={wireframeNotes}
-            onWireframeNotesChange={setWireframeNotes}
-            analysis={wireframeAnalysis}
-            isAnalyzing={analysisMutation.isPending}
-            onAnalyze={() => analysisMutation.mutate()}
-            wireframeDialogue={wireframeDialogue}
-            onWireframeDialogueSubmit={handleWireframeDialogueSubmit}
-            isWireframeDialogueLoading={wireframeDialogueMutation.isPending}
+        <div className="h-full overflow-auto">
+          <ReadingPane
+            text={document.rawText}
+            onTextChange={handleDocumentTextChange}
           />
         </div>
       </ResizablePanel>

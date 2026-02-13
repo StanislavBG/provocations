@@ -9,10 +9,10 @@ import {
   Send,
   Loader2,
   ListChecks,
-  Plus,
   Check,
   Pencil,
   Mic,
+  Globe,
 } from "lucide-react";
 import type {
   StreamingDialogueEntry,
@@ -32,6 +32,7 @@ interface StreamingDialogueProps {
   onUpdateRequirement: (id: string, text: string) => void;
   onConfirmRequirement: (id: string) => void;
   isActive: boolean;
+  hasAnalysis?: boolean;
 }
 
 export function StreamingDialogue({
@@ -47,6 +48,7 @@ export function StreamingDialogue({
   onUpdateRequirement,
   onConfirmRequirement,
   isActive,
+  hasAnalysis,
 }: StreamingDialogueProps) {
   const [answerText, setAnswerText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -89,7 +91,7 @@ export function StreamingDialogue({
     }
   }, [editingReqId, editingText, onUpdateRequirement]);
 
-  // Not started yet - show start button
+  // Not started yet — show guidance
   if (!isActive) {
     return (
       <div className="h-full flex flex-col">
@@ -100,18 +102,25 @@ export function StreamingDialogue({
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center space-y-4 max-w-sm">
             <MessageCircleQuestion className="w-12 h-12 text-muted-foreground/50 mx-auto" />
-            <h3 className="font-medium text-muted-foreground">Streaming Mode</h3>
+            <h3 className="font-medium text-muted-foreground">Waiting for Website Analysis</h3>
             <p className="text-sm text-muted-foreground">
-              Start a guided session where the agent asks you sequential questions
-              to discover and refine implementable requirements.
+              Use the Website Analysis panel on the left to enter a URL, describe the website,
+              and click <strong>Analyze Website</strong>. The agent will review the site and
+              start asking you questions here.
             </p>
-            <p className="text-xs text-muted-foreground">
-              Reference the wireframe panel on the right while you describe what you need.
-            </p>
-            <Button onClick={onStart} className="gap-2">
-              <MessageCircleQuestion className="w-4 h-4" />
-              Start Dialogue
-            </Button>
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
+              <Globe className="w-3.5 h-3.5" />
+              <span>Analyze the website first, then respond here</span>
+            </div>
+            <div className="pt-2 border-t">
+              <p className="text-xs text-muted-foreground mb-2">
+                Or start a dialogue without a website:
+              </p>
+              <Button variant="outline" size="sm" onClick={onStart} className="gap-2">
+                <MessageCircleQuestion className="w-3.5 h-3.5" />
+                Start Dialogue Manually
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -255,7 +264,7 @@ export function StreamingDialogue({
                       <MessageCircleQuestion className="w-3 h-3 text-violet-600 dark:text-violet-400" />
                       <span className="text-xs font-medium text-violet-600 dark:text-violet-400">Agent</span>
                     </div>
-                    <p className="leading-relaxed">{entry.content}</p>
+                    <p className="leading-relaxed whitespace-pre-line">{entry.content}</p>
                   </CardContent>
                 </Card>
               ) : (
@@ -269,7 +278,7 @@ export function StreamingDialogue({
             </div>
           ))}
 
-          {/* Current question */}
+          {/* Loading indicator */}
           {isLoadingQuestion && (
             <Card className="border-violet-200 dark:border-violet-800">
               <CardContent className="p-3 flex items-center gap-3">
@@ -279,7 +288,8 @@ export function StreamingDialogue({
             </Card>
           )}
 
-          {currentQuestion && !isLoadingQuestion && (
+          {/* Current question highlight (only show if it differs from the last entry to avoid duplication) */}
+          {currentQuestion && !isLoadingQuestion && entries.length > 0 && entries[entries.length - 1]?.content !== currentQuestion && (
             <Card className="border-violet-200 dark:border-violet-800 ring-1 ring-violet-200 dark:ring-violet-800">
               <CardContent className="p-3 space-y-3">
                 <div className="flex items-center gap-1.5">
@@ -289,7 +299,7 @@ export function StreamingDialogue({
                     <Badge variant="outline" className="text-[10px] ml-auto">{currentTopic}</Badge>
                   )}
                 </div>
-                <p className="text-sm font-medium leading-relaxed">{currentQuestion}</p>
+                <p className="text-sm font-medium leading-relaxed whitespace-pre-line">{currentQuestion}</p>
               </CardContent>
             </Card>
           )}
@@ -304,7 +314,7 @@ export function StreamingDialogue({
           <div className="space-y-2">
             <ProvokeText
               chrome="inline"
-              placeholder={currentQuestion ? "Type your answer..." : "Waiting for agent question..."}
+              placeholder={currentQuestion ? "Type your response..." : "Waiting for agent..."}
               value={answerText}
               onChange={setAnswerText}
               className="text-sm"
