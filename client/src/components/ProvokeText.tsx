@@ -14,6 +14,19 @@ import type { LucideIcon } from "lucide-react";
    ══════════════════════════════════════════════════════════════ */
 
 /**
+ * Definition for an additional smart mode that uses the `textProcessor` pipeline.
+ * Unlike custom `ProvokeAction` entries, these modes get full snapshot management,
+ * loading states, and undo support — just like the built-in Clean / Summarize buttons.
+ */
+export interface SmartModeDef {
+  mode: string;
+  label: string;
+  loadingLabel: string;
+  description: string;
+  icon: LucideIcon;
+}
+
+/**
  * A custom action button rendered in the smart-button row.
  *
  * Use this for actions specific to your page/feature that don't fit the
@@ -119,6 +132,13 @@ export interface ProvokeTextProps {
    */
   textProcessor?: (text: string, mode: string) => Promise<string>;
 
+  /**
+   * Additional smart modes rendered alongside Clean / Summarize.
+   * Each mode uses the `textProcessor` pipeline and gets full snapshot
+   * management, loading states, and undo support.
+   */
+  extraSmartModes?: SmartModeDef[];
+
   /* ── Custom actions ── */
   actions?: ProvokeAction[];
 
@@ -214,6 +234,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       onRecordingChange: onRecordingChangeProp,
 
       textProcessor,
+      extraSmartModes,
 
       actions,
 
@@ -378,7 +399,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
      * Order: Clean → Summarize → Show/Restore original → custom actions
      */
 
-    const smartActions: ProvokeAction[] = textProcessor
+    const builtInSmartActions: ProvokeAction[] = textProcessor
       ? [
           {
             key: "_smart-clean",
@@ -404,6 +425,22 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           },
         ]
       : [];
+
+    const extraSmartActions: ProvokeAction[] =
+      textProcessor && extraSmartModes
+        ? extraSmartModes.map((def) => ({
+            key: `_smart-${def.mode}`,
+            label: def.label,
+            loadingLabel: def.loadingLabel,
+            description: def.description,
+            icon: def.icon,
+            onClick: () => handleSmartAction(def.mode),
+            disabled: !hasContent || isProcessing,
+            loading: processingMode === def.mode,
+          }))
+        : [];
+
+    const smartActions = [...builtInSmartActions, ...extraSmartActions];
 
     const snapshotActions: ProvokeAction[] =
       hasSnapshot && !isRecording
