@@ -52,6 +52,45 @@ const provocationPrompts: Record<ProvocationType, string> = {
   thinking_bigger: "As the Think Big Advisor: Push the user to scale impact and outcomes — retention, cost-to-serve, accessibility, resilience — without changing the core idea. Propose bolder bets that respect constraints (time, budget, technical limitations, compliance, operational realities). Raise scale concerns early: what breaks, what becomes harder, and what must be simplified when designing for 100,000+ people. Suggest new workflows that better serve the user outcome, potential adjacent product lines as optional/iterative bets, and 'designed-for-100,000+' simplifications that reduce friction (fewer steps, clearer defaults, safer paths). Make the product easier at scale for both users and the team operating it.",
 };
 
+// Think Big vector descriptions for focused scaling questions
+const thinkBigVectorDescriptions: Record<string, { label: string; description: string; goal: string }> = {
+  tenancy_topology: {
+    label: "Tenancy Topology: Silo vs. Pool",
+    description: "How you isolate data. Shared Schema (Pool) vs. Dedicated Database (Silo) for compliance.",
+    goal: "Build a Tenant-Aware abstraction layer at the database level so you can swap between shared and isolated infrastructure without changing application code.",
+  },
+  api_surface: {
+    label: "API Surface: Utility vs. Platform",
+    description: "Are you building a tool that people log into, or an engine that other apps plug into?",
+    goal: "Adopt an API-First contract. Even if you don't have a public API yet, treating your own frontend as 'just another client' ensures that when it's time to build integrations or mobile apps, the plumbing is already there.",
+  },
+  scaling_horizon: {
+    label: "Scaling Horizon: Vertical vs. Horizontal",
+    description: "Will this app handle 1,000 users with complex data, or 1,000,000 users with simple data?",
+    goal: "Ensure Statelessness. By keeping session data out of the application server and in a distributed cache (like Redis), you can spin up 100 instances of your app instantly when traffic spikes.",
+  },
+  data_residency: {
+    label: "Data Residency: Local vs. Sovereign",
+    description: "With regulations like GDPR, where data lives is often more important than what it does.",
+    goal: "Plan for Regional Sharding. If a customer in the EU requires their data to never leave the continent, your system should be able to route traffic to a specific regional cluster based on their 'Home Region' label.",
+  },
+  integration_philosophy: {
+    label: "Integration Philosophy: Adapter vs. Native",
+    description: "Will you build every integration yourself, or provide a 'hook' for the world?",
+    goal: "Implement an Event-Driven Architecture (Webhooks). Instead of writing custom code for every CRM or Slack integration, your app should simply 'emit' events (e.g., user.created, order.completed) that external systems can subscribe to.",
+  },
+  identity_access: {
+    label: "Identity & Access: RBAC vs. ABAC",
+    description: "Simple 'Admin/User' roles usually fall apart when a 'Big' customer asks for 'Regional Manager who can view but not edit billing.'",
+    goal: "Use Attribute-Based Access Control (ABAC) or a flexible policy engine. It's easier to start with a granular permissions model than to try and split a 'User' role into five sub-roles later.",
+  },
+  observability: {
+    label: "Observability: Logs vs. Traces",
+    description: "When you're small, checking logs is fine. When you're big and a request touches five different microservices, logs aren't enough.",
+    goal: "Implement Distributed Tracing (Correlation IDs) from day one. Attaching a unique ID to a request as it moves through your system allows you to debug 'Big' problems in seconds rather than hours.",
+  },
+};
+
 // Instruction classification patterns
 const instructionPatterns: Record<InstructionType, RegExp[]> = {
   expand: [/expand/i, /elaborate/i, /add.*detail/i, /develop/i, /flesh out/i, /more about/i, /tell me more/i, /explain.*further/i],
@@ -934,7 +973,7 @@ Be faithful to their intent - don't add information they didn't mention.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, document: docText, template, previousEntries, provocations } = parsed.data;
+      const { objective, document: docText, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors } = parsed.data;
 
       // Build context from previous Q&A
       const previousContext = previousEntries && previousEntries.length > 0
@@ -959,6 +998,49 @@ Be faithful to their intent - don't add information they didn't mention.`
         ? `\n\nPENDING PROVOCATIONS (challenges not yet addressed):\n${pendingProvocations.map(p => `- [${p.type}] ${p.title}: ${p.content}`).join("\n")}`
         : "";
 
+      // Build direction context from selected personas and mode
+      let directionContext = "";
+      if (directionPersonas && directionPersonas.length > 0) {
+        const mode = directionMode || "challenge";
+        const personaDescs = directionPersonas.map(t => {
+          const prompt = provocationPrompts[t];
+          return `- ${t}: ${prompt}`;
+        }).join("\n");
+
+        const modeInstruction = mode === "advise"
+          ? "Take an ADVISORY stance — suggest improvements, recommend approaches, and offer constructive guidance. Frame questions as opportunities to strengthen the document."
+          : "Take a CHALLENGING stance — push back on assumptions, probe for weaknesses, and question claims. Frame questions as provocations that demand better answers.";
+
+        // Build Think Big vectors context if the thinking_bigger persona is active
+        let thinkBigContext = "";
+        if (directionPersonas.includes("thinking_bigger") && thinkBigVectors && thinkBigVectors.length > 0) {
+          const vectorDescs = thinkBigVectors.map(v => {
+            const vec = thinkBigVectorDescriptions[v];
+            if (!vec) return "";
+            return `- ${vec.label}\n  ${vec.description}\n  Think Big Goal: ${vec.goal}`;
+          }).filter(Boolean).join("\n\n");
+
+          thinkBigContext = `\n\nTHINK BIG FOCUS VECTORS (prioritize questions about these scaling dimensions):
+${vectorDescs}
+
+When acting as the Think Big Advisor, focus your questions on these specific vectors. Push the user to think about how their product handles these concerns at scale.`;
+        }
+
+        directionContext = `\n\nDIRECTION (the user has chosen specific personas and a mode):
+MODE: ${mode.toUpperCase()}
+${modeInstruction}
+
+ACTIVE PERSONAS:
+${personaDescs}
+
+Embody these personas when crafting your questions. Each question should reflect the perspective and expertise of one of the active personas. Include the persona name in the topic label.${thinkBigContext}`;
+      }
+
+      // Build guidance context
+      const guidanceContext = directionGuidance
+        ? `\n\nUSER GUIDANCE: ${directionGuidance}`
+        : "";
+
       const response = await openai.chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 1024,
@@ -968,7 +1050,7 @@ Be faithful to their intent - don't add information they didn't mention.`
             content: `You are a skilled interviewer helping a user develop their document by asking probing questions. Your goal is to extract the information, perspectives, and insights the user needs to include in their document.
 
 OBJECTIVE: ${objective}
-${templateContext}${documentContext}${provocationsContext}
+${templateContext}${documentContext}${provocationsContext}${directionContext}${guidanceContext}
 
 PREVIOUS Q&A:
 ${previousContext}
@@ -978,12 +1060,14 @@ Your job:
 2. Ask ONE focused, provocative question that will elicit useful content for the document
 3. Make the question specific and actionable — the user should be able to answer it directly
 4. Don't repeat topics already covered in previous Q&A
-5. Prioritize questions that address pending provocations or uncovered template sections
-6. If the template is mostly covered and provocations addressed, ask about nuance, examples, or edge cases
+5. If direction personas are set, embody one of them — ask from that persona's perspective
+6. If the direction mode is "advise", frame the question as seeking to improve and strengthen
+7. If the direction mode is "challenge", frame the question as pushing back and probing for weakness
+8. If the template is mostly covered and provocations addressed, ask about nuance, examples, or edge cases
 
 Respond with a JSON object:
 - question: The question to ask (conversational, direct, max 200 chars)
-- topic: A short label for what this question covers (max 40 chars)
+- topic: A short label for what this question covers (max 40 chars). If a direction persona is active, prefix with the persona name, e.g. "Architect: API Contracts"
 - reasoning: Brief internal reasoning for why this question matters (max 100 chars)
 
 Output only valid JSON, no markdown.`
