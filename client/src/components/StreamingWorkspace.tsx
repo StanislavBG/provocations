@@ -6,7 +6,7 @@ import { generateId } from "@/lib/utils";
 import { ReadingPane } from "./ReadingPane";
 import { StreamingDialogue } from "./StreamingDialogue";
 import { StreamingWireframePanel } from "./StreamingWireframePanel";
-import { ScreenCaptureButton } from "./ScreenCaptureButton";
+import { ScreenCaptureButton, type CaptureRegion } from "./ScreenCaptureButton";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type {
   Document,
@@ -245,24 +245,27 @@ export function StreamingWorkspace({
     );
   }, []);
 
-  // Handle screen capture: embed image + commentary into the requirement markdown doc
-  const handleScreenCapture = useCallback((imageDataUrl: string, commentary: string) => {
+  // Handle screen capture: embed annotated image + per-region narration into the requirement markdown doc
+  const handleScreenCapture = useCallback((imageDataUrl: string, regions: CaptureRegion[]) => {
     const timestamp = new Date().toLocaleString();
-    const captionText = commentary || "Screen capture";
+
+    const narrationLines = regions.map(r =>
+      `**Region ${r.number}**: ${r.narration || "(no narration)"}`
+    );
 
     const markdownSnippet = [
       "",
       `---`,
       "",
-      `### Screenshot (${timestamp})`,
+      `### Annotated Screenshot (${timestamp})`,
       "",
-      `![${captionText}](${imageDataUrl})`,
+      `![Annotated screenshot with ${regions.length} marked region${regions.length !== 1 ? "s" : ""}](${imageDataUrl})`,
       "",
-      commentary ? `> ${commentary.split("\n").join("\n> ")}` : "",
+      ...narrationLines,
       "",
       `---`,
       "",
-    ].filter(Boolean).join("\n");
+    ].join("\n");
 
     // Append directly to the document for the streaming workspace
     const updatedText = document.rawText.trim() + "\n" + markdownSnippet;
@@ -270,22 +273,22 @@ export function StreamingWorkspace({
       id: generateId("v"),
       text: updatedText,
       timestamp: Date.now(),
-      description: "Screen capture added",
+      description: `Annotated capture (${regions.length} regions)`,
     };
     onVersionAdd(newVersion);
     onDocumentChange({ ...document, rawText: updatedText });
 
     const historyEntry: EditHistoryEntry = {
-      instruction: "Added screen capture with commentary",
+      instruction: `Added annotated screen capture with ${regions.length} regions`,
       instructionType: "expand",
-      summary: `Screenshot added: ${captionText.slice(0, 60)}`,
+      summary: `Annotated screenshot added with ${regions.length} region${regions.length !== 1 ? "s" : ""}`,
       timestamp: Date.now(),
     };
     onEditHistoryAdd(historyEntry);
 
     toast({
       title: "Screenshot Added",
-      description: "Screen capture and commentary appended to the document.",
+      description: `Annotated capture with ${regions.length} region${regions.length !== 1 ? "s" : ""} appended to the document.`,
     });
   }, [document, onDocumentChange, onVersionAdd, onEditHistoryAdd, toast]);
 

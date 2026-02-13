@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
 import { StreamingWorkspace } from "@/components/StreamingWorkspace";
-import { ScreenCaptureButton } from "@/components/ScreenCaptureButton";
+import { ScreenCaptureButton, type CaptureRegion } from "@/components/ScreenCaptureButton";
 import {
   Sparkles,
   RotateCcw,
@@ -361,32 +361,35 @@ export default function Workspace() {
   }, [document]);
 
 
-  // Handle screen capture: embed image + commentary as markdown into the document
-  const handleScreenCapture = useCallback((imageDataUrl: string, commentary: string) => {
+  // Handle screen capture: embed annotated image + per-region narration as markdown
+  const handleScreenCapture = useCallback((imageDataUrl: string, regions: CaptureRegion[]) => {
     if (!document) return;
 
     const timestamp = new Date().toLocaleString();
-    const captionText = commentary || "Screen capture";
 
-    // Build markdown snippet with embedded image and commentary
+    // Build numbered narration lines from regions
+    const narrationLines = regions.map(r =>
+      `**Region ${r.number}**: ${r.narration || "(no narration)"}`
+    );
+
     const markdownSnippet = [
       "",
       `---`,
       "",
-      `### Screenshot (${timestamp})`,
+      `### Annotated Screenshot (${timestamp})`,
       "",
-      `![${captionText}](${imageDataUrl})`,
+      `![Annotated screenshot with ${regions.length} marked region${regions.length !== 1 ? "s" : ""}](${imageDataUrl})`,
       "",
-      commentary ? `> ${commentary.split("\n").join("\n> ")}` : "",
+      ...narrationLines,
       "",
       `---`,
       "",
-    ].filter(Boolean).join("\n");
+    ].join("\n");
 
     // Merge via the writer for intelligent placement
     writeMutation.mutate({
-      instruction: `Integrate the following screenshot and commentary into the document at the most appropriate location. The screenshot was captured from the current wireframe/app state. Place it near related content, or append it as a new section if no existing section is relevant.\n\nScreenshot markdown:\n${markdownSnippet}`,
-      description: "Screen capture merged",
+      instruction: `Integrate the following annotated screenshot into the document. The screenshot has ${regions.length} numbered regions with narration. Place it at the most appropriate location near related content, or append as a new section.\n\nScreenshot markdown:\n${markdownSnippet}`,
+      description: "Annotated screen capture merged",
     });
   }, [document, writeMutation]);
 
