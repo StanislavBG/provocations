@@ -11,6 +11,8 @@ interface VoiceRecorderProps {
   variant?: "default" | "ghost" | "outline" | "secondary" | "destructive";
   className?: string;
   label?: string;
+  /** When true, automatically starts recording once speech recognition is ready. */
+  autoStart?: boolean;
 }
 
 interface SpeechRecognitionEvent {
@@ -49,7 +51,8 @@ export function VoiceRecorder({
   size = "icon",
   variant = "ghost",
   className = "",
-  label
+  label,
+  autoStart,
 }: VoiceRecorderProps) {
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
@@ -183,6 +186,22 @@ export function VoiceRecorder({
       startRecording();
     }
   }, [startRecording, stopRecording]);
+
+  // Auto-start recording when requested
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStart && !autoStartedRef.current && recognitionRef.current) {
+      autoStartedRef.current = true;
+      // Small delay to let the DOM settle after mount
+      const timer = setTimeout(() => {
+        startRecording();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+    if (!autoStart) {
+      autoStartedRef.current = false;
+    }
+  }, [autoStart, startRecording]);
 
   if (!isSupported) {
     return (
