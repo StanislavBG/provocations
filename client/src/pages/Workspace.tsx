@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
 import { StreamingWorkspace } from "@/components/StreamingWorkspace";
+import { ScreenCaptureButton } from "@/components/ScreenCaptureButton";
 import {
   Sparkles,
   RotateCcw,
@@ -360,6 +361,35 @@ export default function Workspace() {
   }, [document]);
 
 
+  // Handle screen capture: embed image + commentary as markdown into the document
+  const handleScreenCapture = useCallback((imageDataUrl: string, commentary: string) => {
+    if (!document) return;
+
+    const timestamp = new Date().toLocaleString();
+    const captionText = commentary || "Screen capture";
+
+    // Build markdown snippet with embedded image and commentary
+    const markdownSnippet = [
+      "",
+      `---`,
+      "",
+      `### Screenshot (${timestamp})`,
+      "",
+      `![${captionText}](${imageDataUrl})`,
+      "",
+      commentary ? `> ${commentary.split("\n").join("\n> ")}` : "",
+      "",
+      `---`,
+      "",
+    ].filter(Boolean).join("\n");
+
+    // Merge via the writer for intelligent placement
+    writeMutation.mutate({
+      instruction: `Integrate the following screenshot and commentary into the document at the most appropriate location. The screenshot was captured from the current wireframe/app state. Place it near related content, or append it as a new section if no existing section is relevant.\n\nScreenshot markdown:\n${markdownSnippet}`,
+      description: "Screen capture merged",
+    });
+  }, [document, writeMutation]);
+
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
   }, []);
@@ -626,6 +656,10 @@ export default function Workspace() {
                 Versions ({versions.length})
               </Button>
             )}
+            <ScreenCaptureButton
+              onCapture={handleScreenCapture}
+              disabled={!document.rawText || writeMutation.isPending}
+            />
             <Button
               variant="outline"
               size="sm"
