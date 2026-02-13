@@ -630,10 +630,14 @@ export default function Workspace() {
         title: "Document Loaded",
         description: `"${loadedObjective}" loaded.`,
       });
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      const isDecryptionError = message.includes("422");
       toast({
-        title: "Load Failed",
-        description: "Could not load document. Try again.",
+        title: isDecryptionError ? "Cannot Open Document" : "Load Failed",
+        description: isDecryptionError
+          ? "This document was saved with an older encryption method and cannot be opened."
+          : "Could not load document. Try again.",
         variant: "destructive",
       });
     }
