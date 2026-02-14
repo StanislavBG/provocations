@@ -20,6 +20,9 @@ import {
   Crosshair,
   Globe,
   Wrench,
+  Info,
+  UserCircle,
+  Pencil,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode, ThinkBigVector } from "@shared/schema";
 
@@ -60,13 +63,13 @@ const personaLabels: Record<ProvocationType, string> = {
 };
 
 const personaDescriptions: Record<ProvocationType, string> = {
-  architect: "System design, boundaries, API contracts, and data flow",
-  quality_engineer: "Testing gaps, edge cases, error handling, and reliability",
-  ux_designer: "User flows, discoverability, accessibility, and error states",
-  tech_writer: "Documentation, naming, and UI copy clarity",
-  product_manager: "Business value, user stories, and prioritization",
-  security_engineer: "Data privacy, authentication, authorization, and compliance",
-  thinking_bigger: "Scale impact and outcomes without changing the core idea",
+  architect: "Examines system design, boundaries, API contracts, and data flow. This persona ensures your architecture is sound, scalable, and well-structured before you build.",
+  quality_engineer: "Probes for testing gaps, edge cases, error handling, and reliability. Catches the blind spots that break things in production.",
+  ux_designer: "Evaluates user flows, discoverability, accessibility, and error states. Makes sure real people can actually use what you're building.",
+  tech_writer: "Reviews documentation, naming conventions, and UI copy for clarity. If someone can't understand it, it doesn't exist.",
+  product_manager: "Challenges business value, user stories, and prioritization. Asks the hard question: does this actually matter to users?",
+  security_engineer: "Audits data privacy, authentication, authorization, and compliance. Finds the vulnerabilities before someone else does.",
+  thinking_bigger: "Pushes you to scale impact and outcomes without changing the core idea. What if this was 10x bigger?",
 };
 
 // Think Big vector metadata
@@ -172,6 +175,17 @@ export function ProvocationToolbox({
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
         <Wrench className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Toolbox</h3>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted/60 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors text-[10px] font-bold">
+              1
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[300px]">
+            <p className="text-xs font-medium mb-1">Configure Your Session</p>
+            <p className="text-xs text-muted-foreground">This panel is your control center. Choose which expert personas will review your work, set the AI's tone (challenge or advise), and optionally define a custom focus area. Your selections shape the interview questions in the Discussion panel.</p>
+          </TooltipContent>
+        </Tooltip>
         <div className="flex-1" />
         {/* App switcher tabs */}
         <div className="flex items-center gap-1">
@@ -288,55 +302,32 @@ function ProvokeConfigApp({
     });
   }, [directionMode, selectedPersonas, selectedVectors, guidance, onStartInterview]);
 
+  // Custom persona expanded state
+  const [isCustomExpanded, setIsCustomExpanded] = useState(false);
+
   return (
     <div className="h-full flex flex-col overflow-auto">
-      {/* Direction setup */}
+      {/* Configuration setup */}
       <div className="p-4 space-y-4">
-        {/* Direction mode: Challenge / Advise */}
+        {/* 1. Persona toggles — FIRST */}
         <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Direction
-          </label>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={directionMode === "challenge" ? "default" : "outline"}
-              className={`gap-1.5 flex-1 ${
-                directionMode === "challenge"
-                  ? "bg-violet-600 hover:bg-violet-700 text-white"
-                  : "hover:bg-violet-50 dark:hover:bg-violet-950/20 hover:text-violet-700 dark:hover:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700"
-              }`}
-              onClick={() => setDirectionMode("challenge")}
-            >
-              <ShieldAlert className="w-4 h-4" />
-              Challenge
-            </Button>
-            <Button
-              size="sm"
-              variant={directionMode === "advise" ? "default" : "outline"}
-              className={`gap-1.5 flex-1 ${
-                directionMode === "advise"
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : "hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700"
-              }`}
-              onClick={() => setDirectionMode("advise")}
-            >
-              <Lightbulb className="w-4 h-4" />
-              Advise
-            </Button>
+            <UserCircle className="w-4 h-4 text-primary" />
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Personas
+            </label>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help">
+                  <Info className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-primary transition-colors" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-[280px]">
+                <p className="text-xs font-medium mb-1">Choose your reviewers</p>
+                <p className="text-xs text-muted-foreground">Each persona brings a distinct professional lens to challenge your thinking. Select one or more to shape the interview questions around their expertise. Leave empty for general questions.</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {directionMode === "challenge"
-              ? "Push back on assumptions, probe weaknesses, demand better answers."
-              : "Suggest improvements, recommend approaches, offer constructive guidance."}
-          </p>
-        </div>
-
-        {/* Persona toggles */}
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Personas
-          </label>
           <div className="flex items-center gap-1 flex-wrap">
             {allPersonaTypes.map((type) => {
               const Icon = personaIcons[type];
@@ -361,13 +352,66 @@ function ProvokeConfigApp({
                       {personaLabels[type]}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    <p className="text-xs">{personaDescriptions[type]}</p>
+                  <TooltipContent side="bottom" className="max-w-[260px]">
+                    <p className="text-xs font-medium mb-0.5">{personaLabels[type]}</p>
+                    <p className="text-xs text-muted-foreground">{personaDescriptions[type]}</p>
                   </TooltipContent>
                 </Tooltip>
               );
             })}
+
+            {/* Custom persona — opens guidance input */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant={isCustomExpanded ? "default" : "outline"}
+                  className={`gap-1 text-xs h-7 px-2 ${
+                    isCustomExpanded
+                      ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                      : "opacity-50 border-indigo-300 dark:border-indigo-700 hover:opacity-100"
+                  }`}
+                  onClick={() => setIsCustomExpanded(!isCustomExpanded)}
+                >
+                  <Pencil className="w-3 h-3" />
+                  Custom
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[260px]">
+                <p className="text-xs font-medium mb-0.5">Custom Focus</p>
+                <p className="text-xs text-muted-foreground">Define your own area of focus. Tell the AI exactly what to push you on — pricing strategy, technical debt, go-to-market, anything specific to your context.</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
+
+          {/* Custom guidance — collapsed ProvokeText input */}
+          {isCustomExpanded && (
+            <div className="mt-2 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2">
+              <label className="text-xs font-medium text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Crosshair className="w-3 h-3" />
+                Focus Area
+              </label>
+              <ProvokeText
+                chrome="inline"
+                placeholder={
+                  directionMode === "challenge"
+                    ? "e.g. 'Push me on pricing strategy and unit economics'"
+                    : "e.g. 'Help me strengthen my competitive analysis'"
+                }
+                value={guidance}
+                onChange={setGuidance}
+                className="text-sm"
+                minRows={2}
+                maxRows={4}
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={(transcript) => setGuidance(transcript)}
+                onRecordingChange={setIsRecordingGuidance}
+              />
+              {isRecordingGuidance && (
+                <p className="text-xs text-primary animate-pulse">Listening... describe what to focus on</p>
+              )}
+            </div>
+          )}
 
           {/* Think Big vectors — show when Think Big persona is selected */}
           {selectedPersonas.has("thinking_bigger") && (
@@ -412,39 +456,63 @@ function ProvokeConfigApp({
           )}
 
           <p className="text-xs text-muted-foreground">
-            {selectedPersonas.size === 0
+            {selectedPersonas.size === 0 && !isCustomExpanded
               ? "Select personas to focus the interview, or leave empty for general questions."
-              : `${selectedPersonas.size} persona${selectedPersonas.size > 1 ? "s" : ""} selected`}
+              : `${selectedPersonas.size} persona${selectedPersonas.size > 1 ? "s" : ""} selected${isCustomExpanded ? " + Custom focus" : ""}`}
           </p>
         </div>
 
-        {/* Optional guidance text */}
+        {/* 2. Direction mode: Challenge / Advise — SECOND */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Crosshair className="w-4 h-4 text-muted-foreground" />
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Focus (optional)
+              Direction
             </label>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help">
+                  <Info className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-primary transition-colors" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-[280px]">
+                <p className="text-xs font-medium mb-1">Set the AI's tone</p>
+                <p className="text-xs text-muted-foreground">Challenge mode pushes back hard — it questions your assumptions and demands stronger arguments. Advise mode is constructive — it suggests improvements and recommends better approaches.</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <ProvokeText
-            chrome="inline"
-            placeholder={
-              directionMode === "challenge"
-                ? "e.g. 'Push me on pricing strategy'"
-                : "e.g. 'Help me strengthen my competitive analysis'"
-            }
-            value={guidance}
-            onChange={setGuidance}
-            className="text-sm"
-            minRows={2}
-            maxRows={4}
-            voice={{ mode: "replace" }}
-            onVoiceTranscript={(transcript) => setGuidance(transcript)}
-            onRecordingChange={setIsRecordingGuidance}
-          />
-          {isRecordingGuidance && (
-            <p className="text-xs text-primary animate-pulse">Listening... describe the direction for your interview</p>
-          )}
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={directionMode === "challenge" ? "default" : "outline"}
+              className={`gap-1.5 flex-1 ${
+                directionMode === "challenge"
+                  ? "bg-violet-600 hover:bg-violet-700 text-white"
+                  : "hover:bg-violet-50 dark:hover:bg-violet-950/20 hover:text-violet-700 dark:hover:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700"
+              }`}
+              onClick={() => setDirectionMode("challenge")}
+            >
+              <ShieldAlert className="w-4 h-4" />
+              Challenge
+            </Button>
+            <Button
+              size="sm"
+              variant={directionMode === "advise" ? "default" : "outline"}
+              className={`gap-1.5 flex-1 ${
+                directionMode === "advise"
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700"
+              }`}
+              onClick={() => setDirectionMode("advise")}
+            >
+              <Lightbulb className="w-4 h-4" />
+              Advise
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {directionMode === "challenge"
+              ? "Push back on assumptions, probe weaknesses, demand better answers."
+              : "Suggest improvements, recommend approaches, offer constructive guidance."}
+          </p>
         </div>
       </div>
 
