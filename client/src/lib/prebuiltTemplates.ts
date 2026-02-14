@@ -7,7 +7,6 @@ export interface PrebuiltTemplate {
   icon: string; // lucide icon name key
   objective: string;
   starterText: string;
-  draftQuestions: string[]; // probing questions shown in a side panel (not in the draft)
   templateContent: string; // added as a reference document (empty = freeform)
   provocationSources: string[]; // who/what generates the provocations
   provocationExamples: string[]; // example provocations for the card preview
@@ -25,11 +24,6 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     objective:
       "Write a clear, structured prompt using the AIM framework (Actor, Input, Mission) that an AI can execute with precision",
     starterText: "",
-    draftQuestions: [
-      "What should the AI act as? (Actor)",
-      "What context or data are you providing? (Input)",
-      "What exactly do you want it to do? (Mission)",
-    ],
     templateContent: "", // No template — freeform is the point
     provocationSources: ["Clarity Coach", "Intent Detector"],
     provocationExamples: [
@@ -49,12 +43,6 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     objective:
       "Write a clear product requirements document for an incremental feature with defined user, workflow, scope, and acceptance criteria",
     starterText: "",
-    draftQuestions: [
-      "Who is the user?",
-      "What are they trying to do today?",
-      "What's broken or missing?",
-      "What should the new experience look like?",
-    ],
     templateContent: `# Product Requirement
 
 ## Problem
@@ -109,12 +97,6 @@ What specifically changes for the user? Walk through the new flow step by step.
     objective:
       "Write a comprehensive application specification for a new SaaS product that covers users, features, technical architecture, and deployment",
     starterText: "",
-    draftQuestions: [
-      "What does this app do in one sentence?",
-      "Who is it for?",
-      "What are the 3-5 core things a user can do?",
-      "What's the business model (free, paid, freemium)?",
-    ],
     templateContent: `# New Application Specification
 
 ## Vision
@@ -192,7 +174,6 @@ Key endpoints the backend needs:
     objective:
       "Discover and refine requirements for a website through dynamic exploration and iterative questioning",
     starterText: "",
-    draftQuestions: [],
     templateContent: "",
     provocationSources: [
       "UX Researcher",
@@ -218,12 +199,6 @@ Key endpoints the backend needs:
     objective:
       "Write a well-structured research paper with a clear thesis, supporting evidence, methodology, findings, and conclusions",
     starterText: "",
-    draftQuestions: [
-      "What is your research question or thesis?",
-      "What existing work or literature is this building on?",
-      "What methodology or approach are you using?",
-      "What are your key findings or arguments?",
-    ],
     templateContent: `# Research Paper
 
 ## Abstract
@@ -314,12 +289,6 @@ What questions remain open? What should be explored next?
     objective:
       "Write a clear infographic description covering the narrative, key data points, visual structure, and messaging so a designer can produce it without ambiguity",
     starterText: "",
-    draftQuestions: [
-      "What is the main message or story this infographic tells?",
-      "Who is the target audience?",
-      "What are the key data points or facts to highlight?",
-      "What visual style or tone are you going for?",
-    ],
     templateContent: `# Infographic Description
 
 ## Purpose & Goal
@@ -392,12 +361,6 @@ Color palette, fonts, brand guidelines, or mood references.
     objective:
       "Write a cohesive slide-by-slide video script that transforms source text into an engaging visual narrative with voiceover, visuals, and pacing",
     starterText: "",
-    draftQuestions: [
-      "What is the source material (news article, blog post, report)?",
-      "Who is the target audience for this video?",
-      "What is the desired length and tone?",
-      "What platform is this for (YouTube, social media, presentation)?",
-    ],
     templateContent: `# Slide Video Script
 
 ## Overview

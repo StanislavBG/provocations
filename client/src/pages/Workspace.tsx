@@ -148,72 +148,8 @@ export default function Workspace() {
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
 
-  // ── Local backup: persist workspace state to localStorage ──
-  const LOCAL_BACKUP_KEY = "provocations-workspace-backup";
   const lastServerSave = useRef<number>(0);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Save to localStorage on every meaningful change (debounced 2s)
-  useEffect(() => {
-    if (!document.rawText) return;
-    const handle = setTimeout(() => {
-      try {
-        const backup = JSON.stringify({
-          documentText: document.rawText,
-          objective,
-          secondaryObjective,
-          currentDocId,
-          savedAt: Date.now(),
-        });
-        localStorage.setItem(LOCAL_BACKUP_KEY, backup);
-      } catch {
-        // localStorage full or unavailable — ignore
-      }
-    }, 2000);
-    return () => clearTimeout(handle);
-  }, [document.rawText, objective, secondaryObjective, currentDocId]);
-
-  // Restore from localStorage on mount if workspace is empty
-  useEffect(() => {
-    if (document.rawText) return; // already has content
-    try {
-      const raw = localStorage.getItem(LOCAL_BACKUP_KEY);
-      if (!raw) return;
-      const backup = JSON.parse(raw) as {
-        documentText?: string;
-        objective?: string;
-        secondaryObjective?: string;
-        currentDocId?: number | null;
-        savedAt?: number;
-      };
-      // Only restore if the backup is less than 7 days old
-      if (backup.savedAt && Date.now() - backup.savedAt > 7 * 24 * 60 * 60 * 1000) return;
-      if (backup.documentText) {
-        setDocument({ id: generateId("doc"), rawText: backup.documentText });
-        if (backup.objective) setObjective(backup.objective);
-        if (backup.secondaryObjective) setSecondaryObjectiveRaw(backup.secondaryObjective);
-        if (backup.currentDocId) setCurrentDocId(backup.currentDocId);
-        toast({
-          title: "Draft Restored",
-          description: "Your previous session was recovered from local backup.",
-        });
-      }
-    } catch {
-      // Corrupt backup — ignore
-    }
-    // Only run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Warn before closing tab with unsaved work
-  useEffect(() => {
-    if (!document.rawText) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [document.rawText]);
 
   // Auto-save to server every 60s when there's content and user is authenticated
   useEffect(() => {
@@ -459,7 +395,7 @@ export default function Workspace() {
         setInterviewEntries([]);
 
         toast({
-          title: "Merged to Draft",
+          title: "Merged to Document",
           description: `${interviewEntries.length} answers integrated. Interview continues.`,
         });
       }
@@ -678,8 +614,8 @@ export default function Workspace() {
     interviewSummaryMutation.mutate();
   }, [interviewSummaryMutation]);
 
-  // Merge discussion content to draft without ending the session
-  const handleMergeToDraft = useCallback(() => {
+  // Merge discussion content to document without ending the session
+  const handleMergeToDocument = useCallback(() => {
     if (activeToolboxApp === "provoke") {
       if (interviewEntries.length > 0 && !interviewMergeMutation.isPending) {
         interviewMergeMutation.mutate();
@@ -1068,7 +1004,7 @@ export default function Workspace() {
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[300px]">
             <p className="text-xs font-medium mb-1">The Interview</p>
-            <p className="text-xs text-muted-foreground">This is where the AI challenges your thinking. It asks provocative questions based on your personas and direction. Answer using voice or text — each response deepens and refines your document. Use "Merge to Draft" to push your answers into the document at any time.</p>
+            <p className="text-xs text-muted-foreground">This is where the AI challenges your thinking. It asks provocative questions based on your personas and direction. Answer using voice or text — each response deepens and refines your document. Use "Merge to Document" to push your answers into the document at any time.</p>
           </TooltipContent>
         </Tooltip>
         {(isInterviewActive || isStreamingDialogueActive) && (
@@ -1081,7 +1017,7 @@ export default function Workspace() {
             variant="outline"
             size="sm"
             className="gap-1.5 text-xs h-7"
-            onClick={handleMergeToDraft}
+            onClick={handleMergeToDocument}
             disabled={interviewMergeMutation.isPending || streamingRefineMutation.isPending}
           >
             {interviewMergeMutation.isPending || streamingRefineMutation.isPending ? (
@@ -1092,7 +1028,7 @@ export default function Workspace() {
             ) : (
               <>
                 <ArrowRightToLine className="w-3 h-3" />
-                Merge to Draft
+                Merge to Document
               </>
             )}
           </Button>

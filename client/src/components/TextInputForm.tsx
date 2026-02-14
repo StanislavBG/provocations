@@ -1,9 +1,7 @@
 import { useState, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  FileText,
   ArrowRight,
-  Mic,
   Target,
   PenLine,
   PencilLine,
@@ -20,7 +18,6 @@ import {
 import { ProvokeText } from "@/components/ProvokeText";
 import type { SmartModeDef } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
-import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument } from "@shared/schema";
 import { generateId } from "@/lib/utils";
@@ -70,12 +67,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
 
-  // Draft section expanded state
-  const [isDraftExpanded, setIsDraftExpanded] = useState(false);
-
-  // Auto-record flag: set when user clicks "Speak it", cleared after ProvokeText picks it up
-  const [autoRecordDraft, setAutoRecordDraft] = useState(false);
-
   // Ref for scrolling back to top on selection
   const stepOneRef = useRef<HTMLDivElement>(null);
 
@@ -114,16 +105,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
   const handleSelectPrebuilt = (template: PrebuiltTemplate) => {
     setObjective(template.objective);
-    if (!template.draftQuestions?.length) {
-      setText(template.starterText);
-    } else {
-      setText("");
-    }
+    setText(template.starterText);
     setActivePrebuilt(template);
     setIsCustomObjective(false);
 
     setCardsExpanded(false);
-    setIsDraftExpanded(true);
   };
 
   const handleSelectCustom = () => {
@@ -132,7 +118,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
     setObjective("");
     setCardsExpanded(false);
-    setIsDraftExpanded(false);
   };
 
   const handleChangeType = () => {
@@ -140,11 +125,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
     requestAnimationFrame(() => {
       stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  };
-
-  const handleDraftQuestionResponse = (question: string, response: string) => {
-    const entry = `[${question}]\n${response}`;
-    setText((prev) => (prev ? prev + "\n\n" + entry : entry));
   };
 
   return (
@@ -352,53 +332,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
-          ) : !isDraftExpanded ? (
-            <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setIsDraftExpanded(true)}
-                  className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-lg bg-primary/10">
-                      <FileText className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="font-medium text-base">Paste text</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-snug">
-                    Notes, transcripts, reports — any raw material to shape.
-                  </p>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setIsDraftExpanded(true);
-                    setAutoRecordDraft(true);
-                  }}
-                  disabled={isLoading}
-                  className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-lg bg-primary/10">
-                      <Mic className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="font-medium text-base">Speak it</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-snug">
-                    Talk through your ideas and we'll capture them as a draft.
-                  </p>
-                </button>
-            </div>
           ) : (
             <div className="flex flex-1 min-h-0 gap-3">
-              {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
-                <DraftQuestionsPanel
-                  questions={activePrebuilt.draftQuestions}
-                  onResponse={handleDraftQuestionResponse}
-                />
-              )}
               <ProvokeText
                 chrome="container"
-                label="Your draft"
+                label="Your content"
                 labelIcon={PenLine}
                 containerClassName="flex-1 min-h-0 flex flex-col"
                 data-testid="input-source-text"
@@ -413,13 +351,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 onVoiceTranscript={(transcript) =>
                   setText((prev) => (prev ? prev + " " + transcript : transcript))
                 }
-                onRecordingChange={(recording) => {
-                  // Clear auto-record flag once recording actually starts
-                  if (recording && autoRecordDraft) {
-                    setAutoRecordDraft(false);
-                  }
-                }}
-                autoRecord={autoRecordDraft}
                 textProcessor={(t, mode) =>
                   processText(t, mode, mode === "clean" ? "source" : undefined)
                 }
@@ -434,17 +365,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
       </div>
 
       {/* Fixed bottom action bar */}
-      {isDraftExpanded && activePrebuilt?.id !== "streaming" && (
+      {activePrebuilt?.id !== "streaming" && (
         <div className="shrink-0 border-t bg-card px-6 py-3">
           <div className="w-full max-w-4xl mx-auto flex items-center justify-end gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsDraftExpanded(false)}
-              className="text-muted-foreground"
-            >
-              Cancel
-            </Button>
             <Button
               data-testid="button-analyze"
               onClick={handleSubmit}

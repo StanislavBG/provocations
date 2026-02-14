@@ -370,9 +370,9 @@ export function LargeVoiceRecorder({
         )}
       </button>
       <p className="text-muted-foreground text-center text-lg">
-        {isRecording 
-          ? "Listening... Click to stop and process your draft" 
-          : "Click the microphone to start speaking your first draft"
+        {isRecording
+          ? "Listening... Click to stop and process your recording"
+          : "Click the microphone to start speaking your ideas"
         }
       </p>
     </div>
