@@ -1383,6 +1383,45 @@ Output only the instruction text. No meta-commentary.`
   });
 
   // ==========================================
+  // User Preferences
+  // ==========================================
+
+  // Get user preferences
+  app.get("/api/preferences", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const prefs = await storage.getUserPreferences(userId);
+      res.json(prefs);
+    } catch (error) {
+      console.error("Get preferences error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to get preferences", details: errorMessage });
+    }
+  });
+
+  // Update user preferences
+  app.put("/api/preferences", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { autoDictate } = req.body;
+      if (typeof autoDictate !== "boolean") {
+        return res.status(400).json({ error: "autoDictate must be a boolean" });
+      }
+
+      const prefs = await storage.setUserPreferences(userId, { autoDictate });
+      res.json(prefs);
+    } catch (error) {
+      console.error("Set preferences error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to set preferences", details: errorMessage });
+    }
+  });
+
+  // ==========================================
   // Streaming Provocation Type Endpoints
   // Agent-guided sequential question dialogue for requirement discovery
   // ==========================================
