@@ -103,6 +103,10 @@ interface ProvocationToolboxProps {
   discoveredCount: number;
   /** Extra actions rendered in the browser header (e.g. Capture button) */
   browserHeaderActions?: ReactNode;
+  /** Controlled expanded state for the browser explorer */
+  browserExpanded?: boolean;
+  /** Called when browser expanded state changes */
+  onBrowserExpandedChange?: (expanded: boolean) => void;
 }
 
 export function ProvocationToolbox({
@@ -119,6 +123,8 @@ export function ProvocationToolbox({
   isAnalyzing,
   discoveredCount,
   browserHeaderActions,
+  browserExpanded,
+  onBrowserExpandedChange,
 }: ProvocationToolboxProps) {
   return (
     <div className="h-full flex flex-col">
@@ -179,6 +185,8 @@ export function ProvocationToolbox({
             isAnalyzing={isAnalyzing}
             discoveredCount={discoveredCount}
             headerActions={browserHeaderActions}
+            expanded={browserExpanded}
+            onExpandedChange={onBrowserExpandedChange}
           />
         )}
       </div>
