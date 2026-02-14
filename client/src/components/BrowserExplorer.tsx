@@ -264,7 +264,7 @@ export function BrowserExplorer({
       </div>
 
       {/* Browser viewport */}
-      <div className="flex-1 relative overflow-hidden bg-white">
+      <div id="browser-explorer-viewport" className="flex-1 relative overflow-hidden bg-white">
         {loadedUrl ? (
           <>
             <iframe
