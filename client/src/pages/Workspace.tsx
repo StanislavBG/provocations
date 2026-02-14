@@ -625,6 +625,21 @@ export default function Workspace() {
     setWebsiteUrl(url);
   }, []);
 
+  // ── Browser expanded state (for full-screen capture flow) ──
+  const [browserExpanded, setBrowserExpanded] = useState(false);
+
+  const handlePreCapture = useCallback(async () => {
+    // Expand the browser to full screen before capturing
+    setBrowserExpanded(true);
+    // Wait for the browser to render at full size
+    await new Promise<void>((resolve) => setTimeout(resolve, 600));
+  }, []);
+
+  const handlePostCapture = useCallback(() => {
+    // Collapse the browser back to normal after capture completes
+    setBrowserExpanded(false);
+  }, []);
+
   // ── Common handlers ──
 
   const handleReset = useCallback(() => {
@@ -882,6 +897,8 @@ export default function Workspace() {
       onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
       isAnalyzing={streamingAnalysisMutation.isPending}
       discoveredCount={discoveredCount}
+      browserExpanded={browserExpanded}
+      onBrowserExpandedChange={setBrowserExpanded}
       browserHeaderActions={
         <ScreenCaptureButton
           onCapture={handleScreenCapture}
@@ -889,6 +906,8 @@ export default function Workspace() {
           disabled={!document.rawText || writeMutation.isPending}
           targetElementId="browser-explorer-viewport"
           websiteUrl={websiteUrl}
+          onPreCapture={handlePreCapture}
+          onPostCapture={handlePostCapture}
         />
       }
     />

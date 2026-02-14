@@ -23,6 +23,10 @@ interface BrowserExplorerProps {
   discoveredCount?: number;
   /** Actions rendered in the panel header (e.g. Capture button) */
   headerActions?: ReactNode;
+  /** Controlled expanded (full-screen) state. When provided, overrides internal state. */
+  expanded?: boolean;
+  /** Called when the user toggles expansion (via the maximize/minimize button). */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 function normalizeUrl(raw: string): string {
@@ -40,13 +44,25 @@ export function BrowserExplorer({
   isAnalyzing,
   discoveredCount = 0,
   headerActions,
+  expanded: controlledExpanded,
+  onExpandedChange,
 }: BrowserExplorerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [addressBar, setAddressBar] = useState(websiteUrl);
   const [loadedUrl, setLoadedUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+
+  // Support both controlled and uncontrolled expanded state
+  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+  const setIsExpanded = useCallback((value: boolean) => {
+    if (onExpandedChange) {
+      onExpandedChange(value);
+    } else {
+      setInternalExpanded(value);
+    }
+  }, [onExpandedChange]);
 
   // Suppress cross-origin errors from iframe scripts (TCF consent, ad frameworks, etc.)
   useEffect(() => {
