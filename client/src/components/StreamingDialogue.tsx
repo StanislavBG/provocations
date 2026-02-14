@@ -136,6 +136,41 @@ export function StreamingDialogue({
         </Button>
       </div>
 
+      {/* Answer input — at the top for quick access */}
+      {isActive && (
+        <div className="p-3 border-b">
+          <div className="space-y-2">
+            <ProvokeText
+              chrome="inline"
+              placeholder={entries.length === 0 ? "Tell the agent what you need..." : "Type your response..."}
+              value={answerText}
+              onChange={setAnswerText}
+              className="text-sm"
+              minRows={2}
+              maxRows={6}
+              disabled={isLoadingQuestion}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmitAnswer();
+                }
+              }}
+              voice={{ mode: "replace" }}
+              onVoiceTranscript={handleVoiceAnswer}
+              onRecordingChange={setIsRecording}
+              onSubmit={handleSubmitAnswer}
+              submitIcon={Send}
+            />
+            {isRecording && (
+              <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
+                <Mic className="w-3 h-3" />
+                Listening... speak your answer
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Requirements panel (toggled) */}
       {showRequirements && (
         <div className="border-b bg-muted/10 max-h-[40%] overflow-auto">
@@ -240,7 +275,7 @@ export function StreamingDialogue({
           {entries.length === 0 && !isLoadingQuestion && (
             <div className="text-center py-8">
               <p className="text-sm text-muted-foreground">
-                Type below to tell the agent what you need.
+                Type above to tell the agent what you need.
               </p>
             </div>
           )}
@@ -302,40 +337,6 @@ export function StreamingDialogue({
         </div>
       </ScrollArea>
 
-      {/* Answer input */}
-      {isActive && (
-        <div className="p-3 border-t">
-          <div className="space-y-2">
-            <ProvokeText
-              chrome="inline"
-              placeholder={entries.length === 0 ? "Tell the agent what you need..." : "Type your response..."}
-              value={answerText}
-              onChange={setAnswerText}
-              className="text-sm"
-              minRows={2}
-              maxRows={6}
-              disabled={isLoadingQuestion}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmitAnswer();
-                }
-              }}
-              voice={{ mode: "replace" }}
-              onVoiceTranscript={handleVoiceAnswer}
-              onRecordingChange={setIsRecording}
-              onSubmit={handleSubmitAnswer}
-              submitIcon={Send}
-            />
-            {isRecording && (
-              <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
-                <Mic className="w-3 h-3" />
-                Listening... speak your answer
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
