@@ -342,8 +342,6 @@ export function StreamingWorkspace({
             onConfirmRequirement={handleConfirmRequirement}
             isActive={isDialogueActive}
             hasAnalysis={wireframeAnalysis !== null}
-            wireframeAnalysis={wireframeAnalysis}
-            websiteUrl={websiteUrl}
             objective={objective}
             documentText={document.rawText}
           />
