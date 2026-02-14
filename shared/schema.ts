@@ -353,12 +353,32 @@ export interface WireframeAnalysisResponse {
   contentScanStatus?: "pending" | "scanning" | "complete";
 }
 
+// Wireframe analysis schema for passing to refine endpoint
+export const wireframeAnalysisSchema = z.object({
+  analysis: z.string(),
+  components: z.array(z.string()),
+  suggestions: z.array(z.string()),
+  siteMap: z.array(z.object({
+    url: z.string(),
+    title: z.string(),
+    depth: z.number(),
+  })).optional(),
+  videos: z.array(z.object({ url: z.string(), title: z.string(), type: z.string().optional() })).optional(),
+  audioContent: z.array(z.object({ url: z.string(), title: z.string(), type: z.string().optional() })).optional(),
+  rssFeeds: z.array(z.object({ url: z.string(), title: z.string(), type: z.string().optional() })).optional(),
+  images: z.array(z.object({ url: z.string(), title: z.string(), type: z.string().optional() })).optional(),
+  primaryContent: z.string().optional(),
+  contentScanStatus: z.enum(["pending", "scanning", "complete"]).optional(),
+}).optional();
+
 // Request to refine requirements from streaming dialogue
 export const streamingRefineRequestSchema = z.object({
   objective: z.string().min(1, "Objective is required"),
   dialogueEntries: z.array(streamingDialogueEntrySchema).min(1, "At least one dialogue entry is required"),
   existingRequirements: z.array(streamingRequirementSchema).optional(),
   document: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  wireframeAnalysis: wireframeAnalysisSchema,
 });
 
 export type StreamingRefineRequest = z.infer<typeof streamingRefineRequestSchema>;

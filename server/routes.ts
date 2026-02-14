@@ -1406,11 +1406,15 @@ Output only the instruction text. No meta-commentary.`
         : "";
 
       const wireframeContext = wireframeNotes
-        ? `\n\nWIREFRAME NOTES:\n${wireframeNotes.slice(0, 2000)}`
+        ? `\n\nWIREFRAME / SITE ANALYSIS:\n${wireframeNotes.slice(0, 3000)}`
         : "";
 
       const websiteContext = websiteUrl
         ? `\n\nTARGET WEBSITE: ${websiteUrl}`
+        : "";
+
+      const documentContext = docText
+        ? `\n\nCURRENT REQUIREMENTS DOCUMENT (distilled so far — use this to understand what has already been captured and what gaps remain):\n${docText.slice(0, 3000)}`
         : "";
 
       const isFirstQuestion = !previousEntries || previousEntries.length === 0;
@@ -1421,7 +1425,11 @@ Output only the instruction text. No meta-commentary.`
         messages: [
           {
             role: "system",
-            content: `You are a requirements discovery agent helping a user write crystal-clear requirements for a website or application. The user knows WHAT they want but not HOW to express it as implementable requirements.
+            content: `You are a requirements discovery agent. Your PRIMARY purpose is to help the user express automation requirements for the objective below. Everything you do should serve this objective.
+
+OBJECTIVE (this is your north star — every response should help the user make progress toward this):
+${objective}
+${websiteContext}${wireframeContext}${documentContext}${requirementsContext}
 
 Your behavior:
 - You ONLY respond to what the user says. You do NOT proactively ask for clarification or list areas that need attention.
@@ -1429,10 +1437,8 @@ Your behavior:
 - ${isFirstQuestion ? 'The user has not spoken yet. Simply greet them briefly and wait. Say something like: "Ready when you are." Do NOT ask questions or list clarification areas.' : 'Respond to what the user just said. Acknowledge their input, extract any requirements, and if you genuinely need one piece of clarification to proceed, ask it. Do NOT volunteer lists of questions or areas needing clarification.'}
 - Keep responses concise and focused on what the user shared.
 - If the user\'s message implies a requirement, extract it as suggestedRequirement.
+- Use the current requirements document (if present) to understand what has already been captured. Focus on what is still missing or unclear relative to the objective.
 - Your output should help produce requirements that an application or calling agent can implement.
-
-OBJECTIVE: ${objective}
-${websiteContext}${wireframeContext}${requirementsContext}
 
 ${previousContext ? `CONVERSATION SO FAR:\n${previousContext}` : ""}
 
@@ -1595,11 +1601,28 @@ Output only valid JSON, no markdown.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, dialogueEntries, existingRequirements, document: docText } = parsed.data;
+      const { objective, dialogueEntries, existingRequirements, document: docText, websiteUrl, wireframeAnalysis } = parsed.data;
 
       const dialogueText = dialogueEntries.map(e => `[${e.role}]: ${e.content}`).join("\n");
       const existingReqText = existingRequirements && existingRequirements.length > 0
         ? `\n\nEXISTING REQUIREMENTS:\n${existingRequirements.map((r, i) => `${i + 1}. [${r.status}] ${r.text}`).join("\n")}`
+        : "";
+
+      // Build wireframe context for the refine prompt
+      const wireframeParts: string[] = [];
+      if (websiteUrl) wireframeParts.push(`TARGET WEBSITE: ${websiteUrl}`);
+      if (wireframeAnalysis) {
+        if (wireframeAnalysis.analysis) wireframeParts.push(`SITE ANALYSIS: ${wireframeAnalysis.analysis}`);
+        if (wireframeAnalysis.components.length > 0) wireframeParts.push(`UI COMPONENTS: ${wireframeAnalysis.components.join(", ")}`);
+        if (wireframeAnalysis.suggestions.length > 0) wireframeParts.push(`NOTABLE PATTERNS: ${wireframeAnalysis.suggestions.join("; ")}`);
+        if (wireframeAnalysis.primaryContent) wireframeParts.push(`PRIMARY CONTENT: ${wireframeAnalysis.primaryContent}`);
+        if (wireframeAnalysis.siteMap && wireframeAnalysis.siteMap.length > 0) {
+          const siteMapStr = wireframeAnalysis.siteMap.map(p => `${"  ".repeat(p.depth)}${p.title}${p.url ? ` (${p.url})` : ""}`).join("\n");
+          wireframeParts.push(`SITE MAP:\n${siteMapStr}`);
+        }
+      }
+      const wireframeContext = wireframeParts.length > 0
+        ? `\n\nWEBSITE CONTEXT:\n${wireframeParts.join("\n")}`
         : "";
 
       const response = await openai.chat.completions.create({
@@ -1611,7 +1634,7 @@ Output only valid JSON, no markdown.`
             content: `You are an expert requirements writer. Given a dialogue between a user and an agent, extract and refine clear, implementable requirements. Each requirement should be specific enough that a developer or AI agent can implement it without ambiguity.
 
 OBJECTIVE: ${objective}
-${existingReqText}
+${existingReqText}${wireframeContext}
 
 DIALOGUE:
 ${dialogueText}
