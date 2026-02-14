@@ -46,8 +46,16 @@ export function MarkdownRenderer({
         splitIdx = remaining.lastIndexOf("\n", chunkSize);
       }
       if (splitIdx < chunkSize * 0.5) {
-        // Last resort: split at chunk size
-        splitIdx = chunkSize;
+        // No newline found before chunkSize — this means we're inside a
+        // very long line (e.g. a base64 data-URL image).  Instead of
+        // hard-cutting mid-line (which would break markdown image syntax),
+        // find the next newline *after* chunkSize to keep the line intact.
+        splitIdx = remaining.indexOf("\n", chunkSize);
+        if (splitIdx === -1) {
+          // No newline at all in the remainder — take everything
+          result.push(remaining);
+          break;
+        }
       }
 
       result.push(remaining.slice(0, splitIdx));
