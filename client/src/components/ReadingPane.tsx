@@ -6,7 +6,7 @@ import { Download, Mic, Square, Send, X, Pencil, FileText, Copy, Info } from "lu
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
-import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { MarkdownRenderer, markdownToHtml } from "@/components/MarkdownRenderer";
 
 interface ReadingPaneProps {
   text: string;
@@ -268,11 +268,36 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const readingTime = Math.ceil(wordCount / 200);
 
   const handleDownload = () => {
-    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const htmlBody = markdownToHtml(text);
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Document</title>
+<style>
+body{font-family:Georgia,'Times New Roman',serif;max-width:800px;margin:0 auto;padding:2rem;line-height:1.8;color:#1a1a1a}
+img{max-width:100%;height:auto;border-radius:.5rem;border:1px solid #e5e7eb;margin:1rem 0}
+h1,h2,h3,h4{margin-top:1.5em;margin-bottom:.5em;line-height:1.3}
+hr{border:none;border-top:1px solid #d1d5db;margin:2rem 0}
+blockquote{border-left:3px solid #d1d5db;padding-left:1rem;color:#4b5563;margin:1rem 0}
+code{background:#f3f4f6;padding:.15em .4em;border-radius:3px;font-size:.9em}
+pre{background:#f3f4f6;padding:1rem;border-radius:.5rem;overflow-x:auto}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:1rem 0}
+th,td{border:1px solid #d1d5db;padding:.5rem .75rem;text-align:left}
+th{background:#f9fafb;font-weight:600}
+</style>
+</head>
+<body>
+${htmlBody}
+</body>
+</html>`;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `document-${new Date().toISOString().split("T")[0]}.md`;
+    link.download = `document-${new Date().toISOString().split("T")[0]}.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -368,7 +393,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={handleDownload}
-            title="Download as markdown"
+            title="Download as HTML"
           >
             <Download className="w-4 h-4" />
           </Button>
