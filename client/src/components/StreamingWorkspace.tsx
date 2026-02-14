@@ -340,6 +340,8 @@ export function StreamingWorkspace({
             hasAnalysis={wireframeAnalysis !== null}
             wireframeAnalysis={wireframeAnalysis}
             websiteUrl={websiteUrl}
+            objective={objective}
+            documentText={document.rawText}
           />
         </div>
       </ResizablePanel>
