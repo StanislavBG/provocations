@@ -216,6 +216,46 @@ export default function Workspace() {
     },
   });
 
+  // ── Create first draft mutation (input phase → workspace) ──
+
+  const createDraftMutation = useMutation({
+    mutationFn: async ({ context, obj, refs }: { context: string; obj: string; refs: ReferenceDocument[] }) => {
+      const response = await apiRequest("POST", "/api/write", {
+        document: context,
+        objective: obj,
+        instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
+        referenceDocuments: refs.length > 0 ? refs : undefined,
+      });
+      return await response.json() as WriteResponse;
+    },
+    onSuccess: (data, variables) => {
+      setDocument({ id: generateId("doc"), rawText: data.document });
+      setObjective(variables.obj);
+      setReferenceDocuments(variables.refs);
+      const initialVersion: DocumentVersion = {
+        id: generateId("v"),
+        text: data.document,
+        timestamp: Date.now(),
+        description: "First draft",
+      };
+      setVersions([initialVersion]);
+
+      if (data.summary) {
+        toast({
+          title: "First Draft Created",
+          description: data.summary,
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Draft Creation Failed",
+        description: error instanceof Error ? error.message : "Could not create the first draft. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // ── Interview mutations ──
 
   const interviewQuestionMutation = useMutation({
@@ -848,17 +888,9 @@ export default function Workspace() {
         <div className="flex-1 overflow-y-auto">
           <TextInputForm
             onSubmit={(text, obj, refs) => {
-              setDocument({ id: generateId("doc"), rawText: text });
-              setObjective(obj);
-              setReferenceDocuments(refs);
-              const initialVersion: DocumentVersion = {
-                id: generateId("v"),
-                text,
-                timestamp: Date.now(),
-                description: "Original document",
-              };
-              setVersions([initialVersion]);
+              createDraftMutation.mutate({ context: text, obj, refs });
             }}
+            isLoading={createDraftMutation.isPending}
             onBlankDocument={(obj) => {
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
