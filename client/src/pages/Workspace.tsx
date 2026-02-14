@@ -15,6 +15,7 @@ import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { Drawler } from "@/components/Drawler";
+import { ResponseButton } from "@/components/ResponseButton";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -1117,6 +1118,20 @@ export default function Workspace() {
         wireframeAnalysis={wireframeAnalysis}
         isAnalyzing={streamingAnalysisMutation.isPending}
         websiteUrl={websiteUrl}
+      />
+
+      {/* Floating Response button */}
+      <ResponseButton
+        onSubmitText={(instruction) => {
+          writeMutation.mutate({ instruction, description: "Response instruction" });
+        }}
+        onRecordingStart={() => {
+          setPendingVoiceContext({ context: "document" });
+          setShowTranscriptOverlay(true);
+          setTranscriptSummary("");
+          setCleanedTranscript(undefined);
+        }}
+        isProcessing={writeMutation.isPending}
       />
     </div>
   );
