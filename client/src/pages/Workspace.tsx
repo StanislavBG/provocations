@@ -393,6 +393,14 @@ export default function Workspace() {
     });
   }, [document, writeMutation]);
 
+  // Handle capture close: "elephant" keyword response
+  const handleCaptureClose = useCallback((keyword: string) => {
+    toast({
+      title: keyword,
+      description: "Capture dismissed without saving.",
+    });
+  }, [toast]);
+
   const toggleDiffView = useCallback(() => {
     setShowDiffView(prev => !prev);
   }, []);
@@ -661,6 +669,7 @@ export default function Workspace() {
             )}
             <ScreenCaptureButton
               onCapture={handleScreenCapture}
+              onClose={handleCaptureClose}
               disabled={!document.rawText || writeMutation.isPending}
             />
             <Button
