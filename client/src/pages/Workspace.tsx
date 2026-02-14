@@ -27,6 +27,7 @@ import {
   MessageCircleQuestion,
   GitCompare,
   Target,
+  Crosshair,
   X,
   Lightbulb,
   Save,
@@ -34,6 +35,8 @@ import {
   ChevronUp,
   ArrowRightToLine,
   Loader2,
+  Share2,
+  Copy,
 } from "lucide-react";
 import type {
   Document,
@@ -70,7 +73,16 @@ export default function Workspace() {
 
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
+  const [secondaryObjective, setSecondaryObjectiveRaw] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
+
+  // Guard: prevent secondary objective from duplicating the primary (REQ-002)
+  const setSecondaryObjective = useCallback((value: string) => {
+    if (value.trim() && value.trim().toLowerCase() === objective.trim().toLowerCase()) {
+      return; // silently reject duplicates
+    }
+    setSecondaryObjectiveRaw(value);
+  }, [objective]);
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
@@ -159,6 +171,7 @@ export default function Workspace() {
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
         ...request,
@@ -233,6 +246,7 @@ export default function Workspace() {
       const dir = direction ?? interviewDirection;
       const response = await apiRequest("POST", "/api/interview/question", {
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         document: document.rawText,
         template: templateDoc?.content,
         previousEntries: entries.length > 0 ? entries : undefined,
@@ -265,6 +279,7 @@ export default function Workspace() {
       // Step 1: Get summarized instruction from interview entries
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
       });
@@ -274,6 +289,7 @@ export default function Workspace() {
       const writeResponse = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         instruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
@@ -324,6 +340,7 @@ export default function Workspace() {
       if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
       });
@@ -332,6 +349,7 @@ export default function Workspace() {
       const writeResponse = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         instruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
@@ -417,6 +435,7 @@ export default function Workspace() {
 
       const response = await apiRequest("POST", "/api/streaming/question", {
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         document: document.rawText || undefined,
         websiteUrl: websiteUrl || undefined,
         wireframeNotes: enrichedNotes,
@@ -459,6 +478,7 @@ export default function Workspace() {
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/streaming/wireframe-analysis", {
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         websiteUrl: websiteUrl || undefined,
         wireframeNotes,
         document: document.rawText || undefined,
@@ -482,6 +502,7 @@ export default function Workspace() {
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/streaming/refine", {
         objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
         dialogueEntries: streamingDialogueEntries,
         existingRequirements: streamingRequirements.length > 0 ? streamingRequirements : undefined,
         document: document.rawText || undefined,
@@ -842,7 +863,7 @@ export default function Workspace() {
     setIsSaving(true);
     try {
       const title = objective || "Untitled Document";
-      const content = JSON.stringify({ objective, documentText: document.rawText });
+      const content = JSON.stringify({ objective, secondaryObjective: secondaryObjective.trim() || undefined, documentText: document.rawText });
 
       if (currentDocId) {
         await apiRequest("PUT", `/api/documents/${currentDocId}`, { title, content });
@@ -971,11 +992,6 @@ export default function Workspace() {
                 Versions ({versions.length})
               </Button>
             )}
-            <ScreenCaptureButton
-              onCapture={handleScreenCapture}
-              onClose={handleCaptureClose}
-              disabled={!document.rawText || writeMutation.isPending}
-            />
             <Button
               variant="outline"
               size="sm"
@@ -1022,7 +1038,7 @@ export default function Workspace() {
             <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
         ) : (
-          <div className="border-t px-4 py-3">
+          <div className="border-t px-4 py-3 space-y-3">
             <ProvokeText
               chrome="container"
               variant="textarea"
@@ -1058,9 +1074,82 @@ export default function Workspace() {
                 </Button>
               }
             />
+            <ProvokeText
+              chrome="container"
+              variant="textarea"
+              data-testid="input-secondary-objective-header"
+              label="Secondary objective"
+              labelIcon={Crosshair}
+              value={secondaryObjective}
+              onChange={setSecondaryObjective}
+              placeholder="Optional: a secondary goal, constraint, or perspective to keep in mind..."
+              className="text-sm leading-relaxed font-serif"
+              minRows={1}
+              maxRows={3}
+              voice={{ mode: "replace" }}
+              onVoiceTranscript={(text) => setSecondaryObjective(text)}
+            />
           </div>
         )}
       </header>
+
+      {/* Secondary objective panel (REQ-002, REQ-003) — prominent provocation text */}
+      {secondaryObjective.trim() && (
+        <div className="border-b bg-violet-50/60 dark:bg-violet-950/30 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <Crosshair className="w-4 h-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                  Secondary objective
+                </span>
+              </div>
+              <p className="text-sm font-serif leading-relaxed text-violet-900 dark:text-violet-100">
+                {secondaryObjective}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200"
+                onClick={() => {
+                  navigator.clipboard.writeText(secondaryObjective);
+                  toast({ title: "Copied", description: "Secondary objective copied to clipboard" });
+                }}
+                title="Copy secondary objective"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200"
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ title: "Secondary Objective", text: secondaryObjective });
+                  } else {
+                    navigator.clipboard.writeText(secondaryObjective);
+                    toast({ title: "Copied", description: "Secondary objective copied to clipboard (share not supported)" });
+                  }
+                }}
+                title="Share secondary objective"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={() => setSecondaryObjective("")}
+                title="Clear secondary objective"
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {writeMutation.isPending && (
         <div className="bg-primary/10 border-b px-4 py-2 flex items-center gap-2 text-sm">
@@ -1216,8 +1305,6 @@ export default function Workspace() {
                     onConfirmRequirement={handleStreamingConfirmRequirement}
                     isActive={isStreamingDialogueActive}
                     hasAnalysis={wireframeAnalysis !== null}
-                    wireframeAnalysis={wireframeAnalysis}
-                    websiteUrl={websiteUrl}
                     objective={objective}
                     documentText={document.rawText}
                   />
