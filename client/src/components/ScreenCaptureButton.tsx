@@ -144,29 +144,110 @@ export function ScreenCaptureButton({
   const imageRef = useRef<HTMLImageElement>(null);
   const annotationsEndRef = useRef<HTMLDivElement>(null);
 
-  // ─── Capture ──────────────────────────────────────────────────────────
+  // ─── Capture via Screen Capture API (captures iframe content) ───────
+
+  const captureViaDisplayMedia = useCallback(
+    async (targetEl: HTMLElement | null): Promise<string | null> => {
+      if (!navigator.mediaDevices?.getDisplayMedia) return null;
+
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: "browser" } as MediaTrackConstraints,
+          // @ts-expect-error preferCurrentTab is a non-standard Chrome option
+          preferCurrentTab: true,
+        });
+
+        // Create video element to extract a frame
+        const video = window.document.createElement("video");
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = true;
+
+        await new Promise<void>((resolve, reject) => {
+          video.onloadeddata = () => resolve();
+          setTimeout(() => reject(new Error("timeout")), 5000);
+        });
+        // Allow the frame to settle after the sharing dialog closes
+        await new Promise<void>((r) => setTimeout(r, 300));
+
+        const fullWidth = video.videoWidth;
+        const fullHeight = video.videoHeight;
+
+        // Draw the full frame
+        const fullCanvas = window.document.createElement("canvas");
+        fullCanvas.width = fullWidth;
+        fullCanvas.height = fullHeight;
+        const fullCtx = fullCanvas.getContext("2d")!;
+        fullCtx.drawImage(video, 0, 0, fullWidth, fullHeight);
+
+        // Stop stream immediately after capture
+        stream.getTracks().forEach((t) => t.stop());
+        video.srcObject = null;
+
+        // Crop to target element if specified
+        if (targetEl) {
+          const rect = targetEl.getBoundingClientRect();
+          const dpr = fullWidth / window.innerWidth;
+
+          const cropX = Math.round(rect.left * dpr);
+          const cropY = Math.round(rect.top * dpr);
+          const cropW = Math.round(rect.width * dpr);
+          const cropH = Math.round(rect.height * dpr);
+
+          // Clamp to canvas bounds
+          const safeW = Math.min(cropW, fullWidth - Math.max(0, cropX));
+          const safeH = Math.min(cropH, fullHeight - Math.max(0, cropY));
+
+          if (safeW > 0 && safeH > 0) {
+            const cropCanvas = window.document.createElement("canvas");
+            cropCanvas.width = safeW;
+            cropCanvas.height = safeH;
+            const cropCtx = cropCanvas.getContext("2d")!;
+            cropCtx.drawImage(
+              fullCanvas,
+              Math.max(0, cropX), Math.max(0, cropY), safeW, safeH,
+              0, 0, safeW, safeH,
+            );
+            return cropCanvas.toDataURL("image/png");
+          }
+        }
+
+        return fullCanvas.toDataURL("image/png");
+      } catch {
+        // User cancelled or API not supported — will fall back to html2canvas
+        return null;
+      }
+    },
+    [],
+  );
+
+  // ─── Capture (Screen Capture API → html2canvas fallback) ──────────
 
   const handleCapture = useCallback(async () => {
     setIsCapturing(true);
     try {
-      // Resolve target element
-      const target = targetElementId
-        ? window.document.getElementById(targetElementId) || window.document.body
-        : window.document.body;
+      const targetEl = targetElementId
+        ? window.document.getElementById(targetElementId)
+        : null;
 
-      // Resolve computed background color to avoid html2canvas failing
-      // on CSS custom properties (hsl vars, oklch, etc.)
-      const computedBg = getComputedStyle(target).backgroundColor;
+      // Try Screen Capture API first (captures cross-origin iframe content)
+      let dataUrl = await captureViaDisplayMedia(targetEl);
 
-      const canvas = await html2canvas(target, {
-        useCORS: true,
-        allowTaint: true,
-        scale: 2, // High-resolution capture
-        logging: false,
-        backgroundColor: computedBg || "#ffffff",
-      });
+      // Fall back to html2canvas if Screen Capture API failed or was cancelled
+      if (!dataUrl) {
+        const target = targetEl || window.document.body;
+        const computedBg = getComputedStyle(target).backgroundColor;
 
-      const dataUrl = canvas.toDataURL("image/png");
+        const canvas = await html2canvas(target, {
+          useCORS: true,
+          allowTaint: true,
+          scale: 2,
+          logging: false,
+          backgroundColor: computedBg || "#ffffff",
+        });
+        dataUrl = canvas.toDataURL("image/png");
+      }
+
       setCapturedImage(dataUrl);
       setAnnotations([]);
       setAnnotationMode("pointer");
@@ -186,7 +267,7 @@ export function ScreenCaptureButton({
     } finally {
       setIsCapturing(false);
     }
-  }, [toast, targetElementId]);
+  }, [toast, targetElementId, captureViaDisplayMedia]);
 
   // ─── Coordinate mapping ───────────────────────────────────────────────
 
