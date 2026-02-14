@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
 import { ScreenCaptureButton, type CaptureRegion } from "@/components/ScreenCaptureButton";
+import { MapLayout } from "@/components/MapLayout";
 import {
   Sparkles,
   RotateCcw,
@@ -37,6 +38,8 @@ import {
   Loader2,
   Share2,
   Copy,
+  LayoutGrid,
+  Columns3,
 } from "lucide-react";
 import type {
   Document,
@@ -147,6 +150,9 @@ export default function Workspace() {
 
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
+
+  // Layout mode: panels (3-panel resizable) or map (spatial card overview)
+  const [layoutMode, setLayoutMode] = useState<"panels" | "map">("panels");
 
   // Fetch saved documents on mount
   const fetchSavedDocuments = useCallback(async () => {
@@ -980,6 +986,31 @@ export default function Workspace() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Layout toggle */}
+            <div className="flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+              <Button
+                data-testid="button-layout-panels"
+                variant={layoutMode === "panels" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs gap-1"
+                onClick={() => setLayoutMode("panels")}
+                title="Panel layout"
+              >
+                <Columns3 className="w-3.5 h-3.5" />
+                Panels
+              </Button>
+              <Button
+                data-testid="button-layout-map"
+                variant={layoutMode === "map" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs gap-1"
+                onClick={() => setLayoutMode("map")}
+                title="Map layout"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Map
+              </Button>
+            </div>
             {canShowDiff && (
               <Button
                 data-testid="button-versions"
@@ -1193,8 +1224,16 @@ export default function Workspace() {
         </div>
       )}
 
-      {/* ── Universal 3-Panel Layout: Toolbox | Discussion | Document ── */}
+      {/* ── Main content area: Panels or Map layout ── */}
       <div className="flex-1 overflow-hidden">
+        {layoutMode === "map" ? (
+          <MapLayout
+            documentText={document.rawText}
+            objective={objective}
+            interviewEntries={interviewEntries}
+            isInterviewActive={isInterviewActive}
+          />
+        ) : (
         <ResizablePanelGroup direction="horizontal">
           {/* Left Panel: Provocation Toolbox */}
           <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
@@ -1354,6 +1393,7 @@ export default function Workspace() {
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
+        )}
       </div>
     </div>
   );
