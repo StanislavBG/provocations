@@ -32,6 +32,8 @@ import {
   Save,
   ChevronDown,
   ChevronUp,
+  ArrowRightToLine,
+  Loader2,
 } from "lucide-react";
 import type {
   Document,
@@ -316,6 +318,63 @@ export default function Workspace() {
     },
   });
 
+  // Incremental merge — push interview answers into document without ending the session
+  const interviewMergeMutation = useMutation({
+    mutationFn: async () => {
+      if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
+      const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
+        objective,
+        entries: interviewEntries,
+        document: document.rawText,
+      });
+      const { instruction } = await summaryResponse.json() as { instruction: string };
+
+      const writeResponse = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        instruction,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        editHistory: editHistory.length > 0 ? editHistory : undefined,
+      });
+      return await writeResponse.json() as WriteResponse;
+    },
+    onSuccess: (data) => {
+      if (document) {
+        const newVersion: DocumentVersion = {
+          id: generateId("v"),
+          text: data.document,
+          timestamp: Date.now(),
+          description: `Incremental merge (${interviewEntries.length} answers)`,
+        };
+        setVersions(prev => [...prev, newVersion]);
+        setDocument({ ...document, rawText: data.document });
+
+        const historyEntry: EditHistoryEntry = {
+          instruction: `Merged ${interviewEntries.length} interview answers into document`,
+          instructionType: data.instructionType || "general",
+          summary: data.summary || "Interview responses merged",
+          timestamp: Date.now(),
+        };
+        setEditHistory(prev => [...prev.slice(-9), historyEntry]);
+
+        // Clear entries so subsequent merge only captures new answers
+        setInterviewEntries([]);
+
+        toast({
+          title: "Merged to Draft",
+          description: `${interviewEntries.length} answers integrated. Interview continues.`,
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Merge Failed",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
   // ── Streaming mutations ──
 
   const streamingQuestionMutation = useMutation({
@@ -517,6 +576,19 @@ export default function Workspace() {
   const handleEndInterview = useCallback(() => {
     interviewSummaryMutation.mutate();
   }, [interviewSummaryMutation]);
+
+  // Merge discussion content to draft without ending the session
+  const handleMergeToDraft = useCallback(() => {
+    if (activeToolboxApp === "provoke") {
+      if (interviewEntries.length > 0 && !interviewMergeMutation.isPending) {
+        interviewMergeMutation.mutate();
+      }
+    } else {
+      if (streamingDialogueEntries.length > 0 && !streamingRefineMutation.isPending) {
+        streamingRefineMutation.mutate();
+      }
+    }
+  }, [activeToolboxApp, interviewEntries.length, interviewMergeMutation, streamingDialogueEntries.length, streamingRefineMutation]);
 
   // ── Streaming handlers ──
 
@@ -1088,6 +1160,30 @@ export default function Workspace() {
                 <h3 className="font-semibold text-sm">Discussion</h3>
                 {(isInterviewActive || isStreamingDialogueActive) && (
                   <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+                )}
+                <div className="flex-1" />
+                {/* Merge to Draft — pushes discussion content into the document */}
+                {((activeToolboxApp === "provoke" && interviewEntries.length > 0) ||
+                  (activeToolboxApp === "website" && streamingDialogueEntries.length > 0)) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-7"
+                    onClick={handleMergeToDraft}
+                    disabled={interviewMergeMutation.isPending || streamingRefineMutation.isPending}
+                  >
+                    {interviewMergeMutation.isPending || streamingRefineMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Merging...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRightToLine className="w-3 h-3" />
+                        Merge to Draft
+                      </>
+                    )}
+                  </Button>
                 )}
               </div>
 
