@@ -51,6 +51,10 @@ interface ScreenCaptureButtonProps {
   targetElementId?: string;
   /** URL of the website displayed in the iframe. When provided, tries server-side screenshot first. */
   websiteUrl?: string;
+  /** Async callback invoked before capture starts (e.g. to expand browser to full screen). Resolves when ready. */
+  onPreCapture?: () => Promise<void>;
+  /** Callback invoked after save or close (e.g. to collapse browser back to normal). */
+  onPostCapture?: () => void;
 }
 
 // ─── Pointer rendering helpers ────────────────────────────────────────────────
@@ -123,6 +127,8 @@ export function ScreenCaptureButton({
   disabled,
   targetElementId,
   websiteUrl,
+  onPreCapture,
+  onPostCapture,
 }: ScreenCaptureButtonProps) {
   const { toast } = useToast();
   const [isCapturing, setIsCapturing] = useState(false);
@@ -308,6 +314,11 @@ export function ScreenCaptureButton({
   const handleCapture = useCallback(async () => {
     setIsCapturing(true);
     try {
+      // Allow parent to prepare (e.g. expand browser to full screen) before capture
+      if (onPreCapture) {
+        await onPreCapture();
+      }
+
       const targetEl = targetElementId
         ? window.document.getElementById(targetElementId)
         : null;
@@ -354,7 +365,7 @@ export function ScreenCaptureButton({
     } finally {
       setIsCapturing(false);
     }
-  }, [toast, targetElementId, captureViaDisplayMedia, captureViaServer]);
+  }, [toast, targetElementId, captureViaDisplayMedia, captureViaServer, onPreCapture]);
 
   // ─── Coordinate mapping ───────────────────────────────────────────────
 
@@ -688,7 +699,10 @@ export function ScreenCaptureButton({
     setDragEnd(null);
     setShowReviewDialog(false);
     setCroppedSubImages([]);
-  }, [onClose]);
+
+    // Allow parent to clean up (e.g. collapse browser back to normal)
+    onPostCapture?.();
+  }, [onClose, onPostCapture]);
 
   // ─── Save: open review dialog ─────────────────────────────────────────
 
@@ -772,11 +786,14 @@ export function ScreenCaptureButton({
     setAnnotations([]);
     setAnnotationMode("pointer");
 
+    // Allow parent to clean up (e.g. collapse browser back to normal)
+    onPostCapture?.();
+
     toast({
       title: "Capture Saved",
       description: `Screenshot with ${annotations.length} annotation${annotations.length !== 1 ? "s" : ""} sent to the document.`,
     });
-  }, [capturedImage, imageEl, annotations, onCapture, toast]);
+  }, [capturedImage, imageEl, annotations, onCapture, toast, onPostCapture]);
 
   const handleCloseReviewDialog = useCallback(() => {
     setShowReviewDialog(false);
