@@ -810,6 +810,13 @@ export default function Workspace() {
             onDocumentChange={setDocument}
             onVersionAdd={(version) => setVersions(prev => [...prev, version])}
             onEditHistoryAdd={(entry) => setEditHistory(prev => [...prev.slice(-9), entry])}
+            captureActions={
+              <ScreenCaptureButton
+                onCapture={handleScreenCapture}
+                onClose={handleCaptureClose}
+                disabled={!document.rawText || writeMutation.isPending}
+              />
+            }
           />
         ) : (
           <ResizablePanelGroup direction="horizontal">
@@ -859,9 +866,9 @@ export default function Workspace() {
                   context={pendingVoiceContext?.context || "document"}
                 />
                 {/* Single Provoke panel — no tabs */}
-                <div className="border-b px-4 py-3 flex items-center gap-2">
+                <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20">
                   <MessageCircleQuestion className="w-4 h-4 text-primary" />
-                  <span className="font-semibold text-sm">Provoke</span>
+                  <h3 className="font-semibold text-sm">Provoke</h3>
                   {isInterviewActive && (
                     <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
                   )}

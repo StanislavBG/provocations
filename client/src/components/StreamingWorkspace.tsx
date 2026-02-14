@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -27,6 +27,8 @@ interface StreamingWorkspaceProps {
   onDocumentChange: (doc: Document) => void;
   onVersionAdd: (version: DocumentVersion) => void;
   onEditHistoryAdd: (entry: EditHistoryEntry) => void;
+  /** Actions rendered in the BrowserExplorer panel header (e.g. Capture button) */
+  captureActions?: ReactNode;
 }
 
 export function StreamingWorkspace({
@@ -37,6 +39,7 @@ export function StreamingWorkspace({
   onDocumentChange,
   onVersionAdd,
   onEditHistoryAdd,
+  captureActions,
 }: StreamingWorkspaceProps) {
   const { toast } = useToast();
 
@@ -311,6 +314,7 @@ export function StreamingWorkspace({
           onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
           isAnalyzing={analysisMutation.isPending}
           discoveredCount={discoveredCount}
+          headerActions={captureActions}
         />
       </ResizablePanel>
 
