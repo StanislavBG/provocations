@@ -328,7 +328,7 @@ export function ScreenCaptureButton({
         const canvas = await html2canvas(target, {
           useCORS: true,
           allowTaint: true,
-          scale: 2,
+          scale: 1,
           logging: false,
           backgroundColor: computedBg || "#ffffff",
         });
@@ -665,7 +665,7 @@ export function ScreenCaptureButton({
       }
 
       return {
-        dataUrl: cropCanvas.toDataURL("image/png"),
+        dataUrl: cropCanvas.toDataURL("image/jpeg", 0.82),
         annotation,
       };
     });
@@ -746,7 +746,21 @@ export function ScreenCaptureButton({
       }
     });
 
-    const annotatedDataUrl = offscreen.toDataURL("image/png");
+    // Downscale to keep the image under ~2MB while still legible
+    const MAX_DIM = 1600;
+    let outCanvas: HTMLCanvasElement = offscreen;
+    if (offscreen.width > MAX_DIM || offscreen.height > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM / offscreen.width, MAX_DIM / offscreen.height);
+      const dw = Math.round(offscreen.width * ratio);
+      const dh = Math.round(offscreen.height * ratio);
+      const scaled = window.document.createElement("canvas");
+      scaled.width = dw;
+      scaled.height = dh;
+      const sctx = scaled.getContext("2d")!;
+      sctx.drawImage(offscreen, 0, 0, dw, dh);
+      outCanvas = scaled;
+    }
+    const annotatedDataUrl = outCanvas.toDataURL("image/jpeg", 0.82);
     onCapture(annotatedDataUrl, annotations);
 
     // Reset everything

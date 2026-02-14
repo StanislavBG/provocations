@@ -8,8 +8,6 @@ import {
   MessageCircleQuestion,
   Play,
   Loader2,
-  ShieldAlert,
-  Lightbulb,
   Blocks,
   ShieldCheck,
   Palette,
@@ -24,8 +22,7 @@ import {
   UserCircle,
   Pencil,
 } from "lucide-react";
-import { thinkBigVectors } from "@shared/schema";
-import type { ProvocationType, DirectionMode, ThinkBigVector } from "@shared/schema";
+import type { ProvocationType, DirectionMode } from "@shared/schema";
 
 // ── Toolbox app type ──
 
@@ -73,52 +70,6 @@ const personaDescriptions: Record<ProvocationType, string> = {
   thinking_bigger: "Pushes you to scale impact and outcomes without changing the core idea. What if this was 10x bigger?",
 };
 
-// Think Big vector metadata
-const thinkBigVectorMeta: { id: ThinkBigVector; label: string; shortLabel: string; description: string }[] = [
-  {
-    id: "tenancy_topology",
-    label: "Tenancy Topology",
-    shortLabel: "Tenancy",
-    description: "Silo vs. Pool — How you isolate data across customers.",
-  },
-  {
-    id: "api_surface",
-    label: "API Surface",
-    shortLabel: "API",
-    description: "Utility vs. Platform — Tool or engine that other apps plug into?",
-  },
-  {
-    id: "scaling_horizon",
-    label: "Scaling Horizon",
-    shortLabel: "Scale",
-    description: "Vertical vs. Horizontal — 1K complex users or 1M simple users?",
-  },
-  {
-    id: "data_residency",
-    label: "Data Residency",
-    shortLabel: "Residency",
-    description: "Local vs. Sovereign — Where data lives matters more than what it does.",
-  },
-  {
-    id: "integration_philosophy",
-    label: "Integration Philosophy",
-    shortLabel: "Integration",
-    description: "Adapter vs. Native — Build integrations or provide hooks?",
-  },
-  {
-    id: "identity_access",
-    label: "Identity & Access",
-    shortLabel: "Identity",
-    description: "RBAC vs. ABAC — Simple roles break at scale.",
-  },
-  {
-    id: "observability",
-    label: "Observability",
-    shortLabel: "Observability",
-    description: "Logs vs. Traces — Debug big problems in seconds, not hours.",
-  },
-];
-
 const allPersonaTypes: ProvocationType[] = [
   "thinking_bigger",
   "architect",
@@ -141,7 +92,6 @@ interface ProvocationToolboxProps {
     mode: DirectionMode;
     personas: ProvocationType[];
     guidance?: string;
-    thinkBigVectors?: ThinkBigVector[];
   }) => void;
 
   // Website app props
@@ -246,7 +196,6 @@ interface ProvokeConfigAppProps {
     mode: DirectionMode;
     personas: ProvocationType[];
     guidance?: string;
-    thinkBigVectors?: ThinkBigVector[];
   }) => void;
 }
 
@@ -256,13 +205,9 @@ function ProvokeConfigApp({
   interviewEntryCount,
   onStartInterview,
 }: ProvokeConfigAppProps) {
-  // Direction state
-  const [directionMode, setDirectionMode] = useState<DirectionMode>("advise");
+  // Persona state — Think Big is selected by default
   const [selectedPersonas, setSelectedPersonas] = useState<Set<ProvocationType>>(
     () => new Set<ProvocationType>(["thinking_bigger"])
-  );
-  const [selectedVectors, setSelectedVectors] = useState<Set<ThinkBigVector>>(
-    () => new Set<ThinkBigVector>(thinkBigVectors)
   );
   const [guidance, setGuidance] = useState("");
   const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
@@ -272,9 +217,6 @@ function ProvokeConfigApp({
       const next = new Set<ProvocationType>(prev);
       if (next.has(type)) {
         next.delete(type);
-        if (type === "thinking_bigger") {
-          setSelectedVectors(new Set<ThinkBigVector>());
-        }
       } else {
         next.add(type);
       }
@@ -282,26 +224,13 @@ function ProvokeConfigApp({
     });
   }, []);
 
-  const toggleVector = useCallback((vector: ThinkBigVector) => {
-    setSelectedVectors(prev => {
-      const next = new Set<ThinkBigVector>(prev);
-      if (next.has(vector)) {
-        next.delete(vector);
-      } else {
-        next.add(vector);
-      }
-      return next;
-    });
-  }, []);
-
   const handleStartInterview = useCallback(() => {
     onStartInterview({
-      mode: directionMode,
+      mode: "challenge",
       personas: Array.from(selectedPersonas),
       guidance: guidance.trim() || undefined,
-      thinkBigVectors: selectedVectors.size > 0 ? Array.from(selectedVectors) : undefined,
     });
-  }, [directionMode, selectedPersonas, selectedVectors, guidance, onStartInterview]);
+  }, [selectedPersonas, guidance, onStartInterview]);
 
   // Custom persona expanded state
   const [isCustomExpanded, setIsCustomExpanded] = useState(false);
@@ -394,11 +323,7 @@ function ProvokeConfigApp({
               </label>
               <ProvokeText
                 chrome="inline"
-                placeholder={
-                  directionMode === "challenge"
-                    ? "e.g. 'Push me on pricing strategy and unit economics'"
-                    : "e.g. 'Help me strengthen my competitive analysis'"
-                }
+                placeholder="e.g. 'Push me on pricing strategy and unit economics'"
                 value={guidance}
                 onChange={setGuidance}
                 className="text-sm"
@@ -414,48 +339,6 @@ function ProvokeConfigApp({
             </div>
           )}
 
-          {/* Think Big vectors — show when Think Big persona is selected */}
-          {selectedPersonas.has("thinking_bigger") && (
-            <div className="mt-2 p-3 rounded-lg border border-orange-200 dark:border-orange-800/50 bg-orange-50/50 dark:bg-orange-950/20 space-y-2">
-              <label className="text-xs font-medium text-orange-700 dark:text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Rocket className="w-3 h-3" />
-                Think Big Vectors
-              </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {thinkBigVectorMeta.map((vec) => {
-                  const isVecSelected = selectedVectors.has(vec.id);
-                  return (
-                    <Tooltip key={vec.id}>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant={isVecSelected ? "default" : "outline"}
-                          className={`gap-1 text-xs h-auto py-1.5 px-2 justify-start ${
-                            isVecSelected
-                              ? "bg-orange-600 hover:bg-orange-700 text-white"
-                              : "opacity-60 hover:opacity-100 border-orange-200 dark:border-orange-800/50"
-                          }`}
-                          onClick={() => toggleVector(vec.id)}
-                        >
-                          {vec.shortLabel}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        <p className="text-xs font-medium">{vec.label}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{vec.description}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-orange-600/70 dark:text-orange-400/60">
-                {selectedVectors.size === 0
-                  ? "Select vectors to focus Think Big questions, or leave empty for general scaling."
-                  : `${selectedVectors.size} vector${selectedVectors.size > 1 ? "s" : ""} selected`}
-              </p>
-            </div>
-          )}
-
           <p className="text-xs text-muted-foreground">
             {selectedPersonas.size === 0 && !isCustomExpanded
               ? "Select personas to focus the interview, or leave empty for general questions."
@@ -463,58 +346,6 @@ function ProvokeConfigApp({
           </p>
         </div>
 
-        {/* 2. Direction mode: Challenge / Advise — SECOND */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Direction
-            </label>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-help">
-                  <Info className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-primary transition-colors" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-[280px]">
-                <p className="text-xs font-medium mb-1">Set the AI's tone</p>
-                <p className="text-xs text-muted-foreground">Challenge mode pushes back hard — it questions your assumptions and demands stronger arguments. Advise mode is constructive — it suggests improvements and recommends better approaches.</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={directionMode === "challenge" ? "default" : "outline"}
-              className={`gap-1.5 flex-1 ${
-                directionMode === "challenge"
-                  ? "bg-violet-600 hover:bg-violet-700 text-white"
-                  : "hover:bg-violet-50 dark:hover:bg-violet-950/20 hover:text-violet-700 dark:hover:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700"
-              }`}
-              onClick={() => setDirectionMode("challenge")}
-            >
-              <ShieldAlert className="w-4 h-4" />
-              Challenge
-            </Button>
-            <Button
-              size="sm"
-              variant={directionMode === "advise" ? "default" : "outline"}
-              className={`gap-1.5 flex-1 ${
-                directionMode === "advise"
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : "hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700"
-              }`}
-              onClick={() => setDirectionMode("advise")}
-            >
-              <Lightbulb className="w-4 h-4" />
-              Advise
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {directionMode === "challenge"
-              ? "Push back on assumptions, probe weaknesses, demand better answers."
-              : "Suggest improvements, recommend approaches, offer constructive guidance."}
-          </p>
-        </div>
       </div>
 
       {/* Start button area */}

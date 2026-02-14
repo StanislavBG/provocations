@@ -29,6 +29,7 @@ import {
   Briefcase,
   Lock,
   Rocket,
+  Zap,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
@@ -123,6 +124,7 @@ interface ProvocationsDisplayProps {
   onStartResponse?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onAddToDocument?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onSendToAuthor?: (provocationId: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onAcceptSuggestion?: (provocationId: string, suggestion: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onHoverProvocation?: (provocationId: string | null) => void;
   onRegenerateProvocations?: (guidance?: string, types?: ProvocationType[]) => void;
@@ -187,6 +189,7 @@ function ProvocationCard({
   onStartResponse,
   onAddToDocument,
   onSendToAuthor,
+  onAcceptSuggestion,
   onHover,
   isMerging
 }: {
@@ -195,10 +198,12 @@ function ProvocationCard({
   onStartResponse?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onAddToDocument?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onSendToAuthor?: (provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
+  onAcceptSuggestion?: (provocationId: string, suggestion: string, provocationData: { type: string; title: string; content: string; sourceExcerpt: string }) => void;
   onHover?: (isHovered: boolean) => void;
   isMerging?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isSuggestionDismissed, setIsSuggestionDismissed] = useState(false);
   const Icon = personaIcons[provocation.type];
   const colorClass = personaColors[provocation.type];
   const bgClass = personaBgColors[provocation.type];
@@ -354,6 +359,54 @@ function ProvocationCard({
         <p className="text-sm text-muted-foreground leading-relaxed">
           {provocation.content}
         </p>
+
+        {/* Auto-suggestion — AI-generated response the user can accept or dismiss */}
+        {provocation.autoSuggestion && provocation.status === "pending" && !isSuggestionDismissed && (
+          <div className="p-3 rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                Suggested Response
+              </span>
+            </div>
+            <p className="text-sm text-foreground/80 leading-relaxed italic">
+              "{provocation.autoSuggestion}"
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1 text-xs h-7 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40"
+                onClick={() => onAcceptSuggestion?.(provocation.id, provocation.autoSuggestion!, provData)}
+                disabled={isMerging}
+              >
+                <Check className="w-3 h-3" />
+                Accept
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1 text-xs h-7 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-950/40"
+                onClick={() => {
+                  setIsSuggestionDismissed(true);
+                  onStartResponse?.(provData);
+                }}
+                disabled={isMerging}
+              >
+                <Mic className="w-3 h-3" />
+                Respond Instead
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1 text-xs h-7 text-muted-foreground"
+                onClick={() => setIsSuggestionDismissed(true)}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {provocation.sourceExcerpt && (
           <button
@@ -571,7 +624,7 @@ function FocusMode({
   );
 }
 
-export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onStartResponse, onAddToDocument, onSendToAuthor, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
+export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceResponse, onStartResponse, onAddToDocument, onSendToAuthor, onAcceptSuggestion, onTranscriptUpdate, onHoverProvocation, onRegenerateProvocations, isLoading, isMerging, isRegenerating }: ProvocationsDisplayProps) {
   const [viewFilter, setViewFilter] = useState<ProvocationType | "all">("all");
   const [guidance, setGuidance] = useState("");
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -755,6 +808,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
               onStartResponse={(provocationData) => onStartResponse?.(provocation.id, provocationData)}
               onAddToDocument={(provocationData) => onAddToDocument?.(provocation.id, provocationData)}
               onSendToAuthor={(provocationData) => onSendToAuthor?.(provocation.id, provocationData)}
+              onAcceptSuggestion={onAcceptSuggestion}
               onHover={(isHovered) => onHoverProvocation?.(isHovered ? provocation.id : null)}
               isMerging={isMerging}
             />
