@@ -39,10 +39,16 @@ function getEncryptionKey(): string {
   return secret || "provocations-dev-key-change-in-production";
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return _openai;
+}
 
 const provocationPrompts: Record<ProvocationType, string> = {
   architect: "As the System Architect: Question the clarity of system abstractions — frontend components, backend services, system-to-system communication. Push for well-defined boundaries, API contracts, data flow, and separation of concerns. Challenge technical debt and coupling.",
@@ -127,7 +133,7 @@ function isLikelyVoiceTranscript(text: string): boolean {
 // Clean voice transcript to extract clear intent
 async function cleanVoiceTranscript(transcript: string): Promise<string> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -180,7 +186,7 @@ async function generateEditPlan(
   objective: string
 ): Promise<string> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -404,7 +410,7 @@ export async function registerRoutes(
       const typesList = requestedTypes.join(", ");
       const perTypeCount = Math.max(2, Math.ceil(6 / requestedTypes.length));
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 4096,
         messages: [
@@ -620,7 +626,7 @@ The user's response should be integrated thoughtfully - don't just append it, we
         : "";
 
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
-      const documentResponse = await openai.chat.completions.create({
+      const documentResponse = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 8192,
         messages: [
@@ -676,7 +682,7 @@ Please evolve the document according to this instruction.`
       const evolvedDocument = documentResponse.choices[0]?.message?.content || document;
 
       // Analyze changes for structured output
-      const analysisResponse = await openai.chat.completions.create({
+      const analysisResponse = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 1024,
         messages: [
@@ -826,7 +832,7 @@ STRATEGY: ${strategy}`);
       // Send instruction type first
       res.write(`data: ${JSON.stringify({ type: 'meta', instructionType })}\n\n`);
 
-      const stream = await openai.chat.completions.create({
+      const stream = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 8192,
         stream: true,
@@ -891,7 +897,7 @@ Output only the evolved markdown document. No explanations.`
 
       // AIM mode uses a dedicated prompt and higher-capability model
       if (context === "aim") {
-        const aimResponse = await openai.chat.completions.create({
+        const aimResponse = await getOpenAI().chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
             {
@@ -942,7 +948,7 @@ The AIM framework:
         ? "source material for a document"
         : "general content";
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
@@ -1057,7 +1063,7 @@ Embody these personas when crafting your questions. Each question should reflect
         ? `\n\nUSER GUIDANCE: ${directionGuidance}`
         : "";
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 1024,
         messages: [
@@ -1133,7 +1139,7 @@ Output only valid JSON, no markdown.`
 
       const qaText = entries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n---\n\n");
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 2048,
         messages: [
@@ -1458,7 +1464,7 @@ Output only the instruction text. No meta-commentary.`
 
       const isFirstQuestion = !previousEntries || previousEntries.length === 0;
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 1024,
         messages: [
@@ -1532,7 +1538,7 @@ Output only valid JSON, no markdown.`
 
       const { objective, websiteUrl, wireframeNotes, document: docText } = parsed.data;
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 4096,
         messages: [
@@ -1664,7 +1670,7 @@ Output only valid JSON, no markdown.`
         ? `\n\nWEBSITE CONTEXT:\n${wireframeParts.join("\n")}`
         : "";
 
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model: "gpt-5.2",
         max_completion_tokens: 4096,
         messages: [
