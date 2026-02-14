@@ -12,6 +12,7 @@ import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { Drawler } from "@/components/Drawler";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
@@ -927,6 +928,7 @@ export default function Workspace() {
                 onDocumentsChange={setSavedDocuments}
                 onCurrentDocIdChange={setCurrentDocId}
               />
+              <AutoDictateToggle />
               <ThemeToggle />
               <UserButton data-testid="button-user-menu" />
             </div>
@@ -1020,6 +1022,7 @@ export default function Workspace() {
               <RotateCcw className="w-4 h-4" />
               New
             </Button>
+            <AutoDictateToggle />
             <ThemeToggle />
             <UserButton data-testid="button-user-menu-main" />
           </div>
