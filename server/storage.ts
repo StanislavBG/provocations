@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc } from "drizzle-orm";
 import { db } from "./db";
-import { documents } from "../shared/models/chat";
+import { documents, userPreferences } from "../shared/models/chat";
+import type { UserPreferences } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -36,6 +37,8 @@ export interface IStorage {
   ): Promise<{ id: number; updatedAt: string } | null>;
   renameDocument(id: number, title: string): Promise<{ id: number; title: string; updatedAt: string } | null>;
   deleteDocument(id: number): Promise<void>;
+  getUserPreferences(userId: string): Promise<{ autoDictate: boolean }>;
+  setUserPreferences(userId: string, prefs: { autoDictate: boolean }): Promise<{ autoDictate: boolean }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -150,6 +153,37 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDocument(id: number): Promise<void> {
     await db.delete(documents).where(eq(documents.id, id));
+  }
+
+  async getUserPreferences(userId: string): Promise<{ autoDictate: boolean }> {
+    const [row] = await db
+      .select({ autoDictate: userPreferences.autoDictate })
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, userId))
+      .limit(1);
+
+    return { autoDictate: row?.autoDictate ?? false };
+  }
+
+  async setUserPreferences(userId: string, prefs: { autoDictate: boolean }): Promise<{ autoDictate: boolean }> {
+    const now = new Date();
+    const [row] = await db
+      .insert(userPreferences)
+      .values({
+        userId,
+        autoDictate: prefs.autoDictate,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: userPreferences.userId,
+        set: {
+          autoDictate: prefs.autoDictate,
+          updatedAt: now,
+        },
+      })
+      .returning({ autoDictate: userPreferences.autoDictate });
+
+    return { autoDictate: row.autoDictate };
   }
 }
 
