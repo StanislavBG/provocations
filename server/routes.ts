@@ -1721,5 +1721,54 @@ Output only valid JSON, no markdown wrapping.`
     }
   });
 
+  // ─── Screenshot endpoint ──────────────────────────────────────────────────
+  app.post("/api/screenshot", async (req, res) => {
+    const { url, width, height } = req.body as {
+      url?: string;
+      width?: number;
+      height?: number;
+    };
+
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ error: "url is required" });
+    }
+
+    try {
+      // Dynamic import to avoid loading Playwright at startup
+      const { chromium } = await import("playwright-core");
+
+      // Use the Playwright-managed Chromium
+      const browserPath =
+        process.env.PLAYWRIGHT_CHROMIUM_PATH ||
+        "/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome";
+
+      const browser = await chromium.launch({
+        executablePath: browserPath,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+
+      const page = await browser.newPage({
+        viewport: {
+          width: width || 1280,
+          height: height || 800,
+        },
+      });
+
+      await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
+      // Give dynamic content a moment to settle
+      await page.waitForTimeout(500);
+
+      const buffer = await page.screenshot({ type: "png", fullPage: false });
+      await browser.close();
+
+      const dataUrl = `data:image/png;base64,${buffer.toString("base64")}`;
+      res.json({ dataUrl });
+    } catch (error) {
+      console.error("Screenshot error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to capture screenshot", details: errorMessage });
+    }
+  });
+
   return httpServer;
 }
