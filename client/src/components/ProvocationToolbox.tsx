@@ -24,6 +24,7 @@ import {
   UserCircle,
   Pencil,
 } from "lucide-react";
+import { thinkBigVectors } from "@shared/schema";
 import type { ProvocationType, DirectionMode, ThinkBigVector } from "@shared/schema";
 
 // ── Toolbox app type ──
@@ -256,12 +257,12 @@ function ProvokeConfigApp({
   onStartInterview,
 }: ProvokeConfigAppProps) {
   // Direction state
-  const [directionMode, setDirectionMode] = useState<DirectionMode>("challenge");
+  const [directionMode, setDirectionMode] = useState<DirectionMode>("advise");
   const [selectedPersonas, setSelectedPersonas] = useState<Set<ProvocationType>>(
-    () => new Set<ProvocationType>()
+    () => new Set<ProvocationType>(["thinking_bigger"])
   );
   const [selectedVectors, setSelectedVectors] = useState<Set<ThinkBigVector>>(
-    () => new Set<ThinkBigVector>()
+    () => new Set<ThinkBigVector>(thinkBigVectors)
   );
   const [guidance, setGuidance] = useState("");
   const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
