@@ -62,11 +62,40 @@ export function StreamingWorkspace({
   const questionMutation = useMutation({
     mutationFn: async (overrideEntries?: StreamingDialogueEntry[]) => {
       const entries = overrideEntries ?? dialogueEntries;
-      // Enrich wireframe notes with analysis context so the agent has background knowledge
-      const enrichedNotes = [
-        wireframeNotes || "",
-        wireframeAnalysis ? `\n[SITE ANALYSIS]: ${wireframeAnalysis.analysis}\nComponents: ${wireframeAnalysis.components.join(", ")}` : "",
-      ].filter(Boolean).join("\n") || undefined;
+      // Enrich wireframe notes with full analysis context so the agent has background knowledge
+      const analysisParts: string[] = [];
+      if (wireframeNotes) analysisParts.push(wireframeNotes);
+      if (wireframeAnalysis) {
+        if (wireframeAnalysis.analysis) {
+          analysisParts.push(`[SITE ANALYSIS]: ${wireframeAnalysis.analysis}`);
+        }
+        if (wireframeAnalysis.components.length > 0) {
+          analysisParts.push(`[COMPONENTS]: ${wireframeAnalysis.components.join(", ")}`);
+        }
+        if (wireframeAnalysis.suggestions.length > 0) {
+          analysisParts.push(`[SUGGESTIONS]: ${wireframeAnalysis.suggestions.join("; ")}`);
+        }
+        if (wireframeAnalysis.primaryContent) {
+          analysisParts.push(`[PRIMARY CONTENT]: ${wireframeAnalysis.primaryContent}`);
+        }
+        if (wireframeAnalysis.siteMap && wireframeAnalysis.siteMap.length > 0) {
+          const siteMapStr = wireframeAnalysis.siteMap.map(p => `${"  ".repeat(p.depth)}${p.title}${p.url ? ` (${p.url})` : ""}`).join("\n");
+          analysisParts.push(`[SITE MAP]:\n${siteMapStr}`);
+        }
+        if (wireframeAnalysis.videos && wireframeAnalysis.videos.length > 0) {
+          analysisParts.push(`[VIDEOS]: ${wireframeAnalysis.videos.map(v => v.title).join(", ")}`);
+        }
+        if (wireframeAnalysis.audioContent && wireframeAnalysis.audioContent.length > 0) {
+          analysisParts.push(`[AUDIO]: ${wireframeAnalysis.audioContent.map(a => a.title).join(", ")}`);
+        }
+        if (wireframeAnalysis.rssFeeds && wireframeAnalysis.rssFeeds.length > 0) {
+          analysisParts.push(`[RSS FEEDS]: ${wireframeAnalysis.rssFeeds.map(f => f.title).join(", ")}`);
+        }
+        if (wireframeAnalysis.images && wireframeAnalysis.images.length > 0) {
+          analysisParts.push(`[IMAGES]: ${wireframeAnalysis.images.map(img => `${img.title} (${img.type || "image"})`).join(", ")}`);
+        }
+      }
+      const enrichedNotes = analysisParts.length > 0 ? analysisParts.join("\n") : undefined;
 
       const response = await apiRequest("POST", "/api/streaming/question", {
         objective,
@@ -143,6 +172,8 @@ export function StreamingWorkspace({
         dialogueEntries,
         existingRequirements: requirements.length > 0 ? requirements : undefined,
         document: document.rawText || undefined,
+        websiteUrl: websiteUrl || undefined,
+        wireframeAnalysis: wireframeAnalysis || undefined,
       });
       return await response.json() as StreamingRefineResponse;
     },
@@ -307,6 +338,10 @@ export function StreamingWorkspace({
             onConfirmRequirement={handleConfirmRequirement}
             isActive={isDialogueActive}
             hasAnalysis={wireframeAnalysis !== null}
+            wireframeAnalysis={wireframeAnalysis}
+            websiteUrl={websiteUrl}
+            objective={objective}
+            documentText={document.rawText}
           />
         </div>
       </ResizablePanel>
