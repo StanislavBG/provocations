@@ -13,6 +13,7 @@ import {
   Rss,
   Image,
   FileText,
+  AlignLeft,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -118,49 +119,15 @@ export function LogStatsPanel({
           {/* Analysis results */}
           {wireframeAnalysis && (
             <div className="space-y-3">
-              {/* Brief analysis summary */}
-              <div className="p-3 rounded-md border bg-muted/10">
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {wireframeAnalysis.analysis}
-                </p>
-              </div>
-
-              {/* Components */}
-              {wireframeAnalysis.components.length > 0 && (
+              {/* Summary */}
+              {wireframeAnalysis.analysis && (
                 <CollapsibleSection
-                  icon={<Component className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />}
-                  title="Detected Components"
-                  count={wireframeAnalysis.components.length}
-                  defaultOpen
+                  icon={<AlignLeft className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
+                  title="Summary"
                 >
-                  <div className="flex flex-wrap gap-1.5">
-                    {wireframeAnalysis.components.map((comp, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
-                        {comp}
-                      </Badge>
-                    ))}
-                  </div>
-                </CollapsibleSection>
-              )}
-
-              {/* Suggestions / Notes */}
-              {wireframeAnalysis.suggestions.length > 0 && (
-                <CollapsibleSection
-                  icon={<Lightbulb className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
-                  title="Notes & Insights"
-                  count={wireframeAnalysis.suggestions.length}
-                  defaultOpen
-                >
-                  <ul className="space-y-1.5">
-                    {wireframeAnalysis.suggestions.map((sug, idx) => (
-                      <li
-                        key={idx}
-                        className="text-sm text-muted-foreground pl-3 border-l-2 border-amber-300 dark:border-amber-700 leading-relaxed"
-                      >
-                        {sug}
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {wireframeAnalysis.analysis}
+                  </p>
                 </CollapsibleSection>
               )}
 
@@ -186,29 +153,6 @@ export function LogStatsPanel({
                           <span className="text-[10px] text-muted-foreground/40 truncate max-w-[150px] shrink-0">
                             {page.url}
                           </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </CollapsibleSection>
-              )}
-
-              {/* Videos */}
-              {wireframeAnalysis.videos && wireframeAnalysis.videos.length > 0 && (
-                <CollapsibleSection
-                  icon={<Video className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />}
-                  title="Videos"
-                  count={wireframeAnalysis.videos.length}
-                >
-                  <div className="space-y-1">
-                    {wireframeAnalysis.videos.map((v, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Video className="w-3 h-3 shrink-0 opacity-50" />
-                        <span className="truncate flex-1">{v.title}</span>
-                        {v.type && (
-                          <Badge variant="outline" className="text-[10px] h-5 shrink-0">
-                            {v.type}
-                          </Badge>
                         )}
                       </div>
                     ))}
@@ -254,6 +198,66 @@ export function LogStatsPanel({
                         {f.type && (
                           <Badge variant="outline" className="text-[10px] h-5 shrink-0">
                             {f.type}
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleSection>
+              )}
+
+              {/* Detected Components */}
+              {wireframeAnalysis.components.length > 0 && (
+                <CollapsibleSection
+                  icon={<Component className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />}
+                  title="Detected Components"
+                  count={wireframeAnalysis.components.length}
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {wireframeAnalysis.components.map((comp, idx) => (
+                      <Badge key={idx} variant="outline" className="text-xs">
+                        {comp}
+                      </Badge>
+                    ))}
+                  </div>
+                </CollapsibleSection>
+              )}
+
+              {/* Notes & Insights */}
+              {wireframeAnalysis.suggestions.length > 0 && (
+                <CollapsibleSection
+                  icon={<Lightbulb className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
+                  title="Notes & Insights"
+                  count={wireframeAnalysis.suggestions.length}
+                >
+                  <ul className="space-y-1.5">
+                    {wireframeAnalysis.suggestions.map((sug, idx) => (
+                      <li
+                        key={idx}
+                        className="text-sm text-muted-foreground pl-3 border-l-2 border-amber-300 dark:border-amber-700 leading-relaxed"
+                      >
+                        {sug}
+                      </li>
+                    ))}
+                  </ul>
+                </CollapsibleSection>
+              )}
+
+              {/* Videos */}
+              {wireframeAnalysis.videos && wireframeAnalysis.videos.length > 0 && (
+                <CollapsibleSection
+                  icon={<Video className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />}
+                  title="Videos"
+                  count={wireframeAnalysis.videos.length}
+                >
+                  <div className="space-y-1">
+                    {wireframeAnalysis.videos.map((v, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Video className="w-3 h-3 shrink-0 opacity-50" />
+                        <span className="truncate flex-1">{v.title}</span>
+                        {v.type && (
+                          <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+                            {v.type}
                           </Badge>
                         )}
                       </div>
