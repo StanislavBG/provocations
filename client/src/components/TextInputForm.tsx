@@ -400,7 +400,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 chrome="container"
                 label="Your draft"
                 labelIcon={PenLine}
-                description="Paste your notes, transcripts, or source material — or use voice to speak your ideas."
                 containerClassName="flex-1 min-h-0 flex flex-col"
                 data-testid="input-source-text"
                 placeholder="Paste your notes, transcript, or source material here..."
@@ -426,6 +425,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 }
                 extraSmartModes={aimSmartModes}
                 showCharCount
+                maxCharCount={10000}
+                maxAudioDuration="5min"
               />
             </div>
           )}
