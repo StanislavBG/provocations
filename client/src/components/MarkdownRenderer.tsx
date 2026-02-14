@@ -1,5 +1,5 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface MarkdownRendererProps {
@@ -125,6 +125,11 @@ export function MarkdownRenderer({
             <div key={idx}>
               {shouldRender ? (
                 <ReactMarkdown
+                  urlTransform={(url) => {
+                    // Allow data:image/ URLs for embedded screenshots
+                    if (url.startsWith("data:image/")) return url;
+                    return defaultUrlTransform(url);
+                  }}
                   components={{
                     img: ({ src, alt, ...props }) => (
                       <img
