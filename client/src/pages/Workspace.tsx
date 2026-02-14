@@ -14,7 +14,6 @@ import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToo
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
-import { Drawler } from "@/components/Drawler";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -53,7 +52,6 @@ import type {
   EditHistoryEntry,
   InterviewEntry,
   InterviewQuestionResponse,
-  DocumentListItem,
   StreamingDialogueEntry,
   StreamingRequirement,
   StreamingQuestionResponse,
@@ -140,7 +138,6 @@ export default function Workspace() {
   const lastAnalyzedUrl = useRef<string>("");
 
   // Server-backed save/restore
-  const [savedDocuments, setSavedDocuments] = useState<DocumentListItem[]>([]);
   const [currentDocId, setCurrentDocId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -150,21 +147,6 @@ export default function Workspace() {
 
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
-
-  // Fetch saved documents on mount
-  const fetchSavedDocuments = useCallback(async () => {
-    try {
-      const response = await apiRequest("GET", "/api/documents");
-      const data = await response.json() as { documents: DocumentListItem[] };
-      setSavedDocuments(data.documents);
-    } catch {
-      // Silently fail - documents list just won't show
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSavedDocuments();
-  }, [fetchSavedDocuments]);
 
   // ── Local backup: persist workspace state to localStorage ──
   const LOCAL_BACKUP_KEY = "provocations-workspace-backup";
@@ -798,7 +780,7 @@ export default function Workspace() {
     }
   }, [document]);
 
-  // Handle screen capture
+  // Handle screen capture — append directly to avoid base64 data loss through AI
   const handleScreenCapture = useCallback((imageDataUrl: string, annotations: CaptureAnnotation[]) => {
     if (!document) return;
 
@@ -827,14 +809,24 @@ export default function Workspace() {
       ...annotationLines,
       "",
       `---`,
-      "",
     ].join("\n");
 
-    writeMutation.mutate({
-      instruction: `Integrate the following annotated screenshot of the website into the document. The screenshot has ${countLabel} with descriptions. Place it at the most appropriate location near related content, or append as a new section.\n\nScreenshot markdown:\n${markdownSnippet}`,
+    // Append directly to preserve the base64 image data intact
+    const newText = document.rawText + markdownSnippet;
+    const newVersion: DocumentVersion = {
+      id: generateId("v"),
+      text: newText,
+      timestamp: Date.now(),
       description: "Annotated website capture merged",
+    };
+    setVersions(prev => [...prev, newVersion]);
+    setDocument({ ...document, rawText: newText });
+
+    toast({
+      title: "Screenshot added",
+      description: `Appended annotated screenshot with ${countLabel}.`,
     });
-  }, [document, writeMutation]);
+  }, [document, toast]);
 
   const handleCaptureClose = useCallback((keyword: string) => {
     toast({
@@ -909,59 +901,6 @@ export default function Workspace() {
   }, []);
 
   // Load a saved document from the server
-  const handleLoadSavedDocument = useCallback(async (docId: number) => {
-    try {
-      const response = await apiRequest("GET", `/api/documents/${docId}`);
-      const data = await response.json() as { id: number; title: string; content: string; createdAt: string; updatedAt: string };
-
-      let loadedObjective = data.title;
-      let loadedText = data.content;
-
-      try {
-        const parsed = JSON.parse(data.content) as { objective?: string; documentText?: string };
-        if (parsed.documentText) {
-          loadedText = parsed.documentText;
-          loadedObjective = parsed.objective || data.title;
-        }
-      } catch {
-        // Content is plain text, use as-is
-      }
-
-      setObjective(loadedObjective);
-      setCurrentDocId(docId);
-
-      const tempDoc: Document = { id: `loaded-${Date.now()}`, rawText: loadedText };
-      setDocument(tempDoc);
-
-      setEditHistory([]);
-      setLastSuggestions([]);
-      setShowDiffView(false);
-
-      const initialVersion: DocumentVersion = {
-        id: generateId("v"),
-        text: loadedText,
-        timestamp: Date.now(),
-        description: "Loaded document",
-      };
-      setVersions([initialVersion]);
-
-      toast({
-        title: "Document Loaded",
-        description: `"${loadedObjective}" loaded.`,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "";
-      const isDecryptionError = message.includes("422");
-      toast({
-        title: isDecryptionError ? "Cannot Open Document" : "Load Failed",
-        description: isDecryptionError
-          ? "This document was saved with an older encryption method and cannot be opened."
-          : "Could not load document. Try again.",
-        variant: "destructive",
-      });
-    }
-  }, [toast]);
-
   // Save document to server
   const handleSaveClick = useCallback(async () => {
     if (!document.rawText) return;
@@ -987,7 +926,6 @@ export default function Workspace() {
         });
       }
       lastServerSave.current = Date.now();
-      fetchSavedDocuments();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       const isAuthError = msg.includes("401") || msg.includes("Unauthorized");
@@ -1001,7 +939,7 @@ export default function Workspace() {
     } finally {
       setIsSaving(false);
     }
-  }, [document, objective, secondaryObjective, currentDocId, toast, fetchSavedDocuments]);
+  }, [document, objective, secondaryObjective, currentDocId, toast]);
 
   // ── Computed values ──
 
@@ -1031,13 +969,6 @@ export default function Workspace() {
               <h1 className="font-semibold text-lg">Provocations</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Drawler
-                documents={savedDocuments}
-                currentDocId={currentDocId}
-                onLoad={handleLoadSavedDocument}
-                onDocumentsChange={setSavedDocuments}
-                onCurrentDocIdChange={setCurrentDocId}
-              />
               <AutoDictateToggle />
               <ThemeToggle />
               <UserButton data-testid="button-user-menu" />
@@ -1278,13 +1209,6 @@ export default function Workspace() {
               <Save className="w-4 h-4" />
               <span className="hidden sm:inline">{isSaving ? "Saving..." : "Save"}</span>
             </Button>
-            <Drawler
-              documents={savedDocuments}
-              currentDocId={currentDocId}
-              onLoad={handleLoadSavedDocument}
-              onDocumentsChange={setSavedDocuments}
-              onCurrentDocIdChange={setCurrentDocId}
-            />
             <Button
               data-testid="button-reset"
               variant="ghost"
