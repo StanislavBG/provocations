@@ -176,65 +176,74 @@ export function ScreenCaptureButton({
               resolve();
             }).catch(() => {
               clearTimeout(timer);
-              resolve(); // still try even if play() rejects
+              resolve();
             });
           };
         });
 
-        // Wait for an actual rendered frame using requestVideoFrameCallback
-        // (available in Chrome/Edge), falling back to a generous delay
-        if ("requestVideoFrameCallback" in video) {
-          await new Promise<void>((resolve) => {
-            (video as any).requestVideoFrameCallback(() => resolve());
-            setTimeout(resolve, 2000); // safety timeout
-          });
-          // One extra frame to be safe (the first callback frame can still be
-          // transitional in some drivers)
-          await new Promise<void>((resolve) => {
-            (video as any).requestVideoFrameCallback(() => resolve());
-            setTimeout(resolve, 1000);
-          });
-        } else {
-          // Fallback: wait long enough for the sharing UI to dismiss and a
-          // real frame to arrive
-          await new Promise<void>((r) => setTimeout(r, 1000));
-        }
-
         const fullWidth = video.videoWidth;
         const fullHeight = video.videoHeight;
 
-        // Draw the full frame
+        if (fullWidth === 0 || fullHeight === 0) {
+          stream.getTracks().forEach((t) => t.stop());
+          video.srcObject = null;
+          return null;
+        }
+
         const fullCanvas = window.document.createElement("canvas");
         fullCanvas.width = fullWidth;
         fullCanvas.height = fullHeight;
         const fullCtx = fullCanvas.getContext("2d")!;
-        fullCtx.drawImage(video, 0, 0, fullWidth, fullHeight);
 
-        // Check if the captured frame is essentially black (failed capture).
-        // Sample a grid of pixels; if nearly all are black, retry once.
-        const isBlank = (() => {
+        // Helper: check if the current canvas content is mostly black
+        const isFrameBlank = () => {
           const sample = fullCtx.getImageData(0, 0, fullWidth, fullHeight);
-          const data = sample.data;
-          const step = Math.max(4, Math.floor(data.length / 4 / 500)) * 4; // ~500 pixels
+          const d = sample.data;
+          const step = Math.max(4, Math.floor(d.length / 4 / 400)) * 4;
           let dark = 0;
           let total = 0;
-          for (let i = 0; i < data.length; i += step) {
+          for (let i = 0; i < d.length; i += step) {
             total++;
-            if (data[i] < 10 && data[i + 1] < 10 && data[i + 2] < 10) dark++;
+            if (d[i] < 10 && d[i + 1] < 10 && d[i + 2] < 10) dark++;
           }
-          return total > 0 && dark / total > 0.97;
-        })();
+          return total > 0 && dark / total > 0.95;
+        };
 
-        if (isBlank) {
-          // Wait longer and try one more draw
-          await new Promise<void>((r) => setTimeout(r, 1500));
+        // Wait for a non-black frame from the stream. After the permission
+        // dialog closes Chrome needs time to re-composite the tab, so the
+        // first several frames may be blank. Poll using
+        // requestVideoFrameCallback (Chrome/Edge) or setTimeout fallback.
+        const waitForFrame = (): Promise<void> =>
+          new Promise((resolve) => {
+            if ("requestVideoFrameCallback" in video) {
+              (video as any).requestVideoFrameCallback(() => resolve());
+            } else {
+              setTimeout(resolve, 200);
+            }
+          });
+
+        const MAX_ATTEMPTS = 30; // ~5 seconds at 60fps, or 6s with setTimeout fallback
+        let gotGoodFrame = false;
+
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          await waitForFrame();
           fullCtx.clearRect(0, 0, fullWidth, fullHeight);
           fullCtx.drawImage(video, 0, 0, fullWidth, fullHeight);
+
+          if (!isFrameBlank()) {
+            gotGoodFrame = true;
+            break;
+          }
         }
 
-        // Stop stream immediately after capture
+        // Stop stream after capture
         stream.getTracks().forEach((t) => t.stop());
         video.srcObject = null;
+
+        if (!gotGoodFrame) {
+          console.warn("getDisplayMedia: all frames were blank after polling. Falling back.");
+          return null;
+        }
 
         // Crop to target element if specified
         if (targetEl) {
