@@ -165,13 +165,40 @@ export function ScreenCaptureButton({
         video.srcObject = stream;
         video.autoplay = true;
         video.muted = true;
+        video.playsInline = true;
 
+        // Wait for video to be ready AND playing
         await new Promise<void>((resolve, reject) => {
-          video.onloadeddata = () => resolve();
-          setTimeout(() => reject(new Error("timeout")), 5000);
+          const timer = setTimeout(() => reject(new Error("timeout")), 8000);
+          video.onloadedmetadata = () => {
+            video.play().then(() => {
+              clearTimeout(timer);
+              resolve();
+            }).catch(() => {
+              clearTimeout(timer);
+              resolve(); // still try even if play() rejects
+            });
+          };
         });
-        // Allow the frame to settle after the sharing dialog closes
-        await new Promise<void>((r) => setTimeout(r, 300));
+
+        // Wait for an actual rendered frame using requestVideoFrameCallback
+        // (available in Chrome/Edge), falling back to a generous delay
+        if ("requestVideoFrameCallback" in video) {
+          await new Promise<void>((resolve) => {
+            (video as any).requestVideoFrameCallback(() => resolve());
+            setTimeout(resolve, 2000); // safety timeout
+          });
+          // One extra frame to be safe (the first callback frame can still be
+          // transitional in some drivers)
+          await new Promise<void>((resolve) => {
+            (video as any).requestVideoFrameCallback(() => resolve());
+            setTimeout(resolve, 1000);
+          });
+        } else {
+          // Fallback: wait long enough for the sharing UI to dismiss and a
+          // real frame to arrive
+          await new Promise<void>((r) => setTimeout(r, 1000));
+        }
 
         const fullWidth = video.videoWidth;
         const fullHeight = video.videoHeight;
@@ -182,6 +209,28 @@ export function ScreenCaptureButton({
         fullCanvas.height = fullHeight;
         const fullCtx = fullCanvas.getContext("2d")!;
         fullCtx.drawImage(video, 0, 0, fullWidth, fullHeight);
+
+        // Check if the captured frame is essentially black (failed capture).
+        // Sample a grid of pixels; if nearly all are black, retry once.
+        const isBlank = (() => {
+          const sample = fullCtx.getImageData(0, 0, fullWidth, fullHeight);
+          const data = sample.data;
+          const step = Math.max(4, Math.floor(data.length / 4 / 500)) * 4; // ~500 pixels
+          let dark = 0;
+          let total = 0;
+          for (let i = 0; i < data.length; i += step) {
+            total++;
+            if (data[i] < 10 && data[i + 1] < 10 && data[i + 2] < 10) dark++;
+          }
+          return total > 0 && dark / total > 0.97;
+        })();
+
+        if (isBlank) {
+          // Wait longer and try one more draw
+          await new Promise<void>((r) => setTimeout(r, 1500));
+          fullCtx.clearRect(0, 0, fullWidth, fullHeight);
+          fullCtx.drawImage(video, 0, 0, fullWidth, fullHeight);
+        }
 
         // Stop stream immediately after capture
         stream.getTracks().forEach((t) => t.stop());
