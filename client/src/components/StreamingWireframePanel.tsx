@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ProvokeText } from "./ProvokeText";
-import { ScreenCaptureButton, type CaptureRegion } from "./ScreenCaptureButton";
+import { ScreenCaptureButton, type CaptureAnnotation } from "./ScreenCaptureButton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,7 +32,7 @@ interface StreamingWireframePanelProps {
   isAnalyzing: boolean;
   hasAnalysis: boolean;
   wireframeAnalysis: WireframeAnalysisResponse | null;
-  onCapture: (imageDataUrl: string, regions: CaptureRegion[]) => void;
+  onCapture: (imageDataUrl: string, annotations: CaptureAnnotation[]) => void;
   captureDisabled?: boolean;
 }
 
