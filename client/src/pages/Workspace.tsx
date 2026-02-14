@@ -169,6 +169,104 @@ export default function Workspace() {
     fetchSavedDocuments();
   }, [fetchSavedDocuments]);
 
+  // ── Local backup: persist workspace state to localStorage ──
+  const LOCAL_BACKUP_KEY = "provocations-workspace-backup";
+  const lastServerSave = useRef<number>(0);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Save to localStorage on every meaningful change (debounced 2s)
+  useEffect(() => {
+    if (!document.rawText) return;
+    const handle = setTimeout(() => {
+      try {
+        const backup = JSON.stringify({
+          documentText: document.rawText,
+          objective,
+          secondaryObjective,
+          currentDocId,
+          savedAt: Date.now(),
+        });
+        localStorage.setItem(LOCAL_BACKUP_KEY, backup);
+      } catch {
+        // localStorage full or unavailable — ignore
+      }
+    }, 2000);
+    return () => clearTimeout(handle);
+  }, [document.rawText, objective, secondaryObjective, currentDocId]);
+
+  // Restore from localStorage on mount if workspace is empty
+  useEffect(() => {
+    if (document.rawText) return; // already has content
+    try {
+      const raw = localStorage.getItem(LOCAL_BACKUP_KEY);
+      if (!raw) return;
+      const backup = JSON.parse(raw) as {
+        documentText?: string;
+        objective?: string;
+        secondaryObjective?: string;
+        currentDocId?: number | null;
+        savedAt?: number;
+      };
+      // Only restore if the backup is less than 7 days old
+      if (backup.savedAt && Date.now() - backup.savedAt > 7 * 24 * 60 * 60 * 1000) return;
+      if (backup.documentText) {
+        setDocument({ id: generateId("doc"), rawText: backup.documentText });
+        if (backup.objective) setObjective(backup.objective);
+        if (backup.secondaryObjective) setSecondaryObjectiveRaw(backup.secondaryObjective);
+        if (backup.currentDocId) setCurrentDocId(backup.currentDocId);
+        toast({
+          title: "Draft Restored",
+          description: "Your previous session was recovered from local backup.",
+        });
+      }
+    } catch {
+      // Corrupt backup — ignore
+    }
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Warn before closing tab with unsaved work
+  useEffect(() => {
+    if (!document.rawText) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [document.rawText]);
+
+  // Auto-save to server every 60s when there's content and user is authenticated
+  useEffect(() => {
+    if (!document.rawText) return;
+    autoSaveTimer.current = setInterval(async () => {
+      // Skip if already saving or nothing changed since last server save
+      if (isSaving) return;
+      if (lastServerSave.current && Date.now() - lastServerSave.current < 55_000) return;
+      try {
+        const title = objective || "Untitled Document";
+        const content = JSON.stringify({
+          objective,
+          secondaryObjective: secondaryObjective.trim() || undefined,
+          documentText: document.rawText,
+        });
+        if (currentDocId) {
+          await apiRequest("PUT", `/api/documents/${currentDocId}`, { title, content });
+        } else {
+          const response = await apiRequest("POST", "/api/documents", { title, content });
+          const data = await response.json() as { id: number; createdAt: string };
+          setCurrentDocId(data.id);
+        }
+        lastServerSave.current = Date.now();
+      } catch {
+        // Auto-save failed silently — manual save still available
+      }
+    }, 60_000);
+    return () => {
+      if (autoSaveTimer.current) clearInterval(autoSaveTimer.current);
+    };
+  }, [document.rawText, objective, secondaryObjective, currentDocId, isSaving]);
+
   // ── Writer mutation ──
 
   const writeMutation = useMutation({
@@ -894,17 +992,22 @@ export default function Workspace() {
           description: `"${title}" saved.`,
         });
       }
+      lastServerSave.current = Date.now();
       fetchSavedDocuments();
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      const isAuthError = msg.includes("401") || msg.includes("Unauthorized");
       toast({
         title: "Save Failed",
-        description: "Could not save. Try again.",
+        description: isAuthError
+          ? "You must be signed in to save documents."
+          : "Could not save your document. Please try again. Your work is backed up locally.",
         variant: "destructive",
       });
     } finally {
       setIsSaving(false);
     }
-  }, [document, objective, currentDocId, toast, fetchSavedDocuments]);
+  }, [document, objective, secondaryObjective, currentDocId, toast, fetchSavedDocuments]);
 
   // ── Computed values ──
 
