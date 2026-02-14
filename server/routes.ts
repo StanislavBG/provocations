@@ -1595,11 +1595,28 @@ Output only valid JSON, no markdown.`
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, dialogueEntries, existingRequirements, document: docText } = parsed.data;
+      const { objective, dialogueEntries, existingRequirements, document: docText, websiteUrl, wireframeAnalysis } = parsed.data;
 
       const dialogueText = dialogueEntries.map(e => `[${e.role}]: ${e.content}`).join("\n");
       const existingReqText = existingRequirements && existingRequirements.length > 0
         ? `\n\nEXISTING REQUIREMENTS:\n${existingRequirements.map((r, i) => `${i + 1}. [${r.status}] ${r.text}`).join("\n")}`
+        : "";
+
+      // Build wireframe context for the refine prompt
+      const wireframeParts: string[] = [];
+      if (websiteUrl) wireframeParts.push(`TARGET WEBSITE: ${websiteUrl}`);
+      if (wireframeAnalysis) {
+        if (wireframeAnalysis.analysis) wireframeParts.push(`SITE ANALYSIS: ${wireframeAnalysis.analysis}`);
+        if (wireframeAnalysis.components.length > 0) wireframeParts.push(`UI COMPONENTS: ${wireframeAnalysis.components.join(", ")}`);
+        if (wireframeAnalysis.suggestions.length > 0) wireframeParts.push(`NOTABLE PATTERNS: ${wireframeAnalysis.suggestions.join("; ")}`);
+        if (wireframeAnalysis.primaryContent) wireframeParts.push(`PRIMARY CONTENT: ${wireframeAnalysis.primaryContent}`);
+        if (wireframeAnalysis.siteMap && wireframeAnalysis.siteMap.length > 0) {
+          const siteMapStr = wireframeAnalysis.siteMap.map(p => `${"  ".repeat(p.depth)}${p.title}${p.url ? ` (${p.url})` : ""}`).join("\n");
+          wireframeParts.push(`SITE MAP:\n${siteMapStr}`);
+        }
+      }
+      const wireframeContext = wireframeParts.length > 0
+        ? `\n\nWEBSITE CONTEXT:\n${wireframeParts.join("\n")}`
         : "";
 
       const response = await openai.chat.completions.create({
@@ -1611,7 +1628,7 @@ Output only valid JSON, no markdown.`
             content: `You are an expert requirements writer. Given a dialogue between a user and an agent, extract and refine clear, implementable requirements. Each requirement should be specific enough that a developer or AI agent can implement it without ambiguity.
 
 OBJECTIVE: ${objective}
-${existingReqText}
+${existingReqText}${wireframeContext}
 
 DIALOGUE:
 ${dialogueText}
