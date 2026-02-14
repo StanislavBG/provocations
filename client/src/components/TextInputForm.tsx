@@ -1,9 +1,7 @@
 import { useState, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  FileText,
   ArrowRight,
-  Mic,
   Target,
   PenLine,
   PencilLine,
@@ -16,6 +14,7 @@ import {
   ChevronDown,
   Crosshair,
   Radio,
+  NotebookPen,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import type { SmartModeDef } from "@/components/ProvokeText";
@@ -70,10 +69,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
 
-  // Draft section expanded state
-  const [isDraftExpanded, setIsDraftExpanded] = useState(false);
-
-  // Auto-record flag: set when user clicks "Speak it", cleared after ProvokeText picks it up
+  // Auto-record flag: set when user clicks mic in context area
   const [autoRecordDraft, setAutoRecordDraft] = useState(false);
 
   // Ref for scrolling back to top on selection
@@ -123,7 +119,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
     setIsCustomObjective(false);
 
     setCardsExpanded(false);
-    setIsDraftExpanded(true);
   };
 
   const handleSelectCustom = () => {
@@ -132,7 +127,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
     setObjective("");
     setCardsExpanded(false);
-    setIsDraftExpanded(false);
   };
 
   const handleChangeType = () => {
@@ -307,7 +301,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
         </div>
 
-        {/* ── STEP TWO: Draft ── */}
+        {/* ── STEP TWO: Context ── */}
+        {(activePrebuilt || isCustomObjective) && (
         <div className="flex flex-col min-h-0 gap-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
@@ -316,7 +311,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             <h2 className="text-xl font-semibold">
               {activePrebuilt?.id === "streaming"
                 ? "Describe what you're exploring, then start"
-                : "Add your draft, notes, or rough thoughts — we'll iterate together"}
+                : "Provide your context — notes, references, or spoken thoughts"}
             </h2>
           </div>
           {activePrebuilt?.id === "streaming" && onStreamingMode ? (
@@ -352,42 +347,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
-          ) : !isDraftExpanded ? (
-            <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setIsDraftExpanded(true)}
-                  className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-lg bg-primary/10">
-                      <FileText className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="font-medium text-base">Paste text</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-snug">
-                    Notes, transcripts, reports — any raw material to shape.
-                  </p>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setIsDraftExpanded(true);
-                    setAutoRecordDraft(true);
-                  }}
-                  disabled={isLoading}
-                  className="group p-6 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all text-left space-y-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-lg bg-primary/10">
-                      <Mic className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="font-medium text-base">Speak it</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-snug">
-                    Talk through your ideas and we'll capture them as a draft.
-                  </p>
-                </button>
-            </div>
           ) : (
             <div className="flex flex-1 min-h-0 gap-3">
               {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
@@ -398,11 +357,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               )}
               <ProvokeText
                 chrome="container"
-                label="Your draft"
-                labelIcon={PenLine}
+                label="Your context"
+                labelIcon={NotebookPen}
+                description="Type your notes or click the microphone to speak your thoughts — both are captured as context for your first draft."
                 containerClassName="flex-1 min-h-0 flex flex-col"
                 data-testid="input-source-text"
-                placeholder="Paste your notes, transcript, or source material here..."
+                placeholder="Paste notes, transcripts, or source material — or click the mic to speak your ideas..."
                 className="text-base leading-relaxed font-serif min-h-[200px]"
                 value={text}
                 onChange={setText}
@@ -431,20 +391,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Fixed bottom action bar */}
-      {isDraftExpanded && activePrebuilt?.id !== "streaming" && (
+      {(activePrebuilt || isCustomObjective) && activePrebuilt?.id !== "streaming" && (
         <div className="shrink-0 border-t bg-card px-6 py-3" style={{ scrollbarGutter: "stable" }}>
           <div className="w-full max-w-4xl mx-auto flex items-center justify-end gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsDraftExpanded(false)}
-              className="text-muted-foreground"
-            >
-              Cancel
-            </Button>
             <Button
               data-testid="button-analyze"
               onClick={handleSubmit}
@@ -455,12 +408,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               {isLoading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Analyzing...
+                  Creating first draft...
                 </>
               ) : (
                 <>
-                  Begin Analysis
-                  <ArrowRight className="w-4 h-4" />
+                  Create First Draft
+                  <PenLine className="w-4 h-4" />
                 </>
               )}
             </Button>
