@@ -65,7 +65,12 @@ app.use((req, res, next) => {
 
 (async () => {
   // Create tables if they don't exist (handles first-run / missing db:push)
-  await ensureTables();
+  try {
+    await ensureTables();
+  } catch (err) {
+    console.error("ensureTables failed:", err instanceof Error ? err.message : err);
+    console.warn("Continuing without database.");
+  }
 
   await registerRoutes(httpServer, app);
 
@@ -107,4 +112,7 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
     },
   );
-})();
+})().catch((err) => {
+  console.error("Fatal startup error:", err);
+  process.exit(1);
+});
