@@ -6,15 +6,22 @@ const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+// Prevent unhandled 'error' events from crashing the process
+pool.on("error", (err) => {
+  console.error("PostgreSQL pool error:", err.message);
+});
+
 export const db = drizzle(pool, { schema });
 
 /**
  * Ensure required tables exist. Runs CREATE TABLE IF NOT EXISTS
  * so the app works even if drizzle-kit push was never executed.
+ * Non-fatal: the server will start even if the database is unavailable.
  */
 export async function ensureTables(): Promise<void> {
-  const client = await pool.connect();
+  let client: pg.PoolClient | undefined;
   try {
+    client = await pool.connect();
     await client.query(`
       CREATE TABLE IF NOT EXISTS conversations (
         id SERIAL PRIMARY KEY,
@@ -51,8 +58,9 @@ export async function ensureTables(): Promise<void> {
     `);
     console.log("Database tables verified.");
   } catch (err) {
-    console.error("Failed to ensure database tables:", err);
+    console.error("Failed to ensure database tables:", err instanceof Error ? err.message : err);
+    console.warn("Server will continue without database — document persistence will be unavailable.");
   } finally {
-    client.release();
+    client?.release();
   }
 }
