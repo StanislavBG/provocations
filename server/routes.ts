@@ -1406,11 +1406,15 @@ Output only the instruction text. No meta-commentary.`
         : "";
 
       const wireframeContext = wireframeNotes
-        ? `\n\nWIREFRAME NOTES:\n${wireframeNotes.slice(0, 2000)}`
+        ? `\n\nWIREFRAME / SITE ANALYSIS:\n${wireframeNotes.slice(0, 3000)}`
         : "";
 
       const websiteContext = websiteUrl
         ? `\n\nTARGET WEBSITE: ${websiteUrl}`
+        : "";
+
+      const documentContext = docText
+        ? `\n\nCURRENT REQUIREMENTS DOCUMENT (distilled so far — use this to understand what has already been captured and what gaps remain):\n${docText.slice(0, 3000)}`
         : "";
 
       const isFirstQuestion = !previousEntries || previousEntries.length === 0;
@@ -1421,7 +1425,11 @@ Output only the instruction text. No meta-commentary.`
         messages: [
           {
             role: "system",
-            content: `You are a requirements discovery agent helping a user write crystal-clear requirements for a website or application. The user knows WHAT they want but not HOW to express it as implementable requirements.
+            content: `You are a requirements discovery agent. Your PRIMARY purpose is to help the user express automation requirements for the objective below. Everything you do should serve this objective.
+
+OBJECTIVE (this is your north star — every response should help the user make progress toward this):
+${objective}
+${websiteContext}${wireframeContext}${documentContext}${requirementsContext}
 
 Your behavior:
 - You ONLY respond to what the user says. You do NOT proactively ask for clarification or list areas that need attention.
@@ -1429,10 +1437,8 @@ Your behavior:
 - ${isFirstQuestion ? 'The user has not spoken yet. Simply greet them briefly and wait. Say something like: "Ready when you are." Do NOT ask questions or list clarification areas.' : 'Respond to what the user just said. Acknowledge their input, extract any requirements, and if you genuinely need one piece of clarification to proceed, ask it. Do NOT volunteer lists of questions or areas needing clarification.'}
 - Keep responses concise and focused on what the user shared.
 - If the user\'s message implies a requirement, extract it as suggestedRequirement.
+- Use the current requirements document (if present) to understand what has already been captured. Focus on what is still missing or unclear relative to the objective.
 - Your output should help produce requirements that an application or calling agent can implement.
-
-OBJECTIVE: ${objective}
-${websiteContext}${wireframeContext}${requirementsContext}
 
 ${previousContext ? `CONVERSATION SO FAR:\n${previousContext}` : ""}
 

@@ -15,6 +15,8 @@ import {
   Globe,
   ChevronDown,
   ChevronRight,
+  Target,
+  FileText,
 } from "lucide-react";
 import type {
   StreamingDialogueEntry,
@@ -38,6 +40,8 @@ interface StreamingDialogueProps {
   hasAnalysis?: boolean;
   wireframeAnalysis?: WireframeAnalysisResponse | null;
   websiteUrl?: string;
+  objective?: string;
+  documentText?: string;
 }
 
 export function StreamingDialogue({
@@ -56,6 +60,8 @@ export function StreamingDialogue({
   hasAnalysis,
   wireframeAnalysis,
   websiteUrl,
+  objective,
+  documentText,
 }: StreamingDialogueProps) {
   const [answerText, setAnswerText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -65,10 +71,10 @@ export function StreamingDialogue({
   const [editingText, setEditingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new entries arrive
+  // Auto-scroll to top when new entries arrive (newest messages at top)
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+      scrollRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [entries.length, currentQuestion]);
 
@@ -144,6 +150,26 @@ export function StreamingDialogue({
           Requirements ({requirements.length})
         </Button>
       </div>
+
+      {/* Objective + document status — shows what drives the agent */}
+      {(objective || documentText) && (
+        <div className="border-b bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 space-y-1">
+          {objective && (
+            <div className="flex items-start gap-1.5">
+              <Target className="w-3 h-3 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-300 leading-relaxed line-clamp-2">{objective}</p>
+            </div>
+          )}
+          {documentText && (
+            <div className="flex items-center gap-1.5">
+              <FileText className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+              <span className="text-[10px] text-muted-foreground">
+                Document: {documentText.length > 0 ? `${Math.round(documentText.length / 4)} words captured` : "empty"}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Wireframe context summary — shows what context the agent has */}
       {wireframeAnalysis && (
@@ -319,9 +345,11 @@ export function StreamingDialogue({
         </div>
       )}
 
-      {/* Dialogue messages */}
+      {/* Dialogue messages — newest at top (matches input position) */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
+          <div ref={scrollRef} />
+
           {entries.length === 0 && !isLoadingQuestion && (
             <div className="text-center py-8">
               <p className="text-sm text-muted-foreground">
@@ -329,7 +357,35 @@ export function StreamingDialogue({
               </p>
             </div>
           )}
-          {entries.map((entry) => (
+
+          {/* Loading indicator — top of the feed since newest is first */}
+          {isLoadingQuestion && (
+            <Card className="border-violet-200 dark:border-violet-800">
+              <CardContent className="p-3 flex items-center gap-3">
+                <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
+                <span className="text-sm text-muted-foreground">Agent is thinking...</span>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Current question highlight (newest response from agent) */}
+          {currentQuestion && !isLoadingQuestion && entries.length > 0 && entries[entries.length - 1]?.content !== currentQuestion && (
+            <Card className="border-violet-200 dark:border-violet-800 ring-1 ring-violet-200 dark:ring-violet-800">
+              <CardContent className="p-3 space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <MessageCircleQuestion className="w-3 h-3 text-violet-600 dark:text-violet-400" />
+                  <span className="text-xs font-medium text-violet-600 dark:text-violet-400">Agent</span>
+                  {currentTopic && (
+                    <Badge variant="outline" className="text-[10px] ml-auto">{currentTopic}</Badge>
+                  )}
+                </div>
+                <p className="text-sm font-medium leading-relaxed whitespace-pre-line">{currentQuestion}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Messages in reverse chronological order — newest first */}
+          {[...entries].reverse().map((entry) => (
             <div
               key={entry.id}
               className={`text-sm ${
@@ -356,34 +412,6 @@ export function StreamingDialogue({
               )}
             </div>
           ))}
-
-          {/* Loading indicator */}
-          {isLoadingQuestion && (
-            <Card className="border-violet-200 dark:border-violet-800">
-              <CardContent className="p-3 flex items-center gap-3">
-                <Loader2 className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400" />
-                <span className="text-sm text-muted-foreground">Agent is thinking...</span>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Current question highlight (only show if it differs from the last entry to avoid duplication) */}
-          {currentQuestion && !isLoadingQuestion && entries.length > 0 && entries[entries.length - 1]?.content !== currentQuestion && (
-            <Card className="border-violet-200 dark:border-violet-800 ring-1 ring-violet-200 dark:ring-violet-800">
-              <CardContent className="p-3 space-y-3">
-                <div className="flex items-center gap-1.5">
-                  <MessageCircleQuestion className="w-3 h-3 text-violet-600 dark:text-violet-400" />
-                  <span className="text-xs font-medium text-violet-600 dark:text-violet-400">Agent</span>
-                  {currentTopic && (
-                    <Badge variant="outline" className="text-[10px] ml-auto">{currentTopic}</Badge>
-                  )}
-                </div>
-                <p className="text-sm font-medium leading-relaxed whitespace-pre-line">{currentQuestion}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          <div ref={scrollRef} />
         </div>
       </ScrollArea>
 
