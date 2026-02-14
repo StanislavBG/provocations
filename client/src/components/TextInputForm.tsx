@@ -141,70 +141,27 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
     setText((prev) => (prev ? prev + "\n\n" + entry : entry));
   };
 
+  // Whether step 1 is complete (user picked a type)
+  const hasObjectiveType = !!(activePrebuilt || isCustomObjective);
+
   return (
     <div className="h-full flex flex-col">
-      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto p-6 gap-8" style={{ scrollbarGutter: "stable" }}>
+      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto px-6 py-4 gap-5" style={{ scrollbarGutter: "stable" }}>
 
-        {/* ── STEP ONE: What type of document are you creating? ── */}
-        <div className="space-y-4" ref={stepOneRef}>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+        {/* ── STEP ONE: Your objective ── */}
+        <div className="space-y-3" ref={stepOneRef}>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
               1
             </div>
-            <h2 className="text-xl font-semibold">
-              What type of document are you creating?
+            <h2 className="text-base font-semibold">
+              What do <em>you</em> want to create?
             </h2>
           </div>
 
-          {/* Compact selected indicator — visible when a preset is chosen and grid is collapsed */}
-          {activePrebuilt && !cardsExpanded && (
-            <button
-              onClick={handleChangeType}
-              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary bg-primary/5 ring-2 ring-primary/20 text-left transition-all hover:bg-primary/10"
-            >
-              <div className="p-2 rounded-lg bg-primary/20">
-                {(() => { const I = iconMap[activePrebuilt.icon] || PencilLine; return <I className="w-5 h-5 text-primary" />; })()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="font-semibold text-base">{activePrebuilt.title}</span>
-                <span className="text-sm text-muted-foreground ml-2">{activePrebuilt.subtitle}</span>
-              </div>
-              <div className="p-1 rounded-full bg-primary mr-1">
-                <Check className="w-3.5 h-3.5 text-primary-foreground" />
-              </div>
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
-                Change <ChevronDown className="w-4 h-4" />
-              </span>
-            </button>
-          )}
-
-          {/* Compact indicator for custom objective */}
-          {isCustomObjective && !activePrebuilt && !cardsExpanded && (
-            <button
-              onClick={handleChangeType}
-              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary bg-primary/5 ring-2 ring-primary/20 text-left transition-all hover:bg-primary/10"
-            >
-              <div className="p-2 rounded-lg bg-primary/20">
-                <PenLine className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="font-semibold text-base">Custom Objective</span>
-                {objective && (
-                  <span className="text-sm text-muted-foreground ml-2 truncate">{objective.slice(0, 60)}{objective.length > 60 ? "..." : ""}</span>
-                )}
-              </div>
-              <div className="p-1 rounded-full bg-primary mr-1">
-                <Check className="w-3.5 h-3.5 text-primary-foreground" />
-              </div>
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
-                Change <ChevronDown className="w-4 h-4" />
-              </span>
-            </button>
-          )}
-
-          {/* Full card grid */}
+          {/* Compact chip grid — always visible unless a selection collapses it */}
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="flex flex-wrap gap-2">
               {prebuiltTemplates.map((template) => {
                 const Icon = iconMap[template.icon] || PencilLine;
                 const isActive = activePrebuilt?.id === template.id;
@@ -213,83 +170,72 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                   <button
                     key={template.id}
                     onClick={() => handleSelectPrebuilt(template)}
-                    className={`group relative text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all duration-150 ${
                       isActive
-                        ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                        ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
                         : "border-border hover:border-primary/40 hover:bg-primary/5"
                     }`}
                   >
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`p-2 rounded-lg ${isActive ? "bg-primary/20" : "bg-primary/10"}`}>
-                          <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-primary/70"}`} />
-                        </div>
-                        <div>
-                          <span className="font-semibold text-sm block">{template.title}</span>
-                          <span className="text-xs text-muted-foreground">{template.subtitle}</span>
-                        </div>
-                        {isActive && (
-                          <div className="ml-auto p-1 rounded-full bg-primary">
-                            <Check className="w-3.5 h-3.5 text-primary-foreground" />
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                        {template.description}
-                      </p>
-                    </div>
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                    <span>{template.title}</span>
+                    {isActive && <Check className="w-3 h-3 text-primary" />}
                   </button>
                 );
               })}
 
-              {/* "Type Your Own" card */}
+              {/* "Custom" chip */}
               <button
                 onClick={handleSelectCustom}
-                className={`group relative text-left p-4 rounded-xl border-2 border-dashed transition-all duration-200 ${
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-sm transition-all duration-150 ${
                   isCustomObjective
-                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                    ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
                     : "border-border hover:border-primary/40 hover:bg-primary/5"
                 }`}
               >
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`p-2 rounded-lg ${isCustomObjective ? "bg-primary/20" : "bg-primary/10"}`}>
-                      <PenLine className={`w-5 h-5 ${isCustomObjective ? "text-primary" : "text-primary/70"}`} />
-                    </div>
-                    <div>
-                      <span className="font-semibold text-sm block">Type Your Own</span>
-                      <span className="text-xs text-muted-foreground">Custom objective</span>
-                    </div>
-                    {isCustomObjective && (
-                      <div className="ml-auto p-1 rounded-full bg-primary">
-                        <Check className="w-3.5 h-3.5 text-primary-foreground" />
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                    Have something specific in mind? Write your own objective and we'll provoke your thinking from there.
-                  </p>
-                </div>
+                <PenLine className={`w-4 h-4 shrink-0 ${isCustomObjective ? "text-primary" : "text-muted-foreground"}`} />
+                <span>Custom</span>
+                {isCustomObjective && <Check className="w-3 h-3 text-primary" />}
               </button>
-
             </div>
           )}
 
-          {/* Custom objective — ProvokeText with textProcessor handles everything */}
+          {/* Collapsed selection indicator */}
+          {hasObjectiveType && !cardsExpanded && (
+            <button
+              onClick={handleChangeType}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 transition-colors"
+            >
+              {activePrebuilt ? (
+                <>
+                  {(() => { const I = iconMap[activePrebuilt.icon] || PencilLine; return <I className="w-4 h-4 text-primary" />; })()}
+                  <span className="font-medium">{activePrebuilt.title}</span>
+                </>
+              ) : (
+                <>
+                  <PenLine className="w-4 h-4 text-primary" />
+                  <span className="font-medium">Custom</span>
+                  {objective && <span className="text-muted-foreground truncate max-w-[200px]">&mdash; {objective}</span>}
+                </>
+              )}
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
+            </button>
+          )}
+
+          {/* Custom objective input */}
           {isCustomObjective && (
             <ProvokeText
               chrome="container"
               label="Your objective"
               labelIcon={Target}
-              description="Describe what you're creating — be as specific or broad as you like."
+              description="Describe what you're creating — this is your intent, in your words."
               id="objective"
               data-testid="input-objective"
               placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-              className="text-base leading-relaxed font-serif"
+              className="text-sm leading-relaxed font-serif"
               value={objective}
               onChange={setObjective}
-              minRows={3}
-              maxRows={6}
+              minRows={2}
+              maxRows={4}
               autoFocus
               voice={{ mode: "replace" }}
               onVoiceTranscript={setObjective}
@@ -298,24 +244,23 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               }
             />
           )}
-
         </div>
 
-        {/* ── STEP TWO: Context ── */}
-        {(activePrebuilt || isCustomObjective) && (
-        <div className="flex flex-col min-h-0 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+        {/* ── STEP TWO: Your context ── */}
+        {hasObjectiveType && (
+        <div className="flex flex-col flex-1 min-h-0 gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
               2
             </div>
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-base font-semibold">
               {activePrebuilt?.id === "streaming"
                 ? "Describe what you're exploring, then start"
-                : "Provide your context — notes, references, or spoken thoughts"}
+                : "Share your thinking — notes, ideas, or speak your mind"}
             </h2>
           </div>
           {activePrebuilt?.id === "streaming" && onStreamingMode ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <ProvokeText
                 chrome="container"
                 label="Objective"
@@ -323,11 +268,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 description="Describe the website or feature you're writing requirements for."
                 id="streaming-objective"
                 placeholder="Write requirements for an e-commerce checkout flow... Redesign the user profile page..."
-                className="text-base leading-relaxed font-serif"
+                className="text-sm leading-relaxed font-serif"
                 value={objective}
                 onChange={setObjective}
-                minRows={3}
-                maxRows={6}
+                minRows={2}
+                maxRows={4}
                 autoFocus
                 voice={{ mode: "replace" }}
                 onVoiceTranscript={setObjective}
@@ -359,22 +304,21 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 chrome="container"
                 label="Your context"
                 labelIcon={NotebookPen}
-                description="Type your notes or click the microphone to speak your thoughts — both are captured as context for your first draft."
+                description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
                 containerClassName="flex-1 min-h-0 flex flex-col"
                 data-testid="input-source-text"
-                placeholder="Paste notes, transcripts, or source material — or click the mic to speak your ideas..."
-                className="text-base leading-relaxed font-serif min-h-[200px]"
+                placeholder="Paste your notes or click the mic to speak your ideas..."
+                className="text-sm leading-relaxed font-serif min-h-[140px]"
                 value={text}
                 onChange={setText}
-                minRows={12}
-                maxRows={40}
+                minRows={8}
+                maxRows={30}
                 autoFocus
                 voice={{ mode: "append" }}
                 onVoiceTranscript={(transcript) =>
                   setText((prev) => (prev ? prev + " " + transcript : transcript))
                 }
                 onRecordingChange={(recording) => {
-                  // Clear auto-record flag once recording actually starts
                   if (recording && autoRecordDraft) {
                     setAutoRecordDraft(false);
                   }
@@ -395,7 +339,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
       </div>
 
       {/* Fixed bottom action bar */}
-      {(activePrebuilt || isCustomObjective) && activePrebuilt?.id !== "streaming" && (
+      {hasObjectiveType && activePrebuilt?.id !== "streaming" && (
         <div className="shrink-0 border-t bg-card px-6 py-3" style={{ scrollbarGutter: "stable" }}>
           <div className="w-full max-w-4xl mx-auto flex items-center justify-end gap-3">
             <Button
