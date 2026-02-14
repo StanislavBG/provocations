@@ -20,6 +20,7 @@ import {
   Rss,
   Image,
   FileText,
+  AlignLeft,
 } from "lucide-react";
 import type { WireframeAnalysisResponse } from "@shared/schema";
 
@@ -174,46 +175,17 @@ export function StreamingWireframePanel({
 
                   {wireframeAnalysis && (
                     <div className="px-3 py-2 space-y-3 text-xs">
-                      {/* Brief analysis */}
-                      <p className="text-muted-foreground leading-relaxed">
-                        {wireframeAnalysis.analysis}
-                      </p>
-
-                      {/* Components */}
-                      {wireframeAnalysis.components.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            <Component className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
-                            <span className="font-medium text-muted-foreground">Components</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {wireframeAnalysis.components.map((comp, idx) => (
-                              <Badge key={idx} variant="outline" className="text-[10px]">
-                                {comp}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
+                      {/* Summary */}
+                      {wireframeAnalysis.analysis && (
+                        <ContentDiscoverySection
+                          icon={<AlignLeft className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />}
+                          title="Summary"
+                        >
+                          <p className="text-muted-foreground leading-relaxed">
+                            {wireframeAnalysis.analysis}
+                          </p>
+                        </ContentDiscoverySection>
                       )}
-
-                      {/* Suggestions */}
-                      {wireframeAnalysis.suggestions.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            <Lightbulb className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                            <span className="font-medium text-muted-foreground">Notes</span>
-                          </div>
-                          <ul className="text-muted-foreground space-y-0.5 pl-1">
-                            {wireframeAnalysis.suggestions.map((sug, idx) => (
-                              <li key={idx} className="pl-2 border-l-2 border-amber-300 dark:border-amber-700 leading-relaxed">
-                                {sug}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* ── Content Discovery Sections ── */}
 
                       {/* Site Map */}
                       {wireframeAnalysis.siteMap && wireframeAnalysis.siteMap.length > 0 && (
@@ -237,29 +209,6 @@ export function StreamingWireframePanel({
                                   <span className="text-[9px] text-muted-foreground/50 truncate max-w-[120px]">
                                     {page.url}
                                   </span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </ContentDiscoverySection>
-                      )}
-
-                      {/* Videos */}
-                      {wireframeAnalysis.videos && wireframeAnalysis.videos.length > 0 && (
-                        <ContentDiscoverySection
-                          icon={<Video className="w-3 h-3 text-red-600 dark:text-red-400" />}
-                          title="Videos"
-                          count={wireframeAnalysis.videos.length}
-                        >
-                          <div className="space-y-0.5">
-                            {wireframeAnalysis.videos.map((v, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5 text-muted-foreground">
-                                <Video className="w-2.5 h-2.5 shrink-0 opacity-50" />
-                                <span className="truncate flex-1">{v.title}</span>
-                                {v.type && (
-                                  <Badge variant="outline" className="text-[9px] h-4 shrink-0">
-                                    {v.type}
-                                  </Badge>
                                 )}
                               </div>
                             ))}
@@ -305,6 +254,63 @@ export function StreamingWireframePanel({
                                 {f.type && (
                                   <Badge variant="outline" className="text-[9px] h-4 shrink-0">
                                     {f.type}
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </ContentDiscoverySection>
+                      )}
+
+                      {/* Components */}
+                      {wireframeAnalysis.components.length > 0 && (
+                        <ContentDiscoverySection
+                          icon={<Component className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />}
+                          title="Components"
+                          count={wireframeAnalysis.components.length}
+                        >
+                          <div className="flex flex-wrap gap-1">
+                            {wireframeAnalysis.components.map((comp, idx) => (
+                              <Badge key={idx} variant="outline" className="text-[10px]">
+                                {comp}
+                              </Badge>
+                            ))}
+                          </div>
+                        </ContentDiscoverySection>
+                      )}
+
+                      {/* Notes */}
+                      {wireframeAnalysis.suggestions.length > 0 && (
+                        <ContentDiscoverySection
+                          icon={<Lightbulb className="w-3 h-3 text-amber-600 dark:text-amber-400" />}
+                          title="Notes"
+                          count={wireframeAnalysis.suggestions.length}
+                        >
+                          <ul className="text-muted-foreground space-y-0.5 pl-1">
+                            {wireframeAnalysis.suggestions.map((sug, idx) => (
+                              <li key={idx} className="pl-2 border-l-2 border-amber-300 dark:border-amber-700 leading-relaxed">
+                                {sug}
+                              </li>
+                            ))}
+                          </ul>
+                        </ContentDiscoverySection>
+                      )}
+
+                      {/* Videos */}
+                      {wireframeAnalysis.videos && wireframeAnalysis.videos.length > 0 && (
+                        <ContentDiscoverySection
+                          icon={<Video className="w-3 h-3 text-red-600 dark:text-red-400" />}
+                          title="Videos"
+                          count={wireframeAnalysis.videos.length}
+                        >
+                          <div className="space-y-0.5">
+                            {wireframeAnalysis.videos.map((v, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 text-muted-foreground">
+                                <Video className="w-2.5 h-2.5 shrink-0 opacity-50" />
+                                <span className="truncate flex-1">{v.title}</span>
+                                {v.type && (
+                                  <Badge variant="outline" className="text-[9px] h-4 shrink-0">
+                                    {v.type}
                                   </Badge>
                                 )}
                               </div>
