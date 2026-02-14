@@ -20,6 +20,7 @@ import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
@@ -40,6 +41,7 @@ import {
   Loader2,
   Share2,
   Copy,
+  Info,
 } from "lucide-react";
 import type {
   Document,
@@ -1020,6 +1022,17 @@ export default function Workspace() {
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
         <MessageCircleQuestion className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Discussion</h3>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted/60 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors text-[10px] font-bold">
+              2
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[300px]">
+            <p className="text-xs font-medium mb-1">The Interview</p>
+            <p className="text-xs text-muted-foreground">This is where the AI challenges your thinking. It asks provocative questions based on your personas and direction. Answer using voice or text — each response deepens and refines your document. Use "Merge to Draft" to push your answers into the document at any time.</p>
+          </TooltipContent>
+        </Tooltip>
         {(isInterviewActive || isStreamingDialogueActive) && (
           <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
         )}
