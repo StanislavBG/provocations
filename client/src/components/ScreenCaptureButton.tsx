@@ -49,6 +49,8 @@ interface ScreenCaptureButtonProps {
   disabled?: boolean;
   /** DOM element ID to capture. If omitted, captures document.body */
   targetElementId?: string;
+  /** URL of the website displayed in the iframe. When provided, tries server-side screenshot first. */
+  websiteUrl?: string;
 }
 
 // ─── Pointer rendering helpers ────────────────────────────────────────────────
@@ -120,6 +122,7 @@ export function ScreenCaptureButton({
   onClose,
   disabled,
   targetElementId,
+  websiteUrl,
 }: ScreenCaptureButtonProps) {
   const { toast } = useToast();
   const [isCapturing, setIsCapturing] = useState(false);
@@ -221,7 +224,28 @@ export function ScreenCaptureButton({
     [],
   );
 
-  // ─── Capture (Screen Capture API → html2canvas fallback) ──────────
+  // ─── Server-side screenshot (Playwright) ─────────────────────────
+
+  const captureViaServer = useCallback(
+    async (): Promise<string | null> => {
+      if (!websiteUrl) return null;
+      try {
+        const resp = await fetch("/api/screenshot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: websiteUrl, width: 1280, height: 800 }),
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data.dataUrl ?? null;
+      } catch {
+        return null;
+      }
+    },
+    [websiteUrl],
+  );
+
+  // ─── Capture (server → Screen Capture API → html2canvas fallback) ──
 
   const handleCapture = useCallback(async () => {
     setIsCapturing(true);
@@ -230,10 +254,15 @@ export function ScreenCaptureButton({
         ? window.document.getElementById(targetElementId)
         : null;
 
-      // Try Screen Capture API first (captures cross-origin iframe content)
-      let dataUrl = await captureViaDisplayMedia(targetEl);
+      // 1. Try server-side screenshot first (captures any URL reliably)
+      let dataUrl = await captureViaServer();
 
-      // Fall back to html2canvas if Screen Capture API failed or was cancelled
+      // 2. Try Screen Capture API (captures cross-origin iframe content)
+      if (!dataUrl) {
+        dataUrl = await captureViaDisplayMedia(targetEl);
+      }
+
+      // 3. Fall back to html2canvas
       if (!dataUrl) {
         const target = targetEl || window.document.body;
         const computedBg = getComputedStyle(target).backgroundColor;
@@ -267,7 +296,7 @@ export function ScreenCaptureButton({
     } finally {
       setIsCapturing(false);
     }
-  }, [toast, targetElementId, captureViaDisplayMedia]);
+  }, [toast, targetElementId, captureViaDisplayMedia, captureViaServer]);
 
   // ─── Coordinate mapping ───────────────────────────────────────────────
 

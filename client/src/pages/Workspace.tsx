@@ -1108,6 +1108,7 @@ export default function Workspace() {
           onClose={handleCaptureClose}
           disabled={!document.rawText || writeMutation.isPending}
           targetElementId="browser-explorer-viewport"
+          websiteUrl={websiteUrl}
         />
       }
     />
