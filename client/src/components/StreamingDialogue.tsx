@@ -12,10 +12,14 @@ import {
   Check,
   Pencil,
   Mic,
+  Globe,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type {
   StreamingDialogueEntry,
   StreamingRequirement,
+  WireframeAnalysisResponse,
 } from "@shared/schema";
 
 interface StreamingDialogueProps {
@@ -32,6 +36,8 @@ interface StreamingDialogueProps {
   onConfirmRequirement: (id: string) => void;
   isActive: boolean;
   hasAnalysis?: boolean;
+  wireframeAnalysis?: WireframeAnalysisResponse | null;
+  websiteUrl?: string;
 }
 
 export function StreamingDialogue({
@@ -48,10 +54,13 @@ export function StreamingDialogue({
   onConfirmRequirement,
   isActive,
   hasAnalysis,
+  wireframeAnalysis,
+  websiteUrl,
 }: StreamingDialogueProps) {
   const [answerText, setAnswerText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [showRequirements, setShowRequirements] = useState(false);
+  const [showContext, setShowContext] = useState(false);
   const [editingReqId, setEditingReqId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -135,6 +144,47 @@ export function StreamingDialogue({
           Requirements ({requirements.length})
         </Button>
       </div>
+
+      {/* Wireframe context summary — shows what context the agent has */}
+      {wireframeAnalysis && (
+        <div className="border-b bg-indigo-50/50 dark:bg-indigo-950/20">
+          <button
+            onClick={() => setShowContext(!showContext)}
+            className="w-full flex items-center gap-2 px-4 py-2 hover:bg-indigo-50/80 dark:hover:bg-indigo-950/30 transition-colors text-left"
+          >
+            <Globe className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 flex-1">
+              Site context loaded
+              {websiteUrl && <span className="ml-1 text-muted-foreground font-normal truncate">({websiteUrl})</span>}
+            </span>
+            <Badge variant="outline" className="text-[10px] h-5 border-indigo-300 dark:border-indigo-700">
+              {wireframeAnalysis.components.length} components
+            </Badge>
+            {showContext ? (
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            )}
+          </button>
+          {showContext && (
+            <div className="px-4 pb-3 text-xs space-y-1.5">
+              {wireframeAnalysis.analysis && (
+                <p className="text-muted-foreground leading-relaxed">{wireframeAnalysis.analysis}</p>
+              )}
+              {wireframeAnalysis.components.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {wireframeAnalysis.components.map((comp, idx) => (
+                    <Badge key={idx} variant="outline" className="text-[10px]">{comp}</Badge>
+                  ))}
+                </div>
+              )}
+              {wireframeAnalysis.primaryContent && (
+                <p className="text-muted-foreground/70 leading-relaxed line-clamp-3">{wireframeAnalysis.primaryContent}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Answer input — at the top for quick access */}
       {isActive && (
