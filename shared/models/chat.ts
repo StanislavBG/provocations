@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -57,4 +57,15 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
 
 export type StoredDocument = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+
+// User preferences - persisted settings per Clerk userId
+export const userPreferences = pgTable("user_preferences", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull().unique(),
+  autoDictate: boolean("auto_dictate").default(false).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type UserPreferences = typeof userPreferences.$inferSelect;
 
