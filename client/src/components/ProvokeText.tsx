@@ -153,6 +153,8 @@ export interface ProvokeTextProps {
   showCharCount?: boolean;
   showWordCount?: boolean;
   showReadingTime?: boolean;
+  maxCharCount?: number;
+  maxAudioDuration?: string;
 
   /* ── Keyboard ── */
   onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement | HTMLInputElement>;
@@ -248,6 +250,8 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       showCharCount,
       showWordCount,
       showReadingTime,
+      maxCharCount,
+      maxAudioDuration,
 
       onKeyDown,
       onSelect,
@@ -486,11 +490,22 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     /* ── Metrics badge ── */
 
     const metricsEl =
-      showCharCount || showWordCount || showReadingTime ? (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {showCharCount && `${value.length.toLocaleString()} characters`}
-          {showWordCount && `${wordCount.toLocaleString()} words`}
-          {showReadingTime && ` · ${readingTime} min read`}
+      showCharCount || showWordCount || showReadingTime || maxAudioDuration ? (
+        <span className="text-xs text-muted-foreground tabular-nums flex items-center gap-2">
+          {showCharCount && (
+            <span>
+              {maxCharCount
+                ? `${value.length.toLocaleString()}/${maxCharCount.toLocaleString()}`
+                : `${value.length.toLocaleString()} characters`}
+            </span>
+          )}
+          {maxAudioDuration && (
+            <span>
+              {isRecording ? "Recording" : "0"}/{maxAudioDuration}
+            </span>
+          )}
+          {showWordCount && <span>{wordCount.toLocaleString()} words</span>}
+          {showReadingTime && <span>· {readingTime} min read</span>}
         </span>
       ) : null;
 
@@ -711,8 +726,13 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           {/* Input */}
           <div className={cn("px-4", variant === "editor" && "flex-1 overflow-y-auto")}>{inputControl}</div>
 
-          {/* Actions row (smart + snapshot + custom actions) */}
-          {actionsRow && <div className="px-4 pb-2">{actionsRow}</div>}
+          {/* Actions row (smart + snapshot + custom actions) + metrics */}
+          {(actionsRow || metricsEl) && (
+            <div className="flex items-center justify-between px-4 pb-2 gap-2">
+              {actionsRow ?? <div />}
+              {metricsEl}
+            </div>
+          )}
 
           {/* Internal sections (recording indicator, raw snapshot) */}
           {recordingIndicator}
@@ -720,9 +740,6 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
           {/* Children slot (additional content from parent) */}
           {children}
-
-          {/* Metrics */}
-          {metricsEl && <div className="px-4 pb-2">{metricsEl}</div>}
 
           {/* Footer extra */}
           {footerExtra}
