@@ -148,8 +148,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   };
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-y-auto">
-      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 gap-8">
+    <div className="h-full flex flex-col">
+      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto p-6 gap-8">
 
         {/* ── STEP ONE: What type of document are you creating? ── */}
         <div className="space-y-4" ref={stepOneRef}>
@@ -308,7 +308,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
         </div>
 
         {/* ── STEP TWO: Draft ── */}
-        <div className="flex flex-col flex-1 min-h-0 gap-4">
+        <div className="flex flex-col min-h-0 gap-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
               2
@@ -426,45 +426,46 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 }
                 extraSmartModes={aimSmartModes}
                 showCharCount
-                externalActions={
-                  <>
-                    <div />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsDraftExpanded(false)}
-                        className="text-muted-foreground"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        data-testid="button-analyze"
-                        onClick={handleSubmit}
-                        disabled={!text.trim() || isLoading}
-                        size="lg"
-                        className="gap-2"
-                      >
-                        {isLoading ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            Analyzing...
-                          </>
-                        ) : (
-                          <>
-                            Begin Analysis
-                            <ArrowRight className="w-4 h-4" />
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </>
-                }
               />
             </div>
           )}
         </div>
       </div>
+
+      {/* Fixed bottom action bar */}
+      {isDraftExpanded && activePrebuilt?.id !== "streaming" && (
+        <div className="shrink-0 border-t bg-card px-6 py-3">
+          <div className="w-full max-w-4xl mx-auto flex items-center justify-end gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsDraftExpanded(false)}
+              className="text-muted-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              data-testid="button-analyze"
+              onClick={handleSubmit}
+              disabled={!text.trim() || isLoading}
+              size="lg"
+              className="gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  Begin Analysis
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
