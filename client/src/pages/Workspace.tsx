@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
@@ -70,6 +71,7 @@ async function processObjectiveText(text: string, mode: string): Promise<string>
 
 export default function Workspace() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
@@ -932,7 +934,7 @@ export default function Workspace() {
             </div>
           </div>
         </header>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           <TextInputForm
             onSubmit={(text, obj, refs) => {
               setDocument({ id: generateId("doc"), rawText: text });
@@ -968,12 +970,161 @@ export default function Workspace() {
     );
   }
 
-  // ── Universal 3-Panel Layout ──
+  // ── Panel contents (shared between mobile and desktop layouts) ──
+
+  const toolboxPanel = (
+    <ProvocationToolbox
+      activeApp={activeToolboxApp}
+      onAppChange={setActiveToolboxApp}
+      isInterviewActive={isInterviewActive}
+      isMerging={interviewSummaryMutation.isPending}
+      interviewEntryCount={interviewEntries.length}
+      onStartInterview={handleStartInterview}
+      websiteUrl={websiteUrl}
+      onUrlChange={handleBrowserUrlChange}
+      showLogPanel={showLogPanel}
+      onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
+      isAnalyzing={streamingAnalysisMutation.isPending}
+      discoveredCount={discoveredCount}
+      browserHeaderActions={
+        <ScreenCaptureButton
+          onCapture={handleScreenCapture}
+          onClose={handleCaptureClose}
+          disabled={!document.rawText || writeMutation.isPending}
+        />
+      }
+    />
+  );
+
+  const discussionPanel = (
+    <div className="h-full flex flex-col relative">
+      <TranscriptOverlay
+        isVisible={showTranscriptOverlay}
+        isRecording={isRecordingFromMain}
+        rawTranscript={rawTranscript}
+        cleanedTranscript={cleanedTranscript}
+        resultSummary={transcriptSummary}
+        isProcessing={writeMutation.isPending}
+        onClose={handleCloseTranscriptOverlay}
+        onSend={handleSendTranscript}
+        onCleanTranscript={handleCleanTranscript}
+        onTranscriptUpdate={handleTranscriptUpdate}
+        onFinalTranscript={handleOverlayFinalTranscript}
+        context={pendingVoiceContext?.context || "document"}
+      />
+
+      {/* Panel Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
+        <MessageCircleQuestion className="w-4 h-4 text-primary" />
+        <h3 className="font-semibold text-sm">Discussion</h3>
+        {(isInterviewActive || isStreamingDialogueActive) && (
+          <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+        )}
+        <div className="flex-1" />
+        {((activeToolboxApp === "provoke" && interviewEntries.length > 0) ||
+          (activeToolboxApp === "website" && streamingDialogueEntries.length > 0)) && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs h-7"
+            onClick={handleMergeToDraft}
+            disabled={interviewMergeMutation.isPending || streamingRefineMutation.isPending}
+          >
+            {interviewMergeMutation.isPending || streamingRefineMutation.isPending ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Merging...
+              </>
+            ) : (
+              <>
+                <ArrowRightToLine className="w-3 h-3" />
+                Merge to Draft
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+
+      {/* Panel content */}
+      <div className="flex-1 overflow-hidden">
+        {activeToolboxApp === "provoke" ? (
+          <InterviewPanel
+            isActive={isInterviewActive}
+            entries={interviewEntries}
+            currentQuestion={currentInterviewQuestion}
+            currentTopic={currentInterviewTopic}
+            isLoadingQuestion={interviewQuestionMutation.isPending}
+            isMerging={interviewSummaryMutation.isPending}
+            directionMode={interviewDirection?.mode}
+            onAnswer={handleInterviewAnswer}
+            onEnd={handleEndInterview}
+          />
+        ) : (
+          <StreamingDialogue
+            entries={streamingDialogueEntries}
+            requirements={streamingRequirements}
+            currentQuestion={streamingCurrentQuestion}
+            currentTopic={streamingCurrentTopic}
+            isLoadingQuestion={streamingQuestionMutation.isPending}
+            isRefining={streamingRefineMutation.isPending}
+            onAnswer={handleStreamingAnswer}
+            onStart={handleStreamingStartDialogue}
+            onRefineRequirements={() => streamingRefineMutation.mutate()}
+            onUpdateRequirement={handleStreamingUpdateRequirement}
+            onConfirmRequirement={handleStreamingConfirmRequirement}
+            isActive={isStreamingDialogueActive}
+            hasAnalysis={wireframeAnalysis !== null}
+            objective={objective}
+            documentText={document.rawText}
+          />
+        )}
+      </div>
+    </div>
+  );
+
+  const documentPanel = (
+    <div className="h-full flex flex-col relative">
+      {showDiffView && previousVersion && currentVersion ? (
+        <Suspense fallback={
+          <div className="h-full flex flex-col p-4 space-y-4">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        }>
+          <DiffView
+            previousVersion={previousVersion}
+            currentVersion={currentVersion}
+          />
+        </Suspense>
+      ) : (
+        <ReadingPane
+          text={document.rawText}
+          onTextChange={handleDocumentTextChange}
+          onVoiceMerge={handleSelectionVoiceMerge}
+          isMerging={writeMutation.isPending}
+          onTranscriptUpdate={handleTranscriptUpdate}
+          onTextEdit={handleTextEdit}
+        />
+      )}
+
+      <LogStatsPanel
+        isOpen={showLogPanel}
+        onClose={() => setShowLogPanel(false)}
+        wireframeAnalysis={wireframeAnalysis}
+        isAnalyzing={streamingAnalysisMutation.isPending}
+        websiteUrl={websiteUrl}
+      />
+    </div>
+  );
+
+  // ── Layout ──
 
   return (
     <div className="h-screen flex flex-col">
       <header className="border-b bg-card">
-        <div className="flex items-center justify-between gap-4 px-4 py-2 flex-wrap">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2 flex-wrap">
           <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-primary" />
             <h1 className="font-semibold text-lg">Provocations</h1>
@@ -989,7 +1140,7 @@ export default function Workspace() {
                 className="gap-1.5"
               >
                 <GitCompare className="w-4 h-4" />
-                Versions ({versions.length})
+                <span className="hidden sm:inline">Versions</span> ({versions.length})
               </Button>
             )}
             <Button
@@ -1001,7 +1152,7 @@ export default function Workspace() {
               title={currentDocId ? "Save changes" : "Save your document"}
             >
               <Save className="w-4 h-4" />
-              {isSaving ? "Saving..." : "Save"}
+              <span className="hidden sm:inline">{isSaving ? "Saving..." : "Save"}</span>
             </Button>
             <Drawler
               documents={savedDocuments}
@@ -1018,7 +1169,7 @@ export default function Workspace() {
               className="gap-1.5"
             >
               <RotateCcw className="w-4 h-4" />
-              New
+              <span className="hidden sm:inline">New</span>
             </Button>
             <ThemeToggle />
             <UserButton data-testid="button-user-menu-main" />
@@ -1193,168 +1344,36 @@ export default function Workspace() {
         </div>
       )}
 
-      {/* ── Universal 3-Panel Layout: Toolbox | Discussion | Document ── */}
-      <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
-          {/* Left Panel: Provocation Toolbox */}
-          <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
-            <ProvocationToolbox
-              activeApp={activeToolboxApp}
-              onAppChange={setActiveToolboxApp}
-              // Provoke app props
-              isInterviewActive={isInterviewActive}
-              isMerging={interviewSummaryMutation.isPending}
-              interviewEntryCount={interviewEntries.length}
-              onStartInterview={handleStartInterview}
-              // Website app props
-              websiteUrl={websiteUrl}
-              onUrlChange={handleBrowserUrlChange}
-              showLogPanel={showLogPanel}
-              onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
-              isAnalyzing={streamingAnalysisMutation.isPending}
-              discoveredCount={discoveredCount}
-              browserHeaderActions={
-                <ScreenCaptureButton
-                  onCapture={handleScreenCapture}
-                  onClose={handleCaptureClose}
-                  disabled={!document.rawText || writeMutation.isPending}
-                />
-              }
-            />
-          </ResizablePanel>
-
-          <ResizableHandle withHandle />
-
-          {/* Middle Panel: Discussion (Interview or Streaming Dialogue) */}
-          <ResizablePanel defaultSize={40} minSize={20}>
-            <div className="h-full flex flex-col relative">
-              <TranscriptOverlay
-                isVisible={showTranscriptOverlay}
-                isRecording={isRecordingFromMain}
-                rawTranscript={rawTranscript}
-                cleanedTranscript={cleanedTranscript}
-                resultSummary={transcriptSummary}
-                isProcessing={writeMutation.isPending}
-                onClose={handleCloseTranscriptOverlay}
-                onSend={handleSendTranscript}
-                onCleanTranscript={handleCleanTranscript}
-                onTranscriptUpdate={handleTranscriptUpdate}
-                onFinalTranscript={handleOverlayFinalTranscript}
-                context={pendingVoiceContext?.context || "document"}
-              />
-
-              {/* Panel Header — standardized */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
-                <MessageCircleQuestion className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">Discussion</h3>
-                {(isInterviewActive || isStreamingDialogueActive) && (
-                  <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
-                )}
-                <div className="flex-1" />
-                {/* Merge to Draft — pushes discussion content into the document */}
-                {((activeToolboxApp === "provoke" && interviewEntries.length > 0) ||
-                  (activeToolboxApp === "website" && streamingDialogueEntries.length > 0)) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 text-xs h-7"
-                    onClick={handleMergeToDraft}
-                    disabled={interviewMergeMutation.isPending || streamingRefineMutation.isPending}
-                  >
-                    {interviewMergeMutation.isPending || streamingRefineMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Merging...
-                      </>
-                    ) : (
-                      <>
-                        <ArrowRightToLine className="w-3 h-3" />
-                        Merge to Draft
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-
-              {/* Panel content — switches based on active toolbox app */}
-              <div className="flex-1 overflow-hidden">
-                {activeToolboxApp === "provoke" ? (
-                  <InterviewPanel
-                    isActive={isInterviewActive}
-                    entries={interviewEntries}
-                    currentQuestion={currentInterviewQuestion}
-                    currentTopic={currentInterviewTopic}
-                    isLoadingQuestion={interviewQuestionMutation.isPending}
-                    isMerging={interviewSummaryMutation.isPending}
-                    directionMode={interviewDirection?.mode}
-                    onAnswer={handleInterviewAnswer}
-                    onEnd={handleEndInterview}
-                  />
-                ) : (
-                  <StreamingDialogue
-                    entries={streamingDialogueEntries}
-                    requirements={streamingRequirements}
-                    currentQuestion={streamingCurrentQuestion}
-                    currentTopic={streamingCurrentTopic}
-                    isLoadingQuestion={streamingQuestionMutation.isPending}
-                    isRefining={streamingRefineMutation.isPending}
-                    onAnswer={handleStreamingAnswer}
-                    onStart={handleStreamingStartDialogue}
-                    onRefineRequirements={() => streamingRefineMutation.mutate()}
-                    onUpdateRequirement={handleStreamingUpdateRequirement}
-                    onConfirmRequirement={handleStreamingConfirmRequirement}
-                    isActive={isStreamingDialogueActive}
-                    hasAnalysis={wireframeAnalysis !== null}
-                    objective={objective}
-                    documentText={document.rawText}
-                  />
-                )}
-              </div>
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle withHandle />
-
-          {/* Right Panel: Main Draft (Document) */}
-          <ResizablePanel defaultSize={35} minSize={20}>
-            <div className="h-full flex flex-col relative">
-              {showDiffView && previousVersion && currentVersion ? (
-                <Suspense fallback={
-                  <div className="h-full flex flex-col p-4 space-y-4">
-                    <Skeleton className="h-8 w-48" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-5/6" />
-                  </div>
-                }>
-                  <DiffView
-                    previousVersion={previousVersion}
-                    currentVersion={currentVersion}
-                  />
-                </Suspense>
-              ) : (
-                <ReadingPane
-                  text={document.rawText}
-                  onTextChange={handleDocumentTextChange}
-                  onVoiceMerge={handleSelectionVoiceMerge}
-                  isMerging={writeMutation.isPending}
-                  onTranscriptUpdate={handleTranscriptUpdate}
-                  onTextEdit={handleTextEdit}
-                />
-              )}
-
-              {/* Log Stats overlay — on top of the reading pane, toggled from BrowserExplorer */}
-              <LogStatsPanel
-                isOpen={showLogPanel}
-                onClose={() => setShowLogPanel(false)}
-                wireframeAnalysis={wireframeAnalysis}
-                isAnalyzing={streamingAnalysisMutation.isPending}
-                websiteUrl={websiteUrl}
-              />
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
+      {/* ── Panel Layout (responsive: stacked on mobile, side-by-side on desktop) ── */}
+      {isMobile ? (
+        <div className="flex-1 overflow-y-auto">
+          <section className="h-[60vh] min-h-[350px] border-b">
+            {toolboxPanel}
+          </section>
+          <section className="h-[70vh] min-h-[400px] border-b">
+            {discussionPanel}
+          </section>
+          <section className="h-[80vh] min-h-[450px]">
+            {documentPanel}
+          </section>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-hidden">
+          <ResizablePanelGroup direction="horizontal">
+            <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
+              {toolboxPanel}
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={40} minSize={20}>
+              {discussionPanel}
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={35} minSize={20}>
+              {documentPanel}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
+      )}
     </div>
   );
 }
