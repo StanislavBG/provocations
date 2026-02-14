@@ -429,6 +429,7 @@ For each provocation:
 - content: A 2-3 sentence explanation that gently nudges the user to improve their document
 - sourceExcerpt: A relevant quote from the source text (max 150 chars)
 - scale: Impact level from 1-5 (1=minor tweak, 2=small improvement, 3=moderate gap, 4=significant issue, 5=critical flaw)
+- autoSuggestion: A concrete, actionable suggested response the user could adopt to address this provocation. Write it as if the user is speaking — a 1-3 sentence paragraph they could accept as-is to improve their document. Think bigger, stronger, better.
 
 Focus on completeness: what's missing, what's thin, what could be stronger. Be constructive, not just critical.
 
@@ -472,6 +473,7 @@ Output only valid JSON, no markdown.`
           sourceExcerpt: typeof item?.sourceExcerpt === 'string' ? item.sourceExcerpt : "",
           status: "pending",
           scale,
+          autoSuggestion: typeof item?.autoSuggestion === 'string' ? item.autoSuggestion : undefined,
         };
       });
 

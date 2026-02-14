@@ -24,6 +24,7 @@ export const provocationSchema = z.object({
   sourceExcerpt: z.string(),
   status: z.enum(["pending", "addressed", "rejected", "highlighted"]),
   scale: z.number().min(1).max(5).optional(),
+  autoSuggestion: z.string().optional(),
 });
 
 export type Provocation = z.infer<typeof provocationSchema>;

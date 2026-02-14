@@ -15,7 +15,6 @@ import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { Drawler } from "@/components/Drawler";
-import { ResponseButton } from "@/components/ResponseButton";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -47,7 +46,6 @@ import type {
   Document,
   ProvocationType,
   DirectionMode,
-  ThinkBigVector,
   DocumentVersion,
   WriteRequest,
   WriteResponse,
@@ -127,7 +125,6 @@ export default function Workspace() {
     mode: DirectionMode;
     personas: ProvocationType[];
     guidance?: string;
-    thinkBigVectors?: ThinkBigVector[];
   } | null>(null);
 
   // ── Streaming (Website) state ──
@@ -343,7 +340,7 @@ export default function Workspace() {
   // ── Interview mutations ──
 
   const interviewQuestionMutation = useMutation({
-    mutationFn: async ({ overrideEntries, direction }: { overrideEntries?: InterviewEntry[]; direction?: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string; thinkBigVectors?: ThinkBigVector[] } } = {}) => {
+    mutationFn: async ({ overrideEntries, direction }: { overrideEntries?: InterviewEntry[]; direction?: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string } } = {}) => {
       if (!document) throw new Error("No document");
       const templateDoc = referenceDocuments.find(d => d.type === "template");
       const entries = overrideEntries ?? interviewEntries;
@@ -354,13 +351,10 @@ export default function Workspace() {
         document: document.rawText,
         template: templateDoc?.content,
         previousEntries: entries.length > 0 ? entries : undefined,
-        // Pass direction params for persona + challenge/advise context
         directionMode: dir?.mode,
         directionPersonas: dir?.personas && dir.personas.length > 0
           ? dir.personas : undefined,
         directionGuidance: dir?.guidance,
-        thinkBigVectors: dir?.thinkBigVectors && dir.thinkBigVectors.length > 0
-          ? dir.thinkBigVectors : undefined,
       });
       return await response.json() as InterviewQuestionResponse;
     },
@@ -674,7 +668,7 @@ export default function Workspace() {
 
   // ── Interview handlers ──
 
-  const handleStartInterview = useCallback((direction: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string; thinkBigVectors?: ThinkBigVector[] }) => {
+  const handleStartInterview = useCallback((direction: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string }) => {
     setInterviewDirection(direction);
     setIsInterviewActive(true);
     interviewQuestionMutation.mutate({ direction });
@@ -1246,19 +1240,6 @@ export default function Workspace() {
         websiteUrl={websiteUrl}
       />
 
-      {/* Floating Response button */}
-      <ResponseButton
-        onSubmitText={(instruction) => {
-          writeMutation.mutate({ instruction, description: "Response instruction" });
-        }}
-        onRecordingStart={() => {
-          setPendingVoiceContext({ context: "document" });
-          setShowTranscriptOverlay(true);
-          setTranscriptSummary("");
-          setCleanedTranscript(undefined);
-        }}
-        isProcessing={writeMutation.isPending}
-      />
     </div>
   );
 
