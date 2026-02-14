@@ -24,7 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
-import { ScreenCaptureButton, type CaptureRegion } from "@/components/ScreenCaptureButton";
+import { ScreenCaptureButton, type CaptureAnnotation } from "@/components/ScreenCaptureButton";
 import {
   Sparkles,
   RotateCcw,
@@ -707,14 +707,22 @@ export default function Workspace() {
   }, [document]);
 
   // Handle screen capture
-  const handleScreenCapture = useCallback((imageDataUrl: string, regions: CaptureRegion[]) => {
+  const handleScreenCapture = useCallback((imageDataUrl: string, annotations: CaptureAnnotation[]) => {
     if (!document) return;
 
     const timestamp = new Date().toLocaleString();
 
-    const narrationLines = regions.map(r =>
-      `**Region ${r.number}**: ${r.narration || "(no narration)"}`
-    );
+    const annotationLines = annotations.map(a => {
+      const kindLabel = a.kind === "pointer" ? "Pointer" : "Region";
+      return `**${kindLabel} ${a.number}**: ${a.narration || "(no description)"}`;
+    });
+
+    const pointerCount = annotations.filter(a => a.kind === "pointer").length;
+    const regionCount = annotations.filter(a => a.kind === "region").length;
+    const countParts: string[] = [];
+    if (pointerCount > 0) countParts.push(`${pointerCount} pointer${pointerCount !== 1 ? "s" : ""}`);
+    if (regionCount > 0) countParts.push(`${regionCount} region${regionCount !== 1 ? "s" : ""}`);
+    const countLabel = countParts.join(" and ");
 
     const markdownSnippet = [
       "",
@@ -722,17 +730,17 @@ export default function Workspace() {
       "",
       `### Annotated Screenshot (${timestamp})`,
       "",
-      `![Annotated screenshot with ${regions.length} marked region${regions.length !== 1 ? "s" : ""}](${imageDataUrl})`,
+      `![Annotated screenshot with ${countLabel}](${imageDataUrl})`,
       "",
-      ...narrationLines,
+      ...annotationLines,
       "",
       `---`,
       "",
     ].join("\n");
 
     writeMutation.mutate({
-      instruction: `Integrate the following annotated screenshot into the document. The screenshot has ${regions.length} numbered regions with narration. Place it at the most appropriate location near related content, or append as a new section.\n\nScreenshot markdown:\n${markdownSnippet}`,
-      description: "Annotated screen capture merged",
+      instruction: `Integrate the following annotated screenshot of the website into the document. The screenshot has ${countLabel} with descriptions. Place it at the most appropriate location near related content, or append as a new section.\n\nScreenshot markdown:\n${markdownSnippet}`,
+      description: "Annotated website capture merged",
     });
   }, [document, writeMutation]);
 
@@ -996,6 +1004,7 @@ export default function Workspace() {
           onCapture={handleScreenCapture}
           onClose={handleCaptureClose}
           disabled={!document.rawText || writeMutation.isPending}
+          targetElementId="browser-explorer-viewport"
         />
       }
     />

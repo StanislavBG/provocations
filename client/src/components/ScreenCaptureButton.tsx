@@ -10,59 +10,132 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Camera, Save, X, Loader2, Trash2, MousePointer, Image, FileText } from "lucide-react";
+import { Camera, Save, X, Loader2, Trash2, MousePointer, MapPin, Square, Image, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ProvokeText } from "@/components/ProvokeText";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type AnnotationKind = "pointer" | "region";
+
+export interface CaptureAnnotation {
+  number: number;
+  kind: AnnotationKind;
+  /** Natural (original image) coordinates. For pointers: tip position. For regions: top-left corner. */
+  position: { x: number; y: number };
+  /** Only for region kind: width and height in natural coordinates */
+  size?: { width: number; height: number };
+  narration: string;
+}
+
+/** @deprecated Use CaptureAnnotation instead */
 export interface CaptureRegion {
   number: number;
-  /** Rectangle in natural (original image) coordinates */
   rect: { x: number; y: number; width: number; height: number };
   narration: string;
 }
 
 export interface CaptureRequirementsSummary {
   annotatedImageDataUrl: string;
-  regions: CaptureRegion[];
-  subImages: { dataUrl: string; region: CaptureRegion }[];
+  annotations: CaptureAnnotation[];
+  subImages: { dataUrl: string; annotation: CaptureAnnotation }[];
 }
 
 interface ScreenCaptureButtonProps {
-  /** Called with the annotated base64 image and region details */
-  onCapture: (imageDataUrl: string, regions: CaptureRegion[]) => void;
+  /** Called with the annotated base64 image and annotation details */
+  onCapture: (imageDataUrl: string, annotations: CaptureAnnotation[]) => void;
   /** Called when the user closes the annotator without saving. Receives the keyword "elephant". */
   onClose?: (keyword: string) => void;
   disabled?: boolean;
+  /** DOM element ID to capture. If omitted, captures document.body */
+  targetElementId?: string;
 }
 
+// ─── Pointer rendering helpers ────────────────────────────────────────────────
+
+/** Draw a map-pin pointer at display coordinates on a canvas context */
+function drawPointerPin(
+  ctx: CanvasRenderingContext2D,
+  tipX: number,
+  tipY: number,
+  number: number,
+  scale: number = 1,
+) {
+  const pinHeight = 32 * scale;
+  const circleR = 12 * scale;
+  const neckWidth = 7 * scale;
+  const cx = tipX;
+  const cy = tipY - pinHeight + circleR;
+
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.25)";
+  ctx.shadowBlur = 4 * scale;
+  ctx.shadowOffsetY = 1 * scale;
+
+  // Pin body (triangle from tip to circle base)
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(cx - neckWidth, cy + circleR - 2 * scale);
+  ctx.lineTo(cx + neckWidth, cy + circleR - 2 * scale);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(239, 68, 68, 0.95)";
+  ctx.fill();
+
+  // Circle head
+  ctx.beginPath();
+  ctx.arc(cx, cy, circleR, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(239, 68, 68, 0.95)";
+  ctx.fill();
+
+  ctx.restore(); // Remove shadow
+
+  // White circle border
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.lineWidth = 2 * scale;
+  ctx.beginPath();
+  ctx.arc(cx, cy, circleR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Number text
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `bold ${13 * scale}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(number), cx, cy);
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 /**
- * Multi-step screen capture with requirements review:
- * 1. Captures the current app state as a high-resolution screenshot
- * 2. Full-screen annotator where user draws numbered rectangular regions
- * 3. Instant rationale prompt per region
- * 4. Close triggers the "elephant" keyword
- * 5. Save opens a requirements review dialog with cropped sub-images + bundled rationales
- * 6. Confirming save sends the summary to the Requirements module via onCapture
+ * Multi-step screen capture with annotation support:
+ * 1. Captures a target element (or full page) as a high-resolution screenshot
+ * 2. Full-screen annotator where user places numbered pointers or draws regions
+ * 3. Instant narration prompt per annotation
+ * 4. Save opens a review dialog with context crops + bundled narrations
+ * 5. Confirming save sends the annotated image to the Document via onCapture
  */
 export function ScreenCaptureButton({
   onCapture,
   onClose,
   disabled,
+  targetElementId,
 }: ScreenCaptureButtonProps) {
   const { toast } = useToast();
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
-  const [regions, setRegions] = useState<CaptureRegion[]>([]);
+  const [annotations, setAnnotations] = useState<CaptureAnnotation[]>([]);
   const [showAnnotator, setShowAnnotator] = useState(false);
+  const [annotationMode, setAnnotationMode] = useState<AnnotationKind>("pointer");
 
   // Requirements review dialog
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [croppedSubImages, setCroppedSubImages] = useState<
-    { dataUrl: string; region: CaptureRegion }[]
+    { dataUrl: string; annotation: CaptureAnnotation }[]
   >([]);
 
-  // Drawing state
+  // Drawing state (for region mode)
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null);
@@ -76,7 +149,10 @@ export function ScreenCaptureButton({
   const handleCapture = useCallback(async () => {
     setIsCapturing(true);
     try {
-      const target = document.body;
+      // Resolve target element
+      const target = targetElementId
+        ? window.document.getElementById(targetElementId) || window.document.body
+        : window.document.body;
 
       // Resolve computed background color to avoid html2canvas failing
       // on CSS custom properties (hsl vars, oklch, etc.)
@@ -92,11 +168,12 @@ export function ScreenCaptureButton({
 
       const dataUrl = canvas.toDataURL("image/png");
       setCapturedImage(dataUrl);
-      setRegions([]);
+      setAnnotations([]);
+      setAnnotationMode("pointer");
       setShowAnnotator(true);
 
       // Pre-load the image element for canvas rendering
-      const img = new Image();
+      const img = new window.Image();
       img.onload = () => setImageEl(img);
       img.src = dataUrl;
     } catch (error) {
@@ -109,7 +186,7 @@ export function ScreenCaptureButton({
     } finally {
       setIsCapturing(false);
     }
-  }, [toast]);
+  }, [toast, targetElementId]);
 
   // ─── Coordinate mapping ───────────────────────────────────────────────
 
@@ -159,41 +236,48 @@ export function ScreenCaptureButton({
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
-    // Draw existing regions
-    regions.forEach((region) => {
-      const tl = naturalToDisplay(region.rect.x, region.rect.y);
-      const br = naturalToDisplay(
-        region.rect.x + region.rect.width,
-        region.rect.y + region.rect.height,
-      );
-      const rw = br.x - tl.x;
-      const rh = br.y - tl.y;
+    // Draw existing annotations
+    annotations.forEach((annotation) => {
+      if (annotation.kind === "region" && annotation.size) {
+        // Region: rectangle with number badge
+        const tl = naturalToDisplay(annotation.position.x, annotation.position.y);
+        const br = naturalToDisplay(
+          annotation.position.x + annotation.size.width,
+          annotation.position.y + annotation.size.height,
+        );
+        const rw = br.x - tl.x;
+        const rh = br.y - tl.y;
 
-      // Rectangle stroke + fill
-      ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
-      ctx.strokeRect(tl.x, tl.y, rw, rh);
-      ctx.fillStyle = "rgba(239, 68, 68, 0.08)";
-      ctx.fillRect(tl.x, tl.y, rw, rh);
+        // Rectangle stroke + fill
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.strokeRect(tl.x, tl.y, rw, rh);
+        ctx.fillStyle = "rgba(239, 68, 68, 0.08)";
+        ctx.fillRect(tl.x, tl.y, rw, rh);
 
-      // Number badge (circle)
-      const badgeR = 12;
-      const bx = tl.x + badgeR + 2;
-      const by = tl.y + badgeR + 2;
-      ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
-      ctx.beginPath();
-      ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
-      ctx.fill();
+        // Number badge (circle)
+        const badgeR = 12;
+        const bx = tl.x + badgeR + 2;
+        const by = tl.y + badgeR + 2;
+        ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
+        ctx.beginPath();
+        ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 13px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(region.number), bx, by);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 13px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(annotation.number), bx, by);
+      } else if (annotation.kind === "pointer") {
+        // Pointer: map pin
+        const display = naturalToDisplay(annotation.position.x, annotation.position.y);
+        drawPointerPin(ctx, display.x, display.y, annotation.number);
+      }
     });
 
-    // Draw current drag preview
+    // Draw current drag preview (region mode only)
     if (isDragging && dragStart && dragEnd) {
       const x = Math.min(dragStart.x, dragEnd.x);
       const y = Math.min(dragStart.y, dragEnd.y);
@@ -209,7 +293,7 @@ export function ScreenCaptureButton({
       ctx.setLineDash([]);
 
       // Preview number badge
-      const nextNum = regions.length + 1;
+      const nextNum = annotations.length + 1;
       const badgeR = 12;
       const bx = x + badgeR + 2;
       const by = y + badgeR + 2;
@@ -223,7 +307,7 @@ export function ScreenCaptureButton({
       ctx.textBaseline = "middle";
       ctx.fillText(String(nextNum), bx, by);
     }
-  }, [regions, isDragging, dragStart, dragEnd, naturalToDisplay]);
+  }, [annotations, isDragging, dragStart, dragEnd, naturalToDisplay]);
 
   useEffect(() => {
     redrawCanvas();
@@ -239,7 +323,7 @@ export function ScreenCaptureButton({
     return () => observer.disconnect();
   }, [showAnnotator, redrawCanvas]);
 
-  // ─── Mouse handlers for drawing ───────────────────────────────────────
+  // ─── Mouse handlers ────────────────────────────────────────────────────
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -247,14 +331,17 @@ export function ScreenCaptureButton({
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    setIsDragging(true);
     setDragStart({ x, y });
     setDragEnd({ x, y });
-  }, []);
+
+    if (annotationMode === "region") {
+      setIsDragging(true);
+    }
+  }, [annotationMode]);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!isDragging) return;
+      if (annotationMode !== "region" || !isDragging) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
@@ -263,12 +350,14 @@ export function ScreenCaptureButton({
         y: Math.max(0, Math.min(e.clientY - rect.top, rect.height)),
       });
     },
-    [isDragging],
+    [annotationMode, isDragging],
   );
 
   const finalizeDrag = useCallback(() => {
     if (!isDragging || !dragStart || !dragEnd) {
       setIsDragging(false);
+      setDragStart(null);
+      setDragEnd(null);
       return;
     }
 
@@ -286,19 +375,19 @@ export function ScreenCaptureButton({
         Math.max(dragStart.y, dragEnd.y),
       );
 
-      const newRegion: CaptureRegion = {
-        number: regions.length + 1,
-        rect: {
-          x: topLeft.x,
-          y: topLeft.y,
+      const newAnnotation: CaptureAnnotation = {
+        number: annotations.length + 1,
+        kind: "region",
+        position: { x: topLeft.x, y: topLeft.y },
+        size: {
           width: bottomRight.x - topLeft.x,
           height: bottomRight.y - topLeft.y,
         },
         narration: "",
       };
-      setRegions((prev) => [...prev, newRegion]);
+      setAnnotations((prev) => [...prev, newAnnotation]);
 
-      // Auto-scroll annotations panel to new region
+      // Auto-scroll annotations panel to new item
       requestAnimationFrame(() => {
         annotationsEndRef.current?.scrollIntoView({ behavior: "smooth" });
       });
@@ -307,45 +396,112 @@ export function ScreenCaptureButton({
     setIsDragging(false);
     setDragStart(null);
     setDragEnd(null);
-  }, [isDragging, dragStart, dragEnd, displayToNatural, regions.length]);
+  }, [isDragging, dragStart, dragEnd, displayToNatural, annotations.length]);
 
-  const handleMouseUp = useCallback(() => finalizeDrag(), [finalizeDrag]);
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (annotationMode === "pointer" && dragStart) {
+        // Check if it's a click (not a drag)
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const dist = Math.hypot(x - dragStart.x, y - dragStart.y);
 
-  // ─── Region management ────────────────────────────────────────────────
+        if (dist < 10) {
+          const natural = displayToNatural(x, y);
+          const newAnnotation: CaptureAnnotation = {
+            number: annotations.length + 1,
+            kind: "pointer",
+            position: natural,
+            narration: "",
+          };
+          setAnnotations((prev) => [...prev, newAnnotation]);
+
+          // Auto-scroll annotations panel
+          requestAnimationFrame(() => {
+            annotationsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          });
+        }
+
+        setDragStart(null);
+        setDragEnd(null);
+      } else {
+        // Region mode
+        finalizeDrag();
+      }
+    },
+    [annotationMode, dragStart, displayToNatural, annotations.length, finalizeDrag],
+  );
+
+  // ─── Annotation management ────────────────────────────────────────────
 
   const updateNarration = useCallback((index: number, narration: string) => {
-    setRegions((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, narration } : r)),
+    setAnnotations((prev) =>
+      prev.map((a, i) => (i === index ? { ...a, narration } : a)),
     );
   }, []);
 
-  const deleteRegion = useCallback((index: number) => {
-    setRegions((prev) => {
+  const deleteAnnotation = useCallback((index: number) => {
+    setAnnotations((prev) => {
       const updated = prev.filter((_, i) => i !== index);
-      return updated.map((r, i) => ({ ...r, number: i + 1 }));
+      return updated.map((a, i) => ({ ...a, number: i + 1 }));
     });
   }, []);
 
   // ─── Sub-image cropping ───────────────────────────────────────────────
 
-  const cropSubImages = useCallback((): { dataUrl: string; region: CaptureRegion }[] => {
-    if (!imageEl || regions.length === 0) return [];
+  const cropSubImages = useCallback((): { dataUrl: string; annotation: CaptureAnnotation }[] => {
+    if (!imageEl || annotations.length === 0) return [];
 
-    return regions.map((region) => {
-      const { x, y, width, height } = region.rect;
+    return annotations.map((annotation) => {
       const cropCanvas = window.document.createElement("canvas");
-      cropCanvas.width = width;
-      cropCanvas.height = height;
       const ctx = cropCanvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(imageEl, x, y, width, height, 0, 0, width, height);
+
+      if (annotation.kind === "region" && annotation.size) {
+        // Crop the exact region
+        const { x, y } = annotation.position;
+        const { width, height } = annotation.size;
+        cropCanvas.width = width;
+        cropCanvas.height = height;
+        if (ctx) {
+          ctx.drawImage(imageEl, x, y, width, height, 0, 0, width, height);
+        }
+      } else {
+        // Pointer: crop a context area around the pointer tip
+        const contextSize = 300; // natural pixels
+        const halfCtx = contextSize / 2;
+        const cx = Math.max(0, annotation.position.x - halfCtx);
+        const cy = Math.max(0, annotation.position.y - halfCtx);
+        const cw = Math.min(contextSize, imageEl.naturalWidth - cx);
+        const ch = Math.min(contextSize, imageEl.naturalHeight - cy);
+        cropCanvas.width = cw;
+        cropCanvas.height = ch;
+        if (ctx) {
+          ctx.drawImage(imageEl, cx, cy, cw, ch, 0, 0, cw, ch);
+
+          // Draw a small crosshair at the pointer location within the crop
+          const localX = annotation.position.x - cx;
+          const localY = annotation.position.y - cy;
+          ctx.strokeStyle = "rgba(239, 68, 68, 0.8)";
+          ctx.lineWidth = 2;
+          const armLen = 10;
+          ctx.beginPath();
+          ctx.moveTo(localX - armLen, localY);
+          ctx.lineTo(localX + armLen, localY);
+          ctx.moveTo(localX, localY - armLen);
+          ctx.lineTo(localX, localY + armLen);
+          ctx.stroke();
+        }
       }
+
       return {
         dataUrl: cropCanvas.toDataURL("image/png"),
-        region,
+        annotation,
       };
     });
-  }, [imageEl, regions]);
+  }, [imageEl, annotations]);
 
   // ─── Close: triggers "elephant" keyword ───────────────────────────────
 
@@ -357,7 +513,8 @@ export function ScreenCaptureButton({
     setShowAnnotator(false);
     setCapturedImage(null);
     setImageEl(null);
-    setRegions([]);
+    setAnnotations([]);
+    setAnnotationMode("pointer");
     setIsDragging(false);
     setDragStart(null);
     setDragEnd(null);
@@ -365,21 +522,21 @@ export function ScreenCaptureButton({
     setCroppedSubImages([]);
   }, [onClose]);
 
-  // ─── Save: open requirements review dialog ───────────────────────────
+  // ─── Save: open review dialog ─────────────────────────────────────────
 
   const handleSaveClick = useCallback(() => {
-    if (regions.length === 0) return;
+    if (annotations.length === 0) return;
 
-    // Crop sub-images for each annotated region
+    // Crop sub-images for each annotation
     const subImages = cropSubImages();
     setCroppedSubImages(subImages);
     setShowReviewDialog(true);
-  }, [regions, cropSubImages]);
+  }, [annotations, cropSubImages]);
 
   // ─── Confirm save: burn annotations and fire onCapture ────────────────
 
   const handleConfirmSave = useCallback(() => {
-    if (!capturedImage || !imageEl || regions.length === 0) return;
+    if (!capturedImage || !imageEl || annotations.length === 0) return;
 
     // Burn annotation overlays onto a new canvas
     const offscreen = window.document.createElement("canvas");
@@ -389,33 +546,40 @@ export function ScreenCaptureButton({
 
     ctx.drawImage(imageEl, 0, 0);
 
-    regions.forEach((region) => {
-      const { x, y, width, height } = region.rect;
+    annotations.forEach((annotation) => {
+      if (annotation.kind === "region" && annotation.size) {
+        // Region: burn rectangle + badge
+        const { x, y } = annotation.position;
+        const { width, height } = annotation.size;
 
-      // Rectangle
-      const lineW = Math.max(3, imageEl.naturalWidth * 0.002);
-      ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
-      ctx.lineWidth = lineW;
-      ctx.strokeRect(x, y, width, height);
+        const lineW = Math.max(3, imageEl.naturalWidth * 0.002);
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+        ctx.lineWidth = lineW;
+        ctx.strokeRect(x, y, width, height);
 
-      // Number badge
-      const badgeR = Math.max(14, imageEl.naturalWidth * 0.012);
-      const bx = x + badgeR + lineW;
-      const by = y + badgeR + lineW;
-      ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
-      ctx.beginPath();
-      ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
-      ctx.fill();
+        // Number badge
+        const badgeR = Math.max(14, imageEl.naturalWidth * 0.012);
+        const bx = x + badgeR + lineW;
+        const by = y + badgeR + lineW;
+        ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
+        ctx.beginPath();
+        ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = `bold ${badgeR * 1.1}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(region.number), bx, by);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = `bold ${badgeR * 1.1}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(annotation.number), bx, by);
+      } else if (annotation.kind === "pointer") {
+        // Pointer: burn map pin at natural coordinates
+        const pinScale = Math.max(1, imageEl.naturalWidth / 1000);
+        drawPointerPin(ctx, annotation.position.x, annotation.position.y, annotation.number, pinScale);
+      }
     });
 
     const annotatedDataUrl = offscreen.toDataURL("image/png");
-    onCapture(annotatedDataUrl, regions);
+    onCapture(annotatedDataUrl, annotations);
 
     // Reset everything
     setShowReviewDialog(false);
@@ -423,13 +587,14 @@ export function ScreenCaptureButton({
     setShowAnnotator(false);
     setCapturedImage(null);
     setImageEl(null);
-    setRegions([]);
+    setAnnotations([]);
+    setAnnotationMode("pointer");
 
     toast({
-      title: "Capture Saved to Requirements",
-      description: `Screenshot with ${regions.length} annotated region${regions.length !== 1 ? "s" : ""} sent to the Requirements module.`,
+      title: "Capture Saved",
+      description: `Screenshot with ${annotations.length} annotation${annotations.length !== 1 ? "s" : ""} sent to the document.`,
     });
-  }, [capturedImage, imageEl, regions, onCapture, toast]);
+  }, [capturedImage, imageEl, annotations, onCapture, toast]);
 
   const handleCloseReviewDialog = useCallback(() => {
     setShowReviewDialog(false);
@@ -462,7 +627,7 @@ export function ScreenCaptureButton({
         onClick={handleCapture}
         disabled={disabled || isCapturing}
         className="gap-1.5"
-        title="Capture screen and annotate regions"
+        title="Capture website view and annotate"
       >
         {isCapturing ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -481,10 +646,36 @@ export function ScreenCaptureButton({
               <Camera className="w-4 h-4 text-primary" />
               <span className="font-semibold text-sm">Annotate Screenshot</span>
               <span className="text-xs text-muted-foreground hidden sm:inline">
-                Draw rectangles to mark areas, then explain why each area matters
+                {annotationMode === "pointer"
+                  ? "Click to place numbered pointers, then describe each"
+                  : "Draw rectangles to mark areas, then explain each"}
               </span>
             </div>
             <div className="flex items-center gap-2">
+              {/* Annotation mode toggle */}
+              <div className="flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
+                <Button
+                  variant={annotationMode === "pointer" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-6 px-2 text-xs gap-1"
+                  onClick={() => setAnnotationMode("pointer")}
+                  title="Pointer mode — click to place markers"
+                >
+                  <MapPin className="w-3 h-3" />
+                  Pointer
+                </Button>
+                <Button
+                  variant={annotationMode === "region" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-6 px-2 text-xs gap-1"
+                  onClick={() => setAnnotationMode("region")}
+                  title="Region mode — drag to draw rectangles"
+                >
+                  <Square className="w-3 h-3" />
+                  Region
+                </Button>
+              </div>
+
               <Button variant="ghost" size="sm" onClick={handleClose}>
                 <X className="w-4 h-4 mr-1" />
                 Close
@@ -492,11 +683,11 @@ export function ScreenCaptureButton({
               <Button
                 size="sm"
                 onClick={handleSaveClick}
-                disabled={regions.length === 0}
+                disabled={annotations.length === 0}
                 className="gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
-                Save ({regions.length})
+                Save ({annotations.length})
               </Button>
             </div>
           </div>
@@ -527,12 +718,21 @@ export function ScreenCaptureButton({
                 />
               </div>
 
-              {/* Helper tooltip when no regions yet */}
-              {regions.length === 0 && !isDragging && (
+              {/* Helper tooltip when no annotations yet */}
+              {annotations.length === 0 && !isDragging && (
                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
                   <div className="bg-foreground/80 text-background px-4 py-2 rounded-full flex items-center gap-2 text-sm shadow-lg">
-                    <MousePointer className="w-4 h-4" />
-                    Click and drag to mark areas of interest
+                    {annotationMode === "pointer" ? (
+                      <>
+                        <MapPin className="w-4 h-4" />
+                        Click to place a pointer
+                      </>
+                    ) : (
+                      <>
+                        <MousePointer className="w-4 h-4" />
+                        Click and drag to mark areas of interest
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -542,37 +742,44 @@ export function ScreenCaptureButton({
             <div className="lg:w-80 w-full border-t lg:border-t-0 lg:border-l bg-card overflow-y-auto shrink-0">
               <div className="px-4 py-3 border-b sticky top-0 bg-card z-10">
                 <h3 className="font-semibold text-sm">
-                  Annotations{regions.length > 0 ? ` (${regions.length})` : ""}
+                  Annotations{annotations.length > 0 ? ` (${annotations.length})` : ""}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Explain why each marked area was captured
+                  Describe why each marked point or area matters
                 </p>
               </div>
 
-              {regions.length === 0 ? (
+              {annotations.length === 0 ? (
                 <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  No regions marked yet.
+                  No annotations yet.
                   <br />
-                  Draw rectangles on the screenshot to begin.
+                  {annotationMode === "pointer"
+                    ? "Click on the screenshot to place pointers."
+                    : "Draw rectangles on the screenshot to begin."}
                 </div>
               ) : (
                 <div className="divide-y">
-                  {regions.map((region, idx) => (
-                    <div key={`region-${region.number}-${idx}`} className="px-4 py-3">
+                  {annotations.map((annotation, idx) => (
+                    <div key={`annotation-${annotation.number}-${idx}`} className="px-4 py-3">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className="w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                            {region.number}
+                            {annotation.number}
                           </span>
-                          <span className="text-xs text-muted-foreground">
-                            Region {region.number}
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            {annotation.kind === "pointer" ? (
+                              <MapPin className="w-3 h-3" />
+                            ) : (
+                              <Square className="w-3 h-3" />
+                            )}
+                            {annotation.kind === "pointer" ? "Pointer" : "Region"} {annotation.number}
                           </span>
                         </div>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                          onClick={() => deleteRegion(idx)}
+                          onClick={() => deleteAnnotation(idx)}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -580,9 +787,13 @@ export function ScreenCaptureButton({
                       <ProvokeText
                         variant="textarea"
                         chrome="bare"
-                        value={region.narration}
+                        value={annotation.narration}
                         onChange={(val) => updateNarration(idx, val)}
-                        placeholder="Why did you capture this area? What needs attention here..."
+                        placeholder={
+                          annotation.kind === "pointer"
+                            ? "What does this point to? Why is it important..."
+                            : "Why did you capture this area? What needs attention here..."
+                        }
                         className="text-sm"
                         minRows={2}
                         maxRows={4}
@@ -590,7 +801,7 @@ export function ScreenCaptureButton({
                         showClear={false}
                         voice={{ mode: "replace" }}
                         onVoiceTranscript={(text) => updateNarration(idx, text)}
-                        autoFocus={idx === regions.length - 1}
+                        autoFocus={idx === annotations.length - 1}
                       />
                     </div>
                   ))}
@@ -602,50 +813,57 @@ export function ScreenCaptureButton({
         </div>
       )}
 
-      {/* ── Requirements Review Dialog ── */}
+      {/* ── Review Dialog ── */}
       <Dialog open={showReviewDialog} onOpenChange={(open) => { if (!open) handleCloseReviewDialog(); }}>
         <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              Requirements Capture Review
+              Capture Review
             </DialogTitle>
             <DialogDescription>
-              Review all annotated regions and their rationales before saving to requirements.
+              Review all annotations and their descriptions before sending to the document.
             </DialogDescription>
           </DialogHeader>
 
           <ScrollArea className="flex-1 -mx-6 px-6">
             <div className="space-y-4 py-2">
-              {croppedSubImages.map(({ dataUrl, region }, idx) => (
+              {croppedSubImages.map(({ dataUrl, annotation }, idx) => (
                 <div
-                  key={`review-${region.number}-${idx}`}
+                  key={`review-${annotation.number}-${idx}`}
                   className="border rounded-lg overflow-hidden bg-muted/30"
                 >
                   {/* Sub-image header */}
                   <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
                     <span className="w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                      {region.number}
+                      {annotation.number}
                     </span>
-                    <span className="font-medium text-sm">Region {region.number}</span>
+                    <span className="font-medium text-sm flex items-center gap-1">
+                      {annotation.kind === "pointer" ? (
+                        <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                      {annotation.kind === "pointer" ? "Pointer" : "Region"} {annotation.number}
+                    </span>
                     <Image className="w-3.5 h-3.5 text-muted-foreground ml-auto" />
                   </div>
 
-                  {/* Cropped sub-image */}
+                  {/* Cropped context image */}
                   <div className="p-3 flex justify-center bg-background/50">
                     <img
                       src={dataUrl}
-                      alt={`Captured region ${region.number}`}
+                      alt={`Captured ${annotation.kind} ${annotation.number}`}
                       className="max-w-full max-h-48 rounded border border-border/50 object-contain"
                     />
                   </div>
 
-                  {/* Rationale */}
+                  {/* Narration */}
                   <div className="px-3 py-2.5 border-t">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Rationale</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Description</p>
                     <p className="text-sm leading-relaxed">
-                      {region.narration || (
-                        <span className="italic text-muted-foreground">No rationale provided</span>
+                      {annotation.narration || (
+                        <span className="italic text-muted-foreground">No description provided</span>
                       )}
                     </p>
                   </div>
@@ -659,9 +877,9 @@ export function ScreenCaptureButton({
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
               <Camera className="w-3.5 h-3.5" />
               <span>
-                {croppedSubImages.length} region{croppedSubImages.length !== 1 ? "s" : ""} captured
+                {croppedSubImages.length} annotation{croppedSubImages.length !== 1 ? "s" : ""} captured
                 {" \u00b7 "}
-                {croppedSubImages.filter(s => s.region.narration.trim()).length} with rationale
+                {croppedSubImages.filter(s => s.annotation.narration.trim()).length} with descriptions
               </span>
             </div>
           </div>
@@ -672,7 +890,7 @@ export function ScreenCaptureButton({
             </Button>
             <Button onClick={handleConfirmSave} className="gap-1.5">
               <Save className="w-3.5 h-3.5" />
-              Save to Requirements
+              Send to Document
             </Button>
           </DialogFooter>
         </DialogContent>
