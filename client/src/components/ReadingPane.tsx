@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, Mic, Square, Send, X, Eye, Pencil, FileText } from "lucide-react";
+import { Download, Mic, Square, Send, X, Pencil, FileText, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -307,46 +307,60 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
         <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
         <h3 className="font-semibold text-sm">Document</h3>
-        <div className="flex-1" />
-        <Badge variant="outline" className="text-xs">{wordCount.toLocaleString()} words</Badge>
+        <Badge variant="outline" className="text-xs ml-1">{wordCount.toLocaleString()} words</Badge>
         <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
-      </div>
-
-      {/* Toolbar — format badge, mode toggle, download */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b bg-card/50 shrink-0">
-        <Badge variant="outline" className="text-xs font-mono">MD</Badge>
         <div className="flex-1" />
-        <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+        <div className="flex items-center gap-0.5">
           <Button
-            variant={viewMode === "preview" ? "default" : "ghost"}
-            size="sm"
-            className="h-6 px-2 text-xs gap-1"
-            onClick={() => setViewMode("preview")}
+            data-testid="button-document-mic"
+            variant={viewMode === "edit" && isRecording ? "destructive" : "ghost"}
+            size="icon"
+            className={`h-8 w-8 ${viewMode === "edit" ? "text-foreground" : "text-muted-foreground hover:text-foreground"} ${isRecording ? "animate-pulse" : ""}`}
+            onClick={() => {
+              if (viewMode !== "edit") setViewMode("edit");
+              // Recording toggle handled by edit mode's ProvokeText voice
+            }}
+            title="Voice input (edit mode)"
           >
-            <Eye className="w-3 h-3" />
-            Preview
+            <Mic className="w-4 h-4" />
           </Button>
           <Button
+            data-testid="button-document-pencil"
             variant={viewMode === "edit" ? "default" : "ghost"}
-            size="sm"
-            className="h-6 px-2 text-xs gap-1"
-            onClick={() => setViewMode("edit")}
+            size="icon"
+            className={`h-8 w-8 ${viewMode === "edit" ? "" : "text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setViewMode(viewMode === "edit" ? "preview" : "edit")}
+            title={viewMode === "edit" ? "Switch to preview" : "Edit document"}
           >
-            <Pencil className="w-3 h-3" />
-            Edit
+            <Pencil className="w-4 h-4" />
+          </Button>
+          <Button
+            data-testid="button-copy-document"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              navigator.clipboard.writeText(text);
+              toast({
+                title: "Copied",
+                description: "Document copied to clipboard.",
+              });
+            }}
+            title="Copy document"
+          >
+            <Copy className="w-4 h-4" />
+          </Button>
+          <Button
+            data-testid="button-download-document"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={handleDownload}
+            title="Download as markdown"
+          >
+            <Download className="w-4 h-4" />
           </Button>
         </div>
-        <div className="w-px h-5 bg-border mx-1" />
-        <Button
-          data-testid="button-download-document"
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          onClick={handleDownload}
-          title="Download as markdown"
-        >
-          <Download className="w-4 h-4" />
-        </Button>
       </div>
 
       {/* Content area — either markdown preview or raw editor */}
