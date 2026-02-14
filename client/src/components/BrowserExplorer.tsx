@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Maximize2,
   Minimize2,
+  ScrollText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,10 @@ import { Badge } from "@/components/ui/badge";
 interface BrowserExplorerProps {
   websiteUrl: string;
   onUrlChange?: (url: string) => void;
+  showLogPanel?: boolean;
+  onToggleLogPanel?: () => void;
+  isAnalyzing?: boolean;
+  discoveredCount?: number;
 }
 
 function normalizeUrl(raw: string): string {
@@ -25,7 +30,14 @@ function normalizeUrl(raw: string): string {
   return `https://${trimmed}`;
 }
 
-export function BrowserExplorer({ websiteUrl, onUrlChange }: BrowserExplorerProps) {
+export function BrowserExplorer({
+  websiteUrl,
+  onUrlChange,
+  showLogPanel,
+  onToggleLogPanel,
+  isAnalyzing,
+  discoveredCount = 0,
+}: BrowserExplorerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [addressBar, setAddressBar] = useState(websiteUrl);
   const [loadedUrl, setLoadedUrl] = useState("");
@@ -159,6 +171,26 @@ export function BrowserExplorer({ websiteUrl, onUrlChange }: BrowserExplorerProp
 
         {/* Toolbar actions */}
         <div className="flex items-center gap-0.5">
+          {onToggleLogPanel && (
+            <Button
+              variant={showLogPanel ? "default" : "ghost"}
+              size="sm"
+              className="h-7 gap-1 text-xs px-2"
+              onClick={onToggleLogPanel}
+              title="Toggle site analysis log"
+            >
+              <ScrollText className="w-3.5 h-3.5" />
+              Log
+              {(isAnalyzing || discoveredCount > 0) && (
+                <Badge
+                  variant={showLogPanel ? "secondary" : "outline"}
+                  className="text-[9px] h-4 ml-0.5"
+                >
+                  {isAnalyzing ? "..." : discoveredCount}
+                </Badge>
+              )}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
