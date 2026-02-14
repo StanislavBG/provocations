@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, Mic, Square, Send, X, Eye, Pencil } from "lucide-react";
+import { Download, Mic, Square, Send, X, Eye, Pencil, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -303,10 +303,17 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       className="h-full relative flex flex-col"
       onClick={handleContainerClick}
     >
-      {/* Header bar with word count, mode toggle, download */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b bg-card/50 shrink-0">
+      {/* Panel Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
+        <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+        <h3 className="font-semibold text-sm">Document</h3>
+        <div className="flex-1" />
         <Badge variant="outline" className="text-xs">{wordCount.toLocaleString()} words</Badge>
         <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
+      </div>
+
+      {/* Toolbar — format badge, mode toggle, download */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b bg-card/50 shrink-0">
         <Badge variant="outline" className="text-xs font-mono">MD</Badge>
         <div className="flex-1" />
         <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">

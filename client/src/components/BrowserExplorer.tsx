@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import {
   Globe,
   ArrowLeft,
@@ -21,6 +21,8 @@ interface BrowserExplorerProps {
   onToggleLogPanel?: () => void;
   isAnalyzing?: boolean;
   discoveredCount?: number;
+  /** Actions rendered in the panel header (e.g. Capture button) */
+  headerActions?: ReactNode;
 }
 
 function normalizeUrl(raw: string): string {
@@ -37,6 +39,7 @@ export function BrowserExplorer({
   onToggleLogPanel,
   isAnalyzing,
   discoveredCount = 0,
+  headerActions,
 }: BrowserExplorerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [addressBar, setAddressBar] = useState(websiteUrl);
@@ -147,7 +150,15 @@ export function BrowserExplorer({
 
   return (
     <div className={`h-full flex flex-col bg-background ${isExpanded ? "fixed inset-0 z-50" : ""}`}>
-      {/* Browser Chrome */}
+      {/* Panel Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
+        <Globe className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+        <h3 className="font-semibold text-sm">Website Explorer</h3>
+        <div className="flex-1" />
+        {headerActions}
+      </div>
+
+      {/* Browser Chrome — navigation + address bar */}
       <div className="flex items-center gap-1.5 px-2 py-1.5 border-b bg-muted/30 shrink-0">
         {/* Navigation buttons */}
         <div className="flex items-center gap-0.5">
