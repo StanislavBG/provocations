@@ -1,12 +1,15 @@
-import { useState, useCallback, useEffect, lazy, Suspense } from "react";
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
+import { StreamingDialogue } from "@/components/StreamingDialogue";
+import { LogStatsPanel } from "@/components/LogStatsPanel";
 import { ReadingPane } from "@/components/ReadingPane";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
+import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Drawler } from "@/components/Drawler";
@@ -17,7 +20,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
-import { StreamingWorkspace } from "@/components/StreamingWorkspace";
 import { ScreenCaptureButton, type CaptureRegion } from "@/components/ScreenCaptureButton";
 import {
   Sparkles,
@@ -30,7 +32,8 @@ import {
   Save,
   ChevronDown,
   ChevronUp,
-  Radio,
+  ArrowRightToLine,
+  Loader2,
 } from "lucide-react";
 import type {
   Document,
@@ -45,7 +48,11 @@ import type {
   InterviewEntry,
   InterviewQuestionResponse,
   DocumentListItem,
-  WorkspaceMode,
+  StreamingDialogueEntry,
+  StreamingRequirement,
+  StreamingQuestionResponse,
+  WireframeAnalysisResponse,
+  StreamingRefineResponse,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -64,7 +71,9 @@ export default function Workspace() {
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("standard");
+
+  // Toolbox app state — controls which app is active in the left panel
+  const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
 
   // Voice and version tracking
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -89,7 +98,7 @@ export default function Workspace() {
   // Suggestions from last write response
   const [lastSuggestions, setLastSuggestions] = useState<string[]>([]);
 
-  // Interview state
+  // ── Interview (Provoke) state ──
   const [isInterviewActive, setIsInterviewActive] = useState(false);
   const [interviewEntries, setInterviewEntries] = useState<InterviewEntry[]>([]);
   const [currentInterviewQuestion, setCurrentInterviewQuestion] = useState<string | null>(null);
@@ -102,6 +111,18 @@ export default function Workspace() {
     guidance?: string;
     thinkBigVectors?: ThinkBigVector[];
   } | null>(null);
+
+  // ── Streaming (Website) state ──
+  const [streamingDialogueEntries, setStreamingDialogueEntries] = useState<StreamingDialogueEntry[]>([]);
+  const [streamingRequirements, setStreamingRequirements] = useState<StreamingRequirement[]>([]);
+  const [streamingCurrentQuestion, setStreamingCurrentQuestion] = useState<string | null>(null);
+  const [streamingCurrentTopic, setStreamingCurrentTopic] = useState<string | null>(null);
+  const [isStreamingDialogueActive, setIsStreamingDialogueActive] = useState(false);
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [wireframeNotes, setWireframeNotes] = useState("");
+  const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
+  const [showLogPanel, setShowLogPanel] = useState(false);
+  const lastAnalyzedUrl = useRef<string>("");
 
   // Server-backed save/restore
   const [savedDocuments, setSavedDocuments] = useState<DocumentListItem[]>([]);
@@ -129,6 +150,8 @@ export default function Workspace() {
   useEffect(() => {
     fetchSavedDocuments();
   }, [fetchSavedDocuments]);
+
+  // ── Writer mutation ──
 
   const writeMutation = useMutation({
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory"> & { description?: string }) => {
@@ -199,6 +222,8 @@ export default function Workspace() {
       });
     },
   });
+
+  // ── Interview mutations ──
 
   const interviewQuestionMutation = useMutation({
     mutationFn: async ({ overrideEntries, direction }: { overrideEntries?: InterviewEntry[]; direction?: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string; thinkBigVectors?: ThinkBigVector[] } } = {}) => {
@@ -293,6 +318,237 @@ export default function Workspace() {
     },
   });
 
+  // Incremental merge — push interview answers into document without ending the session
+  const interviewMergeMutation = useMutation({
+    mutationFn: async () => {
+      if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
+      const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
+        objective,
+        entries: interviewEntries,
+        document: document.rawText,
+      });
+      const { instruction } = await summaryResponse.json() as { instruction: string };
+
+      const writeResponse = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        instruction,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        editHistory: editHistory.length > 0 ? editHistory : undefined,
+      });
+      return await writeResponse.json() as WriteResponse;
+    },
+    onSuccess: (data) => {
+      if (document) {
+        const newVersion: DocumentVersion = {
+          id: generateId("v"),
+          text: data.document,
+          timestamp: Date.now(),
+          description: `Incremental merge (${interviewEntries.length} answers)`,
+        };
+        setVersions(prev => [...prev, newVersion]);
+        setDocument({ ...document, rawText: data.document });
+
+        const historyEntry: EditHistoryEntry = {
+          instruction: `Merged ${interviewEntries.length} interview answers into document`,
+          instructionType: data.instructionType || "general",
+          summary: data.summary || "Interview responses merged",
+          timestamp: Date.now(),
+        };
+        setEditHistory(prev => [...prev.slice(-9), historyEntry]);
+
+        // Clear entries so subsequent merge only captures new answers
+        setInterviewEntries([]);
+
+        toast({
+          title: "Merged to Draft",
+          description: `${interviewEntries.length} answers integrated. Interview continues.`,
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Merge Failed",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ── Streaming mutations ──
+
+  const streamingQuestionMutation = useMutation({
+    mutationFn: async (overrideEntries?: StreamingDialogueEntry[]) => {
+      const entries = overrideEntries ?? streamingDialogueEntries;
+      // Enrich wireframe notes with full analysis context
+      const analysisParts: string[] = [];
+      if (wireframeNotes) analysisParts.push(wireframeNotes);
+      if (wireframeAnalysis) {
+        if (wireframeAnalysis.analysis) {
+          analysisParts.push(`[SITE ANALYSIS]: ${wireframeAnalysis.analysis}`);
+        }
+        if (wireframeAnalysis.components.length > 0) {
+          analysisParts.push(`[COMPONENTS]: ${wireframeAnalysis.components.join(", ")}`);
+        }
+        if (wireframeAnalysis.suggestions.length > 0) {
+          analysisParts.push(`[SUGGESTIONS]: ${wireframeAnalysis.suggestions.join("; ")}`);
+        }
+        if (wireframeAnalysis.primaryContent) {
+          analysisParts.push(`[PRIMARY CONTENT]: ${wireframeAnalysis.primaryContent}`);
+        }
+        if (wireframeAnalysis.siteMap && wireframeAnalysis.siteMap.length > 0) {
+          const siteMapStr = wireframeAnalysis.siteMap.map(p => `${"  ".repeat(p.depth)}${p.title}${p.url ? ` (${p.url})` : ""}`).join("\n");
+          analysisParts.push(`[SITE MAP]:\n${siteMapStr}`);
+        }
+        if (wireframeAnalysis.videos && wireframeAnalysis.videos.length > 0) {
+          analysisParts.push(`[VIDEOS]: ${wireframeAnalysis.videos.map(v => v.title).join(", ")}`);
+        }
+        if (wireframeAnalysis.audioContent && wireframeAnalysis.audioContent.length > 0) {
+          analysisParts.push(`[AUDIO]: ${wireframeAnalysis.audioContent.map(a => a.title).join(", ")}`);
+        }
+        if (wireframeAnalysis.rssFeeds && wireframeAnalysis.rssFeeds.length > 0) {
+          analysisParts.push(`[RSS FEEDS]: ${wireframeAnalysis.rssFeeds.map(f => f.title).join(", ")}`);
+        }
+        if (wireframeAnalysis.images && wireframeAnalysis.images.length > 0) {
+          analysisParts.push(`[IMAGES]: ${wireframeAnalysis.images.map(img => `${img.title} (${img.type || "image"})`).join(", ")}`);
+        }
+      }
+      const enrichedNotes = analysisParts.length > 0 ? analysisParts.join("\n") : undefined;
+
+      const response = await apiRequest("POST", "/api/streaming/question", {
+        objective,
+        document: document.rawText || undefined,
+        websiteUrl: websiteUrl || undefined,
+        wireframeNotes: enrichedNotes,
+        previousEntries: entries.length > 0 ? entries : undefined,
+        requirements: streamingRequirements.length > 0 ? streamingRequirements : undefined,
+      });
+      return await response.json() as StreamingQuestionResponse;
+    },
+    onSuccess: (data) => {
+      const agentEntry: StreamingDialogueEntry = {
+        id: generateId("se"),
+        role: "agent",
+        content: data.question,
+        timestamp: Date.now(),
+      };
+      setStreamingDialogueEntries(prev => [...prev, agentEntry]);
+      setStreamingCurrentQuestion(data.question);
+      setStreamingCurrentTopic(data.topic);
+
+      if (data.suggestedRequirement) {
+        const newReq: StreamingRequirement = {
+          id: generateId("req"),
+          text: data.suggestedRequirement,
+          status: "draft",
+          timestamp: Date.now(),
+        };
+        setStreamingRequirements(prev => [...prev, newReq]);
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Question Error",
+        description: error instanceof Error ? error.message : "Failed to generate question",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const streamingAnalysisMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/streaming/wireframe-analysis", {
+        objective,
+        websiteUrl: websiteUrl || undefined,
+        wireframeNotes,
+        document: document.rawText || undefined,
+      });
+      return await response.json() as WireframeAnalysisResponse;
+    },
+    onSuccess: (data) => {
+      setWireframeAnalysis(data);
+      setIsStreamingDialogueActive(true);
+    },
+    onError: (error) => {
+      toast({
+        title: "Analysis Failed",
+        description: error instanceof Error ? error.message : "Failed to analyze website",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const streamingRefineMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/streaming/refine", {
+        objective,
+        dialogueEntries: streamingDialogueEntries,
+        existingRequirements: streamingRequirements.length > 0 ? streamingRequirements : undefined,
+        document: document.rawText || undefined,
+        websiteUrl: websiteUrl || undefined,
+        wireframeAnalysis: wireframeAnalysis || undefined,
+      });
+      return await response.json() as StreamingRefineResponse;
+    },
+    onSuccess: (data) => {
+      if (data.requirements.length > 0) {
+        setStreamingRequirements(data.requirements);
+      }
+
+      if (data.updatedDocument) {
+        const newVersion: DocumentVersion = {
+          id: generateId("v"),
+          text: data.updatedDocument,
+          timestamp: Date.now(),
+          description: `Requirements refined: ${data.summary}`,
+        };
+        setVersions(prev => [...prev, newVersion]);
+        setDocument({ ...document, rawText: data.updatedDocument });
+
+        const historyEntry: EditHistoryEntry = {
+          instruction: "Refine requirements from streaming dialogue",
+          instructionType: "restructure",
+          summary: data.summary,
+          timestamp: Date.now(),
+        };
+        setEditHistory(prev => [...prev.slice(-9), historyEntry]);
+      }
+
+      toast({
+        title: "Requirements Refined",
+        description: data.summary,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Refinement Failed",
+        description: error instanceof Error ? error.message : "Failed to refine",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Auto-trigger site analysis when a valid URL is entered
+  useEffect(() => {
+    const trimmedUrl = websiteUrl.trim();
+    if (!trimmedUrl) return;
+
+    const urlPattern = /^https?:\/\/\S+\.\S+/;
+    if (!urlPattern.test(trimmedUrl)) return;
+
+    if (trimmedUrl === lastAnalyzedUrl.current) return;
+
+    const timer = setTimeout(() => {
+      lastAnalyzedUrl.current = trimmedUrl;
+      streamingAnalysisMutation.mutate();
+    }, 800);
+
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [websiteUrl]);
+
+  // ── Interview handlers ──
+
   const handleStartInterview = useCallback((direction: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string; thinkBigVectors?: ThinkBigVector[] }) => {
     setInterviewDirection(direction);
     setIsInterviewActive(true);
@@ -314,13 +570,64 @@ export default function Workspace() {
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
 
-    // Fetch next question, passing updated entries directly
     interviewQuestionMutation.mutate({ overrideEntries: updatedEntries });
   }, [currentInterviewQuestion, currentInterviewTopic, interviewEntries, interviewQuestionMutation]);
 
   const handleEndInterview = useCallback(() => {
     interviewSummaryMutation.mutate();
   }, [interviewSummaryMutation]);
+
+  // Merge discussion content to draft without ending the session
+  const handleMergeToDraft = useCallback(() => {
+    if (activeToolboxApp === "provoke") {
+      if (interviewEntries.length > 0 && !interviewMergeMutation.isPending) {
+        interviewMergeMutation.mutate();
+      }
+    } else {
+      if (streamingDialogueEntries.length > 0 && !streamingRefineMutation.isPending) {
+        streamingRefineMutation.mutate();
+      }
+    }
+  }, [activeToolboxApp, interviewEntries.length, interviewMergeMutation, streamingDialogueEntries.length, streamingRefineMutation]);
+
+  // ── Streaming handlers ──
+
+  const handleStreamingStartDialogue = useCallback(() => {
+    setIsStreamingDialogueActive(true);
+  }, []);
+
+  const handleStreamingAnswer = useCallback((answer: string) => {
+    const userEntry: StreamingDialogueEntry = {
+      id: generateId("se"),
+      role: "user",
+      content: answer,
+      timestamp: Date.now(),
+    };
+    const updatedEntries = [...streamingDialogueEntries, userEntry];
+    setStreamingDialogueEntries(updatedEntries);
+    setStreamingCurrentQuestion(null);
+    setStreamingCurrentTopic(null);
+
+    streamingQuestionMutation.mutate(updatedEntries);
+  }, [streamingDialogueEntries, streamingQuestionMutation]);
+
+  const handleStreamingUpdateRequirement = useCallback((id: string, text: string) => {
+    setStreamingRequirements(prev =>
+      prev.map(r => r.id === id ? { ...r, text, status: "revised" as const } : r)
+    );
+  }, []);
+
+  const handleStreamingConfirmRequirement = useCallback((id: string) => {
+    setStreamingRequirements(prev =>
+      prev.map(r => r.id === id ? { ...r, status: "confirmed" as const } : r)
+    );
+  }, []);
+
+  const handleBrowserUrlChange = useCallback((url: string) => {
+    setWebsiteUrl(url);
+  }, []);
+
+  // ── Common handlers ──
 
   const handleReset = useCallback(() => {
     setDocument({ id: generateId("doc"), rawText: "" });
@@ -330,13 +637,26 @@ export default function Workspace() {
     setShowDiffView(false);
     setEditHistory([]);
     setLastSuggestions([]);
+    // Reset interview state
     setIsInterviewActive(false);
     setInterviewEntries([]);
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
     setInterviewDirection(null);
+    // Reset streaming state
+    setStreamingDialogueEntries([]);
+    setStreamingRequirements([]);
+    setStreamingCurrentQuestion(null);
+    setStreamingCurrentTopic(null);
+    setIsStreamingDialogueActive(false);
+    setWebsiteUrl("");
+    setWireframeNotes("");
+    setWireframeAnalysis(null);
+    setShowLogPanel(false);
+    lastAnalyzedUrl.current = "";
+    // Reset toolbox
+    setActiveToolboxApp("provoke");
     setCurrentDocId(null);
-    setWorkspaceMode("standard");
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -348,7 +668,6 @@ export default function Workspace() {
   // Handle text edit from pencil icon prompt
   const handleTextEdit = useCallback((newText: string) => {
     if (document) {
-      // Create a new version for the edit
       const newVersion: DocumentVersion = {
         id: generateId("v"),
         text: newText,
@@ -360,14 +679,12 @@ export default function Workspace() {
     }
   }, [document]);
 
-
-  // Handle screen capture: embed annotated image + per-region narration as markdown
+  // Handle screen capture
   const handleScreenCapture = useCallback((imageDataUrl: string, regions: CaptureRegion[]) => {
     if (!document) return;
 
     const timestamp = new Date().toLocaleString();
 
-    // Build numbered narration lines from regions
     const narrationLines = regions.map(r =>
       `**Region ${r.number}**: ${r.narration || "(no narration)"}`
     );
@@ -386,14 +703,12 @@ export default function Workspace() {
       "",
     ].join("\n");
 
-    // Merge via the writer for intelligent placement
     writeMutation.mutate({
       instruction: `Integrate the following annotated screenshot into the document. The screenshot has ${regions.length} numbered regions with narration. Place it at the most appropriate location near related content, or append as a new section.\n\nScreenshot markdown:\n${markdownSnippet}`,
       description: "Annotated screen capture merged",
     });
   }, [document, writeMutation]);
 
-  // Handle capture close: "elephant" keyword response
   const handleCaptureClose = useCallback((keyword: string) => {
     toast({
       title: keyword,
@@ -406,22 +721,16 @@ export default function Workspace() {
   }, []);
 
   // Handle voice merge from text selection in ReadingPane
-  // Now stores context and lets user review transcript before sending
   const handleSelectionVoiceMerge = useCallback((selectedText: string, transcript: string) => {
     if (!document || !transcript.trim()) return;
 
-    // Store the context for deferred sending - user will review and click "Send to writer"
     setPendingVoiceContext({
       selectedText,
       context: "selection",
     });
-    // Transcript is already set via handleTranscriptUpdate
-    // Don't auto-send anymore - user will click "Send to writer" after reviewing
   }, [document]);
 
   const handleTranscriptUpdate = useCallback((transcript: string, isRecording: boolean) => {
-    // Only update rawTranscript if there's content or recording is starting (clear for fresh start)
-    // When isRecording=false and transcript is empty, preserve the existing transcript
     if (transcript || isRecording) {
       setRawTranscript(transcript);
     }
@@ -442,22 +751,18 @@ export default function Workspace() {
     setPendingVoiceContext(null);
   }, []);
 
-  // Handle explicit send from TranscriptOverlay
   const handleSendTranscript = useCallback((transcript: string) => {
     if (!document || !transcript.trim()) return;
 
-    // Use the pending context if available
     const context = pendingVoiceContext;
 
     if (context?.selectedText) {
-      // Sending as selection edit
       writeMutation.mutate({
         instruction: transcript,
         selectedText: context.selectedText,
         description: "Voice edit on selection",
       });
     } else {
-      // Sending as general document instruction
       writeMutation.mutate({
         instruction: transcript,
         description: "Voice instruction",
@@ -465,12 +770,10 @@ export default function Workspace() {
     }
   }, [document, pendingVoiceContext, writeMutation]);
 
-  // Handle cleaned transcript from TranscriptOverlay
   const handleCleanTranscript = useCallback((cleaned: string) => {
     setCleanedTranscript(cleaned);
   }, []);
 
-  // Handle final transcript from the embedded VoiceRecorder in TranscriptOverlay
   const handleOverlayFinalTranscript = useCallback((transcript: string) => {
     if (transcript.trim()) {
       setRawTranscript(transcript);
@@ -487,7 +790,6 @@ export default function Workspace() {
       let loadedObjective = data.title;
       let loadedText = data.content;
 
-      // Try parsing content as JSON (objective + documentText)
       try {
         const parsed = JSON.parse(data.content) as { objective?: string; documentText?: string };
         if (parsed.documentText) {
@@ -504,12 +806,10 @@ export default function Workspace() {
       const tempDoc: Document = { id: `loaded-${Date.now()}`, rawText: loadedText };
       setDocument(tempDoc);
 
-      // Clear stale state from any previous document
       setEditHistory([]);
       setLastSuggestions([]);
       setShowDiffView(false);
 
-      // Create initial version
       const initialVersion: DocumentVersion = {
         id: generateId("v"),
         text: loadedText,
@@ -535,7 +835,7 @@ export default function Workspace() {
     }
   }, [toast]);
 
-  // Save document to server (server handles encryption)
+  // Save document to server
   const handleSaveClick = useCallback(async () => {
     if (!document.rawText) return;
 
@@ -545,14 +845,12 @@ export default function Workspace() {
       const content = JSON.stringify({ objective, documentText: document.rawText });
 
       if (currentDocId) {
-        // Update existing document
         await apiRequest("PUT", `/api/documents/${currentDocId}`, { title, content });
         toast({
           title: "Saved",
           description: `"${title}" updated.`,
         });
       } else {
-        // Create new document
         const response = await apiRequest("POST", "/api/documents", { title, content });
         const data = await response.json() as { id: number; createdAt: string };
         setCurrentDocId(data.id);
@@ -573,11 +871,22 @@ export default function Workspace() {
     }
   }, [document, objective, currentDocId, toast, fetchSavedDocuments]);
 
+  // ── Computed values ──
+
   const canShowDiff = versions.length >= 2;
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
 
-  // Show the input form when there's no document content and no analysis in progress
+  const discoveredCount = wireframeAnalysis
+    ? (wireframeAnalysis.components?.length || 0) +
+      (wireframeAnalysis.siteMap?.length || 0) +
+      (wireframeAnalysis.videos?.length || 0) +
+      (wireframeAnalysis.audioContent?.length || 0) +
+      (wireframeAnalysis.rssFeeds?.length || 0) +
+      (wireframeAnalysis.images?.length || 0)
+    : 0;
+
+  // Show the input form when there's no document content
   const isInputPhase = !document.rawText;
 
   if (isInputPhase) {
@@ -608,7 +917,6 @@ export default function Workspace() {
               setDocument({ id: generateId("doc"), rawText: text });
               setObjective(obj);
               setReferenceDocuments(refs);
-              // Create initial version — provocations are generated on-demand via the Provocations tab
               const initialVersion: DocumentVersion = {
                 id: generateId("v"),
                 text,
@@ -624,7 +932,7 @@ export default function Workspace() {
             onStreamingMode={(obj) => {
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
-              setWorkspaceMode("streaming");
+              setActiveToolboxApp("website");
               const initialVersion: DocumentVersion = {
                 id: generateId("v"),
                 text: " ",
@@ -639,6 +947,8 @@ export default function Workspace() {
     );
   }
 
+  // ── Universal 3-Panel Layout ──
+
   return (
     <div className="h-screen flex flex-col">
       <header className="border-b bg-card">
@@ -646,16 +956,10 @@ export default function Workspace() {
           <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-primary" />
             <h1 className="font-semibold text-lg">Provocations</h1>
-            {workspaceMode === "streaming" && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                <Radio className="w-3 h-3" />
-                Streaming
-              </span>
-            )}
           </div>
 
           <div className="flex items-center gap-2">
-            {canShowDiff && workspaceMode === "standard" && (
+            {canShowDiff && (
               <Button
                 data-testid="button-versions"
                 variant={showDiffView ? "default" : "outline"}
@@ -765,7 +1069,7 @@ export default function Workspace() {
         </div>
       )}
 
-      {/* Suggestions bar - shows after a write when AI has suggestions */}
+      {/* Suggestions bar */}
       {!writeMutation.isPending && lastSuggestions.length > 0 && (
         <div className="bg-amber-500/10 border-b px-4 py-2 flex items-center gap-3 text-sm">
           <Lightbulb className="w-4 h-4 text-amber-600 shrink-0" />
@@ -800,27 +1104,133 @@ export default function Workspace() {
         </div>
       )}
 
+      {/* ── Universal 3-Panel Layout: Toolbox | Discussion | Document ── */}
       <div className="flex-1 overflow-hidden">
-        {workspaceMode === "streaming" ? (
-          <StreamingWorkspace
-            document={document}
-            objective={objective}
-            versions={versions}
-            editHistory={editHistory}
-            onDocumentChange={setDocument}
-            onVersionAdd={(version) => setVersions(prev => [...prev, version])}
-            onEditHistoryAdd={(entry) => setEditHistory(prev => [...prev.slice(-9), entry])}
-            captureActions={
-              <ScreenCaptureButton
-                onCapture={handleScreenCapture}
-                onClose={handleCaptureClose}
-                disabled={!document.rawText || writeMutation.isPending}
+        <ResizablePanelGroup direction="horizontal">
+          {/* Left Panel: Provocation Toolbox */}
+          <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
+            <ProvocationToolbox
+              activeApp={activeToolboxApp}
+              onAppChange={setActiveToolboxApp}
+              // Provoke app props
+              isInterviewActive={isInterviewActive}
+              isMerging={interviewSummaryMutation.isPending}
+              interviewEntryCount={interviewEntries.length}
+              onStartInterview={handleStartInterview}
+              // Website app props
+              websiteUrl={websiteUrl}
+              onUrlChange={handleBrowserUrlChange}
+              showLogPanel={showLogPanel}
+              onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
+              isAnalyzing={streamingAnalysisMutation.isPending}
+              discoveredCount={discoveredCount}
+              browserHeaderActions={
+                <ScreenCaptureButton
+                  onCapture={handleScreenCapture}
+                  onClose={handleCaptureClose}
+                  disabled={!document.rawText || writeMutation.isPending}
+                />
+              }
+            />
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Middle Panel: Discussion (Interview or Streaming Dialogue) */}
+          <ResizablePanel defaultSize={40} minSize={20}>
+            <div className="h-full flex flex-col relative">
+              <TranscriptOverlay
+                isVisible={showTranscriptOverlay}
+                isRecording={isRecordingFromMain}
+                rawTranscript={rawTranscript}
+                cleanedTranscript={cleanedTranscript}
+                resultSummary={transcriptSummary}
+                isProcessing={writeMutation.isPending}
+                onClose={handleCloseTranscriptOverlay}
+                onSend={handleSendTranscript}
+                onCleanTranscript={handleCleanTranscript}
+                onTranscriptUpdate={handleTranscriptUpdate}
+                onFinalTranscript={handleOverlayFinalTranscript}
+                context={pendingVoiceContext?.context || "document"}
               />
-            }
-          />
-        ) : (
-          <ResizablePanelGroup direction="horizontal">
-            <ResizablePanel defaultSize={55} minSize={35}>
+
+              {/* Panel Header — standardized */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
+                <MessageCircleQuestion className="w-4 h-4 text-primary" />
+                <h3 className="font-semibold text-sm">Discussion</h3>
+                {(isInterviewActive || isStreamingDialogueActive) && (
+                  <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+                )}
+                <div className="flex-1" />
+                {/* Merge to Draft — pushes discussion content into the document */}
+                {((activeToolboxApp === "provoke" && interviewEntries.length > 0) ||
+                  (activeToolboxApp === "website" && streamingDialogueEntries.length > 0)) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-7"
+                    onClick={handleMergeToDraft}
+                    disabled={interviewMergeMutation.isPending || streamingRefineMutation.isPending}
+                  >
+                    {interviewMergeMutation.isPending || streamingRefineMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Merging...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRightToLine className="w-3 h-3" />
+                        Merge to Draft
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              {/* Panel content — switches based on active toolbox app */}
+              <div className="flex-1 overflow-hidden">
+                {activeToolboxApp === "provoke" ? (
+                  <InterviewPanel
+                    isActive={isInterviewActive}
+                    entries={interviewEntries}
+                    currentQuestion={currentInterviewQuestion}
+                    currentTopic={currentInterviewTopic}
+                    isLoadingQuestion={interviewQuestionMutation.isPending}
+                    isMerging={interviewSummaryMutation.isPending}
+                    directionMode={interviewDirection?.mode}
+                    onAnswer={handleInterviewAnswer}
+                    onEnd={handleEndInterview}
+                  />
+                ) : (
+                  <StreamingDialogue
+                    entries={streamingDialogueEntries}
+                    requirements={streamingRequirements}
+                    currentQuestion={streamingCurrentQuestion}
+                    currentTopic={streamingCurrentTopic}
+                    isLoadingQuestion={streamingQuestionMutation.isPending}
+                    isRefining={streamingRefineMutation.isPending}
+                    onAnswer={handleStreamingAnswer}
+                    onStart={handleStreamingStartDialogue}
+                    onRefineRequirements={() => streamingRefineMutation.mutate()}
+                    onUpdateRequirement={handleStreamingUpdateRequirement}
+                    onConfirmRequirement={handleStreamingConfirmRequirement}
+                    isActive={isStreamingDialogueActive}
+                    hasAnalysis={wireframeAnalysis !== null}
+                    wireframeAnalysis={wireframeAnalysis}
+                    websiteUrl={websiteUrl}
+                    objective={objective}
+                    documentText={document.rawText}
+                  />
+                )}
+              </div>
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Right Panel: Main Draft (Document) */}
+          <ResizablePanel defaultSize={35} minSize={20}>
+            <div className="h-full flex flex-col relative">
               {showDiffView && previousVersion && currentVersion ? (
                 <Suspense fallback={
                   <div className="h-full flex flex-col p-4 space-y-4">
@@ -845,51 +1255,18 @@ export default function Workspace() {
                   onTextEdit={handleTextEdit}
                 />
               )}
-            </ResizablePanel>
 
-            <ResizableHandle withHandle />
-
-            <ResizablePanel defaultSize={45} minSize={25}>
-              <div className="h-full flex flex-col relative">
-                <TranscriptOverlay
-                  isVisible={showTranscriptOverlay}
-                  isRecording={isRecordingFromMain}
-                  rawTranscript={rawTranscript}
-                  cleanedTranscript={cleanedTranscript}
-                  resultSummary={transcriptSummary}
-                  isProcessing={writeMutation.isPending}
-                  onClose={handleCloseTranscriptOverlay}
-                  onSend={handleSendTranscript}
-                  onCleanTranscript={handleCleanTranscript}
-                  onTranscriptUpdate={handleTranscriptUpdate}
-                  onFinalTranscript={handleOverlayFinalTranscript}
-                  context={pendingVoiceContext?.context || "document"}
-                />
-                {/* Single Provoke panel — no tabs */}
-                <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20">
-                  <MessageCircleQuestion className="w-4 h-4 text-primary" />
-                  <h3 className="font-semibold text-sm">Provoke</h3>
-                  {isInterviewActive && (
-                    <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
-                  )}
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <InterviewPanel
-                    isActive={isInterviewActive}
-                    entries={interviewEntries}
-                    currentQuestion={currentInterviewQuestion}
-                    currentTopic={currentInterviewTopic}
-                    isLoadingQuestion={interviewQuestionMutation.isPending}
-                    isMerging={interviewSummaryMutation.isPending}
-                    onStart={handleStartInterview}
-                    onAnswer={handleInterviewAnswer}
-                    onEnd={handleEndInterview}
-                  />
-                </div>
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        )}
+              {/* Log Stats overlay — on top of the reading pane, toggled from BrowserExplorer */}
+              <LogStatsPanel
+                isOpen={showLogPanel}
+                onClose={() => setShowLogPanel(false)}
+                wireframeAnalysis={wireframeAnalysis}
+                isAnalyzing={streamingAnalysisMutation.isPending}
+                websiteUrl={websiteUrl}
+              />
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
     </div>
   );
