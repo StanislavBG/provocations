@@ -1,7 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import html2canvas from "html2canvas";
 import { Button } from "@/components/ui/button";
-import { Camera, Send, X, Loader2, Trash2, MousePointer } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Camera, Save, X, Loader2, Trash2, MousePointer, Image, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ProvokeText } from "@/components/ProvokeText";
 
@@ -12,21 +21,32 @@ export interface CaptureRegion {
   narration: string;
 }
 
+export interface CaptureRequirementsSummary {
+  annotatedImageDataUrl: string;
+  regions: CaptureRegion[];
+  subImages: { dataUrl: string; region: CaptureRegion }[];
+}
+
 interface ScreenCaptureButtonProps {
   /** Called with the annotated base64 image and region details */
   onCapture: (imageDataUrl: string, regions: CaptureRegion[]) => void;
+  /** Called when the user closes the annotator without saving. Receives the keyword "elephant". */
+  onClose?: (keyword: string) => void;
   disabled?: boolean;
 }
 
 /**
- * Multi-step screen capture:
- * 1. Captures the current app state as a screenshot
+ * Multi-step screen capture with requirements review:
+ * 1. Captures the current app state as a high-resolution screenshot
  * 2. Full-screen annotator where user draws numbered rectangular regions
- * 3. User adds narration per region
- * 4. Fires onCapture with annotated image + region data
+ * 3. Instant rationale prompt per region
+ * 4. Close triggers the "elephant" keyword
+ * 5. Save opens a requirements review dialog with cropped sub-images + bundled rationales
+ * 6. Confirming save sends the summary to the Requirements module via onCapture
  */
 export function ScreenCaptureButton({
   onCapture,
+  onClose,
   disabled,
 }: ScreenCaptureButtonProps) {
   const { toast } = useToast();
@@ -35,6 +55,12 @@ export function ScreenCaptureButton({
   const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
   const [regions, setRegions] = useState<CaptureRegion[]>([]);
   const [showAnnotator, setShowAnnotator] = useState(false);
+
+  // Requirements review dialog
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [croppedSubImages, setCroppedSubImages] = useState<
+    { dataUrl: string; region: CaptureRegion }[]
+  >([]);
 
   // Drawing state
   const [isDragging, setIsDragging] = useState(false);
@@ -59,7 +85,7 @@ export function ScreenCaptureButton({
       const canvas = await html2canvas(target, {
         useCORS: true,
         allowTaint: true,
-        scale: 1,
+        scale: 2, // High-resolution capture
         logging: false,
         backgroundColor: computedBg || "#ffffff",
       });
@@ -300,13 +326,63 @@ export function ScreenCaptureButton({
     });
   }, []);
 
-  // ─── Submit: burn annotations into image ──────────────────────────────
+  // ─── Sub-image cropping ───────────────────────────────────────────────
 
-  const handleSubmit = useCallback(() => {
+  const cropSubImages = useCallback((): { dataUrl: string; region: CaptureRegion }[] => {
+    if (!imageEl || regions.length === 0) return [];
+
+    return regions.map((region) => {
+      const { x, y, width, height } = region.rect;
+      const cropCanvas = window.document.createElement("canvas");
+      cropCanvas.width = width;
+      cropCanvas.height = height;
+      const ctx = cropCanvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(imageEl, x, y, width, height, 0, 0, width, height);
+      }
+      return {
+        dataUrl: cropCanvas.toDataURL("image/png"),
+        region,
+      };
+    });
+  }, [imageEl, regions]);
+
+  // ─── Close: triggers "elephant" keyword ───────────────────────────────
+
+  const handleClose = useCallback(() => {
+    // Trigger the "elephant" keyword response
+    onClose?.("elephant");
+
+    // Reset all state
+    setShowAnnotator(false);
+    setCapturedImage(null);
+    setImageEl(null);
+    setRegions([]);
+    setIsDragging(false);
+    setDragStart(null);
+    setDragEnd(null);
+    setShowReviewDialog(false);
+    setCroppedSubImages([]);
+  }, [onClose]);
+
+  // ─── Save: open requirements review dialog ───────────────────────────
+
+  const handleSaveClick = useCallback(() => {
+    if (regions.length === 0) return;
+
+    // Crop sub-images for each annotated region
+    const subImages = cropSubImages();
+    setCroppedSubImages(subImages);
+    setShowReviewDialog(true);
+  }, [regions, cropSubImages]);
+
+  // ─── Confirm save: burn annotations and fire onCapture ────────────────
+
+  const handleConfirmSave = useCallback(() => {
     if (!capturedImage || !imageEl || regions.length === 0) return;
 
     // Burn annotation overlays onto a new canvas
-    const offscreen = document.createElement("canvas");
+    const offscreen = window.document.createElement("canvas");
     offscreen.width = imageEl.naturalWidth;
     offscreen.height = imageEl.naturalHeight;
     const ctx = offscreen.getContext("2d")!;
@@ -341,37 +417,40 @@ export function ScreenCaptureButton({
     const annotatedDataUrl = offscreen.toDataURL("image/png");
     onCapture(annotatedDataUrl, regions);
 
-    // Reset
+    // Reset everything
+    setShowReviewDialog(false);
+    setCroppedSubImages([]);
     setShowAnnotator(false);
     setCapturedImage(null);
     setImageEl(null);
     setRegions([]);
 
     toast({
-      title: "Capture Added",
-      description: `Screenshot with ${regions.length} annotated region${regions.length !== 1 ? "s" : ""} will be merged into the document.`,
+      title: "Capture Saved to Requirements",
+      description: `Screenshot with ${regions.length} annotated region${regions.length !== 1 ? "s" : ""} sent to the Requirements module.`,
     });
   }, [capturedImage, imageEl, regions, onCapture, toast]);
 
-  const handleClose = useCallback(() => {
-    setShowAnnotator(false);
-    setCapturedImage(null);
-    setImageEl(null);
-    setRegions([]);
-    setIsDragging(false);
-    setDragStart(null);
-    setDragEnd(null);
+  const handleCloseReviewDialog = useCallback(() => {
+    setShowReviewDialog(false);
+    setCroppedSubImages([]);
   }, []);
 
-  // Escape key to close
+  // Escape key to close annotator
   useEffect(() => {
     if (!showAnnotator) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape") {
+        if (showReviewDialog) {
+          handleCloseReviewDialog();
+        } else {
+          handleClose();
+        }
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showAnnotator, handleClose]);
+  }, [showAnnotator, showReviewDialog, handleClose, handleCloseReviewDialog]);
 
   // ─── Render ───────────────────────────────────────────────────────────
 
@@ -402,22 +481,22 @@ export function ScreenCaptureButton({
               <Camera className="w-4 h-4 text-primary" />
               <span className="font-semibold text-sm">Annotate Screenshot</span>
               <span className="text-xs text-muted-foreground hidden sm:inline">
-                Draw rectangles to mark areas, then narrate each one
+                Draw rectangles to mark areas, then explain why each area matters
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={handleClose}>
                 <X className="w-4 h-4 mr-1" />
-                Cancel
+                Close
               </Button>
               <Button
                 size="sm"
-                onClick={handleSubmit}
+                onClick={handleSaveClick}
                 disabled={regions.length === 0}
                 className="gap-1.5"
               >
-                <Send className="w-3.5 h-3.5" />
-                Add to Document ({regions.length})
+                <Save className="w-3.5 h-3.5" />
+                Save ({regions.length})
               </Button>
             </div>
           </div>
@@ -466,7 +545,7 @@ export function ScreenCaptureButton({
                   Annotations{regions.length > 0 ? ` (${regions.length})` : ""}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Add narration for each marked area
+                  Explain why each marked area was captured
                 </p>
               </div>
 
@@ -503,7 +582,7 @@ export function ScreenCaptureButton({
                         chrome="bare"
                         value={region.narration}
                         onChange={(val) => updateNarration(idx, val)}
-                        placeholder="Describe what this area shows or what needs attention..."
+                        placeholder="Why did you capture this area? What needs attention here..."
                         className="text-sm"
                         minRows={2}
                         maxRows={4}
@@ -522,6 +601,82 @@ export function ScreenCaptureButton({
           </div>
         </div>
       )}
+
+      {/* ── Requirements Review Dialog ── */}
+      <Dialog open={showReviewDialog} onOpenChange={(open) => { if (!open) handleCloseReviewDialog(); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              Requirements Capture Review
+            </DialogTitle>
+            <DialogDescription>
+              Review all annotated regions and their rationales before saving to requirements.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="flex-1 -mx-6 px-6">
+            <div className="space-y-4 py-2">
+              {croppedSubImages.map(({ dataUrl, region }, idx) => (
+                <div
+                  key={`review-${region.number}-${idx}`}
+                  className="border rounded-lg overflow-hidden bg-muted/30"
+                >
+                  {/* Sub-image header */}
+                  <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
+                    <span className="w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                      {region.number}
+                    </span>
+                    <span className="font-medium text-sm">Region {region.number}</span>
+                    <Image className="w-3.5 h-3.5 text-muted-foreground ml-auto" />
+                  </div>
+
+                  {/* Cropped sub-image */}
+                  <div className="p-3 flex justify-center bg-background/50">
+                    <img
+                      src={dataUrl}
+                      alt={`Captured region ${region.number}`}
+                      className="max-w-full max-h-48 rounded border border-border/50 object-contain"
+                    />
+                  </div>
+
+                  {/* Rationale */}
+                  <div className="px-3 py-2.5 border-t">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Rationale</p>
+                    <p className="text-sm leading-relaxed">
+                      {region.narration || (
+                        <span className="italic text-muted-foreground">No rationale provided</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+
+          {/* Summary footer */}
+          <div className="border-t pt-3 -mx-6 px-6">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+              <Camera className="w-3.5 h-3.5" />
+              <span>
+                {croppedSubImages.length} region{croppedSubImages.length !== 1 ? "s" : ""} captured
+                {" \u00b7 "}
+                {croppedSubImages.filter(s => s.region.narration.trim()).length} with rationale
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseReviewDialog}>
+              Back to Annotator
+            </Button>
+            <Button onClick={handleConfirmSave} className="gap-1.5">
+              <Save className="w-3.5 h-3.5" />
+              Save to Requirements
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
