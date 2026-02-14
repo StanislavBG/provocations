@@ -45,6 +45,41 @@ export function BrowserExplorer({
   const [hasError, setHasError] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Suppress cross-origin errors from iframe scripts (TCF consent, ad frameworks, etc.)
+  useEffect(() => {
+    const suppressCrossOriginErrors = (event: ErrorEvent) => {
+      if (
+        event.message?.includes("SecurityError") ||
+        event.message?.includes("Blocked a frame") ||
+        event.message?.includes("cross-origin") ||
+        event.message?.includes("TCF") ||
+        event.message?.includes("Permissions policy")
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return true;
+      }
+    };
+
+    const suppressUnhandledRejections = (event: PromiseRejectionEvent) => {
+      const reason = String(event.reason);
+      if (
+        reason.includes("SecurityError") ||
+        reason.includes("cross-origin") ||
+        reason.includes("Blocked a frame")
+      ) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("error", suppressCrossOriginErrors, true);
+    window.addEventListener("unhandledrejection", suppressUnhandledRejections);
+    return () => {
+      window.removeEventListener("error", suppressCrossOriginErrors, true);
+      window.removeEventListener("unhandledrejection", suppressUnhandledRejections);
+    };
+  }, []);
+
   // Sync address bar when parent URL changes
   useEffect(() => {
     if (websiteUrl !== addressBar) {
@@ -227,6 +262,8 @@ export function BrowserExplorer({
               title="Browser Explorer"
               className="w-full h-full border-0"
               sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
+              allow="payment; encrypted-media; autoplay; fullscreen"
+              referrerPolicy="no-referrer"
               onLoad={handleIframeLoad}
               onError={handleIframeError}
             />
