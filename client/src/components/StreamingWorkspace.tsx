@@ -7,9 +7,6 @@ import { ReadingPane } from "./ReadingPane";
 import { StreamingDialogue } from "./StreamingDialogue";
 import { BrowserExplorer } from "./BrowserExplorer";
 import { LogStatsPanel } from "./LogStatsPanel";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollText } from "lucide-react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type {
   Document,
@@ -279,6 +276,10 @@ export function StreamingWorkspace({
         <BrowserExplorer
           websiteUrl={websiteUrl}
           onUrlChange={handleBrowserUrlChange}
+          showLogPanel={showLogPanel}
+          onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
+          isAnalyzing={analysisMutation.isPending}
+          discoveredCount={discoveredCount}
         />
       </ResizablePanel>
 
@@ -320,28 +321,7 @@ export function StreamingWorkspace({
         collapsedSize={0}
       >
         <div className="h-full flex flex-col relative">
-          {/* Log button bar — sits above the reading pane */}
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/20 shrink-0">
-            <Button
-              variant={showLogPanel ? "default" : "outline"}
-              size="sm"
-              className="gap-1.5 text-xs h-7"
-              onClick={() => setShowLogPanel(!showLogPanel)}
-            >
-              <ScrollText className="w-3.5 h-3.5" />
-              Log
-              {(analysisMutation.isPending || discoveredCount > 0) && (
-                <Badge
-                  variant={showLogPanel ? "secondary" : "outline"}
-                  className="text-[9px] h-4 ml-0.5"
-                >
-                  {analysisMutation.isPending ? "..." : discoveredCount}
-                </Badge>
-              )}
-            </Button>
-          </div>
-
-          {/* ReadingPane fills the rest */}
+          {/* ReadingPane fills the panel */}
           <div className="flex-1 overflow-hidden">
             <ReadingPane
               text={document.rawText}
@@ -349,7 +329,7 @@ export function StreamingWorkspace({
             />
           </div>
 
-          {/* Log Stats overlay — on top of the reading pane */}
+          {/* Log Stats overlay — on top of the reading pane, toggled from BrowserExplorer */}
           <LogStatsPanel
             isOpen={showLogPanel}
             onClose={() => setShowLogPanel(false)}
