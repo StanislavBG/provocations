@@ -5,9 +5,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { ReadingPane } from "./ReadingPane";
 import { StreamingDialogue } from "./StreamingDialogue";
-import { StreamingWireframePanel } from "./StreamingWireframePanel";
 import { BrowserExplorer } from "./BrowserExplorer";
-import type { CaptureRegion } from "./ScreenCaptureButton";
+import { LogStatsPanel } from "./LogStatsPanel";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollText } from "lucide-react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import type {
   Document,
@@ -52,6 +54,9 @@ export function StreamingWorkspace({
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [wireframeNotes, setWireframeNotes] = useState("");
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
+
+  // Log overlay panel state
+  const [showLogPanel, setShowLogPanel] = useState(false);
 
   // Track last analyzed URL to avoid duplicate triggers
   const lastAnalyzedUrl = useRef<string>("");
@@ -247,142 +252,112 @@ export function StreamingWorkspace({
     );
   }, []);
 
-  // Handle screen capture: embed annotated image + per-region narration into the requirement markdown doc
-  const handleScreenCapture = useCallback((imageDataUrl: string, regions: CaptureRegion[]) => {
-    const timestamp = new Date().toLocaleString();
-
-    const narrationLines = regions.map(r =>
-      `**Region ${r.number}**: ${r.narration || "(no narration)"}`
-    );
-
-    const markdownSnippet = [
-      "",
-      `---`,
-      "",
-      `### Annotated Screenshot (${timestamp})`,
-      "",
-      `![Annotated screenshot with ${regions.length} marked region${regions.length !== 1 ? "s" : ""}](${imageDataUrl})`,
-      "",
-      ...narrationLines,
-      "",
-      `---`,
-      "",
-    ].join("\n");
-
-    // Append directly to the document for the streaming workspace
-    const updatedText = document.rawText.trim() + "\n" + markdownSnippet;
-    const newVersion: DocumentVersion = {
-      id: generateId("v"),
-      text: updatedText,
-      timestamp: Date.now(),
-      description: `Annotated capture (${regions.length} regions)`,
-    };
-    onVersionAdd(newVersion);
-    onDocumentChange({ ...document, rawText: updatedText });
-
-    const historyEntry: EditHistoryEntry = {
-      instruction: `Added annotated screen capture with ${regions.length} regions`,
-      instructionType: "expand",
-      summary: `Annotated screenshot added with ${regions.length} region${regions.length !== 1 ? "s" : ""}`,
-      timestamp: Date.now(),
-    };
-    onEditHistoryAdd(historyEntry);
-
-    toast({
-      title: "Screenshot Added",
-      description: `Annotated capture with ${regions.length} region${regions.length !== 1 ? "s" : ""} appended to the document.`,
-    });
-  }, [document, onDocumentChange, onVersionAdd, onEditHistoryAdd, toast]);
-
   // Handle URL changes from Browser Explorer address bar back to the context panel
   const handleBrowserUrlChange = useCallback((url: string) => {
     setWebsiteUrl(url);
   }, []);
 
+  // Count discovered items for the Log button badge
+  const discoveredCount = wireframeAnalysis
+    ? (wireframeAnalysis.components?.length || 0) +
+      (wireframeAnalysis.siteMap?.length || 0) +
+      (wireframeAnalysis.videos?.length || 0) +
+      (wireframeAnalysis.audioContent?.length || 0) +
+      (wireframeAnalysis.rssFeeds?.length || 0) +
+      (wireframeAnalysis.images?.length || 0)
+    : 0;
+
   return (
-    <ResizablePanelGroup direction="vertical" className="h-full">
-      {/* Top: Context panels + Dialogue + Document */}
-      <ResizablePanel defaultSize={50} minSize={20}>
-        <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* Panel A: Website Wireframe (left) — URL, wireframe, capture, analysis log */}
-          <ResizablePanel
-            defaultSize={30}
-            minSize={10}
-            collapsible
-            collapsedSize={0}
-          >
-            <div className="h-full overflow-auto">
-              <StreamingWireframePanel
-                websiteUrl={websiteUrl}
-                onWebsiteUrlChange={setWebsiteUrl}
-                wireframeNotes={wireframeNotes}
-                onWireframeNotesChange={setWireframeNotes}
-                isAnalyzing={analysisMutation.isPending}
-                hasAnalysis={wireframeAnalysis !== null}
-                wireframeAnalysis={wireframeAnalysis}
-                onCapture={handleScreenCapture}
-                captureDisabled={refineMutation.isPending}
-              />
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle withHandle />
-
-          {/* Panel B: Requirement Dialogue (center) — agent Q&A populated from analysis */}
-          <ResizablePanel
-            defaultSize={35}
-            minSize={10}
-            collapsible
-            collapsedSize={0}
-          >
-            <div className="h-full overflow-hidden">
-              <StreamingDialogue
-                entries={dialogueEntries}
-                requirements={requirements}
-                currentQuestion={currentQuestion}
-                currentTopic={currentTopic}
-                isLoadingQuestion={questionMutation.isPending}
-                isRefining={refineMutation.isPending}
-                onAnswer={handleAnswer}
-                onStart={handleStartDialogue}
-                onRefineRequirements={() => refineMutation.mutate()}
-                onUpdateRequirement={handleUpdateRequirement}
-                onConfirmRequirement={handleConfirmRequirement}
-                isActive={isDialogueActive}
-                hasAnalysis={wireframeAnalysis !== null}
-              />
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle withHandle />
-
-          {/* Panel C: Requirement Draft / Document (right) — clean reading pane */}
-          <ResizablePanel
-            defaultSize={35}
-            minSize={10}
-            collapsible
-            collapsedSize={0}
-          >
-            <div className="h-full flex flex-col">
-              <div className="flex-1 overflow-auto">
-                <ReadingPane
-                  text={document.rawText}
-                  onTextChange={handleDocumentTextChange}
-                />
-              </div>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </ResizablePanel>
-
-      <ResizableHandle withHandle />
-
-      {/* Bottom: Browser Explorer — embedded iframe for side-by-side site exploration */}
-      <ResizablePanel defaultSize={50} minSize={15} collapsible collapsedSize={0}>
+    <ResizablePanelGroup direction="horizontal" className="h-full">
+      {/* Left Panel: Website Browser (iframe) */}
+      <ResizablePanel
+        defaultSize={35}
+        minSize={15}
+        collapsible
+        collapsedSize={0}
+      >
         <BrowserExplorer
           websiteUrl={websiteUrl}
           onUrlChange={handleBrowserUrlChange}
         />
+      </ResizablePanel>
+
+      <ResizableHandle withHandle />
+
+      {/* Middle Panel: Agent Q&A Dialogue (input at top) */}
+      <ResizablePanel
+        defaultSize={35}
+        minSize={15}
+        collapsible
+        collapsedSize={0}
+      >
+        <div className="h-full overflow-hidden">
+          <StreamingDialogue
+            entries={dialogueEntries}
+            requirements={requirements}
+            currentQuestion={currentQuestion}
+            currentTopic={currentTopic}
+            isLoadingQuestion={questionMutation.isPending}
+            isRefining={refineMutation.isPending}
+            onAnswer={handleAnswer}
+            onStart={handleStartDialogue}
+            onRefineRequirements={() => refineMutation.mutate()}
+            onUpdateRequirement={handleUpdateRequirement}
+            onConfirmRequirement={handleConfirmRequirement}
+            isActive={isDialogueActive}
+            hasAnalysis={wireframeAnalysis !== null}
+          />
+        </div>
+      </ResizablePanel>
+
+      <ResizableHandle withHandle />
+
+      {/* Right Panel: Markdown Document + Log overlay */}
+      <ResizablePanel
+        defaultSize={30}
+        minSize={15}
+        collapsible
+        collapsedSize={0}
+      >
+        <div className="h-full flex flex-col relative">
+          {/* Log button bar — sits above the reading pane */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/20 shrink-0">
+            <Button
+              variant={showLogPanel ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5 text-xs h-7"
+              onClick={() => setShowLogPanel(!showLogPanel)}
+            >
+              <ScrollText className="w-3.5 h-3.5" />
+              Log
+              {(analysisMutation.isPending || discoveredCount > 0) && (
+                <Badge
+                  variant={showLogPanel ? "secondary" : "outline"}
+                  className="text-[9px] h-4 ml-0.5"
+                >
+                  {analysisMutation.isPending ? "..." : discoveredCount}
+                </Badge>
+              )}
+            </Button>
+          </div>
+
+          {/* ReadingPane fills the rest */}
+          <div className="flex-1 overflow-hidden">
+            <ReadingPane
+              text={document.rawText}
+              onTextChange={handleDocumentTextChange}
+            />
+          </div>
+
+          {/* Log Stats overlay — on top of the reading pane */}
+          <LogStatsPanel
+            isOpen={showLogPanel}
+            onClose={() => setShowLogPanel(false)}
+            wireframeAnalysis={wireframeAnalysis}
+            isAnalyzing={analysisMutation.isPending}
+            websiteUrl={websiteUrl}
+          />
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );
