@@ -149,7 +149,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
   return (
     <div className="h-full flex flex-col">
-      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto p-6 gap-8">
+      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto p-6 gap-8" style={{ scrollbarGutter: "stable" }}>
 
         {/* ── STEP ONE: What type of document are you creating? ── */}
         <div className="space-y-4" ref={stepOneRef}>
@@ -435,7 +435,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
       {/* Fixed bottom action bar */}
       {isDraftExpanded && activePrebuilt?.id !== "streaming" && (
-        <div className="shrink-0 border-t bg-card px-6 py-3">
+        <div className="shrink-0 border-t bg-card px-6 py-3" style={{ scrollbarGutter: "stable" }}>
           <div className="w-full max-w-4xl mx-auto flex items-center justify-end gap-3">
             <Button
               variant="ghost"
