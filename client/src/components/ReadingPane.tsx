@@ -1,12 +1,48 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Download, Mic, Square, Send, X, Pencil, FileText, Copy, Info } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Download, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer, markdownToHtml } from "@/components/MarkdownRenderer";
+
+/** Extract all markdown image entries (alt + src) from text */
+function extractMarkdownImages(md: string): { alt: string; src: string }[] {
+  const results: { alt: string; src: string }[] = [];
+  const regex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let match;
+  while ((match = regex.exec(md)) !== null) {
+    results.push({ alt: match[1], src: match[2] });
+  }
+  return results;
+}
+
+/** Fetch an image URL (or data-URL) as a PNG blob suitable for clipboard */
+async function fetchImageAsBlob(src: string): Promise<Blob> {
+  // Draw image onto a canvas and export as PNG — works for data URLs,
+  // cross-origin images, and ensures we always get image/png for clipboard.
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("Canvas context unavailable"));
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Failed to create blob"))),
+        "image/png",
+      );
+    };
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = src;
+  });
+}
 
 interface ReadingPaneProps {
   text: string;
@@ -267,6 +303,35 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const readingTime = Math.ceil(wordCount / 200);
 
+  // Images in the document
+  const docImages = useMemo(() => extractMarkdownImages(text), [text]);
+  const [copyingImage, setCopyingImage] = useState(false);
+
+  const handleCopyImage = useCallback(async (src: string, alt: string) => {
+    setCopyingImage(true);
+    try {
+      const blob = await fetchImageAsBlob(src);
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob }),
+      ]);
+      toast({
+        title: "Image copied",
+        description: alt
+          ? `"${alt.slice(0, 40)}${alt.length > 40 ? "..." : ""}" copied — paste into Claude.`
+          : "Image copied to clipboard — paste into Claude.",
+      });
+    } catch (err) {
+      console.error("Image copy failed:", err);
+      toast({
+        title: "Copy failed",
+        description: "Could not copy image. Try right-click → Copy image instead.",
+        variant: "destructive",
+      });
+    } finally {
+      setCopyingImage(false);
+    }
+  }, [toast]);
+
   const handleDownload = () => {
     const htmlBody = markdownToHtml(text);
     const html = `<!DOCTYPE html>
@@ -387,6 +452,79 @@ ${htmlBody}
           >
             <Copy className="w-4 h-4" />
           </Button>
+          {/* Copy Image button — only when document has images */}
+          {docImages.length === 1 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  data-testid="button-copy-image"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  disabled={copyingImage}
+                  onClick={() => handleCopyImage(docImages[0].src, docImages[0].alt)}
+                  title="Copy image to clipboard"
+                >
+                  {copyingImage ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ImageIcon className="w-4 h-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">Copy image — paste into Claude</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {docImages.length > 1 && (
+            <Popover>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      data-testid="button-copy-image"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      disabled={copyingImage}
+                      title="Copy an image to clipboard"
+                    >
+                      {copyingImage ? (
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <ImageIcon className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">Copy an image — paste into Claude</p>
+                </TooltipContent>
+              </Tooltip>
+              <PopoverContent align="end" className="w-64 p-2">
+                <p className="text-xs text-muted-foreground mb-2 px-1">Select an image to copy</p>
+                <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+                  {docImages.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleCopyImage(img.src, img.alt)}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted text-left text-sm transition-colors"
+                    >
+                      <img
+                        src={img.src}
+                        alt={img.alt}
+                        className="w-10 h-10 object-cover rounded border shrink-0"
+                      />
+                      <span className="truncate text-xs">
+                        {img.alt || `Image ${idx + 1}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
           <Button
             data-testid="button-download-document"
             variant="ghost"
