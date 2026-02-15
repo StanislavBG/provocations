@@ -1102,25 +1102,44 @@ The AIM framework:
         ? "source material for a document"
         : "general content";
 
+      const mode = req.body.mode || "clean";
+
+      let systemPrompt: string;
+      if (mode === "summarize") {
+        systemPrompt = `You are an expert at condensing text. The user has written ${contextLabel}. Your job is to:
+
+1. Identify the core points and key ideas
+2. Remove redundancy, filler, and tangential details
+3. Produce a significantly shorter version that preserves the essential meaning
+
+For objectives: Output a single concise sentence.
+For source material: Condense into the most important points, organized into short paragraphs.
+
+Be faithful to their intent — don't add information they didn't mention. Aim for roughly 30-50% of the original length.`;
+      } else {
+        systemPrompt = `You are an expert editor. The user has written ${contextLabel}. Your job is to:
+
+1. Fix grammar, spelling, and punctuation errors
+2. Clean up speech artifacts if present (um, uh, repeated words, false starts)
+3. Improve clarity and readability without changing the meaning or significantly shortening
+4. Organize into well-structured paragraphs if needed
+
+For objectives: Output a clear, polished sentence describing what they want to create.
+For source material: Clean up and organize into readable, well-written paragraphs.
+
+Be faithful to their intent — don't add information they didn't mention. Keep the same approximate length.`;
+      }
+
       const response = await getOpenAI().chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `You are an expert at extracting clear intent from spoken transcripts. The user has spoken a ${contextLabel}. Your job is to:
-
-1. Clean up speech artifacts (um, uh, repeated words, false starts)
-2. Extract the core intent/meaning
-3. Present it as a clear, concise statement
-
-For objectives: Output a single clear sentence describing what they want to create.
-For source material: Clean up and organize the spoken content into readable paragraphs.
-
-Be faithful to their intent - don't add information they didn't mention.`
+            content: systemPrompt,
           },
           {
             role: "user",
-            content: `Raw transcript:\n\n${transcript}`
+            content: `${mode === "summarize" ? "Summarize this" : "Clean up this text"}:\n\n${transcript}`
           }
         ],
         max_tokens: context === "source" ? 4000 : 500,
