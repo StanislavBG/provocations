@@ -50,6 +50,9 @@ import type {
   InterviewEntry,
   InterviewQuestionResponse,
   WireframeAnalysisResponse,
+  DiscussionMessage,
+  AskQuestionResponse,
+  Advice,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -116,6 +119,16 @@ export default function Workspace() {
     mode: DirectionMode;
     personas: ProvocationType[];
     guidance?: string;
+  } | null>(null);
+
+  // ── Discussion state (enhanced advice + ask question) ──
+  const [discussionMessages, setDiscussionMessages] = useState<DiscussionMessage[]>([]);
+  const [currentAdviceText, setCurrentAdviceText] = useState<string | null>(null);
+
+  // Context collection data (captured from input phase for read-only toolbox tab)
+  const [contextCollectionData, setContextCollectionData] = useState<{
+    text: string;
+    objective: string;
   } | null>(null);
 
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -220,6 +233,11 @@ export default function Workspace() {
       setDocument({ id: generateId("doc"), rawText: data.document });
       setObjective(variables.obj);
       setReferenceDocuments(variables.refs);
+      // Capture context collection for read-only preview in toolbox
+      setContextCollectionData({
+        text: variables.context,
+        objective: variables.obj,
+      });
       const initialVersion: DocumentVersion = {
         id: generateId("v"),
         text: data.document,
@@ -398,6 +416,94 @@ export default function Workspace() {
     },
   });
 
+  // ── Advice mutation (view advice for current question) ──
+  const adviceMutation = useMutation({
+    mutationFn: async ({ question, topic }: { question: string; topic: string }) => {
+      // Extract persona ID from topic (e.g., "CEO: Growth Strategy" → "ceo")
+      const topicLower = topic.toLowerCase();
+      let personaId = "ceo"; // default
+      if (interviewDirection?.personas && interviewDirection.personas.length > 0) {
+        // Try to match from topic label
+        const allPersonas = interviewDirection.personas;
+        for (const pId of allPersonas) {
+          if (topicLower.includes(pId.replace("_", " ")) || topicLower.includes(pId)) {
+            personaId = pId;
+            break;
+          }
+        }
+        // If no match found from topic, use the first active persona
+        if (personaId === "ceo" && !allPersonas.includes("ceo" as ProvocationType)) {
+          personaId = allPersonas[0];
+        }
+      }
+
+      const response = await apiRequest("POST", "/api/generate-advice", {
+        document: document.rawText,
+        objective,
+        challengeId: `interview-${Date.now()}`,
+        challengeTitle: topic,
+        challengeContent: question,
+        personaId,
+      });
+      return (await response.json()) as { advice: Advice };
+    },
+    onSuccess: (data) => {
+      setCurrentAdviceText(data.advice?.content || null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to load advice",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ── Ask question mutation (user asks the persona team) ──
+  const askQuestionMutation = useMutation({
+    mutationFn: async (question: string) => {
+      const response = await apiRequest("POST", "/api/discussion/ask", {
+        question,
+        document: document.rawText,
+        objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
+        activePersonas: interviewDirection?.personas || [],
+        previousMessages: discussionMessages.length > 0 ? discussionMessages.slice(-10) : undefined,
+      });
+      return (await response.json()) as AskQuestionResponse;
+    },
+    onSuccess: (data, question) => {
+      // Add user question to discussion messages
+      const userMsg: DiscussionMessage = {
+        id: generateId("dm"),
+        role: "user-question",
+        content: question,
+        topic: data.topic,
+        timestamp: Date.now(),
+      };
+
+      // Add persona response
+      const responseMsg: DiscussionMessage = {
+        id: generateId("dm"),
+        role: "persona-response",
+        content: data.answer,
+        topic: data.topic,
+        timestamp: Date.now(),
+        perspectives: data.perspectives,
+        status: "pending",
+      };
+
+      setDiscussionMessages(prev => [...prev, userMsg, responseMsg]);
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to get response",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
   const streamingAnalysisMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/streaming/wireframe-analysis", {
@@ -496,6 +602,61 @@ export default function Workspace() {
     setWebsiteUrl(url);
   }, []);
 
+  // ── Discussion handlers (advice, dismiss, ask question) ──
+
+  const handleViewAdvice = useCallback((question: string, topic: string) => {
+    setCurrentAdviceText(null);
+    adviceMutation.mutate({ question, topic });
+  }, [adviceMutation]);
+
+  const handleDismissQuestion = useCallback(() => {
+    // Skip current question and request next one
+    setCurrentInterviewQuestion(null);
+    setCurrentInterviewTopic(null);
+    setCurrentAdviceText(null);
+    interviewQuestionMutation.mutate({});
+  }, [interviewQuestionMutation]);
+
+  const handleAskQuestion = useCallback((question: string) => {
+    askQuestionMutation.mutate(question);
+  }, [askQuestionMutation]);
+
+  const handleAcceptResponse = useCallback((messageId: string) => {
+    // Find the message and merge its content into the document
+    const message = discussionMessages.find(m => m.id === messageId);
+    if (!message) return;
+
+    // Build a merge instruction from the response
+    const perspectivesSummary = message.perspectives?.map(p =>
+      `${p.personaLabel}: ${p.content}`
+    ).join("\n\n") || "";
+
+    const instruction = `Integrate the following team advice into the document:\n\n${message.content}${perspectivesSummary ? `\n\nDetailed perspectives:\n${perspectivesSummary}` : ""}`;
+
+    writeMutation.mutate({
+      instruction,
+      description: "Team advice merged",
+    });
+
+    // Mark as accepted
+    setDiscussionMessages(prev =>
+      prev.map(m => m.id === messageId ? { ...m, status: "accepted" as const } : m)
+    );
+  }, [discussionMessages, writeMutation]);
+
+  const handleDismissResponse = useCallback((messageId: string) => {
+    setDiscussionMessages(prev =>
+      prev.map(m => m.id === messageId ? { ...m, status: "dismissed" as const } : m)
+    );
+  }, []);
+
+  const handleRespondToMessage = useCallback((messageId: string, response: string) => {
+    // The user is responding to a persona response — treat it as a follow-up question
+    const originalMessage = discussionMessages.find(m => m.id === messageId);
+    const context = originalMessage ? `(Responding to: "${originalMessage.content.slice(0, 100)}...") ` : "";
+    askQuestionMutation.mutate(`${context}${response}`);
+  }, [discussionMessages, askQuestionMutation]);
+
   // ── Browser expanded state (for full-screen capture flow) ──
   const [browserExpanded, setBrowserExpanded] = useState(false);
 
@@ -527,6 +688,10 @@ export default function Workspace() {
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
     setInterviewDirection(null);
+    // Reset discussion state
+    setDiscussionMessages([]);
+    setCurrentAdviceText(null);
+    setContextCollectionData(null);
     // Reset website state
     setWebsiteUrl("");
     setWireframeNotes("");
@@ -773,6 +938,8 @@ export default function Workspace() {
       discoveredCount={discoveredCount}
       browserExpanded={browserExpanded}
       onBrowserExpandedChange={setBrowserExpanded}
+      contextCollection={contextCollectionData}
+      referenceDocuments={referenceDocuments}
       browserHeaderActions={
         <ScreenCaptureButton
           onCapture={handleScreenCapture}
@@ -858,6 +1025,19 @@ export default function Workspace() {
           directionMode={interviewDirection?.mode}
           onAnswer={handleInterviewAnswer}
           onEnd={handleEndInterview}
+          // Advice and dismiss
+          onViewAdvice={handleViewAdvice}
+          onDismissQuestion={handleDismissQuestion}
+          adviceText={currentAdviceText}
+          isLoadingAdvice={adviceMutation.isPending}
+          // Ask question
+          onAskQuestion={handleAskQuestion}
+          isLoadingAskResponse={askQuestionMutation.isPending}
+          // Discussion messages
+          discussionMessages={discussionMessages}
+          onAcceptResponse={handleAcceptResponse}
+          onDismissResponse={handleDismissResponse}
+          onRespondToMessage={handleRespondToMessage}
         />
       </div>
     </div>
