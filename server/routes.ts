@@ -4,33 +4,8 @@ import { getAuth } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt } from "./crypto";
 import OpenAI from "openai";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { LLMPlanner } = require("bilko-flow/dist/llm/llm-planner") as {
-  LLMPlanner: new (config: {
-    provider: string;
-    model: string;
-    apiKey: string;
-    baseUrl?: string;
-    temperature?: number;
-  }) => {
-    proposeWorkflow(goal: {
-      description: string;
-      targetDslVersion: string;
-      determinismTarget?: { targetGrade: string };
-    }): Promise<{
-      name: string;
-      description?: string;
-      steps: Array<{
-        id: string;
-        name: string;
-        type: string;
-        description?: string;
-        dependsOn?: string[];
-      }>;
-      plannerInfo: { name: string; version: string };
-    }>;
-  };
-};
+// @ts-ignore - imported via custom exports subpath
+import { LLMPlanner } from "bilko-flow/llm";
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -2176,7 +2151,7 @@ Output only valid JSON, no markdown wrapping.`
       const response: PlannerProposeResponse = {
         name: proposal.name,
         description: proposal.description || description,
-        steps: proposal.steps.map((step) => ({
+        steps: proposal.steps.map((step: any) => ({
           id: step.id,
           name: step.name,
           type: step.type,
