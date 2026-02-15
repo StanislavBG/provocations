@@ -1048,7 +1048,7 @@ export default function Workspace() {
                 id: generateId("v"),
                 text: " ",
                 timestamp: Date.now(),
-                description: "Streaming workspace initialized",
+                description: "Capture workspace initialized",
               };
               setVersions([initialVersion]);
             }}

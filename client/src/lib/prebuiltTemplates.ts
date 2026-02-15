@@ -183,14 +183,14 @@ Key endpoints the backend needs:
   },
   {
     id: "streaming",
-    title: "Streaming",
-    shortLabel: "Streaming",
-    subtitle: "Requirements via dynamic web exploration",
+    title: "Screen Capture",
+    shortLabel: "Capture",
+    subtitle: "Screenshots & annotations to requirements",
     description:
-      "Discover requirements while referencing a live website or wireframe. An agent asks sequential questions — exploring pages, flows, and interactions — until your spec is crystal clear. The output is a markdown requirements document.",
+      "Capture screenshots, annotate them, and transform your observations into structured requirements. An agent asks sequential questions — exploring what you've captured — until the spec is crystal clear. The output is a markdown requirements document.",
     icon: "radio",
     objective:
-      "Discover and refine requirements for a website through dynamic exploration and iterative questioning",
+      "Discover and refine requirements through captured screenshots, annotations, and iterative questioning",
     starterText: "",
     draftQuestions: [],
     templateContent: "",
