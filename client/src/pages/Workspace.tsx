@@ -6,7 +6,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
-import { StreamingDialogue } from "@/components/StreamingDialogue";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
 import { ReadingPane } from "@/components/ReadingPane";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
@@ -38,7 +37,6 @@ import {
   Loader2,
   Share2,
   Copy,
-  Info,
 } from "lucide-react";
 import type {
   Document,
@@ -51,11 +49,7 @@ import type {
   EditHistoryEntry,
   InterviewEntry,
   InterviewQuestionResponse,
-  StreamingDialogueEntry,
-  StreamingRequirement,
-  StreamingQuestionResponse,
   WireframeAnalysisResponse,
-  StreamingRefineResponse,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -124,12 +118,6 @@ export default function Workspace() {
     guidance?: string;
   } | null>(null);
 
-  // ── Streaming (Website) state ──
-  const [streamingDialogueEntries, setStreamingDialogueEntries] = useState<StreamingDialogueEntry[]>([]);
-  const [streamingRequirements, setStreamingRequirements] = useState<StreamingRequirement[]>([]);
-  const [streamingCurrentQuestion, setStreamingCurrentQuestion] = useState<string | null>(null);
-  const [streamingCurrentTopic, setStreamingCurrentTopic] = useState<string | null>(null);
-  const [isStreamingDialogueActive, setIsStreamingDialogueActive] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [wireframeNotes, setWireframeNotes] = useState("");
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
@@ -410,87 +398,6 @@ export default function Workspace() {
     },
   });
 
-  // ── Streaming mutations ──
-
-  const streamingQuestionMutation = useMutation({
-    mutationFn: async (overrideEntries?: StreamingDialogueEntry[]) => {
-      const entries = overrideEntries ?? streamingDialogueEntries;
-      // Enrich wireframe notes with full analysis context
-      const analysisParts: string[] = [];
-      if (wireframeNotes) analysisParts.push(wireframeNotes);
-      if (wireframeAnalysis) {
-        if (wireframeAnalysis.analysis) {
-          analysisParts.push(`[SITE ANALYSIS]: ${wireframeAnalysis.analysis}`);
-        }
-        if (wireframeAnalysis.components.length > 0) {
-          analysisParts.push(`[COMPONENTS]: ${wireframeAnalysis.components.join(", ")}`);
-        }
-        if (wireframeAnalysis.suggestions.length > 0) {
-          analysisParts.push(`[SUGGESTIONS]: ${wireframeAnalysis.suggestions.join("; ")}`);
-        }
-        if (wireframeAnalysis.primaryContent) {
-          analysisParts.push(`[PRIMARY CONTENT]: ${wireframeAnalysis.primaryContent}`);
-        }
-        if (wireframeAnalysis.siteMap && wireframeAnalysis.siteMap.length > 0) {
-          const siteMapStr = wireframeAnalysis.siteMap.map(p => `${"  ".repeat(p.depth)}${p.title}${p.url ? ` (${p.url})` : ""}`).join("\n");
-          analysisParts.push(`[SITE MAP]:\n${siteMapStr}`);
-        }
-        if (wireframeAnalysis.videos && wireframeAnalysis.videos.length > 0) {
-          analysisParts.push(`[VIDEOS]: ${wireframeAnalysis.videos.map(v => v.title).join(", ")}`);
-        }
-        if (wireframeAnalysis.audioContent && wireframeAnalysis.audioContent.length > 0) {
-          analysisParts.push(`[AUDIO]: ${wireframeAnalysis.audioContent.map(a => a.title).join(", ")}`);
-        }
-        if (wireframeAnalysis.rssFeeds && wireframeAnalysis.rssFeeds.length > 0) {
-          analysisParts.push(`[RSS FEEDS]: ${wireframeAnalysis.rssFeeds.map(f => f.title).join(", ")}`);
-        }
-        if (wireframeAnalysis.images && wireframeAnalysis.images.length > 0) {
-          analysisParts.push(`[IMAGES]: ${wireframeAnalysis.images.map(img => `${img.title} (${img.type || "image"})`).join(", ")}`);
-        }
-      }
-      const enrichedNotes = analysisParts.length > 0 ? analysisParts.join("\n") : undefined;
-
-      const response = await apiRequest("POST", "/api/streaming/question", {
-        objective,
-        secondaryObjective: secondaryObjective.trim() || undefined,
-        document: document.rawText || undefined,
-        websiteUrl: websiteUrl || undefined,
-        wireframeNotes: enrichedNotes,
-        previousEntries: entries.length > 0 ? entries : undefined,
-        requirements: streamingRequirements.length > 0 ? streamingRequirements : undefined,
-      });
-      return await response.json() as StreamingQuestionResponse;
-    },
-    onSuccess: (data) => {
-      const agentEntry: StreamingDialogueEntry = {
-        id: generateId("se"),
-        role: "agent",
-        content: data.question,
-        timestamp: Date.now(),
-      };
-      setStreamingDialogueEntries(prev => [...prev, agentEntry]);
-      setStreamingCurrentQuestion(data.question);
-      setStreamingCurrentTopic(data.topic);
-
-      if (data.suggestedRequirement) {
-        const newReq: StreamingRequirement = {
-          id: generateId("req"),
-          text: data.suggestedRequirement,
-          status: "draft",
-          timestamp: Date.now(),
-        };
-        setStreamingRequirements(prev => [...prev, newReq]);
-      }
-    },
-    onError: (error) => {
-      toast({
-        title: "Question Error",
-        description: error instanceof Error ? error.message : "Failed to generate question",
-        variant: "destructive",
-      });
-    },
-  });
-
   const streamingAnalysisMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/streaming/wireframe-analysis", {
@@ -504,63 +411,11 @@ export default function Workspace() {
     },
     onSuccess: (data) => {
       setWireframeAnalysis(data);
-      setIsStreamingDialogueActive(true);
     },
     onError: (error) => {
       toast({
         title: "Analysis Failed",
         description: error instanceof Error ? error.message : "Failed to analyze website",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const streamingRefineMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/streaming/refine", {
-        objective,
-        secondaryObjective: secondaryObjective.trim() || undefined,
-        dialogueEntries: streamingDialogueEntries,
-        existingRequirements: streamingRequirements.length > 0 ? streamingRequirements : undefined,
-        document: document.rawText || undefined,
-        websiteUrl: websiteUrl || undefined,
-        wireframeAnalysis: wireframeAnalysis || undefined,
-      });
-      return await response.json() as StreamingRefineResponse;
-    },
-    onSuccess: (data) => {
-      if (data.requirements.length > 0) {
-        setStreamingRequirements(data.requirements);
-      }
-
-      if (data.updatedDocument) {
-        const newVersion: DocumentVersion = {
-          id: generateId("v"),
-          text: data.updatedDocument,
-          timestamp: Date.now(),
-          description: `Requirements refined: ${data.summary}`,
-        };
-        setVersions(prev => [...prev, newVersion]);
-        setDocument({ ...document, rawText: data.updatedDocument });
-
-        const historyEntry: EditHistoryEntry = {
-          instruction: "Refine requirements from streaming dialogue",
-          instructionType: "restructure",
-          summary: data.summary,
-          timestamp: Date.now(),
-        };
-        setEditHistory(prev => [...prev.slice(-9), historyEntry]);
-      }
-
-      toast({
-        title: "Requirements Refined",
-        description: data.summary,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Refinement Failed",
-        description: error instanceof Error ? error.message : "Failed to refine",
         variant: "destructive",
       });
     },
@@ -584,6 +439,19 @@ export default function Workspace() {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [websiteUrl]);
+
+  // Auto-start interview with Think Big persona when entering workspace
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!isInputPhase && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      const direction = { mode: "challenge" as DirectionMode, personas: ["thinking_bigger" as ProvocationType] };
+      setInterviewDirection(direction);
+      setIsInterviewActive(true);
+      interviewQuestionMutation.mutate({ direction });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInputPhase]);
 
   // ── Interview handlers ──
 
@@ -617,49 +485,10 @@ export default function Workspace() {
 
   // Merge discussion content to draft without ending the session
   const handleMergeToDraft = useCallback(() => {
-    if (activeToolboxApp === "provoke") {
-      if (interviewEntries.length > 0 && !interviewMergeMutation.isPending) {
-        interviewMergeMutation.mutate();
-      }
-    } else {
-      if (streamingDialogueEntries.length > 0 && !streamingRefineMutation.isPending) {
-        streamingRefineMutation.mutate();
-      }
+    if (interviewEntries.length > 0 && !interviewMergeMutation.isPending) {
+      interviewMergeMutation.mutate();
     }
-  }, [activeToolboxApp, interviewEntries.length, interviewMergeMutation, streamingDialogueEntries.length, streamingRefineMutation]);
-
-  // ── Streaming handlers ──
-
-  const handleStreamingStartDialogue = useCallback(() => {
-    setIsStreamingDialogueActive(true);
-  }, []);
-
-  const handleStreamingAnswer = useCallback((answer: string) => {
-    const userEntry: StreamingDialogueEntry = {
-      id: generateId("se"),
-      role: "user",
-      content: answer,
-      timestamp: Date.now(),
-    };
-    const updatedEntries = [...streamingDialogueEntries, userEntry];
-    setStreamingDialogueEntries(updatedEntries);
-    setStreamingCurrentQuestion(null);
-    setStreamingCurrentTopic(null);
-
-    streamingQuestionMutation.mutate(updatedEntries);
-  }, [streamingDialogueEntries, streamingQuestionMutation]);
-
-  const handleStreamingUpdateRequirement = useCallback((id: string, text: string) => {
-    setStreamingRequirements(prev =>
-      prev.map(r => r.id === id ? { ...r, text, status: "revised" as const } : r)
-    );
-  }, []);
-
-  const handleStreamingConfirmRequirement = useCallback((id: string) => {
-    setStreamingRequirements(prev =>
-      prev.map(r => r.id === id ? { ...r, status: "confirmed" as const } : r)
-    );
-  }, []);
+  }, [interviewEntries.length, interviewMergeMutation]);
 
   const handleBrowserUrlChange = useCallback((url: string) => {
     setWebsiteUrl(url);
@@ -696,12 +525,7 @@ export default function Workspace() {
     setCurrentInterviewQuestion(null);
     setCurrentInterviewTopic(null);
     setInterviewDirection(null);
-    // Reset streaming state
-    setStreamingDialogueEntries([]);
-    setStreamingRequirements([]);
-    setStreamingCurrentQuestion(null);
-    setStreamingCurrentTopic(null);
-    setIsStreamingDialogueActive(false);
+    // Reset website state
     setWebsiteUrl("");
     setWireframeNotes("");
     setWireframeAnalysis(null);
@@ -709,6 +533,7 @@ export default function Workspace() {
     lastAnalyzedUrl.current = "";
     // Reset toolbox
     setActiveToolboxApp("provoke");
+    autoStartedRef.current = false;
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -987,20 +812,19 @@ export default function Workspace() {
             <p className="text-xs text-muted-foreground">This is where the AI challenges your thinking. It asks provocative questions based on your personas and direction. Answer using voice or text — each response deepens and refines your document. Use "Merge to Draft" to push your answers into the document at any time.</p>
           </TooltipContent>
         </Tooltip>
-        {(isInterviewActive || isStreamingDialogueActive) && (
+        {isInterviewActive && (
           <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
         )}
         <div className="flex-1" />
-        {((activeToolboxApp === "provoke" && interviewEntries.length > 0) ||
-          (activeToolboxApp === "website" && streamingDialogueEntries.length > 0)) && (
+        {interviewEntries.length > 0 && (
           <Button
             variant="outline"
             size="sm"
             className="gap-1.5 text-xs h-7"
             onClick={handleMergeToDraft}
-            disabled={interviewMergeMutation.isPending || streamingRefineMutation.isPending}
+            disabled={interviewMergeMutation.isPending}
           >
-            {interviewMergeMutation.isPending || streamingRefineMutation.isPending ? (
+            {interviewMergeMutation.isPending ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Merging...
@@ -1017,37 +841,17 @@ export default function Workspace() {
 
       {/* Panel content */}
       <div className="flex-1 overflow-hidden">
-        {activeToolboxApp === "provoke" ? (
-          <InterviewPanel
-            isActive={isInterviewActive}
-            entries={interviewEntries}
-            currentQuestion={currentInterviewQuestion}
-            currentTopic={currentInterviewTopic}
-            isLoadingQuestion={interviewQuestionMutation.isPending}
-            isMerging={interviewSummaryMutation.isPending}
-            directionMode={interviewDirection?.mode}
-            onAnswer={handleInterviewAnswer}
-            onEnd={handleEndInterview}
-          />
-        ) : (
-          <StreamingDialogue
-            entries={streamingDialogueEntries}
-            requirements={streamingRequirements}
-            currentQuestion={streamingCurrentQuestion}
-            currentTopic={streamingCurrentTopic}
-            isLoadingQuestion={streamingQuestionMutation.isPending}
-            isRefining={streamingRefineMutation.isPending}
-            onAnswer={handleStreamingAnswer}
-            onStart={handleStreamingStartDialogue}
-            onRefineRequirements={() => streamingRefineMutation.mutate()}
-            onUpdateRequirement={handleStreamingUpdateRequirement}
-            onConfirmRequirement={handleStreamingConfirmRequirement}
-            isActive={isStreamingDialogueActive}
-            hasAnalysis={wireframeAnalysis !== null}
-            objective={objective}
-            documentText={document.rawText}
-          />
-        )}
+        <InterviewPanel
+          isActive={isInterviewActive}
+          entries={interviewEntries}
+          currentQuestion={currentInterviewQuestion}
+          currentTopic={currentInterviewTopic}
+          isLoadingQuestion={interviewQuestionMutation.isPending}
+          isMerging={interviewSummaryMutation.isPending}
+          directionMode={interviewDirection?.mode}
+          onAnswer={handleInterviewAnswer}
+          onEnd={handleEndInterview}
+        />
       </div>
     </div>
   );
