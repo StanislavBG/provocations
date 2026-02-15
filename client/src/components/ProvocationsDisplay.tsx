@@ -33,86 +33,37 @@ import {
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import type { Provocation, ProvocationType } from "@shared/schema";
+import { builtInPersonas } from "@shared/personas";
 
-// ── Persona metadata ──
+// ── Persona metadata (derived from centralized persona definitions) ──
 
-const personaIcons: Record<ProvocationType, typeof Blocks> = {
-  architect: Blocks,
-  quality_engineer: ShieldCheck,
-  ux_designer: Palette,
-  tech_writer: BookText,
-  product_manager: Briefcase,
-  security_engineer: Lock,
-  thinking_bigger: Rocket,
+const iconMap: Record<string, typeof Blocks> = {
+  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket,
 };
 
-const personaColors: Record<ProvocationType, string> = {
-  architect: "text-cyan-600 dark:text-cyan-400",
-  quality_engineer: "text-rose-600 dark:text-rose-400",
-  ux_designer: "text-fuchsia-600 dark:text-fuchsia-400",
-  tech_writer: "text-amber-600 dark:text-amber-400",
-  product_manager: "text-blue-600 dark:text-blue-400",
-  security_engineer: "text-red-600 dark:text-red-400",
-  thinking_bigger: "text-orange-600 dark:text-orange-400",
-};
+const personaIcons: Record<ProvocationType, typeof Blocks> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, iconMap[p.icon] || Blocks])
+) as Record<ProvocationType, typeof Blocks>;
 
-const personaBgColors: Record<ProvocationType, string> = {
-  architect: "bg-cyan-50 dark:bg-cyan-950/30",
-  quality_engineer: "bg-rose-50 dark:bg-rose-950/30",
-  ux_designer: "bg-fuchsia-50 dark:bg-fuchsia-950/30",
-  tech_writer: "bg-amber-50 dark:bg-amber-950/30",
-  product_manager: "bg-blue-50 dark:bg-blue-950/30",
-  security_engineer: "bg-red-50 dark:bg-red-950/30",
-  thinking_bigger: "bg-orange-50 dark:bg-orange-950/30",
-};
+const personaColors: Record<ProvocationType, string> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, p.color.text])
+) as Record<ProvocationType, string>;
 
-const personaLabels: Record<ProvocationType, string> = {
-  architect: "Architect",
-  quality_engineer: "QA Engineer",
-  ux_designer: "UX Designer",
-  tech_writer: "Tech Writer",
-  product_manager: "Product Manager",
-  security_engineer: "Security",
-  thinking_bigger: "Think Big",
-};
+const personaBgColors: Record<ProvocationType, string> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, p.color.bg])
+) as Record<ProvocationType, string>;
 
-const personaDescriptions: Record<ProvocationType, { role: string; advice: string; challenge: string }> = {
-  architect: {
-    role: "Reviews system design, boundaries, API contracts, and data flow.",
-    advice: "Suggests architectural improvements, cleaner abstractions, and better separation of concerns.",
-    challenge: "Pushes back on unclear boundaries, missing contracts, coupling, and technical debt.",
-  },
-  quality_engineer: {
-    role: "Reviews testing gaps, edge cases, error handling, and reliability.",
-    advice: "Suggests acceptance criteria, test strategies, and observable quality measures.",
-    challenge: "Pushes back on missing error handling, untested paths, and regression risks.",
-  },
-  ux_designer: {
-    role: "Reviews user flows, discoverability, accessibility, and error states.",
-    advice: "Suggests UI improvements, better onboarding, and clearer navigation paths.",
-    challenge: "Pushes back on confusing flows, missing states, and accessibility gaps.",
-  },
-  tech_writer: {
-    role: "Reviews documentation, naming, and UI copy for clarity.",
-    advice: "Suggests clearer labels, better explanations, and self-explanatory interfaces.",
-    challenge: "Pushes back on jargon, missing context, unclear error messages, and documentation gaps.",
-  },
-  product_manager: {
-    role: "Reviews business value, user stories, and prioritization.",
-    advice: "Suggests success metrics, clearer acceptance criteria, and stronger user value propositions.",
-    challenge: "Pushes back on features without clear outcomes, missing priorities, and vague user stories.",
-  },
-  security_engineer: {
-    role: "Reviews data privacy, authentication, authorization, and compliance.",
-    advice: "Suggests secure defaults, input validation, and audit trail improvements.",
-    challenge: "Pushes back on missing threat models, weak auth, and data exposure risks.",
-  },
-  thinking_bigger: {
-    role: "Scales impact and outcomes without changing the core idea.",
-    advice: "Suggests bolder bets within constraints — new workflows, adjacent product lines, and simplifications designed for 100,000+ people.",
-    challenge: "Pushes you to target outcome-level impact (retention, cost-to-serve, accessibility, resilience) and raise scale concerns early.",
-  },
-};
+const personaLabels: Record<ProvocationType, string> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, p.label])
+) as Record<ProvocationType, string>;
+
+const personaDescriptions: Record<ProvocationType, { role: string; advice: string; challenge: string }> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, {
+    role: p.role,
+    advice: p.summary.advice,
+    challenge: p.summary.challenge,
+  }])
+) as Record<ProvocationType, { role: string; advice: string; challenge: string }>;
 
 // Re-export for TranscriptOverlay
 export { personaIcons, personaColors, personaBgColors, personaLabels };
