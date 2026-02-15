@@ -91,10 +91,10 @@ export type Advice = z.infer<typeof adviceSchema>;
 // ── Generate challenge request ──
 
 export const generateChallengeRequestSchema = z.object({
-  document: z.string().min(1, "Document is required"),
-  objective: z.string().optional(),
-  personaIds: z.array(z.string()).optional(),  // filter to specific personas; empty = all
-  guidance: z.string().optional(),             // user-specific focus area
+  document: z.string().min(1, "Document is required"),         // current draft to challenge
+  objective: z.string().min(1, "Objective is required"),       // what the document is trying to achieve
+  personaIds: z.array(z.string()).optional(),                  // filter to specific personas; empty = all
+  guidance: z.string().optional(),                             // user-specific focus area
   referenceDocuments: z.array(z.lazy(() => referenceDocumentSchema)).optional(),
 });
 
@@ -103,12 +103,12 @@ export type GenerateChallengeRequest = z.infer<typeof generateChallengeRequestSc
 // ── Generate advice request ──
 
 export const generateAdviceRequestSchema = z.object({
-  document: z.string().min(1, "Document is required"),
-  objective: z.string().optional(),
-  challengeId: z.string().min(1, "Challenge ID is required"),
-  challengeTitle: z.string(),
-  challengeContent: z.string(),
-  personaId: z.string().min(1, "Persona ID is required"),  // which persona to generate advice from
+  document: z.string().min(1, "Document is required"),        // current draft — the persona reads this
+  objective: z.string().min(1, "Objective is required"),      // what the document is trying to achieve
+  challengeId: z.string().min(1, "Challenge ID is required"), // which challenge to advise on
+  challengeTitle: z.string().min(1, "Challenge title is required"),
+  challengeContent: z.string().min(1, "Challenge content is required"),
+  personaId: z.string().min(1, "Persona ID is required"),     // which persona generates the advice
 });
 
 export type GenerateAdviceRequest = z.infer<typeof generateAdviceRequestSchema>;
