@@ -23,62 +23,35 @@ import {
   Pencil,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode } from "@shared/schema";
+import { builtInPersonas, getAllPersonas } from "@shared/personas";
 
 // ── Toolbox app type ──
 
 export type ToolboxApp = "provoke" | "website";
 
-// ── Persona metadata ──
+// ── Persona metadata (derived from centralized persona definitions) ──
 
-const personaIcons: Record<ProvocationType, typeof Blocks> = {
-  architect: Blocks,
-  quality_engineer: ShieldCheck,
-  ux_designer: Palette,
-  tech_writer: BookText,
-  product_manager: Briefcase,
-  security_engineer: Lock,
-  thinking_bigger: Rocket,
+const iconMap: Record<string, typeof Blocks> = {
+  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket,
 };
 
-const personaColors: Record<ProvocationType, string> = {
-  architect: "text-cyan-600 dark:text-cyan-400",
-  quality_engineer: "text-rose-600 dark:text-rose-400",
-  ux_designer: "text-fuchsia-600 dark:text-fuchsia-400",
-  tech_writer: "text-amber-600 dark:text-amber-400",
-  product_manager: "text-blue-600 dark:text-blue-400",
-  security_engineer: "text-red-600 dark:text-red-400",
-  thinking_bigger: "text-orange-600 dark:text-orange-400",
-};
+const personaIcons: Record<ProvocationType, typeof Blocks> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, iconMap[p.icon] || Blocks])
+) as Record<ProvocationType, typeof Blocks>;
 
-const personaLabels: Record<ProvocationType, string> = {
-  architect: "Architect",
-  quality_engineer: "QA Engineer",
-  ux_designer: "UX Designer",
-  tech_writer: "Tech Writer",
-  product_manager: "Product Manager",
-  security_engineer: "Security",
-  thinking_bigger: "Think Big",
-};
+const personaColors: Record<ProvocationType, string> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, p.color.text])
+) as Record<ProvocationType, string>;
 
-const personaDescriptions: Record<ProvocationType, string> = {
-  architect: "Examines system design, boundaries, API contracts, and data flow. This persona ensures your architecture is sound, scalable, and well-structured before you build.",
-  quality_engineer: "Probes for testing gaps, edge cases, error handling, and reliability. Catches the blind spots that break things in production.",
-  ux_designer: "Evaluates user flows, discoverability, accessibility, and error states. Makes sure real people can actually use what you're building.",
-  tech_writer: "Reviews documentation, naming conventions, and UI copy for clarity. If someone can't understand it, it doesn't exist.",
-  product_manager: "Challenges business value, user stories, and prioritization. Asks the hard question: does this actually matter to users?",
-  security_engineer: "Audits data privacy, authentication, authorization, and compliance. Finds the vulnerabilities before someone else does.",
-  thinking_bigger: "Pushes you to scale impact and outcomes without changing the core idea. What if this was 10x bigger?",
-};
+const personaLabels: Record<ProvocationType, string> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, p.label])
+) as Record<ProvocationType, string>;
 
-const allPersonaTypes: ProvocationType[] = [
-  "thinking_bigger",
-  "architect",
-  "quality_engineer",
-  "ux_designer",
-  "tech_writer",
-  "product_manager",
-  "security_engineer",
-];
+const personaDescriptions: Record<ProvocationType, string> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, p]) => [id, p.description])
+) as Record<ProvocationType, string>;
+
+const allPersonaTypes: ProvocationType[] = getAllPersonas().map((p) => p.id as ProvocationType);
 
 interface ProvocationToolboxProps {
   activeApp: ToolboxApp;
