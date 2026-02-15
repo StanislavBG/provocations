@@ -4,6 +4,7 @@
 Provocations is a cognitive enhancement tool designed to challenge users and enhance critical thinking rather than acting as a traditional AI assistant. The core philosophy: "Would you rather have a tool that thinks for you, or a tool that makes you think?"
 
 ## Recent Changes
+- February 15, 2026: Migrated all LLM calls from OpenAI to Anthropic Claude — uses claude-opus-4-20250918 (primary) and claude-sonnet-4-20250514 (lightweight). Removed openai package entirely. ANTHROPIC_KEY secret used for API access. bilko-flow LLMPlanner also uses Claude via custom adapter registration.
 - February 1, 2026: Added text-based editing via pencil icon - select text, click pencil, type instruction to modify selected text with AI
 - January 31, 2026: Added transcript overlay panels - when recording from document selection, two panels appear over provocations showing raw transcript and merge summary
 - January 31, 2026: Added text selection voice merge - select text in document and a floating mic button appears for voice feedback integration
@@ -31,7 +32,7 @@ Provocations is a cognitive enhancement tool designed to challenge users and enh
 - **DimensionsToolbar**: Text refinement with tone and length controls
 - **ReadingPane**: Source material display with lens-filtered views
 
-### Backend (Express + OpenAI)
+### Backend (Express + Anthropic Claude)
 - `POST /api/analyze` - Analyzes text, generates lenses and provocations
 - `POST /api/expand` - Expands outline headings into paragraphs
 - `POST /api/refine` - Refines text with tone and length adjustments
@@ -57,7 +58,7 @@ Provocations is a cognitive enhancement tool designed to challenge users and enh
 
 ## Tech Stack
 - Frontend: React 18, Vite, TailwindCSS, shadcn/ui, TanStack Query
-- Backend: Express, OpenAI GPT-5.2
+- Backend: Express, Anthropic Claude Opus 4.6 (claude-opus-4-20250918)
 - State: React useState/useCallback (session-based, no persistence)
 
 ## Running the Project
