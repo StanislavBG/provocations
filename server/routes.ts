@@ -300,6 +300,13 @@ function formatStyleGuidance(docs: ReferenceDocument[]): string {
 
 // Persona response examples for better guidance
 const provocationResponseExamples: Record<ProvocationType, string> = {
+  thinking_bigger: `Example good responses to Think Big feedback:
+- "You're right — I haven't thought about what happens at 100,000 users. Let me address the scaling bottleneck"
+- "Good catch — the onboarding flow has too many steps for a self-service product at scale"
+- "I should define the retention metric this feature is supposed to move"
+- "Let me simplify this to work without hand-holding — designed for 100,000+ people"
+The goal is to scale impact and outcomes (retention, cost-to-serve, accessibility, resilience) without changing the core idea.`,
+
   architect: `Example good responses to architecture feedback:
 - "I should define the API contract between the frontend and this service"
 - "Good catch — the boundary between X and Y components isn't clear"

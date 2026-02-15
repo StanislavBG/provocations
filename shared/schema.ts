@@ -3,6 +3,7 @@ import { z } from "zod";
 // ── Persona types (each persona provides Advice and Challenge feedback) ──
 
 export const provocationType = [
+  "thinking_bigger",
   "architect",
   "quality_engineer",
   "ux_designer",
