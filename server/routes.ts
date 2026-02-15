@@ -58,6 +58,10 @@ function getOpenAI(): OpenAI {
   return _openai;
 }
 
+/** Model constants — single place to swap model identifiers */
+const MODEL_PRIMARY = "gpt-5.2";       // Main model for document editing, challenges, advice, etc.
+const MODEL_FAST    = "gpt-5.2";       // Lightweight tasks: cleanup, planning, persona selection
+
 // Derive provocation prompts from centralized persona definitions (challenge prompt is the default)
 const provocationPrompts: Record<ProvocationType, string> = Object.fromEntries(
   Object.entries(builtInPersonas).map(([id, persona]) => [id, persona.prompts.challenge])
@@ -137,7 +141,7 @@ function isLikelyVoiceTranscript(text: string): boolean {
 async function cleanVoiceTranscript(transcript: string): Promise<string> {
   try {
     const response = await getOpenAI().chat.completions.create({
-      model: "gpt-4o-mini",
+      model: MODEL_FAST,
       messages: [
         {
           role: "system",
@@ -190,7 +194,7 @@ async function generateEditPlan(
 ): Promise<string> {
   try {
     const response = await getOpenAI().chat.completions.create({
-      model: "gpt-4o-mini",
+      model: MODEL_FAST,
       messages: [
         {
           role: "system",
@@ -442,7 +446,7 @@ export async function registerRoutes(
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 4096,
         messages: [
           {
@@ -570,7 +574,7 @@ Respond with a JSON object:
 Output only valid JSON, no markdown.`;
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 2048,
         messages: [
           { role: "system", content: systemPrompt },
@@ -781,7 +785,7 @@ The user's response should be integrated thoughtfully - don't just append it, we
 
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
       const documentResponse = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 8192,
         messages: [
           {
@@ -837,7 +841,7 @@ Please evolve the document according to this instruction.`
 
       // Analyze changes for structured output
       const analysisResponse = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 1024,
         messages: [
           {
@@ -987,7 +991,7 @@ STRATEGY: ${strategy}`);
       res.write(`data: ${JSON.stringify({ type: 'meta', instructionType })}\n\n`);
 
       const stream = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 8192,
         stream: true,
         messages: [
@@ -1052,7 +1056,7 @@ Output only the evolved markdown document. No explanations.`
       // AIM mode uses a dedicated prompt and higher-capability model
       if (context === "aim") {
         const aimResponse = await getOpenAI().chat.completions.create({
-          model: "gpt-4o-mini",
+          model: MODEL_FAST,
           messages: [
             {
               role: "system",
@@ -1131,7 +1135,7 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
       }
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-4o-mini",
+        model: MODEL_FAST,
         messages: [
           {
             role: "system",
@@ -1237,7 +1241,7 @@ Embody these personas when crafting your questions. Each question should reflect
         : "";
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 1024,
         messages: [
           {
@@ -1313,7 +1317,7 @@ Output only valid JSON, no markdown.`
       const qaText = entries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n---\n\n");
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 2048,
         messages: [
           {
@@ -1386,7 +1390,7 @@ Output only the instruction text. No meta-commentary.`
 
       // Step 1: Identify the 3 most relevant personas for this question
       const selectionResponse = await getOpenAI().chat.completions.create({
-        model: "gpt-4o-mini",
+        model: MODEL_FAST,
         max_tokens: 256,
         messages: [
           {
@@ -1447,7 +1451,7 @@ Output only valid JSON.`
       ).join("\n\n");
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 3072,
         messages: [
           {
@@ -1808,7 +1812,7 @@ Output only valid JSON, no markdown.`
       const isFirstQuestion = !previousEntries || previousEntries.length === 0;
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 1024,
         messages: [
           {
@@ -1882,7 +1886,7 @@ Output only valid JSON, no markdown.`
       const { objective, websiteUrl, wireframeNotes, document: docText } = parsed.data;
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 4096,
         messages: [
           {
@@ -2014,7 +2018,7 @@ Output only valid JSON, no markdown.`
         : "";
 
       const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
+        model: MODEL_PRIMARY,
         max_completion_tokens: 4096,
         messages: [
           {
