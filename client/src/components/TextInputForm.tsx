@@ -153,11 +153,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   const hasObjectiveType = !!(activePrebuilt || isCustomObjective);
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="w-full max-w-5xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto px-6 py-4 gap-5" style={{ scrollbarGutter: "stable" }}>
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="w-full max-w-6xl mx-auto flex flex-col flex-1 min-h-0 px-6 py-4 gap-3">
 
         {/* ── STEP ONE: Your objective ── */}
-        <div className="space-y-3" ref={stepOneRef}>
+        <div className="shrink-0 space-y-2" ref={stepOneRef}>
           <div className="flex items-center gap-2">
             <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
               1
@@ -178,7 +178,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                   <button
                     key={template.id}
                     onClick={() => handleSelectPrebuilt(template)}
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all duration-150 ${
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
                       isActive
                         ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
                         : "border-border hover:border-primary/40 hover:bg-primary/5"
@@ -194,7 +194,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               {/* "Custom" chip */}
               <button
                 onClick={handleSelectCustom}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-sm transition-all duration-150 ${
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed text-sm transition-all duration-150 ${
                   isCustomObjective
                     ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
                     : "border-border hover:border-primary/40 hover:bg-primary/5"
@@ -243,7 +243,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               value={objective}
               onChange={setObjective}
               minRows={2}
-              maxRows={4}
+              maxRows={3}
               autoFocus
               voice={{ mode: "replace" }}
               onVoiceTranscript={setObjective}
@@ -256,8 +256,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
         {/* ── STEP TWO: Your context ── */}
         {hasObjectiveType && (
-        <div className="flex flex-col flex-1 min-h-0 gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col flex-1 min-h-0 gap-2">
+          <div className="shrink-0 flex items-center gap-2">
             <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
               2
             </div>
@@ -265,78 +265,77 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               Share your thinking — notes, ideas, or speak your mind
             </h2>
           </div>
-            <div className="flex flex-1 min-h-0 gap-4">
-              {/* Left column: context capture widgets + text input */}
-              <div className="flex flex-col flex-1 min-h-0 gap-3 min-w-0">
-                {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
-                  <DraftQuestionsPanel
-                    questions={activePrebuilt.draftQuestions}
-                    onResponse={handleDraftQuestionResponse}
-                  />
-                )}
-                <ProvokeText
-                  chrome="container"
-                  label="Your context"
-                  labelIcon={NotebookPen}
-                  description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
-                  containerClassName="flex-1 min-h-0 flex flex-col"
-                  data-testid="input-source-text"
-                  placeholder="Paste your notes or click the mic to speak your ideas..."
-                  className="text-sm leading-relaxed font-serif min-h-[140px]"
-                  value={text}
-                  onChange={setText}
-                  minRows={8}
-                  maxRows={30}
-                  autoFocus
-                  voice={{ mode: "append" }}
-                  onVoiceTranscript={(transcript) =>
-                    setText((prev) => (prev ? prev + " " + transcript : transcript))
-                  }
-                  onRecordingChange={(recording) => {
-                    if (recording && autoRecordDraft) {
-                      setAutoRecordDraft(false);
-                    }
-                  }}
-                  autoRecord={autoRecordDraft}
-                  textProcessor={(t, mode) =>
-                    processText(t, mode, mode === "clean" ? "source" : undefined)
-                  }
-                  extraSmartModes={aimSmartModes}
-                  showCharCount
-                  maxCharCount={10000}
-                  maxAudioDuration="5min"
+
+          <div className="flex flex-1 min-h-0 gap-4">
+            {/* Left column: draft questions + supporting context + context status */}
+            <div className="w-72 shrink-0 flex flex-col gap-3 min-h-0 overflow-y-auto">
+              {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
+                <DraftQuestionsPanel
+                  questions={activePrebuilt.draftQuestions}
+                  onResponse={handleDraftQuestionResponse}
                 />
+              )}
 
-                {/* Context capture area */}
-                <div className="rounded-lg border bg-card/50 p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Layers className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Supporting Context
-                    </span>
-                  </div>
-                  <ContextCapturePanel
-                    items={capturedContext}
-                    onItemsChange={onCapturedContextChange}
-                  />
+              {/* Context capture area */}
+              <div className="rounded-lg border bg-card/50 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Layers className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Supporting Context
+                  </span>
                 </div>
+                <ContextCapturePanel
+                  items={capturedContext}
+                  onItemsChange={onCapturedContextChange}
+                />
               </div>
 
-              {/* Right column: context status */}
-              <div className="w-56 shrink-0 hidden lg:block">
-                <div className="sticky top-0">
-                  <ContextStatusPanel items={capturedContext} />
-                </div>
-              </div>
+              {/* Context status — directly under capture */}
+              <ContextStatusPanel items={capturedContext} />
             </div>
+
+            {/* Right column: main text area (hero) */}
+            <ProvokeText
+              chrome="container"
+              label="Your context"
+              labelIcon={NotebookPen}
+              description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
+              containerClassName="flex-1 min-h-0 flex flex-col min-w-0"
+              data-testid="input-source-text"
+              placeholder="Paste your notes or click the mic to speak your ideas..."
+              className="text-sm leading-relaxed font-serif"
+              value={text}
+              onChange={setText}
+              minRows={6}
+              maxRows={30}
+              autoFocus
+              voice={{ mode: "append" }}
+              onVoiceTranscript={(transcript) =>
+                setText((prev) => (prev ? prev + " " + transcript : transcript))
+              }
+              onRecordingChange={(recording) => {
+                if (recording && autoRecordDraft) {
+                  setAutoRecordDraft(false);
+                }
+              }}
+              autoRecord={autoRecordDraft}
+              textProcessor={(t, mode) =>
+                processText(t, mode, mode === "clean" ? "source" : undefined)
+              }
+              extraSmartModes={aimSmartModes}
+              showCharCount
+              maxCharCount={10000}
+              maxAudioDuration="5min"
+            />
+          </div>
         </div>
         )}
       </div>
 
       {/* Fixed bottom action bar */}
       {hasObjectiveType && (
-        <div className="shrink-0 border-t bg-card px-6 py-3" style={{ scrollbarGutter: "stable" }}>
-          <div className="w-full max-w-5xl mx-auto flex items-center justify-end gap-3">
+        <div className="shrink-0 border-t bg-card px-6 py-2">
+          <div className="w-full max-w-6xl mx-auto flex items-center justify-end gap-3">
             <Button
               data-testid="button-analyze"
               onClick={handleSubmit}
