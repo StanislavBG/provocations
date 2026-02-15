@@ -60,8 +60,8 @@ const provocationPrompts: Record<ProvocationType, string> = Object.fromEntries(
   Object.entries(builtInPersonas).map(([id, persona]) => [id, persona.prompts.challenge])
 ) as Record<ProvocationType, string>;
 
-// Think Big vector descriptions for focused scaling questions
-const thinkBigVectorDescriptions: Record<string, { label: string; description: string; goal: string }> = {
+// CEO vector descriptions for focused scaling questions
+const ceoVectorDescriptions: Record<string, { label: string; description: string; goal: string }> = {
   tenancy_topology: {
     label: "Tenancy Topology: Silo vs. Pool",
     description: "How you isolate data. Shared Schema (Pool) vs. Dedicated Database (Silo) for compliance.",
@@ -336,12 +336,12 @@ The goal is to ensure every feature has clear purpose, measurement, and user val
 - "Let me add a threat model section for this integration"
 The goal is to ensure the system is secure by default and resilient to abuse.`,
 
-  thinking_bigger: `Example good responses to Think Big feedback:
-- "You're right — instead of just improving the UI, let me target a retention outcome"
-- "I should consider what breaks at 100k users and simplify the critical path"
-- "Let me frame this as a platform bet with an adjacent product extension"
-- "Good point — I should design for operational clarity, not just user delight"
-The goal is to scale impact and outcomes (retention, cost-to-serve, accessibility, resilience) while respecting constraints, and design for 100,000+ people.`,
+  ceo: `Example good responses to CEO feedback:
+- "You're right — I need to name who this actually helps and what success looks like for them"
+- "I should define a clear 'done' and assign ownership before expanding scope"
+- "Good point — I need to call out the tradeoffs we're accepting, not just the benefits"
+- "Let me add measurable outcomes so we know if this is actually working for the people it's meant to serve"
+The goal is to ensure the proposal truly improves outcomes for the intended people, is accountable (clear metrics and ownership), and protects trust (safety, privacy, reliability) as a first-class requirement.`,
 };
 
 // Strategy prompts for each instruction type
@@ -1158,19 +1158,19 @@ Be faithful to their intent - don't add information they didn't mention.`
           ? "Take an ADVISORY stance — suggest improvements, recommend approaches, and offer constructive guidance. Frame questions as opportunities to strengthen the document."
           : "Take a CHALLENGING stance — push back on assumptions, probe for weaknesses, and question claims. Frame questions as provocations that demand better answers.";
 
-        // Build Think Big vectors context if the thinking_bigger persona is active
-        let thinkBigContext = "";
-        if (directionPersonas.includes("thinking_bigger") && thinkBigVectors && thinkBigVectors.length > 0) {
+        // Build CEO vectors context if the ceo persona is active
+        let ceoContext = "";
+        if (directionPersonas.includes("ceo") && thinkBigVectors && thinkBigVectors.length > 0) {
           const vectorDescs = thinkBigVectors.map(v => {
-            const vec = thinkBigVectorDescriptions[v];
+            const vec = ceoVectorDescriptions[v];
             if (!vec) return "";
-            return `- ${vec.label}\n  ${vec.description}\n  Think Big Goal: ${vec.goal}`;
+            return `- ${vec.label}\n  ${vec.description}\n  Goal: ${vec.goal}`;
           }).filter(Boolean).join("\n\n");
 
-          thinkBigContext = `\n\nTHINK BIG FOCUS VECTORS (prioritize questions about these scaling dimensions):
+          ceoContext = `\n\nCEO FOCUS VECTORS (prioritize questions about these scaling dimensions):
 ${vectorDescs}
 
-When acting as the Think Big Advisor, focus your questions on these specific vectors. Push the user to think about how their product handles these concerns at scale.`;
+When acting as the CEO, focus your questions on these specific vectors. Push the user to think about how their product handles these concerns at scale while staying grounded in who it serves.`;
         }
 
         directionContext = `\n\nDIRECTION (the user has chosen specific personas and a mode):
@@ -1180,7 +1180,7 @@ ${modeInstruction}
 ACTIVE PERSONAS:
 ${personaDescs}
 
-Embody these personas when crafting your questions. Each question should reflect the perspective and expertise of one of the active personas. Include the persona name in the topic label.${thinkBigContext}`;
+Embody these personas when crafting your questions. Each question should reflect the perspective and expertise of one of the active personas. Include the persona name in the topic label.${ceoContext}`;
       }
 
       // Build guidance context
