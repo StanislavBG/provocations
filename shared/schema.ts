@@ -9,7 +9,7 @@ export const provocationType = [
   "tech_writer",
   "product_manager",
   "security_engineer",
-  "thinking_bigger",
+  "ceo",
 ] as const;
 
 export type ProvocationType = typeof provocationType[number];
@@ -43,7 +43,7 @@ export type PersonaSummary = z.infer<typeof personaSummarySchema>;
 
 export const personaSchema = z.object({
   id: z.string(),                           // unique key e.g. "architect" (matches ProvocationType)
-  label: z.string(),                        // display name e.g. "Architect", "Think Big"
+  label: z.string(),                        // display name e.g. "Architect", "CEO"
   icon: z.string(),                         // lucide icon name e.g. "Blocks", "Rocket"
   role: z.string(),                         // one-line role summary
   description: z.string(),                  // longer description of what this persona does
@@ -261,7 +261,7 @@ export interface DocumentVersion {
 export const directionModes = ["challenge", "advise"] as const;
 export type DirectionMode = typeof directionModes[number];
 
-// Think Big vectors — high-impact dimensions for scaling products
+// CEO vectors — high-impact dimensions for scaling products
 export const thinkBigVectors = [
   "tenancy_topology",
   "api_surface",
