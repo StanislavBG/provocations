@@ -368,10 +368,21 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     const handleCopy = useCallback(async () => {
       if (!value) return;
       try {
-        await navigator.clipboard.writeText(value);
-        toast({ title: "Copied to clipboard" });
+        // Normalize to clean plain text: trim, collapse 3+ consecutive newlines
+        const plain = value.trim().replace(/\n{3,}/g, "\n\n");
+        const blob = new Blob([plain], { type: "text/plain" });
+        await navigator.clipboard.write([
+          new ClipboardItem({ "text/plain": blob }),
+        ]);
+        toast({ title: "Copied as plain text" });
       } catch {
-        toast({ title: "Failed to copy", variant: "destructive" });
+        // Fallback for browsers that don't support ClipboardItem
+        try {
+          await navigator.clipboard.writeText(value.trim());
+          toast({ title: "Copied as plain text" });
+        } catch {
+          toast({ title: "Failed to copy", variant: "destructive" });
+        }
       }
     }, [value, toast]);
 
@@ -529,7 +540,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
             className={cn(toolbarSize.btn, "text-muted-foreground hover:text-foreground")}
             onClick={handleCopy}
             disabled={!hasContent}
-            title="Copy text"
+            title="Copy as plain text"
           >
             <Copy className={toolbarSize.icon} />
           </Button>
