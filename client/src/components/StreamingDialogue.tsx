@@ -34,7 +34,7 @@ interface StreamingDialogueProps {
   onConfirmRequirement: (id: string) => void;
   isActive: boolean;
   hasAnalysis?: boolean;
-  objective?: string;
+  objective: string;
   documentText?: string;
 }
 

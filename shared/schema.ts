@@ -177,7 +177,7 @@ export type ReferenceDocument = z.infer<typeof referenceDocumentSchema>;
 export const generateProvocationsRequestSchema = z.object({
   text: z.string().min(1, "Text is required"),
   guidance: z.string().optional(),
-  objective: z.string().optional(),
+  objective: z.string().min(1, "Objective is required"),    // principal context — always required
   types: z.array(z.enum(provocationType)).optional(),
   referenceDocuments: z.array(referenceDocumentSchema).optional(),
 });
