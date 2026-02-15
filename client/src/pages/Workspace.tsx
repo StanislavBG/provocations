@@ -556,12 +556,12 @@ export default function Workspace() {
 
   const isInputPhase = !document.rawText;
 
-  // Auto-start interview with CEO persona when entering workspace
+  // Auto-start interview with Think Big persona when entering workspace
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (!isInputPhase && !autoStartedRef.current) {
       autoStartedRef.current = true;
-      const direction = { mode: "challenge" as DirectionMode, personas: ["ceo" as ProvocationType] };
+      const direction = { mode: "challenge" as DirectionMode, personas: ["thinking_bigger" as ProvocationType] };
       setInterviewDirection(direction);
       setIsInterviewActive(true);
       interviewQuestionMutation.mutate({ direction });

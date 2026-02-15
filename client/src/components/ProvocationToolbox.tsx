@@ -325,9 +325,9 @@ function ProvokeConfigApp({
   interviewEntryCount,
   onStartInterview,
 }: ProvokeConfigAppProps) {
-  // Persona state — CEO is selected by default
+  // Persona state — Think Big is selected by default
   const [selectedPersonas, setSelectedPersonas] = useState<Set<ProvocationType>>(
-    () => new Set<ProvocationType>(["ceo"])
+    () => new Set<ProvocationType>(["thinking_bigger"])
   );
   const [guidance, setGuidance] = useState("");
   const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
@@ -382,7 +382,7 @@ function ProvokeConfigApp({
             {allPersonaTypes.map((type) => {
               const Icon = personaIcons[type];
               const isSelected = selectedPersonas.has(type);
-              const isCeo = type === "ceo";
+              const isThinkBig = type === "thinking_bigger";
               return (
                 <Tooltip key={type}>
                   <TooltipTrigger asChild>
@@ -391,11 +391,11 @@ function ProvokeConfigApp({
                       variant={isSelected ? "default" : "outline"}
                       className={`gap-1 text-xs h-7 px-2 ${
                         isSelected
-                          ? isCeo
-                            ? "bg-orange-600 hover:bg-orange-700 text-white"
+                          ? isThinkBig
+                            ? "bg-violet-600 hover:bg-violet-700 text-white"
                             : ""
                           : "opacity-50"
-                      } ${isCeo && !isSelected ? "border-orange-300 dark:border-orange-700" : ""}`}
+                      } ${isThinkBig && !isSelected ? "border-violet-300 dark:border-violet-700" : ""}`}
                       onClick={() => togglePersona(type)}
                     >
                       <Icon className="w-3 h-3" />
