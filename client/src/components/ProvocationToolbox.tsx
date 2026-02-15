@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProvokeText } from "./ProvokeText";
 import { BrowserExplorer } from "./BrowserExplorer";
+import { ContextCapturePanel } from "./ContextCapturePanel";
 import {
   MessageCircleQuestion,
   Play,
@@ -22,10 +23,11 @@ import {
   Info,
   UserCircle,
   Pencil,
+  Layers,
   FileText,
   Target,
 } from "lucide-react";
-import type { ProvocationType, DirectionMode, ReferenceDocument } from "@shared/schema";
+import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument } from "@shared/schema";
 import { builtInPersonas, getAllPersonas } from "@shared/personas";
 
 // ── Toolbox app type ──
@@ -90,6 +92,10 @@ interface ProvocationToolboxProps {
     objective: string;
   } | null;
   referenceDocuments?: ReferenceDocument[];
+
+  // Context app props (captured context items)
+  capturedContext?: ContextItem[];
+  onCapturedContextChange?: (items: ContextItem[]) => void;
 }
 
 export function ProvocationToolbox({
@@ -110,8 +116,12 @@ export function ProvocationToolbox({
   onBrowserExpandedChange,
   contextCollection,
   referenceDocuments,
+  capturedContext,
+  onCapturedContextChange,
 }: ProvocationToolboxProps) {
-  const hasContext = !!(contextCollection?.text || contextCollection?.objective);
+  const hasContextCollection = !!(contextCollection?.text || contextCollection?.objective);
+  const hasCapturedContext = !!(capturedContext && capturedContext.length > 0);
+  const hasContext = hasContextCollection || hasCapturedContext;
 
   return (
     <div className="h-full flex flex-col">
@@ -149,8 +159,13 @@ export function ProvocationToolbox({
               className="gap-1 text-xs h-7 px-2"
               onClick={() => onAppChange("context")}
             >
-              <FileText className="w-3 h-3" />
+              <Layers className="w-3 h-3" />
               Context
+              {hasCapturedContext && (
+                <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px]">
+                  {capturedContext!.length}
+                </Badge>
+              )}
             </Button>
           )}
           <Button
@@ -175,9 +190,11 @@ export function ProvocationToolbox({
             onStartInterview={onStartInterview}
           />
         ) : activeApp === "context" ? (
-          <ContextCollectionPreview
+          <ContextTabContent
             contextCollection={contextCollection}
             referenceDocuments={referenceDocuments}
+            capturedContext={capturedContext}
+            onCapturedContextChange={onCapturedContextChange}
           />
         ) : (
           <BrowserExplorer
@@ -211,92 +228,81 @@ function ContextCollectionPreview({
   contextCollection,
   referenceDocuments,
 }: ContextCollectionPreviewProps) {
-  if (!contextCollection) {
-    return (
-      <div className="h-full flex items-center justify-center p-8">
-        <div className="text-center space-y-2">
-          <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-          <p className="text-sm text-muted-foreground">No context collected yet.</p>
-        </div>
-      </div>
-    );
-  }
+  if (!contextCollection) return null;
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-4">
-        {/* Objective */}
-        {contextCollection.objective && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-primary" />
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Objective
-              </h4>
-            </div>
-            <div className="rounded-lg border bg-card p-3">
-              <p className="text-sm font-serif leading-relaxed text-foreground">
-                {contextCollection.objective}
-              </p>
+    <>
+      {/* Objective */}
+      {contextCollection.objective && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Target className="w-4 h-4 text-primary" />
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Objective
+            </h4>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-sm font-serif leading-relaxed text-foreground">
+              {contextCollection.objective}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Source material */}
+      {contextCollection.text && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" />
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Source Material
+            </h4>
+            <Badge variant="outline" className="text-[10px]">
+              {contextCollection.text.split(/\s+/).length} words
+            </Badge>
+          </div>
+          <div className="rounded-lg border bg-card p-3 max-h-[400px] overflow-y-auto">
+            <div className="text-sm font-serif leading-relaxed text-foreground/90 whitespace-pre-wrap">
+              {contextCollection.text}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Source material */}
-        {contextCollection.text && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" />
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Source Material
-              </h4>
-              <Badge variant="outline" className="text-[10px]">
-                {contextCollection.text.split(/\s+/).length} words
-              </Badge>
-            </div>
-            <div className="rounded-lg border bg-card p-3 max-h-[400px] overflow-y-auto">
-              <div className="text-sm font-serif leading-relaxed text-foreground/90 whitespace-pre-wrap">
-                {contextCollection.text}
-              </div>
-            </div>
+      {/* Reference documents */}
+      {referenceDocuments && referenceDocuments.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <BookText className="w-4 h-4 text-primary" />
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Reference Documents
+            </h4>
+            <Badge variant="outline" className="text-[10px]">
+              {referenceDocuments.length}
+            </Badge>
           </div>
-        )}
-
-        {/* Reference documents */}
-        {referenceDocuments && referenceDocuments.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <BookText className="w-4 h-4 text-primary" />
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Reference Documents
-              </h4>
-              <Badge variant="outline" className="text-[10px]">
-                {referenceDocuments.length}
-              </Badge>
-            </div>
-            <div className="space-y-2">
-              {referenceDocuments.map((doc) => (
-                <div key={doc.id} className="rounded-lg border bg-card p-3 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium">{doc.name}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {doc.type}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground leading-relaxed max-h-[150px] overflow-y-auto whitespace-pre-wrap">
-                    {doc.content.slice(0, 500)}{doc.content.length > 500 ? "..." : ""}
-                  </div>
+            {referenceDocuments.map((doc) => (
+              <div key={doc.id} className="rounded-lg border bg-card p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">{doc.name}</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {doc.type}
+                  </Badge>
                 </div>
-              ))}
-            </div>
+                <div className="text-xs text-muted-foreground leading-relaxed max-h-[150px] overflow-y-auto whitespace-pre-wrap">
+                  {doc.content.slice(0, 500)}{doc.content.length > 500 ? "..." : ""}
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        <p className="text-[10px] text-muted-foreground/60 text-center pt-2">
-          This is a read-only preview of the context collected during the input phase.
-        </p>
-      </div>
-    </ScrollArea>
+      <p className="text-[10px] text-muted-foreground/60 text-center pt-2">
+        Read-only preview of context collected during the input phase.
+      </p>
+    </>
   );
 }
 
@@ -319,9 +325,9 @@ function ProvokeConfigApp({
   interviewEntryCount,
   onStartInterview,
 }: ProvokeConfigAppProps) {
-  // Persona state — CEO is selected by default
+  // Persona state — Think Big is selected by default
   const [selectedPersonas, setSelectedPersonas] = useState<Set<ProvocationType>>(
-    () => new Set<ProvocationType>(["ceo"])
+    () => new Set<ProvocationType>(["thinking_bigger"])
   );
   const [guidance, setGuidance] = useState("");
   const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
@@ -376,7 +382,7 @@ function ProvokeConfigApp({
             {allPersonaTypes.map((type) => {
               const Icon = personaIcons[type];
               const isSelected = selectedPersonas.has(type);
-              const isCeo = type === "ceo";
+              const isThinkBig = type === "thinking_bigger";
               return (
                 <Tooltip key={type}>
                   <TooltipTrigger asChild>
@@ -385,11 +391,11 @@ function ProvokeConfigApp({
                       variant={isSelected ? "default" : "outline"}
                       className={`gap-1 text-xs h-7 px-2 ${
                         isSelected
-                          ? isCeo
-                            ? "bg-orange-600 hover:bg-orange-700 text-white"
+                          ? isThinkBig
+                            ? "bg-violet-600 hover:bg-violet-700 text-white"
                             : ""
                           : "opacity-50"
-                      } ${isCeo && !isSelected ? "border-orange-300 dark:border-orange-700" : ""}`}
+                      } ${isThinkBig && !isSelected ? "border-violet-300 dark:border-violet-700" : ""}`}
                       onClick={() => togglePersona(type)}
                     >
                       <Icon className="w-3 h-3" />
@@ -495,5 +501,74 @@ function ProvokeConfigApp({
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Combined Context Tab (collection preview + captured context items) ──
+
+interface ContextTabContentProps {
+  contextCollection?: {
+    text: string;
+    objective: string;
+  } | null;
+  referenceDocuments?: ReferenceDocument[];
+  capturedContext?: ContextItem[];
+  onCapturedContextChange?: (items: ContextItem[]) => void;
+}
+
+function ContextTabContent({
+  contextCollection,
+  referenceDocuments,
+  capturedContext,
+  onCapturedContextChange,
+}: ContextTabContentProps) {
+  return (
+    <ScrollArea className="h-full">
+      <div className="p-4 space-y-4">
+        {/* Captured context items (editable) */}
+        {capturedContext && onCapturedContextChange && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-primary" />
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Captured Context
+              </h4>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help">
+                    <Info className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-primary transition-colors" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[280px]">
+                  <p className="text-xs font-medium mb-1">Your supporting context</p>
+                  <p className="text-xs text-muted-foreground">Text, images, and document links you captured on the landing page. They ground every AI interaction as reference material.</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            {capturedContext.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {capturedContext.length} item{capturedContext.length !== 1 ? "s" : ""} available as grounding context.
+              </p>
+            )}
+            <ContextCapturePanel items={capturedContext} onItemsChange={onCapturedContextChange} />
+          </div>
+        )}
+
+        {/* Context collection preview (read-only from input phase) */}
+        {contextCollection && (
+          <ContextCollectionPreview
+            contextCollection={contextCollection}
+            referenceDocuments={referenceDocuments}
+          />
+        )}
+
+        {!contextCollection && (!capturedContext || capturedContext.length === 0) && (
+          <div className="text-center space-y-2 py-8">
+            <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+            <p className="text-sm text-muted-foreground">No context collected yet.</p>
+          </div>
+        )}
+      </div>
+    </ScrollArea>
   );
 }

@@ -22,6 +22,31 @@ import type { Persona, ProvocationType } from "./schema";
  */
 
 export const builtInPersonas: Record<ProvocationType, Persona> = {
+  thinking_bigger: {
+    id: "thinking_bigger",
+    label: "Think Big",
+    icon: "Rocket",
+    role: "Scales impact and outcomes without changing the core idea.",
+    description:
+      "Pushes you to scale impact and outcomes without changing the core idea. What if this was 10x bigger?",
+    color: {
+      text: "text-violet-600 dark:text-violet-400",
+      bg: "bg-violet-50 dark:bg-violet-950/30",
+      accent: "#7c3aed",
+    },
+    prompts: {
+      challenge:
+        "As the Think Big Advisor: Push the user to scale impact and outcomes — retention, cost-to-serve, accessibility, resilience — without changing the core idea. Propose bolder bets that respect constraints (time, budget, technical limitations, compliance, operational realities). Raise scale concerns early: what breaks, what becomes harder, and what must be simplified when designing for 100,000+ people. Suggest new workflows that better serve the user outcome, potential adjacent product lines as optional/iterative bets, and 'designed-for-100,000+' simplifications that reduce friction (fewer steps, clearer defaults, safer paths). Make the product easier at scale for both users and the team operating it.",
+      advice:
+        "As the Think Big Advisor: Push the user to scale impact and outcomes — retention, cost-to-serve, accessibility, resilience — without changing the core idea. Propose bolder bets that respect constraints (time, budget, technical limitations, compliance, operational realities). Raise scale concerns early: what breaks, what becomes harder, and what must be simplified when designing for 100,000+ people. Suggest new workflows that better serve the user outcome, potential adjacent product lines as optional/iterative bets, and 'designed-for-100,000+' simplifications that reduce friction (fewer steps, clearer defaults, safer paths). Make the product easier at scale for both users and the team operating it.",
+    },
+    summary: {
+      challenge: "Scales impact and outcomes — retention, cost-to-serve, accessibility, resilience — without changing the core idea.",
+      advice: "Scales impact and outcomes — retention, cost-to-serve, accessibility, resilience — without changing the core idea.",
+    },
+    isBuiltIn: true,
+  },
+
   ceo: {
     id: "ceo",
     label: "CEO",
@@ -302,10 +327,11 @@ export function getPersonaById(id: string): Persona | undefined {
 
 /**
  * Get all built-in personas as an ordered array.
- * CEO is listed first as the default/promoted persona.
+ * Think Big is listed first as the default/promoted persona.
  */
 export function getAllPersonas(): Persona[] {
   const order: ProvocationType[] = [
+    "thinking_bigger",
     "ceo",
     "architect",
     "quality_engineer",
