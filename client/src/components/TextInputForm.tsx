@@ -15,6 +15,7 @@ import {
   Crosshair,
   Radio,
   NotebookPen,
+  UserRoundCog,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import type { SmartModeDef } from "@/components/ProvokeText";
@@ -40,6 +41,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "graduation-cap": GraduationCap,
   "bar-chart-3": BarChart3,
   clapperboard: Clapperboard,
+  "user-round-cog": UserRoundCog,
 };
 
 /**
