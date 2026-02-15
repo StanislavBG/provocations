@@ -440,6 +440,8 @@ export default function Workspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [websiteUrl]);
 
+  const isInputPhase = !document.rawText;
+
   // Auto-start interview with Think Big persona when entering workspace
   const autoStartedRef = useRef(false);
   useEffect(() => {
@@ -690,9 +692,6 @@ export default function Workspace() {
       (wireframeAnalysis.rssFeeds?.length || 0) +
       (wireframeAnalysis.images?.length || 0)
     : 0;
-
-  // Show the input form when there's no document content
-  const isInputPhase = !document.rawText;
 
   if (isInputPhase) {
     return (
