@@ -6,7 +6,6 @@ import { encrypt, decrypt } from "./crypto";
 import OpenAI from "openai";
 import {
   writeRequestSchema,
-  generateProvocationsRequestSchema,
   generateChallengeRequestSchema,
   generateAdviceRequestSchema,
   interviewQuestionRequestSchema,
@@ -375,115 +374,6 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-
-  // Generate provocations for a document (on-demand)
-  app.post("/api/generate-provocations", async (req, res) => {
-    try {
-      const parsed = generateProvocationsRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { text, guidance, objective, types, referenceDocuments } = parsed.data;
-
-      const MAX_ANALYSIS_LENGTH = 8000;
-      const analysisText = text.slice(0, MAX_ANALYSIS_LENGTH);
-
-      const refDocSummary = referenceDocuments && referenceDocuments.length > 0
-        ? referenceDocuments.map(d => `[${d.type.toUpperCase()}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`).join("\n\n")
-        : null;
-
-      const refContext = refDocSummary
-        ? `\n\nReference documents:\n${refDocSummary}\n\nCompare against these for gaps.`
-        : "";
-
-      const guidanceContext = guidance
-        ? `\n\nUSER GUIDANCE: The user specifically wants provocations about: ${guidance}`
-        : "";
-
-      // Filter to requested types or use all
-      const requestedTypes = types && types.length > 0 ? types : [...provocationType];
-      const provDescriptions = requestedTypes.map(t => `- ${t}: ${provocationPrompts[t]}`).join("\n");
-      const typesList = requestedTypes.join(", ");
-      const perTypeCount = Math.max(2, Math.ceil(6 / requestedTypes.length));
-
-      const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
-        max_completion_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content: `You are a critical thinking partner. Challenge assumptions and push thinking deeper. Gently push the user toward a more complete, well-rounded document.
-
-DOCUMENT OBJECTIVE: ${objective}
-Evaluate the document against this objective. Identify what's missing, underdeveloped, or could be stronger to fulfill this goal.
-
-Generate provocations in these categories:
-${provDescriptions}
-${refContext}${guidanceContext}
-
-Respond with a JSON object containing a "provocations" array. Generate ${perTypeCount} provocations per category.
-For each provocation:
-- type: The category (one of: ${typesList})
-- title: A punchy headline (max 60 chars)
-- content: A 2-3 sentence explanation that gently nudges the user to improve their document
-- sourceExcerpt: A relevant quote from the source text (max 150 chars)
-- scale: Impact level from 1-5 (1=minor tweak, 2=small improvement, 3=moderate gap, 4=significant issue, 5=critical flaw)
-- autoSuggestion: A concrete, actionable suggested response the user could adopt to address this provocation. Write it as if the user is speaking — a 1-3 sentence paragraph they could accept as-is to improve their document. Think bigger, stronger, better.
-
-Focus on completeness: what's missing, what's thin, what could be stronger. Be constructive, not just critical.
-
-Output only valid JSON, no markdown.`
-          },
-          {
-            role: "user",
-            content: `Generate provocations for this text:\n\n${analysisText}`
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      const content = response.choices[0]?.message?.content || "{}";
-      let parsedResponse: Record<string, unknown> = {};
-      try {
-        parsedResponse = JSON.parse(content);
-      } catch {
-        console.error("Failed to parse provocations JSON:", content);
-        return res.json({ provocations: [] });
-      }
-
-      const provocationsArray = Array.isArray(parsedResponse.provocations)
-        ? parsedResponse.provocations
-        : [];
-
-      const provocations = provocationsArray.map((p: unknown, idx: number): Provocation => {
-        const item = p as Record<string, unknown>;
-        const provType = provocationType.includes(item?.type as ProvocationType)
-          ? item.type as ProvocationType
-          : requestedTypes[idx % requestedTypes.length];
-
-        const rawScale = typeof item?.scale === 'number' ? item.scale : 3;
-        const scale = Math.max(1, Math.min(5, Math.round(rawScale)));
-
-        return {
-          id: `${provType}-${Date.now()}-${idx}`,
-          type: provType,
-          title: typeof item?.title === 'string' ? item.title : "Untitled Provocation",
-          content: typeof item?.content === 'string' ? item.content : "",
-          sourceExcerpt: typeof item?.sourceExcerpt === 'string' ? item.sourceExcerpt : "",
-          status: "pending",
-          scale,
-          autoSuggestion: typeof item?.autoSuggestion === 'string' ? item.autoSuggestion : undefined,
-        };
-      });
-
-      res.json({ provocations });
-    } catch (error) {
-      console.error("Generate provocations error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to generate provocations", details: errorMessage });
-    }
-  });
 
   // ── Generate challenges (persona-aware, no advice) ──
   // Generates challenges from selected personas. Each challenge includes the
