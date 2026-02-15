@@ -161,6 +161,23 @@ export const documentSchema = z.object({
 
 export type Document = z.infer<typeof documentSchema>;
 
+// ── Captured context items (landing page context capture) ──
+
+export const contextItemTypes = ["text", "image", "document-link"] as const;
+export type ContextItemType = typeof contextItemTypes[number];
+
+export const contextItemSchema = z.object({
+  id: z.string(),
+  type: z.enum(contextItemTypes),
+  /** The content: plain text, base64 image data URL, or a document URL */
+  content: z.string(),
+  /** User annotation explaining why this context item matters */
+  annotation: z.string().optional(),
+  createdAt: z.number(),
+});
+
+export type ContextItem = z.infer<typeof contextItemSchema>;
+
 // Reference document types (style guides, templates)
 export const referenceDocumentSchema = z.object({
   id: z.string(),
@@ -224,6 +241,9 @@ export const writeRequestSchema = z.object({
 
   // Reference documents for style inference
   referenceDocuments: z.array(referenceDocumentSchema).optional(),
+
+  // Captured context items for grounding (from landing page context capture)
+  capturedContext: z.array(contextItemSchema).optional(),
 
   // Edit history for coherent iteration
   editHistory: z.array(editHistoryEntrySchema).optional(),
