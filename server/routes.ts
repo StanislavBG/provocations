@@ -401,10 +401,6 @@ export async function registerRoutes(
         ? `\n\nUSER GUIDANCE: The user specifically wants provocations about: ${guidance}`
         : "";
 
-      const objectiveContext = objective
-        ? `\n\nDOCUMENT OBJECTIVE: ${objective}\nEvaluate the document against this objective. Identify what's missing, underdeveloped, or could be stronger to fulfill this goal.`
-        : "";
-
       // Filter to requested types or use all
       const requestedTypes = types && types.length > 0 ? types : [...provocationType];
       const provDescriptions = requestedTypes.map(t => `- ${t}: ${provocationPrompts[t]}`).join("\n");
@@ -419,9 +415,12 @@ export async function registerRoutes(
             role: "system",
             content: `You are a critical thinking partner. Challenge assumptions and push thinking deeper. Gently push the user toward a more complete, well-rounded document.
 
+DOCUMENT OBJECTIVE: ${objective}
+Evaluate the document against this objective. Identify what's missing, underdeveloped, or could be stronger to fulfill this goal.
+
 Generate provocations in these categories:
 ${provDescriptions}
-${refContext}${guidanceContext}${objectiveContext}
+${refContext}${guidanceContext}
 
 Respond with a JSON object containing a "provocations" array. Generate ${perTypeCount} provocations per category.
 For each provocation:
