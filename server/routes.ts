@@ -625,6 +625,7 @@ Output only valid JSON, no markdown.`;
         tone,
         targetLength,
         referenceDocuments,
+        capturedContext,
         editHistory
       } = parsed.data;
 
@@ -690,6 +691,24 @@ ${historyStr}`);
 
 REFERENCE EXCERPTS (for additional context):
 ${refExcerpts}`);
+      }
+
+      // Add captured context items for grounding
+      if (capturedContext && capturedContext.length > 0) {
+        const contextEntries = capturedContext.map((item, i) => {
+          const num = i + 1;
+          const annotation = item.annotation ? `\n   Why it matters: ${item.annotation}` : "";
+          if (item.type === "text") {
+            return `${num}. [TEXT] ${item.content.slice(0, 500)}${item.content.length > 500 ? "..." : ""}${annotation}`;
+          } else if (item.type === "image") {
+            return `${num}. [IMAGE] (visual reference provided by user)${annotation}`;
+          } else {
+            return `${num}. [DOCUMENT LINK] ${item.content}${annotation}`;
+          }
+        }).join("\n\n");
+
+        contextParts.push(`CAPTURED CONTEXT (use as grounding material — these are reference items the author collected to inform the document):
+${contextEntries}`);
       }
 
       if (provocation) {

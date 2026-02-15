@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProvokeText } from "./ProvokeText";
 import { BrowserExplorer } from "./BrowserExplorer";
+import { ContextCapturePanel } from "./ContextCapturePanel";
 import {
   MessageCircleQuestion,
   Play,
@@ -21,13 +22,14 @@ import {
   Info,
   UserCircle,
   Pencil,
+  Layers,
 } from "lucide-react";
-import type { ProvocationType, DirectionMode } from "@shared/schema";
+import type { ProvocationType, DirectionMode, ContextItem } from "@shared/schema";
 import { builtInPersonas, getAllPersonas } from "@shared/personas";
 
 // ── Toolbox app type ──
 
-export type ToolboxApp = "provoke" | "website";
+export type ToolboxApp = "provoke" | "website" | "context";
 
 // ── Persona metadata (derived from centralized persona definitions) ──
 
@@ -80,6 +82,10 @@ interface ProvocationToolboxProps {
   browserExpanded?: boolean;
   /** Called when browser expanded state changes */
   onBrowserExpandedChange?: (expanded: boolean) => void;
+
+  // Context app props
+  capturedContext?: ContextItem[];
+  onCapturedContextChange?: (items: ContextItem[]) => void;
 }
 
 export function ProvocationToolbox({
@@ -98,6 +104,8 @@ export function ProvocationToolbox({
   browserHeaderActions,
   browserExpanded,
   onBrowserExpandedChange,
+  capturedContext,
+  onCapturedContextChange,
 }: ProvocationToolboxProps) {
   return (
     <div className="h-full flex flex-col">
@@ -137,6 +145,20 @@ export function ProvocationToolbox({
             <Globe className="w-3 h-3" />
             Website
           </Button>
+          {capturedContext && capturedContext.length > 0 && (
+            <Button
+              size="sm"
+              variant={activeApp === "context" ? "default" : "ghost"}
+              className="gap-1 text-xs h-7 px-2"
+              onClick={() => onAppChange("context")}
+            >
+              <Layers className="w-3 h-3" />
+              Context
+              <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px]">
+                {capturedContext.length}
+              </Badge>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -148,6 +170,11 @@ export function ProvocationToolbox({
             isMerging={isMerging}
             interviewEntryCount={interviewEntryCount}
             onStartInterview={onStartInterview}
+          />
+        ) : activeApp === "context" && capturedContext && onCapturedContextChange ? (
+          <ContextApp
+            items={capturedContext}
+            onItemsChange={onCapturedContextChange}
           />
         ) : (
           <BrowserExplorer
@@ -360,6 +387,43 @@ function ProvokeConfigApp({
             )}
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Context App (view/manage captured context in the workspace) ──
+
+interface ContextAppProps {
+  items: ContextItem[];
+  onItemsChange: (items: ContextItem[]) => void;
+}
+
+function ContextApp({ items, onItemsChange }: ContextAppProps) {
+  return (
+    <div className="h-full flex flex-col overflow-auto">
+      <div className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Layers className="w-4 h-4 text-primary" />
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Captured Context
+          </label>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">
+                <Info className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-primary transition-colors" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-[280px]">
+              <p className="text-xs font-medium mb-1">Your supporting context</p>
+              <p className="text-xs text-muted-foreground">These are the text, images, and document links you captured on the landing page. They ground every AI interaction — the writer uses them as reference material when editing your document.</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {items.length} item{items.length !== 1 ? "s" : ""} available as grounding context for your document.
+        </p>
+        <ContextCapturePanel items={items} onItemsChange={onItemsChange} />
       </div>
     </div>
   );

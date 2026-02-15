@@ -50,6 +50,7 @@ import type {
   InterviewEntry,
   InterviewQuestionResponse,
   WireframeAnalysisResponse,
+  ContextItem,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -70,6 +71,9 @@ export default function Workspace() {
   const [objective, setObjective] = useState<string>("");
   const [secondaryObjective, setSecondaryObjectiveRaw] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
+
+  // Captured context items (persists across phases)
+  const [capturedContext, setCapturedContext] = useState<ContextItem[]>([]);
 
   // Guard: prevent secondary objective from duplicating the primary (REQ-002)
   const setSecondaryObjective = useCallback((value: string) => {
@@ -134,13 +138,14 @@ export default function Workspace() {
   // ── Writer mutation ──
 
   const writeMutation = useMutation({
-    mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory"> & { description?: string }) => {
+    mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory" | "capturedContext"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
         ...request,
       });
@@ -213,6 +218,7 @@ export default function Workspace() {
         objective: obj,
         instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
         referenceDocuments: refs.length > 0 ? refs : undefined,
+        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
       });
       return await response.json() as WriteResponse;
     },
@@ -297,6 +303,7 @@ export default function Workspace() {
         secondaryObjective: secondaryObjective.trim() || undefined,
         instruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
       });
       return await writeResponse.json() as WriteResponse;
@@ -357,6 +364,7 @@ export default function Workspace() {
         secondaryObjective: secondaryObjective.trim() || undefined,
         instruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
       });
       return await writeResponse.json() as WriteResponse;
@@ -517,6 +525,7 @@ export default function Workspace() {
     setDocument({ id: generateId("doc"), rawText: "" });
     setObjective("");
     setReferenceDocuments([]);
+    setCapturedContext([]);
     setVersions([]);
     setShowDiffView(false);
     setEditHistory([]);
@@ -749,6 +758,8 @@ export default function Workspace() {
               };
               setVersions([initialVersion]);
             }}
+            capturedContext={capturedContext}
+            onCapturedContextChange={setCapturedContext}
           />
         </div>
       </div>
@@ -784,6 +795,8 @@ export default function Workspace() {
           onPostCapture={handlePostCapture}
         />
       }
+      capturedContext={capturedContext}
+      onCapturedContextChange={setCapturedContext}
     />
   );
 
