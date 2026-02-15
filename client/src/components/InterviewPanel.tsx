@@ -39,6 +39,7 @@ export function InterviewPanel({
 }: InterviewPanelProps) {
   const [answerText, setAnswerText] = useState("");
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   const handleSubmitAnswer = () => {
     if (answerText.trim()) {
@@ -54,17 +55,27 @@ export function InterviewPanel({
     }
   };
 
-  // Not active — prompt user to configure in the Toolbox
+  // Not active — guide user through getting started
   if (!isActive) {
     return (
       <div className="h-full flex items-center justify-center p-8">
-        <div className="text-center space-y-3 max-w-sm">
-          <MessageCircleQuestion className="w-10 h-10 text-muted-foreground/40 mx-auto" />
-          <p className="text-sm text-muted-foreground">
-            Configure personas and direction in the Toolbox, then start an interview.
-          </p>
+        <div className="text-center space-y-4 max-w-md">
+          <MessageCircleQuestion className="w-12 h-12 text-primary/30 mx-auto" />
+          <div className="space-y-2">
+            <h3 className="text-base font-semibold">Your AI Interview</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              This panel hosts a structured conversation between you and expert AI personas.
+              Each persona brings a unique professional lens — challenging your assumptions,
+              spotting gaps, and pushing you to think deeper about your document.
+            </p>
+            <p className="text-xs text-muted-foreground/80 leading-relaxed">
+              Select one or more personas in the <strong>Toolbox</strong> panel on the left,
+              then click <strong>Start Interview</strong>. Answer each question using text or
+              voice — your responses will be merged into the document when you're ready.
+            </p>
+          </div>
           {entries.length > 0 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground border-t pt-3">
               Previous session: {entries.length} questions answered
             </p>
           )}
@@ -117,6 +128,18 @@ export function InterviewPanel({
       {/* Current question on top, answered history below */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
+          {/* Onboarding hint — visible until user engages with the answer field */}
+          {entries.length === 0 && showOnboarding && !answerText && (
+            <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 space-y-1.5">
+              <p className="text-xs font-medium text-primary">How this works</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                The AI will ask you thought-provoking questions based on your selected personas.
+                Answer each one using the text field below or record your response with the mic button.
+                Each answer deepens your document. When you're ready, use <strong>Merge to Draft</strong> in the header to integrate your responses.
+              </p>
+            </div>
+          )}
+
           {/* Current question — always at top */}
           {isLoadingQuestion && (
             <Card className="border-primary/30">
@@ -138,7 +161,7 @@ export function InterviewPanel({
                 <p className="text-sm font-medium leading-relaxed">{currentQuestion}</p>
 
                 {/* Answer input */}
-                <div className="space-y-2">
+                <div className="space-y-2" onFocus={() => setShowOnboarding(false)}>
                   <ProvokeText
                     chrome="inline"
                     placeholder="Type your answer or use the mic..."
