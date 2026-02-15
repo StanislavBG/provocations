@@ -10,6 +10,7 @@ import {
   generateAdviceRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
+  askQuestionRequestSchema,
   saveDocumentRequestSchema,
   updateDocumentRequestSchema,
   renameDocumentRequestSchema,
@@ -27,6 +28,8 @@ import {
   type ReferenceDocument,
   type ChangeEntry,
   type InterviewQuestionResponse,
+  type AskQuestionResponse,
+  type PersonaPerspective,
   type StreamingQuestionResponse,
   type WireframeAnalysisResponse,
   type SiteMapEntry,
@@ -1299,6 +1302,176 @@ Output only the instruction text. No meta-commentary.`
       console.error("Interview summary error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize interview", details: errorMessage });
+    }
+  });
+
+  // ── Ask question to the persona team ──
+  // The user asks a question and the system identifies the 3 most relevant
+  // personas, then composes a multi-perspective response.
+  app.post("/api/discussion/ask", async (req, res) => {
+    try {
+      const parsed = askQuestionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { question, document: docText, objective, secondaryObjective, activePersonas, previousMessages } = parsed.data;
+
+      const MAX_DOC_LENGTH = 6000;
+      const analysisText = docText.slice(0, MAX_DOC_LENGTH);
+
+      // Build all available personas list
+      const allPersonas = Object.values(builtInPersonas);
+      const personaDescriptions = allPersonas
+        .map((p) => `- ${p.id} (${p.label}): ${p.role}`)
+        .join("\n");
+
+      // Build previous conversation context
+      let conversationContext = "";
+      if (previousMessages && previousMessages.length > 0) {
+        const recent = previousMessages.slice(-10);
+        conversationContext = `\n\nRECENT DISCUSSION:\n${recent.map(m => {
+          if (m.role === "user-question") return `User asked: ${m.content}`;
+          if (m.role === "persona-response") return `Team responded: ${m.content}`;
+          if (m.role === "system-question") return `Interview question: ${m.content}`;
+          if (m.role === "user-answer") return `User answered: ${m.content}`;
+          return `${m.role}: ${m.content}`;
+        }).join("\n")}`;
+      }
+
+      // Step 1: Identify the 3 most relevant personas for this question
+      const selectionResponse = await getOpenAI().chat.completions.create({
+        model: "gpt-4o-mini",
+        max_tokens: 256,
+        messages: [
+          {
+            role: "system",
+            content: `Given a user question about their document, select the 3 most relevant personas to answer.
+
+Available personas:
+${personaDescriptions}
+
+${activePersonas && activePersonas.length > 0 ? `Currently active personas (prefer these when relevant): ${activePersonas.join(", ")}` : ""}
+
+Respond with a JSON object:
+{ "personas": ["persona_id_1", "persona_id_2", "persona_id_3"], "topic": "short topic label (max 30 chars)" }
+
+Output only valid JSON.`
+          },
+          {
+            role: "user",
+            content: `Question: ${question}\n\nDocument objective: ${objective}${secondaryObjective ? `\nSecondary objective: ${secondaryObjective}` : ""}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      let selectedPersonaIds: string[] = [];
+      let topic = "Discussion";
+      try {
+        const selectionContent = JSON.parse(selectionResponse.choices[0]?.message?.content || "{}");
+        selectedPersonaIds = Array.isArray(selectionContent.personas)
+          ? selectionContent.personas.filter((id: unknown) => typeof id === "string" && getPersonaById(id as string))
+          : [];
+        topic = typeof selectionContent.topic === "string" ? selectionContent.topic : "Discussion";
+      } catch {
+        // Fallback: use first 3 active personas or CEO + Architect + PM
+        selectedPersonaIds = activePersonas && activePersonas.length >= 3
+          ? activePersonas.slice(0, 3)
+          : ["ceo", "architect", "product_manager"];
+      }
+
+      // Ensure we have exactly 3
+      if (selectedPersonaIds.length < 3) {
+        const fallbacks = ["ceo", "architect", "product_manager", "quality_engineer", "ux_designer"];
+        for (const fb of fallbacks) {
+          if (!selectedPersonaIds.includes(fb) && selectedPersonaIds.length < 3) {
+            selectedPersonaIds.push(fb);
+          }
+        }
+      }
+      selectedPersonaIds = selectedPersonaIds.slice(0, 3);
+
+      const selectedPersonas = selectedPersonaIds
+        .map(id => getPersonaById(id))
+        .filter((p): p is Persona => p !== undefined);
+
+      // Step 2: Generate perspectives from each selected persona
+      const personaPromptSection = selectedPersonas.map(p =>
+        `### ${p.label} (${p.id})\nRole: ${p.role}\nAdvice style: ${p.prompts.advice}`
+      ).join("\n\n");
+
+      const response = await getOpenAI().chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 3072,
+        messages: [
+          {
+            role: "system",
+            content: `You are a panel of expert advisors responding to a user's question about their document. Each advisor provides their unique perspective.
+
+DOCUMENT OBJECTIVE: ${objective}${secondaryObjective ? `\nSECONDARY OBJECTIVE: ${secondaryObjective}` : ""}
+${conversationContext}
+
+THE PANEL (respond from each of these perspectives):
+${personaPromptSection}
+
+Instructions:
+1. Read the user's question carefully
+2. For each persona, provide a concise, actionable perspective (2-3 sentences each)
+3. Also provide a unified "answer" that synthesizes the best insights from all three
+4. Each perspective should reflect that persona's unique expertise and priorities
+5. Be direct and practical — the user wants usable advice, not academic theory
+
+Respond with a JSON object:
+{
+  "answer": "A synthesized 2-4 sentence response combining the key insights from all perspectives",
+  "perspectives": [
+    { "personaId": "persona_id", "personaLabel": "Display Name", "content": "Their specific perspective (2-3 sentences)" },
+    ...
+  ],
+  "topic": "${topic}"
+}
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: `CURRENT DOCUMENT:\n${analysisText}\n\nMY QUESTION: ${question}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let result: AskQuestionResponse;
+      try {
+        const parsed = JSON.parse(content);
+        result = {
+          answer: typeof parsed.answer === "string" ? parsed.answer : "Unable to generate a response.",
+          perspectives: Array.isArray(parsed.perspectives)
+            ? parsed.perspectives.filter((p: unknown) => p && typeof p === "object").map((p: Record<string, unknown>) => ({
+                personaId: typeof p.personaId === "string" ? p.personaId : "",
+                personaLabel: typeof p.personaLabel === "string" ? p.personaLabel : "",
+                content: typeof p.content === "string" ? p.content : "",
+              }))
+            : [],
+          relevantPersonas: selectedPersonaIds,
+          topic: typeof parsed.topic === "string" ? parsed.topic : topic,
+        };
+      } catch {
+        result = {
+          answer: "Unable to parse the response. Please try again.",
+          perspectives: [],
+          relevantPersonas: selectedPersonaIds,
+          topic,
+        };
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Discussion ask error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate response", details: errorMessage });
     }
   });
 
