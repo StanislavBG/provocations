@@ -7,6 +7,8 @@ import OpenAI from "openai";
 import {
   writeRequestSchema,
   generateProvocationsRequestSchema,
+  generateChallengeRequestSchema,
+  generateAdviceRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
   saveDocumentRequestSchema,
@@ -20,6 +22,9 @@ import {
   type ProvocationType,
   type InstructionType,
   type Provocation,
+  type Challenge,
+  type Advice,
+  type Persona,
   type ReferenceDocument,
   type ChangeEntry,
   type InterviewQuestionResponse,
@@ -30,6 +35,7 @@ import {
   type StreamingRefineResponse,
   type StreamingRequirement,
 } from "@shared/schema";
+import { builtInPersonas, getPersonaById } from "@shared/personas";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -50,15 +56,10 @@ function getOpenAI(): OpenAI {
   return _openai;
 }
 
-const provocationPrompts: Record<ProvocationType, string> = {
-  architect: "As the System Architect: Question the clarity of system abstractions — frontend components, backend services, system-to-system communication. Push for well-defined boundaries, API contracts, data flow, and separation of concerns. Challenge technical debt and coupling.",
-  quality_engineer: "As the Quality Engineer: Question testing gaps, edge cases, error handling, and reliability. Ask about regression risks, acceptance criteria, and what happens when things fail. Push for observable, measurable quality and clear exit criteria.",
-  ux_designer: "As the UX Designer: Question how users will discover, understand, and complete tasks. Ask 'how would a user know to do this?' and 'what happens if they get confused here?' Push for clarity on layout, flows, error states, accessibility, and ease of use.",
-  tech_writer: "As the Technical Writer: Question whether documentation, naming, and UI copy are clear enough for someone with no prior context. Flag jargon, missing explanations, unclear labels, and areas where the reader would get lost. Push for self-explanatory interfaces and complete documentation.",
-  product_manager: "As the Product Manager: Question business value, user stories, and prioritization. Ask 'what problem does this solve?' and 'how will we measure success?' Push for clear acceptance criteria, user outcomes, and alignment with strategic goals.",
-  security_engineer: "As the Security Engineer: Question data privacy, authentication, authorization, and compliance. Ask about threat models, input validation, and what happens if an attacker targets this. Push for secure defaults, least-privilege access, and audit trails.",
-  thinking_bigger: "As the Think Big Advisor: Push the user to scale impact and outcomes — retention, cost-to-serve, accessibility, resilience — without changing the core idea. Propose bolder bets that respect constraints (time, budget, technical limitations, compliance, operational realities). Raise scale concerns early: what breaks, what becomes harder, and what must be simplified when designing for 100,000+ people. Suggest new workflows that better serve the user outcome, potential adjacent product lines as optional/iterative bets, and 'designed-for-100,000+' simplifications that reduce friction (fewer steps, clearer defaults, safer paths). Make the product easier at scale for both users and the team operating it.",
-};
+// Derive provocation prompts from centralized persona definitions (challenge prompt is the default)
+const provocationPrompts: Record<ProvocationType, string> = Object.fromEntries(
+  Object.entries(builtInPersonas).map(([id, persona]) => [id, persona.prompts.challenge])
+) as Record<ProvocationType, string>;
 
 // Think Big vector descriptions for focused scaling questions
 const thinkBigVectorDescriptions: Record<string, { label: string; description: string; goal: string }> = {
@@ -483,6 +484,229 @@ Output only valid JSON, no markdown.`
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to generate provocations", details: errorMessage });
     }
+  });
+
+  // ── Generate challenges (persona-aware, no advice) ──
+  // Generates challenges from selected personas. Each challenge includes the
+  // full persona definition so the dialogue panel knows who is speaking.
+  // Advice is generated separately via /api/generate-advice.
+  app.post("/api/generate-challenges", async (req, res) => {
+    try {
+      const parsed = generateChallengeRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { document: docText, objective, personaIds, guidance, referenceDocuments } = parsed.data;
+
+      const MAX_ANALYSIS_LENGTH = 8000;
+      const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
+
+      // Resolve personas — use all built-in if none specified
+      const requestedIds = personaIds && personaIds.length > 0
+        ? personaIds
+        : Object.keys(builtInPersonas);
+
+      const personas: Persona[] = requestedIds
+        .map((id) => getPersonaById(id))
+        .filter((p): p is Persona => p !== undefined);
+
+      if (personas.length === 0) {
+        return res.status(400).json({ error: "No valid personas found for the given IDs" });
+      }
+
+      const personaDescriptions = personas
+        .map((p) => `- ${p.id} (${p.label}): ${p.prompts.challenge}`)
+        .join("\n");
+
+      const refDocSummary = referenceDocuments && referenceDocuments.length > 0
+        ? referenceDocuments.map(d => `[${d.type.toUpperCase()}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`).join("\n\n")
+        : null;
+
+      const refContext = refDocSummary
+        ? `\n\nReference documents:\n${refDocSummary}\n\nCompare against these for gaps.`
+        : "";
+
+      const guidanceContext = guidance
+        ? `\n\nUSER GUIDANCE: The user specifically wants challenges about: ${guidance}`
+        : "";
+
+      const objectiveContext = objective
+        ? `\n\nDOCUMENT OBJECTIVE: ${objective}\nEvaluate the document against this objective.`
+        : "";
+
+      const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
+      const personaIdsList = personas.map((p) => p.id).join(", ");
+
+      const response = await getOpenAI().chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 4096,
+        messages: [
+          {
+            role: "system",
+            content: `You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
+
+IMPORTANT: Only generate challenges. Do NOT provide advice, solutions, or suggestions. The user will request advice separately.
+
+Generate challenges from these personas:
+${personaDescriptions}
+${refContext}${guidanceContext}${objectiveContext}
+
+Respond with a JSON object containing a "challenges" array. Generate ${perPersonaCount} challenges per persona.
+For each challenge:
+- personaId: The persona ID (one of: ${personaIdsList})
+- title: A punchy headline (max 60 chars)
+- content: A 2-3 sentence challenge that identifies a specific gap, weakness, or assumption
+- sourceExcerpt: A relevant quote from the source text (max 150 chars)
+- scale: Impact level from 1-5 (1=minor, 2=small, 3=moderate, 4=significant, 5=critical)
+
+Focus on completeness: what's missing, what's thin, what could break. Be constructive, not destructive.
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: `Generate challenges for this document:\n\n${analysisText}`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let parsedResponse: Record<string, unknown> = {};
+      try {
+        parsedResponse = JSON.parse(content);
+      } catch {
+        console.error("Failed to parse challenges JSON:", content);
+        return res.json({ challenges: [] });
+      }
+
+      const challengesArray = Array.isArray(parsedResponse.challenges)
+        ? parsedResponse.challenges
+        : [];
+
+      const challenges: Challenge[] = challengesArray.map((c: unknown, idx: number) => {
+        const item = c as Record<string, unknown>;
+        const pId = typeof item?.personaId === "string" && getPersonaById(item.personaId)
+          ? item.personaId
+          : personas[idx % personas.length].id;
+
+        const persona = getPersonaById(pId)!;
+        const rawScale = typeof item?.scale === "number" ? item.scale : 3;
+        const scale = Math.max(1, Math.min(5, Math.round(rawScale)));
+
+        return {
+          id: `challenge-${pId}-${Date.now()}-${idx}`,
+          persona,
+          title: typeof item?.title === "string" ? item.title : "Untitled Challenge",
+          content: typeof item?.content === "string" ? item.content : "",
+          sourceExcerpt: typeof item?.sourceExcerpt === "string" ? item.sourceExcerpt : "",
+          status: "pending" as const,
+          scale,
+        };
+      });
+
+      res.json({ challenges });
+    } catch (error) {
+      console.error("Generate challenges error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate challenges", details: errorMessage });
+    }
+  });
+
+  // ── Generate advice for a specific challenge ──
+  // This is a separate invocation from challenge generation so that the advice
+  // is not a reiteration of the provocation. The same persona speaks, but now
+  // provides concrete, actionable guidance on how to address the challenge.
+  app.post("/api/generate-advice", async (req, res) => {
+    try {
+      const parsed = generateAdviceRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { document: docText, objective, challengeId, challengeTitle, challengeContent, personaId } = parsed.data;
+
+      const persona = getPersonaById(personaId);
+      if (!persona) {
+        return res.status(400).json({ error: `Unknown persona: ${personaId}` });
+      }
+
+      const MAX_ANALYSIS_LENGTH = 6000;
+      const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
+
+      const objectiveContext = objective
+        ? `\n\nDOCUMENT OBJECTIVE: ${objective}`
+        : "";
+
+      const response = await getOpenAI().chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 2048,
+        messages: [
+          {
+            role: "system",
+            content: `${persona.prompts.advice}
+${objectiveContext}
+
+You previously challenged the user with:
+CHALLENGE TITLE: ${challengeTitle}
+CHALLENGE: ${challengeContent}
+
+Now provide advice on how to address this challenge. Your advice must:
+1. Be concrete and actionable — the user should know exactly what to do
+2. Be different from the challenge — do NOT restate the problem, provide the solution
+3. Speak from your persona's perspective (${persona.label})
+4. Be 2-4 sentences of practical guidance
+
+Respond with a JSON object:
+{
+  "advice": "Your concrete, actionable advice here"
+}
+
+Output only valid JSON, no markdown.`
+          },
+          {
+            role: "user",
+            content: `Here is the current document:\n\n${analysisText}\n\nPlease provide advice for the challenge: "${challengeTitle}"`
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const content = response.choices[0]?.message?.content || "{}";
+      let parsedResponse: Record<string, unknown> = {};
+      try {
+        parsedResponse = JSON.parse(content);
+      } catch {
+        console.error("Failed to parse advice JSON:", content);
+        return res.json({ advice: null });
+      }
+
+      const adviceContent = typeof parsedResponse.advice === "string"
+        ? parsedResponse.advice
+        : "";
+
+      const advice: Advice = {
+        id: `advice-${personaId}-${Date.now()}`,
+        challengeId,
+        persona,
+        content: adviceContent,
+        status: "pending",
+      };
+
+      res.json({ advice });
+    } catch (error) {
+      console.error("Generate advice error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate advice", details: errorMessage });
+    }
+  });
+
+  // ── Persona listing endpoint ──
+  // Returns all available personas for exploration and editing in the UI.
+  app.get("/api/personas", (_req, res) => {
+    const personas = Object.values(builtInPersonas);
+    res.json({ personas });
   });
 
   // Unified write endpoint - single interface to the AI writer
