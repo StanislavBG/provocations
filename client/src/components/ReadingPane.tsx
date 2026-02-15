@@ -52,9 +52,10 @@ interface ReadingPaneProps {
   isMerging?: boolean;
   onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onTextEdit?: (newText: string) => void;
+  onSendFeedback?: (text: string) => void;
 }
 
-export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit }: ReadingPaneProps) {
+export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback }: ReadingPaneProps) {
   const { toast } = useToast();
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
@@ -63,6 +64,8 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const [promptText, setPromptText] = useState("");
   const [isProcessingEdit, setIsProcessingEdit] = useState(false);
   const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
+  const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -241,6 +244,20 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     setSelectionPosition(null);
   }, []);
 
+  // Handle voice feedback submission
+  const handleSubmitFeedback = useCallback(() => {
+    if (feedbackText.trim() && onSendFeedback) {
+      onSendFeedback(feedbackText.trim());
+      setFeedbackText("");
+      setShowFeedbackInput(false);
+    }
+  }, [feedbackText, onSendFeedback]);
+
+  const handleCloseFeedback = useCallback(() => {
+    setShowFeedbackInput(false);
+    setFeedbackText("");
+  }, []);
+
   // Handle submitting the text edit instruction
   const handleSubmitEdit = useCallback(async () => {
     if (!promptText.trim() || !selectedText) return;
@@ -415,14 +432,17 @@ ${htmlBody}
         <div className="flex items-center gap-0.5">
           <Button
             data-testid="button-document-mic"
-            variant={viewMode === "edit" && isRecording ? "destructive" : "ghost"}
+            variant={showFeedbackInput ? "default" : "ghost"}
             size="icon"
-            className={`h-8 w-8 ${viewMode === "edit" ? "text-foreground" : "text-muted-foreground hover:text-foreground"} ${isRecording ? "animate-pulse" : ""}`}
+            className={`h-8 w-8 ${showFeedbackInput ? "" : "text-muted-foreground hover:text-foreground"}`}
             onClick={() => {
-              if (viewMode !== "edit") setViewMode("edit");
-              // Recording toggle handled by edit mode's ProvokeText voice
+              if (showFeedbackInput) {
+                handleCloseFeedback();
+              } else {
+                setShowFeedbackInput(true);
+              }
             }}
-            title="Voice input (edit mode)"
+            title={showFeedbackInput ? "Close voice feedback" : "Voice feedback"}
           >
             <Mic className="w-4 h-4" />
           </Button>
@@ -537,6 +557,42 @@ ${htmlBody}
           </Button>
         </div>
       </div>
+
+      {/* Voice feedback input bar */}
+      {showFeedbackInput && (
+        <div className="px-3 py-2 border-b bg-primary/5">
+          <ProvokeText
+            variant="input"
+            chrome="bare"
+            data-testid="input-voice-feedback"
+            value={feedbackText}
+            onChange={setFeedbackText}
+            placeholder="Speak or type feedback to evolve the document..."
+            voice={{ mode: "replace" }}
+            onVoiceTranscript={(transcript) => setFeedbackText(transcript)}
+            autoRecord
+            onSubmit={handleSubmitFeedback}
+            submitIcon={Send}
+            showCopy={false}
+            showClear={false}
+            disabled={isMerging}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") handleCloseFeedback();
+            }}
+            extraActions={
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleCloseFeedback}
+                className="h-7 w-7"
+                title="Cancel"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            }
+          />
+        </div>
+      )}
 
       {/* Content area — either markdown preview or raw editor */}
       <div className="flex-1 overflow-hidden relative">
