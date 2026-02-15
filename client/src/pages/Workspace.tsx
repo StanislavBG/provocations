@@ -879,6 +879,16 @@ export default function Workspace() {
               <h1 className="font-semibold text-lg">Provocations</h1>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                data-testid="button-reset-input"
+                variant="ghost"
+                size="sm"
+                onClick={handleReset}
+                className="gap-1.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span className="hidden sm:inline">New</span>
+              </Button>
               <AutoDictateToggle />
               <ThemeToggle />
               <UserButton data-testid="button-user-menu" />
