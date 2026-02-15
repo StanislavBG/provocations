@@ -519,6 +519,14 @@ Output only valid JSON, no markdown.`
         .map((p) => `- ${p.id} (${p.label}): ${p.prompts.challenge}`)
         .join("\n");
 
+      // ── Context assembly ──
+      // All required context for grounded challenges:
+      //   1. objective  — what the document is trying to achieve (required)
+      //   2. document   — current draft each persona reads (required)
+      //   3. personas   — who is speaking and their challenge prompts (required)
+      //   4. guidance   — optional user focus area
+      //   5. references — optional style/template docs for comparison
+
       const refDocSummary = referenceDocuments && referenceDocuments.length > 0
         ? referenceDocuments.map(d => `[${d.type.toUpperCase()}: ${d.name}]\n${d.content.slice(0, 500)}${d.content.length > 500 ? "..." : ""}`).join("\n\n")
         : null;
@@ -529,10 +537,6 @@ Output only valid JSON, no markdown.`
 
       const guidanceContext = guidance
         ? `\n\nUSER GUIDANCE: The user specifically wants challenges about: ${guidance}`
-        : "";
-
-      const objectiveContext = objective
-        ? `\n\nDOCUMENT OBJECTIVE: ${objective}\nEvaluate the document against this objective.`
         : "";
 
       const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
@@ -546,17 +550,20 @@ Output only valid JSON, no markdown.`
             role: "system",
             content: `You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
 
+DOCUMENT OBJECTIVE: ${objective}
+Evaluate the document against this objective. Every challenge must relate to how well the document achieves this goal.
+
 IMPORTANT: Only generate challenges. Do NOT provide advice, solutions, or suggestions. The user will request advice separately.
 
 Generate challenges from these personas:
 ${personaDescriptions}
-${refContext}${guidanceContext}${objectiveContext}
+${refContext}${guidanceContext}
 
 Respond with a JSON object containing a "challenges" array. Generate ${perPersonaCount} challenges per persona.
 For each challenge:
 - personaId: The persona ID (one of: ${personaIdsList})
 - title: A punchy headline (max 60 chars)
-- content: A 2-3 sentence challenge that identifies a specific gap, weakness, or assumption
+- content: A 2-3 sentence challenge that identifies a specific gap, weakness, or assumption relative to the objective
 - sourceExcerpt: A relevant quote from the source text (max 150 chars)
 - scale: Impact level from 1-5 (1=minor, 2=small, 3=moderate, 4=significant, 5=critical)
 
@@ -635,36 +642,39 @@ Output only valid JSON, no markdown.`
       const MAX_ANALYSIS_LENGTH = 6000;
       const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
 
-      const objectiveContext = objective
-        ? `\n\nDOCUMENT OBJECTIVE: ${objective}`
-        : "";
+      // ── Context assembly ──
+      // All four inputs are required so the persona can give grounded advice:
+      //   1. objective  — what the document is trying to achieve
+      //   2. document   — current draft the persona reads
+      //   3. challenge  — the specific gap/weakness identified earlier
+      //   4. persona    — who is speaking and their advice prompt
+      const systemPrompt = `${persona.prompts.advice}
 
-      const response = await getOpenAI().chat.completions.create({
-        model: "gpt-5.2",
-        max_completion_tokens: 2048,
-        messages: [
-          {
-            role: "system",
-            content: `${persona.prompts.advice}
-${objectiveContext}
+DOCUMENT OBJECTIVE: ${objective}
 
-You previously challenged the user with:
-CHALLENGE TITLE: ${challengeTitle}
-CHALLENGE: ${challengeContent}
+CHALLENGE (issued by you, the ${persona.label}):
+Title: ${challengeTitle}
+Detail: ${challengeContent}
 
 Now provide advice on how to address this challenge. Your advice must:
-1. Be concrete and actionable — the user should know exactly what to do
-2. Be different from the challenge — do NOT restate the problem, provide the solution
-3. Speak from your persona's perspective (${persona.label})
-4. Be 2-4 sentences of practical guidance
+1. Be grounded in the objective — explain how your advice serves the goal
+2. Be concrete and actionable — the user should know exactly what to do
+3. Be different from the challenge — do NOT restate the problem, provide the solution
+4. Speak from your persona's perspective (${persona.label})
+5. Be 2-4 sentences of practical guidance
 
 Respond with a JSON object:
 {
   "advice": "Your concrete, actionable advice here"
 }
 
-Output only valid JSON, no markdown.`
-          },
+Output only valid JSON, no markdown.`;
+
+      const response = await getOpenAI().chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 2048,
+        messages: [
+          { role: "system", content: systemPrompt },
           {
             role: "user",
             content: `Here is the current document:\n\n${analysisText}\n\nPlease provide advice for the challenge: "${challengeTitle}"`
