@@ -617,6 +617,14 @@ export default function Workspace() {
     setShowDiffView(prev => !prev);
   }, []);
 
+  // Handle document-level voice feedback from mic button in ReadingPane
+  const handleSendDocumentFeedback = useCallback((feedback: string) => {
+    writeMutation.mutate({
+      instruction: feedback,
+      description: "Voice feedback",
+    });
+  }, [writeMutation]);
+
   // Handle voice merge from text selection in ReadingPane
   const handleSelectionVoiceMerge = useCallback((selectedText: string, transcript: string) => {
     if (!document || !transcript.trim()) return;
@@ -879,6 +887,7 @@ export default function Workspace() {
           isMerging={writeMutation.isPending}
           onTranscriptUpdate={handleTranscriptUpdate}
           onTextEdit={handleTextEdit}
+          onSendFeedback={handleSendDocumentFeedback}
         />
       )}
 
