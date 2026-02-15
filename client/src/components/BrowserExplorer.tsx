@@ -10,7 +10,6 @@ import {
   Maximize2,
   Minimize2,
   ScrollText,
-  ArrowRightCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -263,7 +262,7 @@ export function BrowserExplorer({
             title="Navigate to URL"
           >
             Go
-            <ArrowRightCircle className="w-3.5 h-3.5" />
+            <ArrowRight className="w-3.5 h-3.5" />
           </Button>
           <Button
             variant="ghost"
