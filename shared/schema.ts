@@ -285,6 +285,56 @@ export const interviewEntrySchema = z.object({
 
 export type InterviewEntry = z.infer<typeof interviewEntrySchema>;
 
+// ── Discussion message types (enhanced discussion panel) ──
+
+// A single persona perspective in a multi-persona response
+export const personaPerspectiveSchema = z.object({
+  personaId: z.string(),
+  personaLabel: z.string(),
+  content: z.string(),
+});
+
+export type PersonaPerspective = z.infer<typeof personaPerspectiveSchema>;
+
+// Discussion message — supports both AI questions and user questions
+export const discussionMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(["system-question", "user-answer", "user-question", "persona-response"]),
+  content: z.string(),
+  topic: z.string().optional(),
+  timestamp: z.number(),
+  // For persona responses — individual perspectives from each relevant persona
+  perspectives: z.array(personaPerspectiveSchema).optional(),
+  // Interaction status for persona responses
+  status: z.enum(["pending", "accepted", "dismissed"]).optional(),
+  // Advice loaded on demand for system questions
+  advice: z.string().optional(),
+  advicePersonaId: z.string().optional(),
+  adviceLoading: z.boolean().optional(),
+});
+
+export type DiscussionMessage = z.infer<typeof discussionMessageSchema>;
+
+// Ask question request — user asks a question to the persona team
+export const askQuestionRequestSchema = z.object({
+  question: z.string().min(1, "Question is required"),
+  document: z.string().min(1, "Document is required"),
+  objective: z.string().min(1, "Objective is required"),
+  secondaryObjective: z.string().optional(),
+  activePersonas: z.array(z.string()).optional(),
+  previousMessages: z.array(discussionMessageSchema).optional(),
+});
+
+export type AskQuestionRequest = z.infer<typeof askQuestionRequestSchema>;
+
+// Ask question response — multi-persona response
+export interface AskQuestionResponse {
+  answer: string;
+  perspectives: PersonaPerspective[];
+  relevantPersonas: string[];
+  topic: string;
+}
+
 // Interview question request - generates the next provocative question
 export const interviewQuestionRequestSchema = z.object({
   objective: z.string().min(1, "Objective is required"),
