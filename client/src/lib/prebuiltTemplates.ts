@@ -382,6 +382,114 @@ Color palette, fonts, brand guidelines, or mood references.
     ],
   },
   {
+    id: "persona-definition",
+    title: "Persona / Agent",
+    shortLabel: "Persona",
+    subtitle: "Character, role, or AI agent profile",
+    description:
+      "For defining a persona, character, or AI agent in structured detail. Captures identity, motivations, behavioral traits, communication style, expertise, constraints, and interaction patterns. The output is a complete profile — usable as a character brief, user persona, or agent system prompt.",
+    icon: "user-round-cog",
+    objective:
+      "Write a complete, structured persona definition covering identity, motivations, expertise, behavioral traits, communication style, and constraints",
+    starterText: "",
+    draftQuestions: [
+      "Who is this persona — what's their name, role, or archetype?",
+      "What is their primary goal or mission?",
+      "What makes them distinct — personality traits, quirks, or style?",
+      "What are their boundaries or things they would never do?",
+    ],
+    templateContent: `# Persona Definition
+
+## Identity
+### Name / Label
+What is this persona called?
+
+### Role / Archetype
+What role do they fill? (e.g., mentor, analyst, customer, support agent)
+
+### One-Line Summary
+Describe this persona in a single sentence.
+
+## Background & Context
+### Backstory
+What shaped this persona? Relevant experience, history, or origin.
+
+### Domain Expertise
+What subjects, skills, or fields do they know deeply?
+
+### Knowledge Boundaries
+What do they explicitly not know or defer to others on?
+
+## Personality & Behavior
+### Core Traits
+3–5 defining personality characteristics (e.g., analytical, empathetic, blunt, curious).
+
+### Communication Style
+How do they speak or write? Formal, casual, terse, verbose, humorous, dry?
+
+### Tone & Voice
+What emotional register do they default to? (e.g., warm and encouraging, sharp and direct)
+
+### Decision-Making Style
+How do they approach choices? (e.g., data-driven, intuitive, cautious, bold)
+
+## Motivations & Goals
+### Primary Objective
+What is this persona trying to achieve?
+
+### Secondary Goals
+What else matters to them?
+
+### Values
+What principles guide their behavior?
+
+## Constraints & Boundaries
+### Things They Will Never Do
+Hard limits on behavior, topics, or actions.
+
+### Ethical Guidelines
+Rules or principles they follow.
+
+### Scope of Authority
+What can they decide or do on their own vs. what requires escalation?
+
+## Interaction Patterns
+### How They Greet / Open
+Typical way they start a conversation or interaction.
+
+### How They Handle Conflict
+What do they do when challenged or disagreed with?
+
+### How They Handle Uncertainty
+What do they say or do when they don't know something?
+
+### How They Close / Sign Off
+Typical way they end an interaction.
+
+## Example Exchanges
+### Example 1
+- **User**: [typical input]
+- **Persona**: [characteristic response]
+
+### Example 2
+- **User**: [edge case or challenge]
+- **Persona**: [response showing personality under pressure]`,
+    provocationSources: [
+      "Character Designer",
+      "Psychologist",
+      "End User",
+      "Red Teamer",
+      "Consistency Checker",
+    ],
+    provocationExamples: [
+      "You've listed traits but they don't cohere — 'empathetic' and 'blunt' without explaining how they balance. Which wins in a conflict? — Character Designer",
+      "What's the underlying motivation? You described what they do, not why. People act from needs, not bullet points. — Psychologist",
+      "I just interacted with this persona and it felt generic. What makes them different from a default chatbot? — End User",
+      "What happens if someone asks this persona to do something outside its boundaries? You haven't defined the failure mode. — Red Teamer",
+      "The communication style says 'casual' but the example exchange is formal. Which is it? — Consistency Checker",
+    ],
+  },
+  {
     id: "slide-video-script",
     title: "Slide Video Script",
     shortLabel: "Video Script",
