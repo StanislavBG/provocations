@@ -164,7 +164,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
           {/* Compact chip grid — always visible unless a selection collapses it */}
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
             <div className="flex flex-wrap gap-2">
-              {prebuiltTemplates.map((template) => {
+              {prebuiltTemplates.filter((t) => t.id !== "streaming").map((template) => {
                 const Icon = iconMap[template.icon] || PencilLine;
                 const isActive = activePrebuilt?.id === template.id;
 
@@ -256,46 +256,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               2
             </div>
             <h2 className="text-base font-semibold">
-              {activePrebuilt?.id === "streaming"
-                ? "Describe what you're capturing requirements for"
-                : "Share your thinking — notes, ideas, or speak your mind"}
+              Share your thinking — notes, ideas, or speak your mind
             </h2>
           </div>
-          {activePrebuilt?.id === "streaming" && onStreamingMode ? (
-            <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="Objective"
-                labelIcon={Target}
-                description="Describe what you're capturing — a feature, a flow, an existing screen you want to improve."
-                id="streaming-objective"
-                placeholder="Capture requirements for a checkout flow... Document enhancements to the dashboard..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
-              <Button
-                onClick={() => onStreamingMode(objective.trim() || "Discover and refine requirements through screen capture and annotations")}
-                disabled={isLoading}
-                size="lg"
-                className="w-full gap-2"
-              >
-                <Radio className="w-4 h-4" />
-                Start Capture Workspace
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-1 min-h-0 gap-3">
+          <div className="flex flex-1 min-h-0 gap-3">
               {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
                 <DraftQuestionsPanel
                   questions={activePrebuilt.draftQuestions}
@@ -335,13 +299,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 maxAudioDuration="5min"
               />
             </div>
-          )}
         </div>
         )}
       </div>
 
       {/* Fixed bottom action bar */}
-      {hasObjectiveType && activePrebuilt?.id !== "streaming" && (
+      {hasObjectiveType && (
         <div className="shrink-0 border-t bg-card px-6 py-3" style={{ scrollbarGutter: "stable" }}>
           <div className="w-full max-w-4xl mx-auto flex items-center justify-end gap-3">
             <Button
