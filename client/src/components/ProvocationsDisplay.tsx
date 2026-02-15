@@ -727,7 +727,7 @@ export function ProvocationsDisplay({ provocations, onUpdateStatus, onVoiceRespo
         >
           All
         </Button>
-        {(["architect", "quality_engineer", "ux_designer", "tech_writer", "product_manager", "security_engineer", "thinking_bigger"] as ProvocationType[]).map((type) => {
+        {(["ceo", "architect", "quality_engineer", "ux_designer", "tech_writer", "product_manager", "security_engineer"] as ProvocationType[]).map((type) => {
           const Icon = personaIcons[type];
           const count = safeProvocations.filter((p) => p.type === type).length;
           if (count === 0) return null;
@@ -826,7 +826,7 @@ function ChallengeInput({
         )}
         {/* Persona toggles */}
         <div className="flex items-center gap-1 flex-wrap">
-          {(["architect", "quality_engineer", "ux_designer", "tech_writer", "product_manager", "security_engineer", "thinking_bigger"] as ProvocationType[]).map((type) => {
+          {(["ceo", "architect", "quality_engineer", "ux_designer", "tech_writer", "product_manager", "security_engineer"] as ProvocationType[]).map((type) => {
             const Icon = personaIcons[type];
             const isSelected = selectedTypes.has(type);
             return (
