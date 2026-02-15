@@ -10,6 +10,7 @@ import {
   Maximize2,
   Minimize2,
   ScrollText,
+  ArrowRightCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -172,6 +173,26 @@ export function BrowserExplorer({
         <h3 className="font-semibold text-sm">Website Explorer</h3>
         <div className="flex-1" />
         {headerActions}
+        {onToggleLogPanel && (
+          <Button
+            variant={showLogPanel ? "default" : "ghost"}
+            size="sm"
+            className="h-7 gap-1 text-xs px-2"
+            onClick={onToggleLogPanel}
+            title="Toggle agent analysis view"
+          >
+            <ScrollText className="w-3.5 h-3.5" />
+            Agent View
+            {(isAnalyzing || discoveredCount > 0) && (
+              <Badge
+                variant={showLogPanel ? "secondary" : "outline"}
+                className="text-[9px] h-4 ml-0.5"
+              >
+                {isAnalyzing ? "..." : discoveredCount}
+              </Badge>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Browser Chrome — navigation + address bar */}
@@ -220,7 +241,7 @@ export function BrowserExplorer({
               type="text"
               value={addressBar}
               onChange={(e) => setAddressBar(e.target.value)}
-              placeholder="Enter URL to explore..."
+              placeholder="Enter a website for us to browse..."
               className="flex-1 bg-transparent outline-none text-sm"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -233,26 +254,17 @@ export function BrowserExplorer({
 
         {/* Toolbar actions */}
         <div className="flex items-center gap-0.5">
-          {onToggleLogPanel && (
-            <Button
-              variant={showLogPanel ? "default" : "ghost"}
-              size="sm"
-              className="h-7 gap-1 text-xs px-2"
-              onClick={onToggleLogPanel}
-              title="Toggle site analysis log"
-            >
-              <ScrollText className="w-3.5 h-3.5" />
-              Log
-              {(isAnalyzing || discoveredCount > 0) && (
-                <Badge
-                  variant={showLogPanel ? "secondary" : "outline"}
-                  className="text-[9px] h-4 ml-0.5"
-                >
-                  {isAnalyzing ? "..." : discoveredCount}
-                </Badge>
-              )}
-            </Button>
-          )}
+          <Button
+            variant="default"
+            size="sm"
+            className="h-7 gap-1 text-xs px-2.5"
+            onClick={(e) => handleAddressBarSubmit(e as any)}
+            disabled={!addressBar.trim()}
+            title="Navigate to URL"
+          >
+            Go
+            <ArrowRightCircle className="w-3.5 h-3.5" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -324,12 +336,12 @@ export function BrowserExplorer({
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3 max-w-sm px-4">
               <Globe className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm text-muted-foreground">
-                Enter a URL above or in the Website Context panel to start exploring
+              <p className="text-sm font-medium text-foreground/70">
+                Paste a URL above and hit Go
               </p>
-              <Badge variant="outline" className="text-xs">
-                Browse side-by-side while building requirements
-              </Badge>
+              <p className="text-xs text-muted-foreground">
+                We'll load the site here so you can capture screenshots, annotate what you see, and turn your observations into requirements.
+              </p>
             </div>
           </div>
         )}
