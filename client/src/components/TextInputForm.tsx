@@ -257,7 +257,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             </div>
             <h2 className="text-base font-semibold">
               {activePrebuilt?.id === "streaming"
-                ? "Describe what you're exploring, then start"
+                ? "Describe what you're capturing requirements for"
                 : "Share your thinking — notes, ideas, or speak your mind"}
             </h2>
           </div>
@@ -267,9 +267,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 chrome="container"
                 label="Objective"
                 labelIcon={Target}
-                description="Describe the website or feature you're writing requirements for."
+                description="Describe what you're capturing — a feature, a flow, an existing screen you want to improve."
                 id="streaming-objective"
-                placeholder="Write requirements for an e-commerce checkout flow... Redesign the user profile page..."
+                placeholder="Capture requirements for a checkout flow... Document enhancements to the dashboard..."
                 className="text-sm leading-relaxed font-serif"
                 value={objective}
                 onChange={setObjective}
@@ -284,13 +284,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               />
 
               <Button
-                onClick={() => onStreamingMode(objective.trim() || "Discover and refine requirements for a website")}
+                onClick={() => onStreamingMode(objective.trim() || "Discover and refine requirements through screen capture and annotations")}
                 disabled={isLoading}
                 size="lg"
                 className="w-full gap-2"
               >
                 <Radio className="w-4 h-4" />
-                Start Streaming Workspace
+                Start Capture Workspace
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
