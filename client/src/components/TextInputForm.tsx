@@ -16,13 +16,16 @@ import {
   Radio,
   NotebookPen,
   UserRoundCog,
+  Layers,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import type { SmartModeDef } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
+import { ContextCapturePanel } from "@/components/ContextCapturePanel";
+import { ContextStatusPanel } from "@/components/ContextStatusPanel";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
-import type { ReferenceDocument } from "@shared/schema";
+import type { ReferenceDocument, ContextItem } from "@shared/schema";
 import { generateId } from "@/lib/utils";
 
 
@@ -31,6 +34,9 @@ interface TextInputFormProps {
   onBlankDocument?: (objective: string) => void;
   onStreamingMode?: (objective: string) => void;
   isLoading?: boolean;
+  /** Captured context items (managed by parent for persistence) */
+  capturedContext: ContextItem[];
+  onCapturedContextChange: (items: ContextItem[]) => void;
 }
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -62,7 +68,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading, capturedContext, onCapturedContextChange }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
 
@@ -148,7 +154,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
   return (
     <div className="h-full flex flex-col">
-      <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto px-6 py-4 gap-5" style={{ scrollbarGutter: "stable" }}>
+      <div className="w-full max-w-5xl mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto px-6 py-4 gap-5" style={{ scrollbarGutter: "stable" }}>
 
         {/* ── STEP ONE: Your objective ── */}
         <div className="space-y-3" ref={stepOneRef}>
@@ -259,45 +265,69 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               Share your thinking — notes, ideas, or speak your mind
             </h2>
           </div>
-          <div className="flex flex-1 min-h-0 gap-3">
-              {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
-                <DraftQuestionsPanel
-                  questions={activePrebuilt.draftQuestions}
-                  onResponse={handleDraftQuestionResponse}
-                />
-              )}
-              <ProvokeText
-                chrome="container"
-                label="Your context"
-                labelIcon={NotebookPen}
-                description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
-                containerClassName="flex-1 min-h-0 flex flex-col"
-                data-testid="input-source-text"
-                placeholder="Paste your notes or click the mic to speak your ideas..."
-                className="text-sm leading-relaxed font-serif min-h-[140px]"
-                value={text}
-                onChange={setText}
-                minRows={8}
-                maxRows={30}
-                autoFocus
-                voice={{ mode: "append" }}
-                onVoiceTranscript={(transcript) =>
-                  setText((prev) => (prev ? prev + " " + transcript : transcript))
-                }
-                onRecordingChange={(recording) => {
-                  if (recording && autoRecordDraft) {
-                    setAutoRecordDraft(false);
+            <div className="flex flex-1 min-h-0 gap-4">
+              {/* Left column: context capture widgets + text input */}
+              <div className="flex flex-col flex-1 min-h-0 gap-3 min-w-0">
+                {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
+                  <DraftQuestionsPanel
+                    questions={activePrebuilt.draftQuestions}
+                    onResponse={handleDraftQuestionResponse}
+                  />
+                )}
+                <ProvokeText
+                  chrome="container"
+                  label="Your context"
+                  labelIcon={NotebookPen}
+                  description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
+                  containerClassName="flex-1 min-h-0 flex flex-col"
+                  data-testid="input-source-text"
+                  placeholder="Paste your notes or click the mic to speak your ideas..."
+                  className="text-sm leading-relaxed font-serif min-h-[140px]"
+                  value={text}
+                  onChange={setText}
+                  minRows={8}
+                  maxRows={30}
+                  autoFocus
+                  voice={{ mode: "append" }}
+                  onVoiceTranscript={(transcript) =>
+                    setText((prev) => (prev ? prev + " " + transcript : transcript))
                   }
-                }}
-                autoRecord={autoRecordDraft}
-                textProcessor={(t, mode) =>
-                  processText(t, mode, mode === "clean" ? "source" : undefined)
-                }
-                extraSmartModes={aimSmartModes}
-                showCharCount
-                maxCharCount={10000}
-                maxAudioDuration="5min"
-              />
+                  onRecordingChange={(recording) => {
+                    if (recording && autoRecordDraft) {
+                      setAutoRecordDraft(false);
+                    }
+                  }}
+                  autoRecord={autoRecordDraft}
+                  textProcessor={(t, mode) =>
+                    processText(t, mode, mode === "clean" ? "source" : undefined)
+                  }
+                  extraSmartModes={aimSmartModes}
+                  showCharCount
+                  maxCharCount={10000}
+                  maxAudioDuration="5min"
+                />
+
+                {/* Context capture area */}
+                <div className="rounded-lg border bg-card/50 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Supporting Context
+                    </span>
+                  </div>
+                  <ContextCapturePanel
+                    items={capturedContext}
+                    onItemsChange={onCapturedContextChange}
+                  />
+                </div>
+              </div>
+
+              {/* Right column: context status */}
+              <div className="w-56 shrink-0 hidden lg:block">
+                <div className="sticky top-0">
+                  <ContextStatusPanel items={capturedContext} />
+                </div>
+              </div>
             </div>
         </div>
         )}
@@ -306,7 +336,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
       {/* Fixed bottom action bar */}
       {hasObjectiveType && (
         <div className="shrink-0 border-t bg-card px-6 py-3" style={{ scrollbarGutter: "stable" }}>
-          <div className="w-full max-w-4xl mx-auto flex items-center justify-end gap-3">
+          <div className="w-full max-w-5xl mx-auto flex items-center justify-end gap-3">
             <Button
               data-testid="button-analyze"
               onClick={handleSubmit}
