@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
     "@clerk/clerk-react": "^5.60.0",
     "@clerk/express": "^1.7.69",
     "@hookform/resolvers": "^3.10.0",
