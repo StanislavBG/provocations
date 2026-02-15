@@ -4,6 +4,33 @@ import { getAuth } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt } from "./crypto";
 import OpenAI from "openai";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { LLMPlanner } = require("bilko-flow/dist/llm/llm-planner") as {
+  LLMPlanner: new (config: {
+    provider: string;
+    model: string;
+    apiKey: string;
+    baseUrl?: string;
+    temperature?: number;
+  }) => {
+    proposeWorkflow(goal: {
+      description: string;
+      targetDslVersion: string;
+      determinismTarget?: { targetGrade: string };
+    }): Promise<{
+      name: string;
+      description?: string;
+      steps: Array<{
+        id: string;
+        name: string;
+        type: string;
+        description?: string;
+        dependsOn?: string[];
+      }>;
+      plannerInfo: { name: string; version: string };
+    }>;
+  };
+};
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -36,6 +63,8 @@ import {
   type DiscoveredMedia,
   type StreamingRefineResponse,
   type StreamingRequirement,
+  plannerProposeRequestSchema,
+  type PlannerProposeResponse,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById } from "@shared/personas";
 
@@ -2097,6 +2126,74 @@ Output only valid JSON, no markdown wrapping.`
       console.error("Screenshot error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to capture screenshot", details: errorMessage });
+    }
+  });
+
+  // ── Planner endpoint (bilko-flow LLMPlanner) ──
+
+  let _planner: InstanceType<typeof LLMPlanner> | null = null;
+  function getPlanner(): InstanceType<typeof LLMPlanner> {
+    if (!_planner) {
+      const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (!apiKey) throw new Error("AI_INTEGRATIONS_OPENAI_API_KEY not set");
+      _planner = new LLMPlanner({
+        provider: "openai",
+        model: "gpt-4o",
+        apiKey,
+        baseUrl: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        temperature: 0.3,
+      });
+    }
+    return _planner;
+  }
+
+  app.post("/api/planner/propose", async (req, res) => {
+    try {
+      const parsed = plannerProposeRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const { description, context, userRole } = parsed.data;
+
+      // Build the goal description with optional context
+      let goalDescription = description;
+      if (context) {
+        goalDescription += `\n\nContext:\n${context}`;
+      }
+      if (userRole) {
+        goalDescription += `\n\nUser role: ${userRole}`;
+      }
+
+      const planner = getPlanner();
+      const proposal = await planner.proposeWorkflow({
+        description: goalDescription,
+        targetDslVersion: "1.0.0",
+        determinismTarget: { targetGrade: "best-effort" },
+      });
+
+      // Map the WorkflowProposal to our simplified client response
+      const response: PlannerProposeResponse = {
+        name: proposal.name,
+        description: proposal.description || description,
+        steps: proposal.steps.map((step) => ({
+          id: step.id,
+          name: step.name,
+          type: step.type,
+          description: step.description || "",
+          dependsOn: step.dependsOn || [],
+        })),
+        plannerInfo: {
+          name: proposal.plannerInfo.name,
+          version: proposal.plannerInfo.version,
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Planner error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate workflow", details: message });
     }
   });
 
