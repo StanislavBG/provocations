@@ -173,17 +173,6 @@ export type ReferenceDocument = z.infer<typeof referenceDocumentSchema>;
 
 // API request schemas - used by both frontend and backend
 
-// Generate provocations request
-export const generateProvocationsRequestSchema = z.object({
-  text: z.string().min(1, "Text is required"),
-  guidance: z.string().optional(),
-  objective: z.string().min(1, "Objective is required"),    // principal context — always required
-  types: z.array(z.enum(provocationType)).optional(),
-  referenceDocuments: z.array(referenceDocumentSchema).optional(),
-});
-
-export type GenerateProvocationsRequest = z.infer<typeof generateProvocationsRequestSchema>;
-
 // Unified write request - single interface to the AI writer
 export const provocationContextSchema = z.object({
   type: z.enum(provocationType),
