@@ -5,10 +5,11 @@
 **Provocations** is an AI-augmented document workspace where users iteratively shape ideas into polished documents through voice, text, and thought-provoking AI interactions.
 
 Think of it as a **smarter Google Docs** — the document is the output, and the AI helps you create and refine it through:
-- **Multiple perspectives** (lenses) that challenge your thinking
-- **Provocations** that push you to address gaps, fallacies, and alternatives
+- **Multiple personas** (8 expert perspectives) that challenge your thinking
+- **Provocations** that push you to address gaps, assumptions, and alternatives
 - **Voice input** for natural ideation and feedback
 - **Iterative shaping** where each interaction evolves the document
+- **Screen capture** mode for requirement discovery through annotations
 
 **Core Philosophy**: "Would you rather have a tool that thinks for you, or a tool that makes you think?"
 
@@ -28,45 +29,67 @@ npm run db:push  # Push Drizzle schema to database
 
 | Layer | Technologies |
 |-------|-------------|
-| **Frontend** | React 18, TypeScript, Vite 7, Tailwind CSS 3.4, shadcn/ui |
-| **Backend** | Express 5.0, OpenAI GPT-5.2 |
-| **Database** | PostgreSQL via Drizzle ORM (documents are in-memory only) |
+| **Frontend** | React 18, TypeScript 5.6, Vite 7, Tailwind CSS 3.4, shadcn/ui (47 components) |
+| **Backend** | Express 5.0, Anthropic Claude Opus 4.6 (`claude-opus-4-6`) |
+| **Database** | PostgreSQL via Drizzle ORM, server-side AES-GCM encryption |
+| **Auth** | Clerk (authentication & user ownership) |
 | **Validation** | Zod schemas shared between frontend/backend |
 | **State** | React Query (TanStack), React hooks |
-| **Routing** | Wouter (lightweight) |
+| **Routing** | Wouter (lightweight client-side router) |
+| **Voice** | Web Speech API + custom audio worklets |
 
 ## Directory Structure
 
 ```
 provocations/
-├── client/src/              # React frontend
+├── client/src/
 │   ├── pages/
-│   │   └── Workspace.tsx    # Main app interface (primary orchestrator)
+│   │   ├── Workspace.tsx           # Main app orchestrator
+│   │   └── not-found.tsx           # 404 page
 │   ├── components/
-│   │   ├── ui/              # 47 shadcn/ui components
-│   │   ├── TextInputForm.tsx
-│   │   ├── LensesPanel.tsx
-│   │   ├── ProvocationsDisplay.tsx
-│   │   ├── OutlineBuilder.tsx
-│   │   ├── ReadingPane.tsx
-│   │   ├── DimensionsToolbar.tsx
-│   │   ├── DiffView.tsx
-│   │   ├── VoiceRecorder.tsx
-│   │   └── TranscriptOverlay.tsx
-│   ├── hooks/               # Custom React hooks
+│   │   ├── ui/                     # 47 shadcn/ui primitives (Radix-based)
+│   │   ├── TextInputForm.tsx       # Landing page input (template selection + URL)
+│   │   ├── ProvocationsDisplay.tsx  # Challenge cards with voice response
+│   │   ├── ProvocationToolbox.tsx   # Mode selector (challenge/advise/interview)
+│   │   ├── ReadingPane.tsx          # Editable document canvas
+│   │   ├── InterviewPanel.tsx       # Multi-turn interview Q&A flow
+│   │   ├── StreamingWorkspace.tsx   # Requirement discovery workspace
+│   │   ├── StreamingDialogue.tsx    # Agent dialogue for requirements
+│   │   ├── StreamingWireframePanel.tsx # Wireframe analysis display
+│   │   ├── BrowserExplorer.tsx      # Embedded iframe for website browsing
+│   │   ├── ScreenCaptureButton.tsx  # Screenshot + annotation workflow
+│   │   ├── VoiceRecorder.tsx        # Web Speech API recording
+│   │   ├── TranscriptOverlay.tsx    # Live transcript during recording
+│   │   ├── ProvokeText.tsx          # Smart text area with voice + processing
+│   │   ├── ContextCapturePanel.tsx  # Capture text/images/links as context
+│   │   ├── ContextStatusPanel.tsx   # Display captured context status
+│   │   ├── DraftQuestionsPanel.tsx  # Guided questions for templates
+│   │   ├── DiffView.tsx             # Side-by-side version comparison
+│   │   ├── MarkdownRenderer.tsx     # Markdown → HTML rendering
+│   │   ├── OutlineBuilder.tsx       # Document outline with sections
+│   │   ├── LogStatsPanel.tsx        # Edit statistics and logs
+│   │   └── AutoDictateToggle.tsx    # Continuous voice recording toggle
+│   ├── hooks/
+│   │   ├── use-auto-dictate.ts      # Voice recording preference
+│   │   ├── use-mobile.tsx           # Mobile viewport detection
+│   │   └── use-toast.ts            # Toast notification system
 │   ├── lib/
-│   │   ├── queryClient.ts   # React Query config
-│   │   └── utils.ts         # Tailwind merge utilities
-│   ├── App.tsx              # Router setup
-│   └── main.tsx             # Entry point
+│   │   ├── queryClient.ts          # React Query config + apiRequest helper
+│   │   ├── prebuiltTemplates.ts    # Template definitions (8 prebuilt types)
+│   │   └── utils.ts                # Tailwind merge utilities
+│   ├── App.tsx                     # Router setup
+│   └── main.tsx                    # Entry point
 ├── server/
-│   ├── index.ts             # Express app setup
-│   ├── routes.ts            # Core API endpoints
-│   └── storage.ts           # In-memory document storage
+│   ├── index.ts                    # Express app setup
+│   ├── routes.ts                   # All API endpoints (21 routes)
+│   ├── storage.ts                  # Database operations (Drizzle ORM)
+│   ├── crypto.ts                   # AES-GCM encryption/decryption
+│   └── db.ts                       # Database connection
 ├── shared/
-│   ├── schema.ts            # Zod schemas & types
-│   └── models/chat.ts       # Drizzle ORM models
-└── script/build.ts          # Build configuration
+│   ├── schema.ts                   # Zod schemas & TypeScript types
+│   ├── personas.ts                 # 8 built-in persona definitions
+│   └── models/chat.ts             # Drizzle ORM table definitions
+└── script/build.ts                 # Production build configuration
 ```
 
 ## Path Aliases
@@ -91,106 +114,109 @@ Configured in `tsconfig.json`:
 ```
 
 1. **Input** — Start with rough ideas, notes, or existing material
-2. **Analyze** — AI generates lenses (perspectives) and provocations (challenges)
-3. **Respond** — Use voice or text to address provocations
+2. **Analyze** — AI generates challenges from multiple persona perspectives
+3. **Respond** — Use voice or text to address challenges
 4. **Merge** — AI intelligently weaves your responses into the document
 5. **Iterate** — Repeat until the document fully captures your thinking
 
-### Key Insight
-
-The document is not static input to be critiqued — it's a **living artifact** that grows through dialogue between you and the AI. Each provocation is an invitation to think deeper; each response shapes the final output.
-
 ## API Endpoints
+
+All endpoints use Zod validation. Document endpoints require Clerk authentication.
+
+### AI-Powered Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/analyze` | POST | Generate lenses & provocations from current document |
-| `/api/expand` | POST | AI-expand outline headings into paragraphs |
-| `/api/refine` | POST | Adjust tone & length of text |
-| `/api/merge` | POST | Integrate voice/text feedback into document |
-| `/api/edit-text` | POST | Edit selected text with instructions |
+| `/api/generate-challenges` | POST | Generate challenges from selected personas |
+| `/api/generate-advice` | POST | Generate advice for a specific challenge |
+| `/api/write` | POST | Unified document editor (edit, expand, refine) |
+| `/api/write/stream` | POST | Streaming write for large documents (SSE) |
+| `/api/summarize-intent` | POST | Clean voice transcripts into clear intent |
+| `/api/interview/question` | POST | Generate next interview question |
+| `/api/interview/summary` | POST | Synthesize interview entries into instructions |
+| `/api/discussion/ask` | POST | Multi-persona response to user questions |
+| `/api/streaming/question` | POST | Requirement discovery dialogue |
+| `/api/streaming/wireframe-analysis` | POST | Analyze website structure & content |
+| `/api/streaming/refine` | POST | Refine requirements from dialogue |
 
-### Request Schemas
+### Data Endpoints
 
-All schemas defined in `shared/schema.ts` with Zod validation.
-
-```typescript
-// Analyze - generate perspectives and challenges
-{ text: string, selectedLenses?: LensType[] }
-
-// Expand - develop outline into content
-{ heading: string, context?: string, tone?: ToneOption }
-
-// Refine - adjust style
-{ text: string, tone: ToneOption, targetLength: "shorter" | "same" | "longer" }
-
-// Merge - integrate feedback (supports voice context)
-{ originalText: string, userFeedback: string, provocationContext?: string, selectedText?: string, activeLens?: LensType }
-
-// Edit - modify selection
-{ instruction: string, selectedText: string, fullDocument: string }
-```
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/personas` | GET | List all 8 built-in personas |
+| `/api/documents` | POST | Save new document (encrypted) |
+| `/api/documents/:id` | PUT | Update document |
+| `/api/documents` | GET | List user's documents |
+| `/api/documents/:id` | GET | Load document (decrypted) |
+| `/api/documents/:id` | PATCH | Rename document |
+| `/api/documents/:id` | DELETE | Delete document |
+| `/api/preferences` | GET/PUT | User preferences (auto-dictate) |
+| `/api/screenshot` | POST | Server-side screenshot via Playwright |
 
 ## Domain Concepts
 
-### Lenses (6 Perspectives)
-Different viewpoints to examine your document:
-- `consumer` — End-user/customer viewpoint
-- `executive` — Strategic leadership view
-- `technical` — Implementation constraints
-- `financial` — Cost/ROI analysis
-- `strategic` — Competitive positioning
-- `skeptic` — Critical assumptions challenge
+### Personas (8 Built-in Perspectives)
 
-### Provocations (3 Categories)
-Challenges that push your thinking:
-- `opportunity` — Growth/innovation gaps you might be missing
-- `fallacy` — Logical errors, weak arguments, unsupported claims
-- `alternative` — Different approaches or perspectives to consider
+Each persona has distinct challenge and advice prompts:
+
+| ID | Label | Focus |
+|----|-------|-------|
+| `thinking_bigger` | Think Bigger | Scale impact: retention, cost-to-serve, accessibility |
+| `ceo` | CEO | Mission-first: clarity, accountability, trust |
+| `architect` | Architect | System design: boundaries, APIs, data flow |
+| `quality_engineer` | Quality Engineer | Testing: edge cases, error handling, reliability |
+| `ux_designer` | UX Designer | User flows: discoverability, accessibility, error states |
+| `tech_writer` | Tech Writer | Documentation: clarity, naming, missing context |
+| `product_manager` | Product Manager | Business value: user stories, success metrics |
+| `security_engineer` | Security Engineer | Security: auth, data privacy, compliance |
+
+### Instruction Types (7 Classifications)
+
+The `/api/write` endpoint classifies instructions before processing:
+- `expand` — Add depth, examples, supporting details
+- `condense` — Remove redundancy, tighten prose
+- `restructure` — Reorganize content, modify headings, reorder sections
+- `clarify` — Simplify language, improve accessibility
+- `style` — Adjust voice and tone
+- `correct` — Fix grammar, spelling, logic errors
+- `general` — Fallback for mixed instructions
 
 ### Tone Options
-Voice for the final document:
 - `inspirational`, `practical`, `analytical`, `persuasive`, `cautious`
 
 ## Key Components
 
 ### Workspace.tsx (Orchestrator)
 Central hub managing:
-- **Phases**: `input` → `blank-document` → `workspace`
-- **State**: document, lenses, provocations, outline, versions
+- **Phases**: `input` → `workspace` (with streaming/capture variant)
+- **State**: document, personas, challenges, interview entries, versions
 - **Versioning**: Full history with diff comparison
+- **Toolbox apps**: interview, website/capture, discussion
 
 ### ReadingPane.tsx
 The document canvas:
 - Editable mode (pencil toggle)
 - Text selection → voice/edit actions
-- Download functionality
+- Markdown rendering and download
 
 ### ProvocationsDisplay.tsx
 Challenge cards that drive iteration:
 - Voice recording on each card
 - Status: pending, addressed, rejected, highlighted
-- Context passed to merge for intelligent integration
+- Context passed to write endpoint for intelligent integration
 
-### VoiceRecorder.tsx
-Natural input via speech:
-- Web Speech API transcription
-- Auto-merge into document
-- Works on provocations and text selections
-
-## Design Principles
-
-1. **Document-Centric** — The document is the product, not a chat log
-2. **Productive Resistance** — AI challenges, doesn't just assist
-3. **User as Author** — You write; AI provokes better writing
-4. **Voice-First Feedback** — Speaking is faster than typing for ideation
-5. **Iterative Shaping** — Documents evolve through multiple passes
+### StreamingWorkspace.tsx
+Requirement discovery through:
+- Agent-guided dialogue
+- Website wireframe analysis
+- Screenshot annotations
+- Requirement extraction and refinement
 
 ## Design System
 
 ### Theme
 - **Primary**: Warm amber (#B35C1E)
-- **Accent**: Thoughtful blue (200°, 60%, 45%)
+- **Accent**: Thoughtful blue (200, 60%, 45%)
 - **Aesthetic**: Aged paper/ink, intellectual warmth
 - **Mode**: Dark mode supported
 
@@ -203,9 +229,12 @@ Natural input via speech:
 
 | Variable | Description |
 |----------|-------------|
-| `AI_INTEGRATIONS_OPENAI_API_KEY` | OpenAI API key |
-| `AI_INTEGRATIONS_OPENAI_BASE_URL` | OpenAI API base URL |
+| `ANTHROPIC_API_KEY` | Anthropic API key (or `ANTHROPIC_KEY`) |
+| `ANTHROPIC_BASE_URL` | Optional proxy base URL |
 | `DATABASE_URL` | PostgreSQL connection string |
+| `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
+| `CLERK_PUBLISHABLE_KEY` | Clerk frontend authentication |
+| `PLAYWRIGHT_CHROMIUM_PATH` | Path to Chromium for screenshots |
 
 ## Development Notes
 
@@ -213,6 +242,7 @@ Natural input via speech:
 1. Define Zod schema in `shared/schema.ts`
 2. Add endpoint in `server/routes.ts`
 3. Use `safeParse()` for validation
+4. All LLM calls go through `getAnthropic()` singleton
 
 ### State Management
 - Local state in Workspace.tsx for app-wide concerns
@@ -224,10 +254,13 @@ Natural input via speech:
 - Defensive null-checks in components
 - Toast notifications for user feedback
 
+### Document Storage
+- Documents encrypted at rest with AES-GCM (server-side)
+- Ownership verified via Clerk userId
+- Salt and IV stored alongside ciphertext
+
 ## Not Yet Implemented
 
 - Testing framework (Jest/Vitest)
 - CI/CD pipeline
 - Structured logging
-- Document persistence to database
-- Starting from blank (currently requires input text)
