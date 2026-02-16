@@ -11,6 +11,7 @@ export const provocationType = [
   "product_manager",
   "security_engineer",
   "ceo",
+  "data_architect",
 ] as const;
 
 export type ProvocationType = typeof provocationType[number];
