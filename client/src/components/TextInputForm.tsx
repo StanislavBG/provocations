@@ -10,6 +10,7 @@ import {
   GraduationCap,
   BarChart3,
   Clapperboard,
+  MonitorPlay,
   Check,
   ChevronDown,
   Crosshair,
@@ -48,6 +49,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "graduation-cap": GraduationCap,
   "bar-chart-3": BarChart3,
   clapperboard: Clapperboard,
+  "monitor-play": MonitorPlay,
   "user-round-cog": UserRoundCog,
 };
 
