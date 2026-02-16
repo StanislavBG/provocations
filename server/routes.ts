@@ -52,14 +52,19 @@ let _anthropicKey: string | undefined = undefined;
 function getAnthropic(): Anthropic {
   // Re-read key each call so hot-added secrets are picked up
   const currentKey = process.env.ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
+  const baseURL = process.env.ANTHROPIC_BASE_URL;
   if (!_anthropic || currentKey !== _anthropicKey) {
-    if (!currentKey) {
+    if (!currentKey && !baseURL) {
       throw new Error(
-        "Neither ANTHROPIC_KEY nor ANTHROPIC_API_KEY is set. Please add your Anthropic API key as a secret."
+        "Neither ANTHROPIC_KEY nor ANTHROPIC_API_KEY is set, and no ANTHROPIC_BASE_URL proxy is configured. Please add your Anthropic API key as a secret."
       );
     }
     _anthropicKey = currentKey;
-    _anthropic = new Anthropic({ apiKey: currentKey });
+    // When a proxy base URL is set, the proxy handles auth — no explicit key needed.
+    // The SDK auto-detects ANTHROPIC_BASE_URL from the environment.
+    _anthropic = currentKey
+      ? new Anthropic({ apiKey: currentKey })
+      : new Anthropic();
   }
   return _anthropic;
 }
