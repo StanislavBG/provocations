@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Download, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Download, FileDown, FileArchive, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -349,11 +350,27 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     }
   }, [toast]);
 
-  const handleDownload = async () => {
+  /** Build markdown text with data-URL images replaced by file references */
+  const buildExportMarkdown = (images: { alt: string; src: string }[], dateStr: string) => {
+    let mdText = text;
+    images.forEach((img, idx) => {
+      const safeAlt = img.alt || `image-${idx + 1}`;
+      const safeName = safeAlt.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 60);
+      if (img.src.startsWith("data:")) {
+        mdText = mdText.replace(
+          `![${img.alt}](${img.src})`,
+          `![${safeAlt}](${safeName}-${dateStr}.png)`,
+        );
+      }
+    });
+    return mdText;
+  };
+
+  /** Download as individual files (markdown + each image separately) */
+  const handleDownloadIndividual = async () => {
     const dateStr = new Date().toISOString().split("T")[0];
     const images = extractMarkdownImages(text);
 
-    // Download each image as an individual PNG file
     let imageIndex = 0;
     for (const img of images) {
       imageIndex++;
@@ -375,19 +392,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       }
     }
 
-    // Download text as markdown (strip inline data-url images, keep alt text references)
-    let mdText = text;
-    images.forEach((img, idx) => {
-      const safeAlt = img.alt || `image-${idx + 1}`;
-      const safeName = safeAlt.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 60);
-      // Replace data-url images with file references; keep regular URLs as-is
-      if (img.src.startsWith("data:")) {
-        mdText = mdText.replace(
-          `![${img.alt}](${img.src})`,
-          `![${safeAlt}](${safeName}-${dateStr}.png)`,
-        );
-      }
-    });
+    const mdText = buildExportMarkdown(images, dateStr);
     const blob = new Blob([mdText], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -403,6 +408,49 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
         title: `Downloaded ${images.length} image${images.length > 1 ? "s" : ""} + document`,
       });
     }
+  };
+
+  /** Download everything as a single ZIP file */
+  const handleDownloadZip = async () => {
+    const dateStr = new Date().toISOString().split("T")[0];
+    const images = extractMarkdownImages(text);
+
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+
+    // Add images
+    let imageIndex = 0;
+    for (const img of images) {
+      imageIndex++;
+      try {
+        const blob = await fetchImageAsBlob(img.src);
+        const safeName = (img.alt || `image-${imageIndex}`)
+          .replace(/[^a-zA-Z0-9_-]/g, "_")
+          .substring(0, 60);
+        zip.file(`${safeName}-${dateStr}.png`, blob);
+      } catch (err) {
+        console.warn(`Failed to add image ${imageIndex} to zip:`, err);
+      }
+    }
+
+    // Add markdown
+    const mdText = buildExportMarkdown(images, dateStr);
+    zip.file(`document-${dateStr}.md`, mdText);
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(zipBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `document-${dateStr}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "ZIP downloaded",
+      description: `Document${images.length > 0 ? ` + ${images.length} image${images.length > 1 ? "s" : ""}` : ""} saved as ZIP.`,
+    });
   };
 
   // Clear selection toolbar when clicking outside in preview mode
@@ -564,16 +612,29 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
               </PopoverContent>
             </Popover>
           )}
-          <Button
-            data-testid="button-download-document"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={handleDownload}
-            title="Download (images + markdown)"
-          >
-            <Download className="w-4 h-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                data-testid="button-download-document"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                title="Download"
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleDownloadIndividual} className="gap-2">
+                <FileDown className="w-4 h-4" />
+                All Individual Files
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleDownloadZip} className="gap-2">
+                <FileArchive className="w-4 h-4" />
+                Single Zip
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
