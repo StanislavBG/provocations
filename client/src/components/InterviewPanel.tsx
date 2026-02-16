@@ -201,25 +201,6 @@ export function InterviewPanel({
         <Badge variant="outline" className="ml-auto text-xs">
           {entries.length} answered
         </Badge>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onEnd}
-          disabled={entries.length === 0 || isMerging}
-          className="gap-1.5"
-        >
-          {isMerging ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Merging...
-            </>
-          ) : (
-            <>
-              <Square className="w-3 h-3" />
-              End & Merge
-            </>
-          )}
-        </Button>
       </div>
 
       {/* Conversation thread */}
@@ -235,6 +216,49 @@ export function InterviewPanel({
                 guidance, <strong>skip</strong> questions, or <strong>ask your own questions</strong> to the team.
                 Use <strong>Merge to Draft</strong> to integrate responses into your document.
               </p>
+            </div>
+          )}
+
+          {/* Ask the team — above agent questions */}
+          {onAskQuestion && (
+            <div className="rounded-lg border bg-blue-50/30 dark:bg-blue-950/10 border-blue-200/50 dark:border-blue-800/30 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Ask the team</span>
+              </div>
+              <ProvokeText
+                chrome="inline"
+                variant="input"
+                placeholder="Ask a question to the persona team..."
+                value={askQuestionText}
+                onChange={setAskQuestionText}
+                className="text-sm"
+                disabled={isLoadingAskResponse}
+                showCopy={false}
+                showClear={false}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleAskQuestion();
+                  }
+                }}
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={(transcript) => {
+                  setAskQuestionText(transcript);
+                  if (transcript.trim() && onAskQuestion) {
+                    onAskQuestion(transcript.trim());
+                    setAskQuestionText("");
+                  }
+                }}
+                onSubmit={handleAskQuestion}
+                submitIcon={isLoadingAskResponse ? Loader2 : Send}
+              />
+              {isLoadingAskResponse && (
+                <div className="flex items-center gap-2 text-xs text-blue-500 animate-pulse">
+                  <Users className="w-3 h-3" />
+                  Consulting the team...
+                </div>
+              )}
             </div>
           )}
 
@@ -402,49 +426,6 @@ export function InterviewPanel({
         </div>
       </ScrollArea>
 
-      {/* Ask Question input — pinned at bottom */}
-      {onAskQuestion && (
-        <div className="border-t bg-muted/10 px-4 py-3 shrink-0 space-y-2">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
-            <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Ask the team</span>
-          </div>
-          <ProvokeText
-            chrome="inline"
-            variant="input"
-            placeholder="Ask a question to the persona team..."
-            value={askQuestionText}
-            onChange={setAskQuestionText}
-            className="text-sm"
-            disabled={isLoadingAskResponse}
-            showCopy={false}
-            showClear={false}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleAskQuestion();
-              }
-            }}
-            voice={{ mode: "replace" }}
-            onVoiceTranscript={(transcript) => {
-              setAskQuestionText(transcript);
-              // Auto-submit after voice
-              if (transcript.trim() && onAskQuestion) {
-                onAskQuestion(transcript.trim());
-                setAskQuestionText("");
-              }
-            }}
-            onSubmit={handleAskQuestion}
-            submitIcon={isLoadingAskResponse ? Loader2 : Send}
-          />
-          {isLoadingAskResponse && (
-            <div className="flex items-center gap-2 text-xs text-blue-500 animate-pulse">
-              <Users className="w-3 h-3" />
-              Consulting the team...
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

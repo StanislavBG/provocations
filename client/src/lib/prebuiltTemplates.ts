@@ -501,12 +501,19 @@ Typical way they end an interaction.
       "Write a presenter-driven slide-show video script with a clear host voice, targeted audience, focused content, and commanded structure",
     starterText: "",
     draftQuestions: [
+      "What is the source material? (news article, blog post, report, or raw notes)",
       "What persona or analogy should the AI host use? (e.g., 'a cynical industry veteran', 'an excited teacher', 'a cautionary tale narrator')",
       "Who is the target audience? (e.g., 'non-technical stakeholders who care about ROI', 'developers new to the framework')",
       "What should the AI focus on or ignore? (e.g., 'Focus on security risks in Source 3, ignore marketing sections')",
-      "How should the video be structured? (e.g., 'Start with a what's-in-it-for-me hook, three key takeaways, end with a call to action')",
     ],
     templateContent: `# AI Video Host Script
+
+## Source Material
+### What is this video based on?
+Paste or describe the source content (news article, blog post, report, raw notes).
+
+### Video Purpose
+What should the viewer understand, feel, or do after watching?
 
 ## Host Persona
 ### Who is the presenter?
@@ -555,24 +562,28 @@ How should the video flow? Define the structure explicitly:
 ### Slide Breakdown
 
 #### Slide 1 — Hook
-- **On Screen**: Text or visual
+- **On Screen**: Text, image, or animation description
 - **Host says**: "Narration in the host's voice"
 - **Duration**: X seconds
+- **Transition**: Cut / fade / slide
 
 #### Slide 2 — Context
-- **On Screen**: Text or visual
+- **On Screen**: Visual description
 - **Host says**: "Narration"
 - **Duration**: X seconds
+- **Transition**: Type
 
 #### Slide 3 — Takeaway
-- **On Screen**: Text or visual
+- **On Screen**: Visual description
 - **Host says**: "Narration"
 - **Duration**: X seconds
+- **Transition**: Type
 
 #### Slide N — Closing
-- **On Screen**: Text or visual
+- **On Screen**: Visual description
 - **Host says**: "Narration"
 - **Duration**: X seconds
+- **Transition**: Type
 
 ## Production Notes
 ### Duration
@@ -582,101 +593,6 @@ Target length (60s social, 3–5 min YouTube, etc.)
 Where will this be published? (YouTube, LinkedIn, internal, TikTok)
 
 ### Music & Sound
-Background music style, pacing cues.`,
-    provocationSources: [
-      "The Audience",
-      "Storytelling Coach",
-      "Persona Critic",
-      "Content Strategist",
-      "Attention Economist",
-    ],
-    provocationExamples: [
-      "Your host persona says 'cautionary tale' but the script sounds like a product demo. Where's the tension? — Storytelling Coach",
-      "You said the audience is non-technical, but Slide 3 uses three acronyms without explaining them. — The Audience",
-      "You have 8 takeaways. A video audience retains 3. Which five do you cut? — Attention Economist",
-      "The host voice disappears after Slide 2 and becomes generic narration. Keep the persona consistent. — Persona Critic",
-      "What's the one thing the viewer should do after watching? Your closing doesn't ask for anything. — Content Strategist",
-    ],
-  },
-  {
-    id: "slide-video-script",
-    title: "Slide Video Script",
-    shortLabel: "Video Script",
-    subtitle: "News or text into a cohesive video",
-    description:
-      "For turning a news article, blog post, or any text into a slide-based video script. Defines the narrative arc, slide-by-slide breakdown with visuals and voiceover, and pacing. The result is a production-ready script a video editor or AI tool can execute.",
-    icon: "clapperboard",
-    objective:
-      "Write a cohesive slide-by-slide video script that transforms source text into an engaging visual narrative with voiceover, visuals, and pacing",
-    starterText: "",
-    draftQuestions: [
-      "What is the source material (news article, blog post, report)?",
-      "Who is the target audience for this video?",
-      "What is the desired length and tone?",
-      "What platform is this for (YouTube, social media, presentation)?",
-    ],
-    templateContent: `# Slide Video Script
-
-## Overview
-### Source Material
-What text, article, or content is this video based on?
-
-### Video Purpose
-What should the viewer understand, feel, or do after watching?
-
-### Target Audience
-Who is watching? What's their attention span and context?
-
-### Tone & Style
-Informational, dramatic, conversational, urgent, inspirational?
-
-### Duration
-Target length (e.g., 60s for social, 3–5 min for YouTube).
-
-## Narrative Arc
-### Hook (first 5 seconds)
-What grabs attention immediately?
-
-### Setup
-Introduce the topic — what's the context or problem?
-
-### Core Content
-The main points, evidence, or story beats.
-
-### Climax / Key Insight
-The most important moment or revelation.
-
-### Closing / Call to Action
-What does the viewer do next?
-
-## Slide-by-Slide Breakdown
-
-### Slide 1 — Hook
-- **On Screen**: Text, image, or animation description
-- **Voiceover**: "Exact script for narration"
-- **Duration**: X seconds
-- **Transition**: Cut / fade / slide
-
-### Slide 2 — Context
-- **On Screen**: Visual description
-- **Voiceover**: "Narration script"
-- **Duration**: X seconds
-- **Transition**: Type
-
-### Slide 3 — Key Point
-- **On Screen**: Visual description
-- **Voiceover**: "Narration script"
-- **Duration**: X seconds
-- **Transition**: Type
-
-### Slide N — Closing
-- **On Screen**: Visual description
-- **Voiceover**: "Narration script"
-- **Duration**: X seconds
-- **Transition**: Type
-
-## Production Notes
-### Music / Sound
 Background music style, sound effects, or silence cues.
 
 ### Branding
@@ -685,17 +601,17 @@ Logo placement, brand colors, watermarks.
 ### Format
 Aspect ratio (16:9, 9:16, 1:1), resolution, export format.`,
     provocationSources: [
-      "Video Editor",
-      "Audience Member",
+      "The Audience",
       "Storytelling Coach",
-      "Platform Strategist",
+      "Persona Critic",
+      "Video Editor",
       "Fact Checker",
     ],
     provocationExamples: [
+      "Your host persona says 'cautionary tale' but the script sounds like a product demo. Where's the tension? — Storytelling Coach",
+      "You said the audience is non-technical, but Slide 3 uses three acronyms without explaining them. — The Audience",
       "Slide 3 has 40 words of on-screen text. That's a paragraph, not a slide. What do you cut? — Video Editor",
-      "I'm 10 seconds in and I still don't know what this video is about. Where's the hook? — Audience Member",
-      "Your slides present facts in order, but there's no narrative tension. Why should I keep watching? — Storytelling Coach",
-      "This is a 4-minute video for TikTok. Your audience will scroll away in 3 seconds. Rethink the format. — Platform Strategist",
+      "The host voice disappears after Slide 2 and becomes generic narration. Keep the persona consistent. — Persona Critic",
       "The source article says 'reportedly' and 'according to sources.' Your script states it as fact. — Fact Checker",
     ],
   },
