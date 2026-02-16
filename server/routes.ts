@@ -520,7 +520,7 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { document: docText, objective, challengeId, challengeTitle, challengeContent, personaId } = parsed.data;
+      const { document: docText, objective, challengeId, challengeTitle, challengeContent, personaId, discussionHistory } = parsed.data;
 
       const persona = getPersonaById(personaId);
       if (!persona) {
@@ -530,12 +530,26 @@ Output only valid JSON, no markdown.`,
       const MAX_ANALYSIS_LENGTH = 6000;
       const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
 
+      // Build discussion history context if available
+      let discussionContext = "";
+      if (discussionHistory && discussionHistory.length > 0) {
+        const historyLines = discussionHistory.slice(-10).map(m => {
+          const roleLabel = m.role === "user-question" ? "User asked"
+            : m.role === "user-answer" ? "User answered"
+            : m.role === "persona-response" ? "Team responded"
+            : "Question";
+          return `[${roleLabel}]: ${m.content.slice(0, 300)}`;
+        });
+        discussionContext = `\n\nDISCUSSION HISTORY (recent conversation — ground your advice in this context):\n${historyLines.join("\n")}`;
+      }
+
       // ── Context assembly ──
-      // All four inputs are required so the persona can give grounded advice:
+      // All inputs ground the persona so advice is specific and actionable:
       //   1. objective  — what the document is trying to achieve
       //   2. document   — current draft the persona reads
       //   3. challenge  — the specific gap/weakness identified earlier
       //   4. persona    — who is speaking and their advice prompt
+      //   5. discussion — the ongoing conversation for continuity
       const systemPrompt = `${persona.prompts.advice}
 
 DOCUMENT OBJECTIVE: ${objective}
@@ -543,13 +557,16 @@ DOCUMENT OBJECTIVE: ${objective}
 CHALLENGE (issued by you, the ${persona.label}):
 Title: ${challengeTitle}
 Detail: ${challengeContent}
+${discussionContext}
 
 Now provide advice on how to address this challenge. Your advice must:
-1. Be grounded in the objective — explain how your advice serves the goal
-2. Be concrete and actionable — the user should know exactly what to do
-3. Be different from the challenge — do NOT restate the problem, provide the solution
-4. Speak from your persona's perspective (${persona.label})
-5. Be 2-4 sentences of practical guidance
+1. Be grounded in the OBJECTIVE — explain how your advice serves the stated goal
+2. Reference the CURRENT DOCUMENT STATE — point to specific sections, gaps, or content that need attention
+3. Build on the DISCUSSION HISTORY — if the user has been answering questions or asking things, acknowledge that context and avoid repeating what was already discussed
+4. Be concrete and actionable — the user should know exactly what to do next
+5. Be different from the challenge — do NOT restate the problem, provide the solution
+6. Speak from your persona's perspective (${persona.label})
+7. Be 2-4 sentences of practical guidance
 
 Respond with a JSON object:
 {

@@ -111,6 +111,11 @@ export const generateAdviceRequestSchema = z.object({
   challengeTitle: z.string().min(1, "Challenge title is required"),
   challengeContent: z.string().min(1, "Challenge content is required"),
   personaId: z.string().min(1, "Persona ID is required"),     // which persona generates the advice
+  discussionHistory: z.array(z.object({
+    role: z.string(),
+    content: z.string(),
+    topic: z.string().optional(),
+  })).optional(), // recent discussion for grounding
 });
 
 export type GenerateAdviceRequest = z.infer<typeof generateAdviceRequestSchema>;
