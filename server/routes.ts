@@ -4,10 +4,6 @@ import { getAuth } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt } from "./crypto";
 import Anthropic from "@anthropic-ai/sdk";
-// @ts-ignore - imported via custom exports subpath
-import { LLMPlanner } from "bilko-flow/llm";
-// @ts-ignore - direct filesystem path to bypass exports restriction
-import { registerLLMAdapter } from "../node_modules/bilko-flow/dist/llm/index.js";
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -40,8 +36,6 @@ import {
   type DiscoveredMedia,
   type StreamingRefineResponse,
   type StreamingRequirement,
-  plannerProposeRequestSchema,
-  type PlannerProposeResponse,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById } from "@shared/personas";
 
@@ -2080,102 +2074,6 @@ Output only valid JSON, no markdown wrapping.`,
       console.error("Screenshot error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to capture screenshot", details: errorMessage });
-    }
-  });
-
-  // ── Planner endpoint (bilko-flow LLMPlanner) ──
-
-  let _claudeAdapterRegistered = false;
-  function ensureClaudeAdapter() {
-    if (_claudeAdapterRegistered) return;
-    registerLLMAdapter('claude', async (options: any): Promise<any> => {
-      const anthropic = getAnthropic();
-      const systemMsg = options.systemPrompt || '';
-      const messages = options.messages.map((m: any) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
-      const response = await anthropic.messages.create({
-        model: options.model,
-        max_tokens: options.maxTokens || 4096,
-        system: systemMsg,
-        messages,
-        temperature: options.temperature,
-      });
-      return {
-        content: response.content[0].type === 'text' ? response.content[0].text : '',
-        usage: {
-          promptTokens: response.usage.input_tokens,
-          completionTokens: response.usage.output_tokens,
-        },
-      };
-    });
-    _claudeAdapterRegistered = true;
-  }
-
-  let _planner: InstanceType<typeof LLMPlanner> | null = null;
-  function getPlanner(): InstanceType<typeof LLMPlanner> {
-    if (!_planner) {
-      const apiKey = process.env.ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error("Neither ANTHROPIC_KEY nor ANTHROPIC_API_KEY is set");
-      ensureClaudeAdapter();
-      _planner = new LLMPlanner({
-        provider: "claude",
-        model: "claude-opus-4-6",
-        apiKey,
-        temperature: 0.3,
-      });
-    }
-    return _planner;
-  }
-
-  app.post("/api/planner/propose", async (req, res) => {
-    try {
-      const parsed = plannerProposeRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.flatten() });
-      }
-
-      const { description, context, userRole } = parsed.data;
-
-      // Build the goal description with optional context
-      let goalDescription = description;
-      if (context) {
-        goalDescription += `\n\nContext:\n${context}`;
-      }
-      if (userRole) {
-        goalDescription += `\n\nUser role: ${userRole}`;
-      }
-
-      const planner = getPlanner();
-      const proposal = await planner.proposeWorkflow({
-        description: goalDescription,
-        targetDslVersion: "1.0.0",
-        determinismTarget: { targetGrade: "best-effort" },
-      });
-
-      // Map the WorkflowProposal to our simplified client response
-      const response: PlannerProposeResponse = {
-        name: proposal.name,
-        description: proposal.description || description,
-        steps: proposal.steps.map((step: any) => ({
-          id: step.id,
-          name: step.name,
-          type: step.type,
-          description: step.description || "",
-          dependsOn: step.dependsOn || [],
-        })),
-        plannerInfo: {
-          name: proposal.plannerInfo.name,
-          version: proposal.plannerInfo.version,
-        },
-      };
-
-      res.json(response);
-    } catch (error) {
-      console.error("Planner error:", error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to generate workflow", details: message });
     }
   });
 
