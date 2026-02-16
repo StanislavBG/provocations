@@ -142,7 +142,7 @@ function isLikelyVoiceTranscript(text: string): boolean {
 async function cleanVoiceTranscript(transcript: string): Promise<string> {
   try {
     const response = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-6",
       max_tokens: 500,
       temperature: 0.2,
       system: `You are an expert at extracting clear editing instructions from spoken transcripts.
@@ -193,7 +193,7 @@ async function generateEditPlan(
 ): Promise<string> {
   try {
     const response = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-6",
       max_tokens: 300,
       temperature: 0.3,
       system: `You are an expert editor planning document changes. Given an instruction, create a brief execution plan.
@@ -443,7 +443,7 @@ export async function registerRoutes(
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 4096,
         system: `You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
 
@@ -567,7 +567,7 @@ Respond with a JSON object:
 Output only valid JSON, no markdown.`;
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 2048,
         system: systemPrompt,
         messages: [
@@ -777,7 +777,7 @@ The user's response should be integrated thoughtfully - don't just append it, we
 
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
       const documentResponse = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 8192,
         system: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
 
@@ -830,7 +830,7 @@ Please evolve the document according to this instruction.`
 
       // Analyze changes for structured output
       const analysisResponse = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 1024,
         system: `You are a document change analyzer. Compare the original and evolved documents and provide a brief structured analysis.
 
@@ -990,7 +990,7 @@ Guidelines:
 Output only the evolved markdown document. No explanations.`;
 
       const stream = await getAnthropic().messages.stream({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 8192,
         system: streamSystemPrompt,
         messages: [
@@ -1039,7 +1039,7 @@ Output only the evolved markdown document. No explanations.`;
       // AIM mode uses a dedicated prompt and higher-capability model
       if (context === "aim") {
         const aimResponse = await getAnthropic().messages.create({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-opus-4-6",
           max_tokens: 4000,
           temperature: 0.3,
           system: `You are an expert prompt engineer. The user has written a rough draft of a prompt for an AI tool. Your job is to restructure it using the AIM framework while preserving every bit of their original intent.
@@ -1087,24 +1087,43 @@ The AIM framework:
         ? "source material for a document"
         : "general content";
 
+      const mode = req.body.mode || "clean";
+
+      let systemPrompt: string;
+      if (mode === "summarize") {
+        systemPrompt = `You are an expert at condensing text. The user has written ${contextLabel}. Your job is to:
+
+1. Identify the core points and key ideas
+2. Remove redundancy, filler, and tangential details
+3. Produce a significantly shorter version that preserves the essential meaning
+
+For objectives: Output a single concise sentence.
+For source material: Condense into the most important points, organized into short paragraphs.
+
+Be faithful to their intent — don't add information they didn't mention. Aim for roughly 30-50% of the original length.`;
+      } else {
+        systemPrompt = `You are an expert editor. The user has written ${contextLabel}. Your job is to:
+
+1. Fix grammar, spelling, and punctuation errors
+2. Clean up speech artifacts if present (um, uh, repeated words, false starts)
+3. Improve clarity and readability without changing the meaning or significantly shortening
+4. Organize into well-structured paragraphs if needed
+
+For objectives: Output a clear, polished sentence describing what they want to create.
+For source material: Clean up and organize into readable, well-written paragraphs.
+
+Be faithful to their intent — don't add information they didn't mention. Keep the same approximate length.`;
+      }
+
       const response = await getAnthropic().messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-opus-4-6",
         max_tokens: context === "source" ? 4000 : 500,
         temperature: 0.3,
-        system: `You are an expert at extracting clear intent from spoken transcripts. The user has spoken a ${contextLabel}. Your job is to:
-
-1. Clean up speech artifacts (um, uh, repeated words, false starts)
-2. Extract the core intent/meaning
-3. Present it as a clear, concise statement
-
-For objectives: Output a single clear sentence describing what they want to create.
-For source material: Clean up and organize the spoken content into readable paragraphs.
-
-Be faithful to their intent - don't add information they didn't mention.`,
+        system: systemPrompt,
         messages: [
           {
             role: "user",
-            content: `Raw transcript:\n\n${transcript}`
+            content: `${mode === "summarize" ? "Summarize this" : "Clean up this text"}:\n\n${transcript}`
           }
         ],
       });
@@ -1201,7 +1220,7 @@ Embody these personas when crafting your questions. Each question should reflect
         : "";
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 1024,
         system: `You are a skilled interviewer helping a user develop their document by asking probing questions. Your goal is to extract the information, perspectives, and insights the user needs to include in their document.
 
@@ -1273,7 +1292,7 @@ Output only valid JSON, no markdown.`,
       const qaText = entries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n---\n\n");
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 2048,
         system: `You are an expert at synthesizing interview responses into clear editing instructions.
 
@@ -1344,7 +1363,7 @@ Output only the instruction text. No meta-commentary.`,
 
       // Step 1: Identify the 3 most relevant personas for this question
       const selectionResponse = await getAnthropic().messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-opus-4-6",
         max_tokens: 256,
         system: `Given a user question about their document, select the 3 most relevant personas to answer.
 
@@ -1401,7 +1420,7 @@ Output only valid JSON.`,
       ).join("\n\n");
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 3072,
         system: `You are a panel of expert advisors responding to a user's question about their document. Each advisor provides their unique perspective.
 
@@ -1758,7 +1777,7 @@ Output only valid JSON, no markdown.`,
       const isFirstQuestion = !previousEntries || previousEntries.length === 0;
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 1024,
         system: `You are a requirements discovery agent. Your PRIMARY purpose is to help the user express automation requirements for the objective below. Everything you do should serve this objective.
 
@@ -1828,7 +1847,7 @@ Output only valid JSON, no markdown.`,
       const { objective, websiteUrl, wireframeNotes, document: docText } = parsed.data;
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 4096,
         system: `You are a website/application analysis expert. Analyze the website or wireframe description and identify key components, interactions, structural patterns, AND proactively discover content assets on the site.
 
@@ -1956,7 +1975,7 @@ Output only valid JSON, no markdown.`,
         : "";
 
       const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         max_tokens: 4096,
         system: `You are an expert requirements writer. Given a dialogue between a user and an agent, extract and refine clear, implementable requirements. Each requirement should be specific enough that a developer or AI agent can implement it without ambiguity.
 
@@ -2065,7 +2084,7 @@ Output only valid JSON, no markdown wrapping.`,
     registerLLMAdapter('claude', async (options: any): Promise<any> => {
       const anthropic = getAnthropic();
       const systemMsg = options.systemPrompt || '';
-      const messages = options.messages.map(m => ({
+      const messages = options.messages.map((m: any) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       }));
@@ -2095,7 +2114,7 @@ Output only valid JSON, no markdown wrapping.`,
       ensureClaudeAdapter();
       _planner = new LLMPlanner({
         provider: "claude",
-        model: "claude-opus-4-20250918",
+        model: "claude-opus-4-6",
         apiKey,
         temperature: 0.3,
       });
