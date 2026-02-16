@@ -54,11 +54,18 @@ function getEncryptionKey(): string {
 }
 
 let _anthropic: Anthropic | null = null;
+let _anthropicKey: string | undefined = undefined;
 function getAnthropic(): Anthropic {
-  if (!_anthropic) {
-    _anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_KEY,
-    });
+  // Re-read key each call so hot-added secrets are picked up
+  const currentKey = process.env.ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!_anthropic || currentKey !== _anthropicKey) {
+    if (!currentKey) {
+      throw new Error(
+        "Neither ANTHROPIC_KEY nor ANTHROPIC_API_KEY is set. Please add your Anthropic API key as a secret."
+      );
+    }
+    _anthropicKey = currentKey;
+    _anthropic = new Anthropic({ apiKey: currentKey });
   }
   return _anthropic;
 }
@@ -2109,8 +2116,8 @@ Output only valid JSON, no markdown wrapping.`,
   let _planner: InstanceType<typeof LLMPlanner> | null = null;
   function getPlanner(): InstanceType<typeof LLMPlanner> {
     if (!_planner) {
-      const apiKey = process.env.ANTHROPIC_KEY;
-      if (!apiKey) throw new Error("ANTHROPIC_KEY not set");
+      const apiKey = process.env.ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("Neither ANTHROPIC_KEY nor ANTHROPIC_API_KEY is set");
       ensureClaudeAdapter();
       _planner = new LLMPlanner({
         provider: "claude",
