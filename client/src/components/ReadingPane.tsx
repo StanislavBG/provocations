@@ -349,41 +349,60 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     }
   }, [toast]);
 
-  const handleDownload = () => {
-    const htmlBody = markdownToHtml(text);
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Document</title>
-<style>
-body{font-family:Georgia,'Times New Roman',serif;max-width:800px;margin:0 auto;padding:2rem;line-height:1.8;color:#1a1a1a}
-img{max-width:100%;height:auto;border-radius:.5rem;border:1px solid #e5e7eb;margin:1rem 0}
-h1,h2,h3,h4{margin-top:1.5em;margin-bottom:.5em;line-height:1.3}
-hr{border:none;border-top:1px solid #d1d5db;margin:2rem 0}
-blockquote{border-left:3px solid #d1d5db;padding-left:1rem;color:#4b5563;margin:1rem 0}
-code{background:#f3f4f6;padding:.15em .4em;border-radius:3px;font-size:.9em}
-pre{background:#f3f4f6;padding:1rem;border-radius:.5rem;overflow-x:auto}
-pre code{background:none;padding:0}
-table{border-collapse:collapse;width:100%;margin:1rem 0}
-th,td{border:1px solid #d1d5db;padding:.5rem .75rem;text-align:left}
-th{background:#f9fafb;font-weight:600}
-</style>
-</head>
-<body>
-${htmlBody}
-</body>
-</html>`;
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const handleDownload = async () => {
+    const dateStr = new Date().toISOString().split("T")[0];
+    const images = extractMarkdownImages(text);
+
+    // Download each image as an individual PNG file
+    let imageIndex = 0;
+    for (const img of images) {
+      imageIndex++;
+      try {
+        const blob = await fetchImageAsBlob(img.src);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const safeName = (img.alt || `image-${imageIndex}`)
+          .replace(/[^a-zA-Z0-9_-]/g, "_")
+          .substring(0, 60);
+        link.download = `${safeName}-${dateStr}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.warn(`Failed to download image ${imageIndex}:`, err);
+      }
+    }
+
+    // Download text as markdown (strip inline data-url images, keep alt text references)
+    let mdText = text;
+    images.forEach((img, idx) => {
+      const safeAlt = img.alt || `image-${idx + 1}`;
+      const safeName = safeAlt.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 60);
+      // Replace data-url images with file references; keep regular URLs as-is
+      if (img.src.startsWith("data:")) {
+        mdText = mdText.replace(
+          `![${img.alt}](${img.src})`,
+          `![${safeAlt}](${safeName}-${dateStr}.png)`,
+        );
+      }
+    });
+    const blob = new Blob([mdText], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `document-${new Date().toISOString().split("T")[0]}.html`;
+    link.download = `document-${dateStr}.md`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+
+    if (images.length > 0) {
+      toast({
+        title: `Downloaded ${images.length} image${images.length > 1 ? "s" : ""} + document`,
+      });
+    }
   };
 
   // Clear selection toolbar when clicking outside in preview mode
@@ -551,7 +570,7 @@ ${htmlBody}
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={handleDownload}
-            title="Download as HTML"
+            title="Download (images + markdown)"
           >
             <Download className="w-4 h-4" />
           </Button>
