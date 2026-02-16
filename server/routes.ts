@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getAuth } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt } from "./crypto";
-import Anthropic from "@anthropic-ai/sdk";
+import { llm } from "./llm";
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -47,27 +47,9 @@ function getEncryptionKey(): string {
   return secret || "provocations-dev-key-change-in-production";
 }
 
-let _anthropic: Anthropic | null = null;
-let _anthropicKey: string | undefined = undefined;
-function getAnthropic(): Anthropic {
-  // Re-read key each call so hot-added secrets are picked up
-  const currentKey = process.env.ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
-  const baseURL = process.env.ANTHROPIC_BASE_URL;
-  if (!_anthropic || currentKey !== _anthropicKey) {
-    if (!currentKey && !baseURL) {
-      throw new Error(
-        "Neither ANTHROPIC_KEY nor ANTHROPIC_API_KEY is set, and no ANTHROPIC_BASE_URL proxy is configured. Please add your Anthropic API key as a secret."
-      );
-    }
-    _anthropicKey = currentKey;
-    // When a proxy base URL is set, the proxy handles auth — no explicit key needed.
-    // The SDK auto-detects ANTHROPIC_BASE_URL from the environment.
-    _anthropic = currentKey
-      ? new Anthropic({ apiKey: currentKey })
-      : new Anthropic();
-  }
-  return _anthropic;
-}
+// LLM provider is configured in server/llm.ts
+// Set GEMINI_API_KEY for Google Gemini (default) or ANTHROPIC_API_KEY for Anthropic Claude.
+// Override auto-detection with LLM_PROVIDER=gemini|anthropic.
 
 // Derive provocation prompts from centralized persona definitions (challenge prompt is the default)
 const provocationPrompts: Record<ProvocationType, string> = Object.fromEntries(
@@ -147,9 +129,8 @@ function isLikelyVoiceTranscript(text: string): boolean {
 // Clean voice transcript to extract clear intent
 async function cleanVoiceTranscript(transcript: string): Promise<string> {
   try {
-    const response = await getAnthropic().messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 500,
+    const response = await llm.generate({
+      maxTokens: 500,
       temperature: 0.2,
       system: `You are an expert at extracting clear editing instructions from spoken transcripts.
 
@@ -167,7 +148,7 @@ Output ONLY the cleaned instruction, nothing else.`,
         }
       ],
     });
-    const cleanedText = response.content[0].type === 'text' ? response.content[0].text : '';
+    const cleanedText = response.text;
     return cleanedText.trim() || transcript;
   } catch {
     return transcript; // Fall back to original if cleaning fails
@@ -198,9 +179,8 @@ async function generateEditPlan(
   objective: string
 ): Promise<string> {
   try {
-    const response = await getAnthropic().messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 300,
+    const response = await llm.generate({
+      maxTokens: 300,
       temperature: 0.3,
       system: `You are an expert editor planning document changes. Given an instruction, create a brief execution plan.
 
@@ -227,7 +207,7 @@ Create a brief execution plan:`
         }
       ],
     });
-    const planText = response.content[0].type === 'text' ? response.content[0].text : '';
+    const planText = response.text;
     return planText.trim() || "";
   } catch {
     return ""; // Skip planning if it fails
@@ -359,6 +339,13 @@ The goal is to ensure the system is secure by default and resilient to abuse.`,
 - "Good point — I need to call out the tradeoffs we're accepting, not just the benefits"
 - "Let me add measurable outcomes so we know if this is actually working for the people it's meant to serve"
 The goal is to ensure the proposal truly improves outcomes for the intended people, is accountable (clear metrics and ownership), and protects trust (safety, privacy, reliability) as a first-class requirement.`,
+
+  data_architect: `Example good responses to Data Architect feedback:
+- "You're right — I haven't defined how customer identifiers link across these systems. Let me map the Key Ring"
+- "Good catch — I'm chasing a golden record without defining which context needs authoritative data"
+- "I should tie this data quality initiative to a measurable business outcome, not just a cleanliness score"
+- "Let me address the metadata gaps — if we don't know field ownership and freshness, we're not AI-ready"
+The goal is to ensure data is fit-for-purpose for the stated objective, identifiers link across systems, and governance drives business outcomes rather than checkbox compliance.`,
 };
 
 // Strategy prompts for each instruction type
@@ -448,9 +435,8 @@ export async function registerRoutes(
       const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 4096,
+      const response = await llm.generate({
+        maxTokens: 4096,
         system: `You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
 
 DOCUMENT OBJECTIVE: ${objective}
@@ -481,7 +467,7 @@ Output only valid JSON, no markdown.`,
         ],
       });
 
-      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
+      const content = response.text || "{}";
       let parsedResponse: Record<string, unknown> = {};
       try {
         parsedResponse = JSON.parse(content);
@@ -572,9 +558,8 @@ Respond with a JSON object:
 
 Output only valid JSON, no markdown.`;
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 2048,
+      const response = await llm.generate({
+        maxTokens: 2048,
         system: systemPrompt,
         messages: [
           {
@@ -584,7 +569,7 @@ Output only valid JSON, no markdown.`;
         ],
       });
 
-      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
+      const content = response.text || "{}";
       let parsedResponse: Record<string, unknown> = {};
       try {
         parsedResponse = JSON.parse(content);
@@ -782,9 +767,8 @@ The user's response should be integrated thoughtfully - don't just append it, we
         : "";
 
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
-      const documentResponse = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 8192,
+      const documentResponse = await llm.generate({
+        maxTokens: 8192,
         system: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
 
 DOCUMENT OBJECTIVE: ${objective}
@@ -832,12 +816,11 @@ Please evolve the document according to this instruction.`
         ],
       });
 
-      const evolvedDocument = (documentResponse.content[0].type === 'text' ? documentResponse.content[0].text : '') || document;
+      const evolvedDocument = documentResponse.text || document;
 
       // Analyze changes for structured output
-      const analysisResponse = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 1024,
+      const analysisResponse = await llm.generate({
+        maxTokens: 1024,
         system: `You are a document change analyzer. Compare the original and evolved documents and provide a brief structured analysis.
 
 Respond with a JSON object containing:
@@ -868,7 +851,7 @@ INSTRUCTION APPLIED: ${instruction}`
       let summary = `Applied: ${instruction.slice(0, 100)}${instruction.length > 100 ? "..." : ""}`;
 
       try {
-        const analysisContent = analysisResponse.content[0].type === 'text' ? analysisResponse.content[0].text : "{}";
+        const analysisContent = analysisResponse.text || "{}";
         const analysis = JSON.parse(analysisContent);
         if (typeof analysis.summary === 'string') {
           summary = analysis.summary;
@@ -995,9 +978,8 @@ Guidelines:
 
 Output only the evolved markdown document. No explanations.`;
 
-      const stream = await getAnthropic().messages.stream({
-        model: "claude-opus-4-6",
-        max_tokens: 8192,
+      const stream = llm.stream({
+        maxTokens: 8192,
         system: streamSystemPrompt,
         messages: [
           {
@@ -1009,12 +991,9 @@ Output only the evolved markdown document. No explanations.`;
 
       let fullContent = '';
 
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          const content = event.delta.text;
-          fullContent += content;
-          res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
-        }
+      for await (const chunk of stream) {
+        fullContent += chunk;
+        res.write(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`);
       }
 
       // Send completion with summary
@@ -1044,9 +1023,8 @@ Output only the evolved markdown document. No explanations.`;
 
       // AIM mode uses a dedicated prompt and higher-capability model
       if (context === "aim") {
-        const aimResponse = await getAnthropic().messages.create({
-          model: "claude-opus-4-6",
-          max_tokens: 4000,
+        const aimResponse = await llm.generate({
+          maxTokens: 4000,
           temperature: 0.3,
           system: `You are an expert prompt engineer. The user has written a rough draft of a prompt for an AI tool. Your job is to restructure it using the AIM framework while preserving every bit of their original intent.
 
@@ -1078,7 +1056,7 @@ The AIM framework:
           ],
         });
 
-        const aimText = aimResponse.content[0].type === 'text' ? aimResponse.content[0].text : '';
+        const aimText = aimResponse.text;
         const summary = aimText.trim() || transcript;
         return res.json({
           summary,
@@ -1121,9 +1099,8 @@ For source material: Clean up and organize into readable, well-written paragraph
 Be faithful to their intent — don't add information they didn't mention. Keep the same approximate length.`;
       }
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: context === "source" ? 4000 : 500,
+      const response = await llm.generate({
+        maxTokens: context === "source" ? 4000 : 500,
         temperature: 0.3,
         system: systemPrompt,
         messages: [
@@ -1134,7 +1111,7 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
         ],
       });
 
-      const respText = response.content[0].type === 'text' ? response.content[0].text : '';
+      const respText = response.text;
       const summary = respText.trim() || transcript;
 
       res.json({
@@ -1225,9 +1202,8 @@ Embody these personas when crafting your questions. Each question should reflect
         ? `\n\nUSER GUIDANCE: ${directionGuidance}`
         : "";
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 1024,
+      const response = await llm.generate({
+        maxTokens: 1024,
         system: `You are a skilled interviewer helping a user develop their document by asking probing questions. Your goal is to extract the information, perspectives, and insights the user needs to include in their document.
 
 OBJECTIVE: ${objective}
@@ -1260,7 +1236,7 @@ Output only valid JSON, no markdown.`,
         ],
       });
 
-      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
+      const content = response.text || "{}";
       let result: InterviewQuestionResponse;
       try {
         const parsed = JSON.parse(content);
@@ -1297,9 +1273,8 @@ Output only valid JSON, no markdown.`,
 
       const qaText = entries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n---\n\n");
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 2048,
+      const response = await llm.generate({
+        maxTokens: 2048,
         system: `You are an expert at synthesizing interview responses into clear editing instructions.
 
 Given a series of Q&A pairs from a document development interview, create a single comprehensive instruction that tells a document editor how to integrate all the information gathered.
@@ -1322,7 +1297,7 @@ Output only the instruction text. No meta-commentary.`,
         ],
       });
 
-      const instrText = response.content[0].type === 'text' ? response.content[0].text : '';
+      const instrText = response.text;
       const instruction = instrText.trim() || "";
 
       res.json({ instruction });
@@ -1368,9 +1343,8 @@ Output only the instruction text. No meta-commentary.`,
       }
 
       // Step 1: Identify the 3 most relevant personas for this question
-      const selectionResponse = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 256,
+      const selectionResponse = await llm.generate({
+        maxTokens: 256,
         system: `Given a user question about their document, select the 3 most relevant personas to answer.
 
 Available personas:
@@ -1393,7 +1367,7 @@ Output only valid JSON.`,
       let selectedPersonaIds: string[] = [];
       let topic = "Discussion";
       try {
-        const selectionContent = JSON.parse(selectionResponse.content[0].type === 'text' ? selectionResponse.content[0].text : "{}");
+        const selectionContent = JSON.parse(selectionResponse.text || "{}");
         selectedPersonaIds = Array.isArray(selectionContent.personas)
           ? selectionContent.personas.filter((id: unknown) => typeof id === "string" && getPersonaById(id as string))
           : [];
@@ -1425,9 +1399,8 @@ Output only valid JSON.`,
         `### ${p.label} (${p.id})\nRole: ${p.role}\nAdvice style: ${p.prompts.advice}`
       ).join("\n\n");
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 3072,
+      const response = await llm.generate({
+        maxTokens: 3072,
         system: `You are a panel of expert advisors responding to a user's question about their document. Each advisor provides their unique perspective.
 
 DOCUMENT OBJECTIVE: ${objective}${secondaryObjective ? `\nSECONDARY OBJECTIVE: ${secondaryObjective}` : ""}
@@ -1462,7 +1435,7 @@ Output only valid JSON, no markdown.`,
         ],
       });
 
-      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
+      const content = response.text || "{}";
       let result: AskQuestionResponse;
       try {
         const parsed = JSON.parse(content);
@@ -1782,9 +1755,8 @@ Output only valid JSON, no markdown.`,
 
       const isFirstQuestion = !previousEntries || previousEntries.length === 0;
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 1024,
+      const response = await llm.generate({
+        maxTokens: 1024,
         system: `You are a requirements discovery agent. Your PRIMARY purpose is to help the user express automation requirements for the objective below. Everything you do should serve this objective.
 
 OBJECTIVE (this is your north star — every response should help the user make progress toward this):
@@ -1818,7 +1790,7 @@ Output only valid JSON, no markdown.`,
         ],
       });
 
-      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
+      const content = response.text || "{}";
       let result: StreamingQuestionResponse;
       try {
         const parsed = JSON.parse(content);
@@ -1852,9 +1824,8 @@ Output only valid JSON, no markdown.`,
 
       const { objective, websiteUrl, wireframeNotes, document: docText } = parsed.data;
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 4096,
+      const response = await llm.generate({
+        maxTokens: 4096,
         system: `You are a website/application analysis expert. Analyze the website or wireframe description and identify key components, interactions, structural patterns, AND proactively discover content assets on the site.
 
 OBJECTIVE: ${objective}
@@ -1895,7 +1866,7 @@ Output only valid JSON, no markdown.`,
         ],
       });
 
-      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
+      const content = response.text || "{}";
       let result: WireframeAnalysisResponse;
       try {
         const parsed = JSON.parse(content);
@@ -1980,9 +1951,8 @@ Output only valid JSON, no markdown.`,
         ? `\n\nWEBSITE CONTEXT:\n${wireframeParts.join("\n")}`
         : "";
 
-      const response = await getAnthropic().messages.create({
-        model: "claude-opus-4-6",
-        max_tokens: 4096,
+      const response = await llm.generate({
+        maxTokens: 4096,
         system: `You are an expert requirements writer. Given a dialogue between a user and an agent, extract and refine clear, implementable requirements. Each requirement should be specific enough that a developer or AI agent can implement it without ambiguity.
 
 OBJECTIVE: ${objective}
@@ -2008,7 +1978,7 @@ Output only valid JSON, no markdown wrapping.`,
         ],
       });
 
-      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
+      const content = response.text || "{}";
       let result: StreamingRefineResponse;
       try {
         const parsed = JSON.parse(content);
