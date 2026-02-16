@@ -490,6 +490,115 @@ Typical way they end an interaction.
     ],
   },
   {
+    id: "ai-video-host",
+    title: "AI Video Host",
+    shortLabel: "Video Host",
+    subtitle: "Slide-show video with a presenter voice",
+    description:
+      "For creating a slide-show video script driven by a presenter persona or key story. You define who the host is (a cynical veteran, an excited educator, a cautionary narrator) and what they should focus on — the AI shapes the narration around that voice. Works best when you set a clear persona or analogy, define the target audience, constrain what to highlight, and command the structure.",
+    icon: "monitor-play",
+    objective:
+      "Write a presenter-driven slide-show video script with a clear host voice, targeted audience, focused content, and commanded structure",
+    starterText: "",
+    draftQuestions: [
+      "What persona or analogy should the AI host use? (e.g., 'a cynical industry veteran', 'an excited teacher', 'a cautionary tale narrator')",
+      "Who is the target audience? (e.g., 'non-technical stakeholders who care about ROI', 'developers new to the framework')",
+      "What should the AI focus on or ignore? (e.g., 'Focus on security risks in Source 3, ignore marketing sections')",
+      "How should the video be structured? (e.g., 'Start with a what's-in-it-for-me hook, three key takeaways, end with a call to action')",
+    ],
+    templateContent: `# AI Video Host Script
+
+## Host Persona
+### Who is the presenter?
+Define the host's character, tone, and perspective. A persona or analogy makes the narration compelling rather than robotic.
+
+Examples:
+- "A cautionary tale narrator warning about what happens when you ignore technical debt"
+- "A cynical industry veteran explaining why this project will fail without proper planning"
+- "An excited teacher breaking down a complex topic for beginners"
+
+### Voice & Tone
+What's the emotional register? (urgent, witty, warm, authoritative, conspiratorial)
+
+## Audience
+### Who is watching?
+Define the target audience — the AI adjusts vocabulary and depth based on this.
+
+### What do they already know?
+Prior knowledge, context, and assumptions.
+
+### What do they care about?
+ROI? Technical depth? Quick wins? Risk avoidance?
+
+## Focus & Constraints
+### What should the AI focus on?
+Specific sections, data points, or themes to highlight from the source material.
+
+### What should the AI ignore?
+Sections, topics, or tangents to skip entirely.
+
+### Key sources or data
+If you have multiple sources, name which ones matter and what to extract from each.
+
+## Structure
+### Opening Hook (first 5–10 seconds)
+What grabs the viewer immediately? A provocative question, a shocking stat, a "what if" scenario?
+
+### Narrative Arc
+How should the video flow? Define the structure explicitly:
+1. Hook — grab attention
+2. Context — set the scene
+3. Key takeaways (3–5 max)
+4. Climax / key insight
+5. Call to action / closing
+
+### Slide Breakdown
+
+#### Slide 1 — Hook
+- **On Screen**: Text or visual
+- **Host says**: "Narration in the host's voice"
+- **Duration**: X seconds
+
+#### Slide 2 — Context
+- **On Screen**: Text or visual
+- **Host says**: "Narration"
+- **Duration**: X seconds
+
+#### Slide 3 — Takeaway
+- **On Screen**: Text or visual
+- **Host says**: "Narration"
+- **Duration**: X seconds
+
+#### Slide N — Closing
+- **On Screen**: Text or visual
+- **Host says**: "Narration"
+- **Duration**: X seconds
+
+## Production Notes
+### Duration
+Target length (60s social, 3–5 min YouTube, etc.)
+
+### Platform
+Where will this be published? (YouTube, LinkedIn, internal, TikTok)
+
+### Music & Sound
+Background music style, pacing cues.`,
+    provocationSources: [
+      "The Audience",
+      "Storytelling Coach",
+      "Persona Critic",
+      "Content Strategist",
+      "Attention Economist",
+    ],
+    provocationExamples: [
+      "Your host persona says 'cautionary tale' but the script sounds like a product demo. Where's the tension? — Storytelling Coach",
+      "You said the audience is non-technical, but Slide 3 uses three acronyms without explaining them. — The Audience",
+      "You have 8 takeaways. A video audience retains 3. Which five do you cut? — Attention Economist",
+      "The host voice disappears after Slide 2 and becomes generic narration. Keep the persona consistent. — Persona Critic",
+      "What's the one thing the viewer should do after watching? Your closing doesn't ask for anything. — Content Strategist",
+    ],
+  },
+  {
     id: "slide-video-script",
     title: "Slide Video Script",
     shortLabel: "Video Script",
