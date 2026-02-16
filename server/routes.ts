@@ -3,7 +3,11 @@ import { createServer, type Server } from "http";
 import { getAuth } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt } from "./crypto";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+// @ts-ignore - imported via custom exports subpath
+import { LLMPlanner } from "bilko-flow/llm";
+// @ts-ignore - direct filesystem path to bypass exports restriction
+import { registerLLMAdapter } from "../node_modules/bilko-flow/dist/llm/index.js";
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -36,6 +40,8 @@ import {
   type DiscoveredMedia,
   type StreamingRefineResponse,
   type StreamingRequirement,
+  plannerProposeRequestSchema,
+  type PlannerProposeResponse,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById } from "@shared/personas";
 
@@ -47,20 +53,15 @@ function getEncryptionKey(): string {
   return secret || "provocations-dev-key-change-in-production";
 }
 
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+let _anthropic: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    _anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_KEY,
     });
   }
-  return _openai;
+  return _anthropic;
 }
-
-/** Model constants — single place to swap model identifiers */
-const MODEL_PRIMARY = "gpt-5.2";       // Main model for document editing, challenges, advice, etc.
-const MODEL_FAST    = "gpt-5.2";       // Lightweight tasks: cleanup, planning, persona selection
 
 // Derive provocation prompts from centralized persona definitions (challenge prompt is the default)
 const provocationPrompts: Record<ProvocationType, string> = Object.fromEntries(
@@ -140,12 +141,11 @@ function isLikelyVoiceTranscript(text: string): boolean {
 // Clean voice transcript to extract clear intent
 async function cleanVoiceTranscript(transcript: string): Promise<string> {
   try {
-    const response = await getOpenAI().chat.completions.create({
-      model: MODEL_FAST,
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert at extracting clear editing instructions from spoken transcripts.
+    const response = await getAnthropic().messages.create({
+      model: "claude-opus-4-6",
+      max_tokens: 500,
+      temperature: 0.2,
+      system: `You are an expert at extracting clear editing instructions from spoken transcripts.
 
 Your job is to:
 1. Remove speech artifacts (um, uh, like, you know, basically, so, repeated words)
@@ -153,17 +153,16 @@ Your job is to:
 3. Make it a clear, actionable editing directive
 
 Keep the user's intent intact. Don't add information they didn't mention.
-Output ONLY the cleaned instruction, nothing else.`
-        },
+Output ONLY the cleaned instruction, nothing else.`,
+      messages: [
         {
           role: "user",
           content: transcript
         }
       ],
-      max_tokens: 500,
-      temperature: 0.2,
     });
-    return response.choices[0]?.message?.content?.trim() || transcript;
+    const cleanedText = response.content[0].type === 'text' ? response.content[0].text : '';
+    return cleanedText.trim() || transcript;
   } catch {
     return transcript; // Fall back to original if cleaning fails
   }
@@ -193,12 +192,11 @@ async function generateEditPlan(
   objective: string
 ): Promise<string> {
   try {
-    const response = await getOpenAI().chat.completions.create({
-      model: MODEL_FAST,
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert editor planning document changes. Given an instruction, create a brief execution plan.
+    const response = await getAnthropic().messages.create({
+      model: "claude-opus-4-6",
+      max_tokens: 300,
+      temperature: 0.3,
+      system: `You are an expert editor planning document changes. Given an instruction, create a brief execution plan.
 
 Output a concise numbered list (3-5 steps max) of specific changes to make.
 Each step should be atomic and verifiable.
@@ -210,8 +208,8 @@ Plan:
 1. Expand the pricing section with specific tier information
 2. Add pricing comparison table after the tier descriptions
 3. Move the FAQ section to after the Contact section
-4. Update any internal references to FAQ location`
-        },
+4. Update any internal references to FAQ location`,
+      messages: [
         {
           role: "user",
           content: `Document (first 1000 chars): ${document.slice(0, 1000)}${document.length > 1000 ? "..." : ""}
@@ -222,10 +220,9 @@ Instruction: ${instruction}
 Create a brief execution plan:`
         }
       ],
-      max_tokens: 300,
-      temperature: 0.3,
     });
-    return response.choices[0]?.message?.content?.trim() || "";
+    const planText = response.content[0].type === 'text' ? response.content[0].text : '';
+    return planText.trim() || "";
   } catch {
     return ""; // Skip planning if it fails
   }
@@ -445,13 +442,10 @@ export async function registerRoutes(
       const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content: `You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 4096,
+        system: `You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
 
 DOCUMENT OBJECTIVE: ${objective}
 Evaluate the document against this objective. Every challenge must relate to how well the document achieves this goal.
@@ -472,17 +466,16 @@ For each challenge:
 
 Focus on completeness: what's missing, what's thin, what could break. Be constructive, not destructive.
 
-Output only valid JSON, no markdown.`
-          },
+Output only valid JSON, no markdown.`,
+        messages: [
           {
             role: "user",
             content: `Generate challenges for this document:\n\n${analysisText}`
           }
         ],
-        response_format: { type: "json_object" },
       });
 
-      const content = response.choices[0]?.message?.content || "{}";
+      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
       let parsedResponse: Record<string, unknown> = {};
       try {
         parsedResponse = JSON.parse(content);
@@ -573,20 +566,19 @@ Respond with a JSON object:
 
 Output only valid JSON, no markdown.`;
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 2048,
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 2048,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           {
             role: "user",
             content: `Here is the current document:\n\n${analysisText}\n\nPlease provide advice for the challenge: "${challengeTitle}"`
           }
         ],
-        response_format: { type: "json_object" },
       });
 
-      const content = response.choices[0]?.message?.content || "{}";
+      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
       let parsedResponse: Record<string, unknown> = {};
       try {
         parsedResponse = JSON.parse(content);
@@ -784,13 +776,10 @@ The user's response should be integrated thoughtfully - don't just append it, we
         : "";
 
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
-      const documentResponse = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 8192,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
+      const documentResponse = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 8192,
+        system: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
 
 DOCUMENT OBJECTIVE: ${objective}
 
@@ -822,8 +811,8 @@ Guidelines:
 6. When the document contains embedded images (![...](data:...)), preserve them exactly without modification
 ${contextSection}${preservationSection}
 
-Output only the evolved markdown document text. No explanations or meta-commentary.`
-          },
+Output only the evolved markdown document text. No explanations or meta-commentary.`,
+        messages: [
           {
             role: "user",
             content: `CURRENT DOCUMENT:
@@ -837,16 +826,13 @@ Please evolve the document according to this instruction.`
         ],
       });
 
-      const evolvedDocument = documentResponse.choices[0]?.message?.content || document;
+      const evolvedDocument = (documentResponse.content[0].type === 'text' ? documentResponse.content[0].text : '') || document;
 
       // Analyze changes for structured output
-      const analysisResponse = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 1024,
-        messages: [
-          {
-            role: "system",
-            content: `You are a document change analyzer. Compare the original and evolved documents and provide a brief structured analysis.
+      const analysisResponse = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 1024,
+        system: `You are a document change analyzer. Compare the original and evolved documents and provide a brief structured analysis.
 
 Respond with a JSON object containing:
 - summary: A one-sentence summary of what changed (max 100 chars)
@@ -856,8 +842,8 @@ Respond with a JSON object containing:
   - location: Where in the document (e.g., "Introduction", "Second paragraph") (optional)
 - suggestions: An array of 0-2 strings with potential next improvements (max 60 chars each)
 
-Output only valid JSON, no markdown.`
-          },
+Output only valid JSON, no markdown.`,
+        messages: [
           {
             role: "user",
             content: `ORIGINAL DOCUMENT:
@@ -869,7 +855,6 @@ ${evolvedDocument.slice(0, 2000)}${evolvedDocument.length > 2000 ? "..." : ""}
 INSTRUCTION APPLIED: ${instruction}`
           }
         ],
-        response_format: { type: "json_object" },
       });
 
       let changes: ChangeEntry[] = [];
@@ -877,7 +862,7 @@ INSTRUCTION APPLIED: ${instruction}`
       let summary = `Applied: ${instruction.slice(0, 100)}${instruction.length > 100 ? "..." : ""}`;
 
       try {
-        const analysisContent = analysisResponse.choices[0]?.message?.content || "{}";
+        const analysisContent = analysisResponse.content[0].type === 'text' ? analysisResponse.content[0].text : "{}";
         const analysis = JSON.parse(analysisContent);
         if (typeof analysis.summary === 'string') {
           summary = analysis.summary;
@@ -990,14 +975,7 @@ STRATEGY: ${strategy}`);
       // Send instruction type first
       res.write(`data: ${JSON.stringify({ type: 'meta', instructionType })}\n\n`);
 
-      const stream = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 8192,
-        stream: true,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert document editor. OBJECTIVE: ${objective}
+      const streamSystemPrompt = `You are an expert document editor. OBJECTIVE: ${objective}
 
 ${contextSection}
 
@@ -1009,8 +987,13 @@ Guidelines:
 3. Output the complete evolved document in valid markdown
 4. When the document contains embedded images, preserve them without modification
 
-Output only the evolved markdown document. No explanations.`
-          },
+Output only the evolved markdown document. No explanations.`;
+
+      const stream = await getAnthropic().messages.stream({
+        model: "claude-opus-4-6",
+        max_tokens: 8192,
+        system: streamSystemPrompt,
+        messages: [
           {
             role: "user",
             content: `DOCUMENT:\n${document}${selectedText ? `\n\nSELECTED TEXT:\n"${selectedText}"` : ""}\n\nINSTRUCTION: ${instruction}`
@@ -1020,9 +1003,9 @@ Output only the evolved markdown document. No explanations.`
 
       let fullContent = '';
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content) {
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          const content = event.delta.text;
           fullContent += content;
           res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
         }
@@ -1055,12 +1038,11 @@ Output only the evolved markdown document. No explanations.`
 
       // AIM mode uses a dedicated prompt and higher-capability model
       if (context === "aim") {
-        const aimResponse = await getOpenAI().chat.completions.create({
-          model: MODEL_FAST,
-          messages: [
-            {
-              role: "system",
-              content: `You are an expert prompt engineer. The user has written a rough draft of a prompt for an AI tool. Your job is to restructure it using the AIM framework while preserving every bit of their original intent.
+        const aimResponse = await getAnthropic().messages.create({
+          model: "claude-opus-4-6",
+          max_tokens: 4000,
+          temperature: 0.3,
+          system: `You are an expert prompt engineer. The user has written a rough draft of a prompt for an AI tool. Your job is to restructure it using the AIM framework while preserving every bit of their original intent.
 
 The AIM framework:
 - **Actor**: Who should the AI be? Define the role, expertise, and persona.
@@ -1081,18 +1063,17 @@ The AIM framework:
 [Context, constraints, and data extracted from the draft]
 
 **Mission**
-[Clear task description with expected output]`
-            },
+[Clear task description with expected output]`,
+          messages: [
             {
               role: "user",
               content: `Restructure this draft into an AIM-structured prompt:\n\n${transcript}`
             }
           ],
-          max_tokens: 4000,
-          temperature: 0.3,
         });
 
-        const summary = aimResponse.choices[0]?.message?.content?.trim() || transcript;
+        const aimText = aimResponse.content[0].type === 'text' ? aimResponse.content[0].text : '';
+        const summary = aimText.trim() || transcript;
         return res.json({
           summary,
           originalLength: transcript.length,
@@ -1134,23 +1115,21 @@ For source material: Clean up and organize into readable, well-written paragraph
 Be faithful to their intent — don't add information they didn't mention. Keep the same approximate length.`;
       }
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_FAST,
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: context === "source" ? 4000 : 500,
+        temperature: 0.3,
+        system: systemPrompt,
         messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
           {
             role: "user",
             content: `${mode === "summarize" ? "Summarize this" : "Clean up this text"}:\n\n${transcript}`
           }
         ],
-        max_tokens: context === "source" ? 4000 : 500,
-        temperature: 0.3,
       });
 
-      const summary = response.choices[0]?.message?.content?.trim() || transcript;
+      const respText = response.content[0].type === 'text' ? response.content[0].text : '';
+      const summary = respText.trim() || transcript;
 
       res.json({
         summary,
@@ -1240,13 +1219,10 @@ Embody these personas when crafting your questions. Each question should reflect
         ? `\n\nUSER GUIDANCE: ${directionGuidance}`
         : "";
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 1024,
-        messages: [
-          {
-            role: "system",
-            content: `You are a skilled interviewer helping a user develop their document by asking probing questions. Your goal is to extract the information, perspectives, and insights the user needs to include in their document.
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 1024,
+        system: `You are a skilled interviewer helping a user develop their document by asking probing questions. Your goal is to extract the information, perspectives, and insights the user needs to include in their document.
 
 OBJECTIVE: ${objective}
 ${templateContext}${documentContext}${provocationsContext}${directionContext}${guidanceContext}
@@ -1269,17 +1245,16 @@ Respond with a JSON object:
 - topic: A short label for what this question covers (max 40 chars). If a direction persona is active, prefix with the persona name, e.g. "Architect: API Contracts"
 - reasoning: Brief internal reasoning for why this question matters (max 100 chars)
 
-Output only valid JSON, no markdown.`
-          },
+Output only valid JSON, no markdown.`,
+        messages: [
           {
             role: "user",
             content: `Generate the next interview question to help me develop my document.`
           }
         ],
-        response_format: { type: "json_object" },
       });
 
-      const content = response.choices[0]?.message?.content || "{}";
+      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
       let result: InterviewQuestionResponse;
       try {
         const parsed = JSON.parse(content);
@@ -1316,13 +1291,10 @@ Output only valid JSON, no markdown.`
 
       const qaText = entries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n---\n\n");
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 2048,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert at synthesizing interview responses into clear editing instructions.
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 2048,
+        system: `You are an expert at synthesizing interview responses into clear editing instructions.
 
 Given a series of Q&A pairs from a document development interview, create a single comprehensive instruction that tells a document editor how to integrate all the information gathered.
 
@@ -1335,8 +1307,8 @@ The instruction should:
 4. Be written as a clear directive to a document editor
 5. Remind the editor that the output document must be valid Markdown format
 
-Output only the instruction text. No meta-commentary.`
-          },
+Output only the instruction text. No meta-commentary.`,
+        messages: [
           {
             role: "user",
             content: `${docText ? `Current document:\n${docText.slice(0, 2000)}\n\n---\n\n` : ""}Interview Q&A:\n\n${qaText}`
@@ -1344,7 +1316,8 @@ Output only the instruction text. No meta-commentary.`
         ],
       });
 
-      const instruction = response.choices[0]?.message?.content?.trim() || "";
+      const instrText = response.content[0].type === 'text' ? response.content[0].text : '';
+      const instruction = instrText.trim() || "";
 
       res.json({ instruction });
     } catch (error) {
@@ -1389,13 +1362,10 @@ Output only the instruction text. No meta-commentary.`
       }
 
       // Step 1: Identify the 3 most relevant personas for this question
-      const selectionResponse = await getOpenAI().chat.completions.create({
-        model: MODEL_FAST,
+      const selectionResponse = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
         max_tokens: 256,
-        messages: [
-          {
-            role: "system",
-            content: `Given a user question about their document, select the 3 most relevant personas to answer.
+        system: `Given a user question about their document, select the 3 most relevant personas to answer.
 
 Available personas:
 ${personaDescriptions}
@@ -1405,20 +1375,19 @@ ${activePersonas && activePersonas.length > 0 ? `Currently active personas (pref
 Respond with a JSON object:
 { "personas": ["persona_id_1", "persona_id_2", "persona_id_3"], "topic": "short topic label (max 30 chars)" }
 
-Output only valid JSON.`
-          },
+Output only valid JSON.`,
+        messages: [
           {
             role: "user",
             content: `Question: ${question}\n\nDocument objective: ${objective}${secondaryObjective ? `\nSecondary objective: ${secondaryObjective}` : ""}`
           }
         ],
-        response_format: { type: "json_object" },
       });
 
       let selectedPersonaIds: string[] = [];
       let topic = "Discussion";
       try {
-        const selectionContent = JSON.parse(selectionResponse.choices[0]?.message?.content || "{}");
+        const selectionContent = JSON.parse(selectionResponse.content[0].type === 'text' ? selectionResponse.content[0].text : "{}");
         selectedPersonaIds = Array.isArray(selectionContent.personas)
           ? selectionContent.personas.filter((id: unknown) => typeof id === "string" && getPersonaById(id as string))
           : [];
@@ -1450,13 +1419,10 @@ Output only valid JSON.`
         `### ${p.label} (${p.id})\nRole: ${p.role}\nAdvice style: ${p.prompts.advice}`
       ).join("\n\n");
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 3072,
-        messages: [
-          {
-            role: "system",
-            content: `You are a panel of expert advisors responding to a user's question about their document. Each advisor provides their unique perspective.
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 3072,
+        system: `You are a panel of expert advisors responding to a user's question about their document. Each advisor provides their unique perspective.
 
 DOCUMENT OBJECTIVE: ${objective}${secondaryObjective ? `\nSECONDARY OBJECTIVE: ${secondaryObjective}` : ""}
 ${conversationContext}
@@ -1481,17 +1447,16 @@ Respond with a JSON object:
   "topic": "${topic}"
 }
 
-Output only valid JSON, no markdown.`
-          },
+Output only valid JSON, no markdown.`,
+        messages: [
           {
             role: "user",
             content: `CURRENT DOCUMENT:\n${analysisText}\n\nMY QUESTION: ${question}`
           }
         ],
-        response_format: { type: "json_object" },
       });
 
-      const content = response.choices[0]?.message?.content || "{}";
+      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
       let result: AskQuestionResponse;
       try {
         const parsed = JSON.parse(content);
@@ -1811,13 +1776,10 @@ Output only valid JSON, no markdown.`
 
       const isFirstQuestion = !previousEntries || previousEntries.length === 0;
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 1024,
-        messages: [
-          {
-            role: "system",
-            content: `You are a requirements discovery agent. Your PRIMARY purpose is to help the user express automation requirements for the objective below. Everything you do should serve this objective.
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 1024,
+        system: `You are a requirements discovery agent. Your PRIMARY purpose is to help the user express automation requirements for the objective below. Everything you do should serve this objective.
 
 OBJECTIVE (this is your north star — every response should help the user make progress toward this):
 ${objective}
@@ -1839,8 +1801,8 @@ Respond with a JSON object:
 - topic: A short label for what this exchange covers (max 40 chars)
 - suggestedRequirement: If the user's message implies a requirement, state it clearly here (optional, max 200 chars)
 
-Output only valid JSON, no markdown.`
-          },
+Output only valid JSON, no markdown.`,
+        messages: [
           {
             role: "user",
             content: isFirstQuestion
@@ -1848,10 +1810,9 @@ Output only valid JSON, no markdown.`
               : "Generate the next question based on our conversation."
           }
         ],
-        response_format: { type: "json_object" },
       });
 
-      const content = response.choices[0]?.message?.content || "{}";
+      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
       let result: StreamingQuestionResponse;
       try {
         const parsed = JSON.parse(content);
@@ -1885,13 +1846,10 @@ Output only valid JSON, no markdown.`
 
       const { objective, websiteUrl, wireframeNotes, document: docText } = parsed.data;
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content: `You are a website/application analysis expert. Analyze the website or wireframe description and identify key components, interactions, structural patterns, AND proactively discover content assets on the site.
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 4096,
+        system: `You are a website/application analysis expert. Analyze the website or wireframe description and identify key components, interactions, structural patterns, AND proactively discover content assets on the site.
 
 OBJECTIVE: ${objective}
 ${websiteUrl ? `TARGET WEBSITE: ${websiteUrl}` : ""}
@@ -1920,8 +1878,8 @@ Respond with a JSON object:
 - images: An array of significant images worth capturing, each with: url (string), title (string, descriptive name), type (string, e.g. "hero", "product", "infographic"). NOT icons, buttons, or ad images. Max 10 items.
 - primaryContent: A concise extract of the main textual content on the site — the substance, not chrome. Max 1000 chars. If the site is primarily visual, describe what the visual content conveys.
 
-Output only valid JSON, no markdown.`
-          },
+Output only valid JSON, no markdown.`,
+        messages: [
           {
             role: "user",
             content: wireframeNotes
@@ -1929,10 +1887,9 @@ Output only valid JSON, no markdown.`
               : `Analyze the website${websiteUrl ? ` at ${websiteUrl}` : ""}. Identify its key components, structure, content assets (video, audio, RSS, images, text), and areas that would need requirement specification based on the objective.`
           }
         ],
-        response_format: { type: "json_object" },
       });
 
-      const content = response.choices[0]?.message?.content || "{}";
+      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
       let result: WireframeAnalysisResponse;
       try {
         const parsed = JSON.parse(content);
@@ -2017,13 +1974,10 @@ Output only valid JSON, no markdown.`
         ? `\n\nWEBSITE CONTEXT:\n${wireframeParts.join("\n")}`
         : "";
 
-      const response = await getOpenAI().chat.completions.create({
-        model: MODEL_PRIMARY,
-        max_completion_tokens: 4096,
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert requirements writer. Given a dialogue between a user and an agent, extract and refine clear, implementable requirements. Each requirement should be specific enough that a developer or AI agent can implement it without ambiguity.
+      const response = await getAnthropic().messages.create({
+        model: "claude-opus-4-6",
+        max_tokens: 4096,
+        system: `You are an expert requirements writer. Given a dialogue between a user and an agent, extract and refine clear, implementable requirements. Each requirement should be specific enough that a developer or AI agent can implement it without ambiguity.
 
 OBJECTIVE: ${objective}
 ${existingReqText}${wireframeContext}
@@ -2039,17 +1993,16 @@ Respond with a JSON object:
 - summary: Brief description of what was refined (max 200 chars)
 
 Preserve existing confirmed requirements. Update draft requirements with new information. Add new requirements discovered in the dialogue.
-Output only valid JSON, no markdown wrapping.`
-          },
+Output only valid JSON, no markdown wrapping.`,
+        messages: [
           {
             role: "user",
             content: "Refine the requirements based on our dialogue."
           }
         ],
-        response_format: { type: "json_object" },
       });
 
-      const content = response.choices[0]?.message?.content || "{}";
+      const content = response.content[0].type === 'text' ? response.content[0].text : "{}";
       let result: StreamingRefineResponse;
       try {
         const parsed = JSON.parse(content);
@@ -2120,6 +2073,102 @@ Output only valid JSON, no markdown wrapping.`
       console.error("Screenshot error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to capture screenshot", details: errorMessage });
+    }
+  });
+
+  // ── Planner endpoint (bilko-flow LLMPlanner) ──
+
+  let _claudeAdapterRegistered = false;
+  function ensureClaudeAdapter() {
+    if (_claudeAdapterRegistered) return;
+    registerLLMAdapter('claude', async (options: any): Promise<any> => {
+      const anthropic = getAnthropic();
+      const systemMsg = options.systemPrompt || '';
+      const messages = options.messages.map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+      const response = await anthropic.messages.create({
+        model: options.model,
+        max_tokens: options.maxTokens || 4096,
+        system: systemMsg,
+        messages,
+        temperature: options.temperature,
+      });
+      return {
+        content: response.content[0].type === 'text' ? response.content[0].text : '',
+        usage: {
+          promptTokens: response.usage.input_tokens,
+          completionTokens: response.usage.output_tokens,
+        },
+      };
+    });
+    _claudeAdapterRegistered = true;
+  }
+
+  let _planner: InstanceType<typeof LLMPlanner> | null = null;
+  function getPlanner(): InstanceType<typeof LLMPlanner> {
+    if (!_planner) {
+      const apiKey = process.env.ANTHROPIC_KEY;
+      if (!apiKey) throw new Error("ANTHROPIC_KEY not set");
+      ensureClaudeAdapter();
+      _planner = new LLMPlanner({
+        provider: "claude",
+        model: "claude-opus-4-6",
+        apiKey,
+        temperature: 0.3,
+      });
+    }
+    return _planner;
+  }
+
+  app.post("/api/planner/propose", async (req, res) => {
+    try {
+      const parsed = plannerProposeRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const { description, context, userRole } = parsed.data;
+
+      // Build the goal description with optional context
+      let goalDescription = description;
+      if (context) {
+        goalDescription += `\n\nContext:\n${context}`;
+      }
+      if (userRole) {
+        goalDescription += `\n\nUser role: ${userRole}`;
+      }
+
+      const planner = getPlanner();
+      const proposal = await planner.proposeWorkflow({
+        description: goalDescription,
+        targetDslVersion: "1.0.0",
+        determinismTarget: { targetGrade: "best-effort" },
+      });
+
+      // Map the WorkflowProposal to our simplified client response
+      const response: PlannerProposeResponse = {
+        name: proposal.name,
+        description: proposal.description || description,
+        steps: proposal.steps.map((step: any) => ({
+          id: step.id,
+          name: step.name,
+          type: step.type,
+          description: step.description || "",
+          dependsOn: step.dependsOn || [],
+        })),
+        plannerInfo: {
+          name: proposal.plannerInfo.name,
+          version: proposal.plannerInfo.version,
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Planner error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate workflow", details: message });
     }
   });
 
