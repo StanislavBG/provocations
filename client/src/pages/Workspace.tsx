@@ -10,14 +10,10 @@ import { LogStatsPanel } from "@/components/LogStatsPanel";
 import { ReadingPane } from "@/components/ReadingPane";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
-import { WorkflowSidebar } from "@/components/WorkflowSidebar";
-import { WorkflowProgressTracker } from "@/components/WorkflowProgressTracker";
-import { StepDetailsPanel } from "@/components/StepDetailsPanel";
-import { usePlanner } from "@/hooks/use-planner";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
-import { UserButton, useUser } from "@clerk/clerk-react";
+import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,7 +22,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
 import { ScreenCaptureButton, type CaptureAnnotation } from "@/components/ScreenCaptureButton";
-import type { Workflow } from "@/lib/workflows";
 import {
   Sparkles,
   RotateCcw,
@@ -42,7 +37,6 @@ import {
   Loader2,
   Share2,
   Copy,
-  PanelRight,
 } from "lucide-react";
 import type {
   Document,
@@ -75,16 +69,6 @@ async function processObjectiveText(text: string, mode: string): Promise<string>
 export default function Workspace() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { user } = useUser();
-
-  // ── Planner (bilko-flow) ──
-  const planner = usePlanner();
-
-  // ── Workflow state ──
-  const [activeWorkflow, setActiveWorkflow] = useState<Workflow | null>(null);
-  const [workflowStepIndex, setWorkflowStepIndex] = useState(0);
-  const [completedWorkflowSteps, setCompletedWorkflowSteps] = useState<Set<string>>(new Set());
-  const [showDetailsPanel, setShowDetailsPanel] = useState(true);
 
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
@@ -726,75 +710,6 @@ export default function Workspace() {
     // Reset toolbox
     setActiveToolboxApp("provoke");
     autoStartedRef.current = false;
-    // Reset workflow state
-    setActiveWorkflow(null);
-    setWorkflowStepIndex(0);
-    setCompletedWorkflowSteps(new Set());
-    setShowDetailsPanel(true);
-    planner.reset();
-  }, [planner]);
-
-  // ── Workflow handlers ──
-
-  const handleWorkflowSelect = useCallback((workflow: Workflow) => {
-    setActiveWorkflow(workflow);
-    setWorkflowStepIndex(0);
-    setCompletedWorkflowSteps(new Set());
-    setShowDetailsPanel(true);
-    // Initialize a blank document for the workflow
-    if (!document.rawText.trim()) {
-      setDocument({ id: generateId("doc"), rawText: " " });
-      setObjective(workflow.title);
-    }
-    // Trigger the planner to generate a workflow from the description
-    planner.propose(
-      `${workflow.title}: ${workflow.description}`,
-      undefined,
-      user?.publicMetadata?.role as string | undefined,
-    );
-  }, [document.rawText, planner, user]);
-
-  const handleFreeformSubmit = useCallback((text: string) => {
-    setDocument({ id: generateId("doc"), rawText: " " });
-    setObjective(text);
-    // Trigger the planner to auto-generate a workflow from the freeform text
-    planner.propose(
-      text,
-      undefined,
-      user?.publicMetadata?.role as string | undefined,
-    );
-  }, [planner, user]);
-
-  const handleWorkflowStepClick = useCallback((index: number) => {
-    setWorkflowStepIndex(index);
-  }, []);
-
-  const handleWorkflowNext = useCallback(() => {
-    if (activeWorkflow && workflowStepIndex < activeWorkflow.steps.length - 1) {
-      setWorkflowStepIndex(prev => prev + 1);
-    }
-  }, [activeWorkflow, workflowStepIndex]);
-
-  const handleWorkflowPrevious = useCallback(() => {
-    if (workflowStepIndex > 0) {
-      setWorkflowStepIndex(prev => prev - 1);
-    }
-  }, [workflowStepIndex]);
-
-  const handleWorkflowStepComplete = useCallback(() => {
-    if (!activeWorkflow) return;
-    const step = activeWorkflow.steps[workflowStepIndex];
-    setCompletedWorkflowSteps(prev => new Set([...Array.from(prev), step.id]));
-    // Auto-advance to next step
-    if (workflowStepIndex < activeWorkflow.steps.length - 1) {
-      setWorkflowStepIndex(prev => prev + 1);
-    }
-  }, [activeWorkflow, workflowStepIndex]);
-
-  const handleWorkflowReset = useCallback(() => {
-    setActiveWorkflow(null);
-    setWorkflowStepIndex(0);
-    setCompletedWorkflowSteps(new Set());
   }, []);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
@@ -1016,330 +931,176 @@ export default function Workspace() {
     );
   }
 
-  // ── Panel contents for workflow steps ──
+  // ── Panel contents (shared between mobile and desktop layouts) ──
 
-  /** Renders the appropriate component for the current workflow step */
-  const renderWorkflowStepContent = () => {
-    if (!activeWorkflow) {
-      // Show planner loading state if generating
-      if (planner.isLoading) {
-        return (
-          <div className="h-full flex items-center justify-center p-8">
-            <div className="text-center space-y-4 max-w-md">
-              <Loader2 className="w-12 h-12 text-primary/40 mx-auto animate-spin" />
-              <h2 className="font-serif text-xl text-foreground">Generating workflow...</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                The AI planner is designing a workflow based on your request.
-              </p>
-            </div>
-          </div>
-        );
+  const toolboxPanel = (
+    <ProvocationToolbox
+      activeApp={activeToolboxApp}
+      onAppChange={setActiveToolboxApp}
+      isInterviewActive={isInterviewActive}
+      isMerging={interviewSummaryMutation.isPending}
+      interviewEntryCount={interviewEntries.length}
+      onStartInterview={handleStartInterview}
+      websiteUrl={websiteUrl}
+      onUrlChange={handleBrowserUrlChange}
+      showLogPanel={showLogPanel}
+      onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
+      isAnalyzing={streamingAnalysisMutation.isPending}
+      discoveredCount={discoveredCount}
+      browserExpanded={browserExpanded}
+      onBrowserExpandedChange={setBrowserExpanded}
+      contextCollection={contextCollectionData}
+      referenceDocuments={referenceDocuments}
+      browserHeaderActions={
+        <ScreenCaptureButton
+          onCapture={handleScreenCapture}
+          onClose={handleCaptureClose}
+          disabled={!document.rawText || writeMutation.isPending}
+          targetElementId="browser-explorer-viewport"
+          websiteUrl={websiteUrl}
+          onPreCapture={handlePreCapture}
+          onPostCapture={handlePostCapture}
+        />
       }
+      capturedContext={capturedContext}
+      onCapturedContextChange={setCapturedContext}
+    />
+  );
 
-      // Show planner error
-      if (planner.error) {
-        return (
-          <div className="h-full flex items-center justify-center p-8">
-            <div className="text-center space-y-4 max-w-md">
-              <Sparkles className="w-12 h-12 text-destructive/30 mx-auto" />
-              <h2 className="font-serif text-xl text-foreground">Couldn't generate workflow</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">{planner.error}</p>
-              <Button variant="outline" size="sm" onClick={planner.reset}>Try again</Button>
-            </div>
-          </div>
-        );
-      }
+  const discussionPanel = (
+    <div className="h-full flex flex-col relative">
+      <TranscriptOverlay
+        isVisible={showTranscriptOverlay}
+        isRecording={isRecordingFromMain}
+        rawTranscript={rawTranscript}
+        cleanedTranscript={cleanedTranscript}
+        resultSummary={transcriptSummary}
+        isProcessing={writeMutation.isPending}
+        onClose={handleCloseTranscriptOverlay}
+        onSend={handleSendTranscript}
+        onCleanTranscript={handleCleanTranscript}
+        onTranscriptUpdate={handleTranscriptUpdate}
+        onFinalTranscript={handleOverlayFinalTranscript}
+        context={pendingVoiceContext?.context || "document"}
+      />
 
-      // Show planner result preview (workflow generated but not yet selected for execution)
-      if (planner.proposal && planner.flowSteps.length > 0) {
-        return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-2xl mx-auto space-y-6">
-                <div className="space-y-2">
-                  <h2 className="font-serif text-xl">{planner.proposal.name}</h2>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {planner.proposal.description}
-                  </p>
-                  <p className="text-xs text-muted-foreground/60">
-                    Generated by {planner.proposal.plannerInfo.name} v{planner.proposal.plannerInfo.version}
-                  </p>
-                </div>
-
-                {/* Workflow preview using FlowProgress */}
-                <div className="rounded-lg border bg-card p-4">
-                  <WorkflowProgressTracker
-                    workflow={{
-                      id: "planner-preview",
-                      title: planner.proposal.name,
-                      description: planner.proposal.description,
-                      icon: "Sparkles",
-                      category: "for-you",
-                      steps: planner.proposal.steps.map((s) => ({
-                        id: s.id,
-                        title: s.name,
-                        description: s.description,
-                        component: "text-input" as const,
-                      })),
-                    }}
-                    currentStepIndex={0}
-                    completedSteps={new Set()}
-                    onStepClick={() => {}}
-                    onNext={() => {}}
-                    onPrevious={() => {}}
-                    onReset={planner.reset}
-                    plannerSteps={planner.flowSteps}
-                  />
-                </div>
-
-                {/* Step list */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Workflow Steps</h3>
-                  {planner.proposal.steps.map((step, i) => (
-                    <div key={step.id} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
-                      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-semibold text-primary">{i + 1}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{step.name}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
-                        <span className="inline-block mt-1 text-[10px] text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded">
-                          {step.type}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div className="h-full flex items-center justify-center p-8">
-          <div className="text-center space-y-4 max-w-md">
-            <Sparkles className="w-12 h-12 text-primary/30 mx-auto" />
-            <h2 className="font-serif text-xl text-foreground">Select a workflow to begin</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Choose a workflow from the sidebar or describe what you're working on.
-              The AI planner will automatically generate a workflow for you.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    const currentStep = activeWorkflow.steps[workflowStepIndex];
-    if (!currentStep) return null;
-
-    switch (currentStep.component) {
-      case "text-input":
-        return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-2xl mx-auto space-y-4">
-                <h2 className="font-serif text-lg">{currentStep.title}</h2>
-                <p className="text-sm text-muted-foreground">{currentStep.description}</p>
-                <ProvokeText
-                  chrome="container"
-                  variant="textarea"
-                  placeholder="Start typing or use voice to capture your thoughts..."
-                  value={document.rawText.trim() === "" ? "" : document.rawText}
-                  onChange={(text) => setDocument({ ...document, rawText: text })}
-                  className="text-sm leading-relaxed font-serif min-h-[200px]"
-                  minRows={8}
-                  maxRows={20}
-                  voice={{ mode: "replace" }}
-                  onVoiceTranscript={(text) => setDocument({ ...document, rawText: text })}
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case "persona-select":
-        return (
-          <div className="h-full overflow-y-auto">
-            <ProvocationToolbox
-              activeApp="provoke"
-              onAppChange={() => {}}
-              isInterviewActive={isInterviewActive}
-              isMerging={interviewSummaryMutation.isPending}
-              interviewEntryCount={interviewEntries.length}
-              onStartInterview={handleStartInterview}
-              websiteUrl={websiteUrl}
-              onUrlChange={handleBrowserUrlChange}
-              showLogPanel={showLogPanel}
-              onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
-              isAnalyzing={streamingAnalysisMutation.isPending}
-              discoveredCount={discoveredCount}
-              capturedContext={capturedContext}
-              onCapturedContextChange={setCapturedContext}
-            />
-          </div>
-        );
-
-      case "interview":
-        return (
-          <div className="h-full flex flex-col relative">
-            <TranscriptOverlay
-              isVisible={showTranscriptOverlay}
-              isRecording={isRecordingFromMain}
-              rawTranscript={rawTranscript}
-              cleanedTranscript={cleanedTranscript}
-              resultSummary={transcriptSummary}
-              isProcessing={writeMutation.isPending}
-              onClose={handleCloseTranscriptOverlay}
-              onSend={handleSendTranscript}
-              onCleanTranscript={handleCleanTranscript}
-              onTranscriptUpdate={handleTranscriptUpdate}
-              onFinalTranscript={handleOverlayFinalTranscript}
-              context={pendingVoiceContext?.context || "document"}
-            />
-
-            {/* Inline merge bar */}
-            {interviewEntries.length > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/20 shrink-0">
-                <MessageCircleQuestion className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium flex-1">Interview</span>
-                {isInterviewActive && (
-                  <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs h-7"
-                  onClick={handleMergeToDraft}
-                  disabled={interviewMergeMutation.isPending}
-                >
-                  {interviewMergeMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Merging...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowRightToLine className="w-3 h-3" />
-                      Merge to Draft
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-
-            <div className="flex-1 overflow-hidden">
-              <InterviewPanel
-                isActive={isInterviewActive}
-                entries={interviewEntries}
-                currentQuestion={currentInterviewQuestion}
-                currentTopic={currentInterviewTopic}
-                isLoadingQuestion={interviewQuestionMutation.isPending}
-                isMerging={interviewSummaryMutation.isPending}
-                directionMode={interviewDirection?.mode}
-                onAnswer={handleInterviewAnswer}
-                onEnd={handleEndInterview}
-                onViewAdvice={handleViewAdvice}
-                onDismissQuestion={handleDismissQuestion}
-                adviceText={currentAdviceText}
-                isLoadingAdvice={adviceMutation.isPending}
-                onAskQuestion={handleAskQuestion}
-                isLoadingAskResponse={askQuestionMutation.isPending}
-                discussionMessages={discussionMessages}
-                onAcceptResponse={handleAcceptResponse}
-                onDismissResponse={handleDismissResponse}
-                onRespondToMessage={handleRespondToMessage}
-              />
-            </div>
-          </div>
-        );
-
-      case "document-review":
-        return (
-          <div className="h-full flex flex-col relative">
-            {showDiffView && previousVersion && currentVersion ? (
-              <Suspense fallback={
-                <div className="h-full flex flex-col p-4 space-y-4">
-                  <Skeleton className="h-8 w-48" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-5/6" />
-                </div>
-              }>
-                <DiffView
-                  previousVersion={previousVersion}
-                  currentVersion={currentVersion}
-                />
-              </Suspense>
+      {/* Panel Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
+        <MessageCircleQuestion className="w-4 h-4 text-primary" />
+        <h3 className="font-semibold text-sm">Discussion</h3>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted/60 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors text-[10px] font-bold">
+              2
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[300px]">
+            <p className="text-xs font-medium mb-1">The Interview</p>
+            <p className="text-xs text-muted-foreground">This is where the AI challenges your thinking. It asks provocative questions based on your personas and direction. Answer using voice or text — each response deepens and refines your document. Use "Merge to Draft" to push your answers into the document at any time.</p>
+          </TooltipContent>
+        </Tooltip>
+        {isInterviewActive && (
+          <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
+        )}
+        <div className="flex-1" />
+        {interviewEntries.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs h-7"
+            onClick={handleMergeToDraft}
+            disabled={interviewMergeMutation.isPending}
+          >
+            {interviewMergeMutation.isPending ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Merging...
+              </>
             ) : (
-              <ReadingPane
-                text={document.rawText}
-                onTextChange={handleDocumentTextChange}
-                onVoiceMerge={handleSelectionVoiceMerge}
-                isMerging={writeMutation.isPending}
-                onTranscriptUpdate={handleTranscriptUpdate}
-                onTextEdit={handleTextEdit}
-                onSendFeedback={handleSendDocumentFeedback}
-              />
+              <>
+                <ArrowRightToLine className="w-3 h-3" />
+                Merge to Draft
+              </>
             )}
-          </div>
-        );
+          </Button>
+        )}
+      </div>
 
-      case "capture":
-        return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-2xl mx-auto space-y-4">
-                <h2 className="font-serif text-lg">{currentStep.title}</h2>
-                <p className="text-sm text-muted-foreground">{currentStep.description}</p>
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  {[
-                    { label: "Screenshot", desc: "Capture and annotate" },
-                    { label: "Text Clip", desc: "Paste reference text" },
-                    { label: "URL", desc: "Add a web reference" },
-                    { label: "Upload", desc: "Add a file" },
-                  ].map((opt) => (
-                    <div key={opt.label} className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-muted-foreground/20 hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                        <span className="text-lg text-muted-foreground">+</span>
-                      </div>
-                      <span className="text-sm font-medium">{opt.label}</span>
-                      <span className="text-xs text-muted-foreground">{opt.desc}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
+      {/* Panel content */}
+      <div className="flex-1 overflow-hidden">
+        <InterviewPanel
+          isActive={isInterviewActive}
+          entries={interviewEntries}
+          currentQuestion={currentInterviewQuestion}
+          currentTopic={currentInterviewTopic}
+          isLoadingQuestion={interviewQuestionMutation.isPending}
+          isMerging={interviewSummaryMutation.isPending}
+          directionMode={interviewDirection?.mode}
+          onAnswer={handleInterviewAnswer}
+          onEnd={handleEndInterview}
+          // Advice and dismiss
+          onViewAdvice={handleViewAdvice}
+          onDismissQuestion={handleDismissQuestion}
+          adviceText={currentAdviceText}
+          isLoadingAdvice={adviceMutation.isPending}
+          // Ask question
+          onAskQuestion={handleAskQuestion}
+          isLoadingAskResponse={askQuestionMutation.isPending}
+          // Discussion messages
+          discussionMessages={discussionMessages}
+          onAcceptResponse={handleAcceptResponse}
+          onDismissResponse={handleDismissResponse}
+          onRespondToMessage={handleRespondToMessage}
+        />
+      </div>
+    </div>
+  );
 
-      case "export":
-        return (
-          <div className="h-full flex items-center justify-center p-8">
-            <div className="text-center space-y-4 max-w-md">
-              <h2 className="font-serif text-lg">Export Your Document</h2>
-              <p className="text-sm text-muted-foreground">Your document is ready. Choose how to export.</p>
-              <div className="flex flex-col gap-2 mt-4">
-                <Button variant="outline" className="gap-2">Download as Markdown</Button>
-                <Button variant="outline" className="gap-2">Copy to Clipboard</Button>
-                <Button variant="outline" className="gap-2">Download as Text</Button>
-              </div>
-            </div>
+  const documentPanel = (
+    <div className="h-full flex flex-col relative">
+      {showDiffView && previousVersion && currentVersion ? (
+        <Suspense fallback={
+          <div className="h-full flex flex-col p-4 space-y-4">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-5/6" />
           </div>
-        );
+        }>
+          <DiffView
+            previousVersion={previousVersion}
+            currentVersion={currentVersion}
+          />
+        </Suspense>
+      ) : (
+        <ReadingPane
+          text={document.rawText}
+          onTextChange={handleDocumentTextChange}
+          onVoiceMerge={handleSelectionVoiceMerge}
+          isMerging={writeMutation.isPending}
+          onTranscriptUpdate={handleTranscriptUpdate}
+          onTextEdit={handleTextEdit}
+          onSendFeedback={handleSendDocumentFeedback}
+        />
+      )}
 
-      default:
-        return null;
-    }
-  };
+      <LogStatsPanel
+        isOpen={showLogPanel}
+        onClose={() => setShowLogPanel(false)}
+        wireframeAnalysis={wireframeAnalysis}
+        isAnalyzing={streamingAnalysisMutation.isPending}
+        websiteUrl={websiteUrl}
+      />
+
+    </div>
+  );
 
   // ── Layout ──
 
   return (
     <div className="h-screen flex flex-col">
-      {/* Minimal header */}
-      <header className="border-b bg-card shrink-0">
-        <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
+      <header className="border-b bg-card">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2 flex-wrap">
           <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-primary" />
             <h1 className="font-semibold text-lg">Provocations</h1>
@@ -1368,45 +1129,140 @@ export default function Workspace() {
               <RotateCcw className="w-4 h-4" />
               <span className="hidden sm:inline">New</span>
             </Button>
-            {!showDetailsPanel && activeWorkflow && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setShowDetailsPanel(true)}
-                  >
-                    <PanelRight className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Show details panel</TooltipContent>
-              </Tooltip>
-            )}
+            <AutoDictateToggle />
             <ThemeToggle />
             <UserButton data-testid="button-user-menu-main" />
           </div>
         </div>
+
+        {/* Objective bar (collapsible, minimized by default) */}
+        {isObjectiveCollapsed ? (
+          <button
+            className="border-t px-4 py-2 flex items-center gap-2 w-full text-left hover:bg-muted/50 transition-colors"
+            onClick={() => setIsObjectiveCollapsed(false)}
+          >
+            <Target className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm text-muted-foreground truncate flex-1">
+              {objective || "Set your objective..."}
+            </span>
+            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+          </button>
+        ) : (
+          <div className="border-t px-4 py-3 space-y-3">
+            <ProvokeText
+              chrome="container"
+              variant="textarea"
+              data-testid="input-objective-header"
+              label="Objective"
+              labelIcon={Target}
+              value={objective}
+              onChange={setObjective}
+              placeholder="What are you creating? Describe your objective..."
+              className="text-sm leading-relaxed font-serif"
+              minRows={2}
+              maxRows={4}
+              voice={{ mode: "replace" }}
+              onVoiceTranscript={(text) => {
+                setObjective(text);
+                setObjectiveInterimTranscript("");
+              }}
+              onVoiceInterimTranscript={setObjectiveInterimTranscript}
+              onRecordingChange={setIsRecordingObjective}
+              textProcessor={processObjectiveText}
+              headerActions={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsObjectiveCollapsed(true);
+                  }}
+                  title="Minimize objective"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </Button>
+              }
+            />
+            <ProvokeText
+              chrome="container"
+              variant="textarea"
+              data-testid="input-secondary-objective-header"
+              label="Secondary objective"
+              labelIcon={Crosshair}
+              value={secondaryObjective}
+              onChange={setSecondaryObjective}
+              placeholder="Optional: a secondary goal, constraint, or perspective to keep in mind..."
+              className="text-sm leading-relaxed font-serif"
+              minRows={1}
+              maxRows={3}
+              voice={{ mode: "replace" }}
+              onVoiceTranscript={(text) => setSecondaryObjective(text)}
+            />
+          </div>
+        )}
       </header>
 
-      {/* Workflow progress tracker (Region 4) */}
-      {activeWorkflow && (
-        <WorkflowProgressTracker
-          workflow={activeWorkflow}
-          currentStepIndex={workflowStepIndex}
-          completedSteps={completedWorkflowSteps}
-          onStepClick={handleWorkflowStepClick}
-          onNext={handleWorkflowNext}
-          onPrevious={handleWorkflowPrevious}
-          onReset={handleWorkflowReset}
-          isStepProcessing={writeMutation.isPending || interviewQuestionMutation.isPending}
-          plannerSteps={planner.flowSteps}
-        />
+      {/* Secondary objective panel (REQ-002, REQ-003) — prominent provocation text */}
+      {secondaryObjective.trim() && (
+        <div className="border-b bg-violet-50/60 dark:bg-violet-950/30 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <Crosshair className="w-4 h-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                  Secondary objective
+                </span>
+              </div>
+              <p className="text-sm font-serif leading-relaxed text-violet-900 dark:text-violet-100">
+                {secondaryObjective}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200"
+                onClick={() => {
+                  navigator.clipboard.writeText(secondaryObjective);
+                  toast({ title: "Copied", description: "Secondary objective copied to clipboard" });
+                }}
+                title="Copy secondary objective"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200"
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ title: "Secondary Objective", text: secondaryObjective });
+                  } else {
+                    navigator.clipboard.writeText(secondaryObjective);
+                    toast({ title: "Copied", description: "Secondary objective copied to clipboard (share not supported)" });
+                  }
+                }}
+                title="Share secondary objective"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={() => setSecondaryObjective("")}
+                title="Clear secondary objective"
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Processing indicator */}
       {writeMutation.isPending && (
-        <div className="bg-primary/10 border-b px-4 py-2 flex items-center gap-2 text-sm shrink-0">
+        <div className="bg-primary/10 border-b px-4 py-2 flex items-center gap-2 text-sm">
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <span>Integrating your feedback into the document...</span>
         </div>
@@ -1414,7 +1270,7 @@ export default function Workspace() {
 
       {/* Suggestions bar */}
       {!writeMutation.isPending && lastSuggestions.length > 0 && (
-        <div className="bg-amber-500/10 border-b px-4 py-2 flex items-center gap-3 text-sm shrink-0">
+        <div className="bg-amber-500/10 border-b px-4 py-2 flex items-center gap-3 text-sm">
           <Lightbulb className="w-4 h-4 text-amber-600 shrink-0" />
           <span className="text-muted-foreground shrink-0">Suggestions:</span>
           <div className="flex items-center gap-2 overflow-x-auto">
@@ -1447,63 +1303,36 @@ export default function Workspace() {
         </div>
       )}
 
-      {/* ── Main Layout: Sidebar | Workflow Main | Details Panel ── */}
-      <div className="flex-1 overflow-hidden">
-        {isMobile ? (
-          <div className="h-full overflow-y-auto">
-            {!activeWorkflow && (
-              <section className="min-h-[50vh] border-b">
-                <WorkflowSidebar
-                  userRole={user?.publicMetadata?.role as string | undefined}
-                  userName={user?.firstName || undefined}
-                  onWorkflowSelect={handleWorkflowSelect}
-                  onFreeformSubmit={handleFreeformSubmit}
-                  activeWorkflowId={undefined}
-                />
-              </section>
-            )}
-            <section className="min-h-[60vh]">
-              {renderWorkflowStepContent()}
-            </section>
-          </div>
-        ) : (
+      {/* ── Panel Layout (responsive: stacked on mobile, side-by-side on desktop) ── */}
+      {isMobile ? (
+        <div className="flex-1 overflow-y-auto">
+          <section className="h-[60vh] min-h-[350px] border-b">
+            {toolboxPanel}
+          </section>
+          <section className="h-[70vh] min-h-[400px] border-b">
+            {discussionPanel}
+          </section>
+          <section className="h-[80vh] min-h-[450px]">
+            {documentPanel}
+          </section>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-hidden">
           <ResizablePanelGroup direction="horizontal">
-            {/* Region 1: Left Sidebar */}
-            <ResizablePanel defaultSize={22} minSize={15} maxSize={30} collapsible collapsedSize={0}>
-              <WorkflowSidebar
-                userRole={user?.publicMetadata?.role as string | undefined}
-                userName={user?.firstName || undefined}
-                onWorkflowSelect={handleWorkflowSelect}
-                onFreeformSubmit={handleFreeformSubmit}
-                activeWorkflowId={activeWorkflow?.id}
-              />
+            <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
+              {toolboxPanel}
             </ResizablePanel>
             <ResizableHandle withHandle />
-
-            {/* Pointer 3: Main Workflow Area */}
-            <ResizablePanel defaultSize={showDetailsPanel && activeWorkflow ? 53 : 78} minSize={35}>
-              {renderWorkflowStepContent()}
+            <ResizablePanel defaultSize={40} minSize={20}>
+              {discussionPanel}
             </ResizablePanel>
-
-            {/* Region 5: Step Details Panel (conditionally shown) */}
-            {showDetailsPanel && activeWorkflow && (
-              <>
-                <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={25} minSize={18} maxSize={35}>
-                  <StepDetailsPanel
-                    step={activeWorkflow.steps[workflowStepIndex]}
-                    stepIndex={workflowStepIndex}
-                    totalSteps={activeWorkflow.steps.length}
-                    isCompleted={completedWorkflowSteps.has(activeWorkflow.steps[workflowStepIndex]?.id)}
-                    onComplete={handleWorkflowStepComplete}
-                    onCollapse={() => setShowDetailsPanel(false)}
-                  />
-                </ResizablePanel>
-              </>
-            )}
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={35} minSize={20}>
+              {documentPanel}
+            </ResizablePanel>
           </ResizablePanelGroup>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
