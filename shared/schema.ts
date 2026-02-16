@@ -551,32 +551,3 @@ export interface StreamingRefineResponse {
   updatedDocument: string;
   summary: string;
 }
-
-// ── Planner request/response schemas ──
-
-export const plannerProposeRequestSchema = z.object({
-  description: z.string().min(1, "Description is required"),
-  /** Optional context from the document or objective */
-  context: z.string().optional(),
-  /** Optional user role for personalized planning */
-  userRole: z.string().optional(),
-});
-
-export type PlannerProposeRequest = z.infer<typeof plannerProposeRequestSchema>;
-
-/** Client-facing workflow proposal (simplified from bilko-flow's WorkflowProposal) */
-export interface PlannerProposeResponse {
-  name: string;
-  description: string;
-  steps: Array<{
-    id: string;
-    name: string;
-    type: string;
-    description: string;
-    dependsOn: string[];
-  }>;
-  plannerInfo: {
-    name: string;
-    version: string;
-  };
-}
