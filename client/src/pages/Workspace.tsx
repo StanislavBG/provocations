@@ -1015,12 +1015,12 @@ export default function Workspace() {
             {interviewMergeMutation.isPending ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
-                Merging...
+                Evolving...
               </>
             ) : (
               <>
                 <ArrowRightToLine className="w-3 h-3" />
-                Merge to Draft
+                Evolve Document
               </>
             )}
           </Button>

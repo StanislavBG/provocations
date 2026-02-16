@@ -341,11 +341,20 @@ function ProvokeConfigApp({
       } else {
         next.add(type);
       }
+      // Auto-apply persona change to active interview
+      if (isInterviewActive) {
+        onStartInterview({
+          mode: "challenge",
+          personas: Array.from(next),
+          guidance: guidance.trim() || undefined,
+        });
+      }
       return next;
     });
-  }, []);
+  }, [isInterviewActive, onStartInterview, guidance]);
 
-  const handleStartInterview = useCallback(() => {
+  // Auto-apply persona/guidance changes to the active interview
+  const applyDirection = useCallback(() => {
     onStartInterview({
       mode: "challenge",
       personas: Array.from(selectedPersonas),
@@ -469,37 +478,18 @@ function ProvokeConfigApp({
 
       </div>
 
-      {/* Start button area */}
-      <div className="flex-1 flex items-end p-4">
-        <div className="w-full space-y-3">
-          {isInterviewActive && (
-            <p className="text-xs text-center text-muted-foreground">
-              Interview is active — check the Discussion panel.
-            </p>
-          )}
-          {!isInterviewActive && interviewEntryCount > 0 && (
-            <p className="text-xs text-center text-muted-foreground">
-              Previous session: {interviewEntryCount} questions answered
-            </p>
-          )}
-          <Button
-            onClick={handleStartInterview}
-            className="gap-2 w-full"
-            disabled={isMerging || isInterviewActive}
-          >
-            {isMerging ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Merging into document...
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4" />
-                {interviewEntryCount > 0 ? "Resume Interview" : "Start Interview"}
-              </>
-            )}
-          </Button>
-        </div>
+      {/* Status info */}
+      <div className="px-4 pb-4">
+        {isInterviewActive && (
+          <p className="text-xs text-center text-muted-foreground">
+            Interview is active — check the Discussion panel.
+          </p>
+        )}
+        {!isInterviewActive && interviewEntryCount > 0 && (
+          <p className="text-xs text-center text-muted-foreground">
+            Previous session: {interviewEntryCount} questions answered
+          </p>
+        )}
       </div>
     </div>
   );
