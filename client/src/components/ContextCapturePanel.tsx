@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
+import { ProvokeText } from "@/components/ProvokeText";
 import {
   Plus,
   Type,
@@ -173,12 +172,18 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
 
           {/* Type-specific input */}
           {addingType === "text" && (
-            <Textarea
+            <ProvokeText
+              chrome="inline"
+              variant="textarea"
               placeholder="Paste or type your text context..."
               value={formContent}
-              onChange={(e) => setFormContent(e.target.value)}
-              className="text-sm min-h-[80px] resize-none"
+              onChange={setFormContent}
+              className="text-sm"
+              minRows={3}
+              maxRows={8}
               autoFocus
+              voice={{ mode: "append" }}
+              onVoiceTranscript={(transcript) => setFormContent(prev => prev ? `${prev} ${transcript}` : transcript)}
             />
           )}
 
@@ -222,28 +227,33 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
           )}
 
           {addingType === "document-link" && (
-            <Input
-              type="url"
+            <ProvokeText
+              chrome="inline"
+              variant="input"
               placeholder="https://docs.google.com/..."
               value={formContent}
-              onChange={(e) => setFormContent(e.target.value)}
+              onChange={setFormContent}
               className="text-sm"
               autoFocus
+              voice={{ mode: "replace" }}
+              onVoiceTranscript={(transcript) => setFormContent(transcript)}
+              showCopy={false}
             />
           )}
 
           {/* Annotation field (shared across all types) */}
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Annotation (why does this matter?)
-            </label>
-            <Input
-              placeholder="Explain why this context is important..."
-              value={formAnnotation}
-              onChange={(e) => setFormAnnotation(e.target.value)}
-              className="text-sm"
-            />
-          </div>
+          <ProvokeText
+            chrome="inline"
+            variant="input"
+            label="Annotation (why does this matter?)"
+            placeholder="Explain why this context is important..."
+            value={formAnnotation}
+            onChange={setFormAnnotation}
+            className="text-sm"
+            voice={{ mode: "replace" }}
+            onVoiceTranscript={(transcript) => setFormAnnotation(transcript)}
+            showCopy={false}
+          />
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
