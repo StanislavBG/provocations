@@ -911,9 +911,10 @@ export default function Workspace() {
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
             }}
-            onStreamingMode={(obj) => {
+            onStreamingMode={(obj, url) => {
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
+              if (url) setWebsiteUrl(url);
               setActiveToolboxApp("website");
               const initialVersion: DocumentVersion = {
                 id: generateId("v"),

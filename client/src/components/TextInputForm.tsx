@@ -17,6 +17,7 @@ import {
   NotebookPen,
   UserRoundCog,
   Layers,
+  Globe,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import type { SmartModeDef } from "@/components/ProvokeText";
@@ -32,7 +33,7 @@ import { generateId } from "@/lib/utils";
 interface TextInputFormProps {
   onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[]) => void;
   onBlankDocument?: (objective: string) => void;
-  onStreamingMode?: (objective: string) => void;
+  onStreamingMode?: (objective: string, websiteUrl?: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -72,6 +73,7 @@ async function processText(
 export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading, capturedContext, onCapturedContextChange }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
+  const [captureUrl, setCaptureUrl] = useState("");
 
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
@@ -291,8 +293,32 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 }
               />
 
+              {/* Website URL input */}
+              <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Website URL
+                  </span>
+                  <span className="text-xs text-muted-foreground/60">(optional)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Drop a URL to load the site in the capture workspace for live screenshots and analysis.
+                </p>
+                <input
+                  type="url"
+                  value={captureUrl}
+                  onChange={(e) => setCaptureUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono"
+                />
+              </div>
+
               <Button
-                onClick={() => onStreamingMode(objective.trim() || "Discover and refine requirements through screen capture and annotations")}
+                onClick={() => onStreamingMode(
+                  objective.trim() || "Discover and refine requirements through screen capture and annotations",
+                  captureUrl.trim() || undefined,
+                )}
                 disabled={isLoading}
                 size="lg"
                 className="w-full gap-2"
