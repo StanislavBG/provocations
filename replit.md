@@ -4,6 +4,7 @@
 Provocations is a cognitive enhancement tool designed to challenge users and enhance critical thinking rather than acting as a traditional AI assistant. The core philosophy: "Would you rather have a tool that thinks for you, or a tool that makes you think?"
 
 ## Recent Changes
+- February 16, 2026: Switched LLM provider to Google Gemini (gemini-2.0-flash) with configurable provider abstraction. Set GEMINI_API_KEY or ANTHROPIC_API_KEY; defaults to Gemini. Override with LLM_PROVIDER env var.
 - February 15, 2026: Migrated all LLM calls to Anthropic Claude — uses claude-opus-4-6 across all endpoints. ANTHROPIC_API_KEY secret used for API access.
 - February 1, 2026: Added text-based editing via pencil icon - select text, click pencil, type instruction to modify selected text with AI
 - January 31, 2026: Added transcript overlay panels - when recording from document selection, two panels appear over provocations showing raw transcript and merge summary
@@ -32,7 +33,7 @@ Provocations is a cognitive enhancement tool designed to challenge users and enh
 - **DimensionsToolbar**: Text refinement with tone and length controls
 - **ReadingPane**: Source material display with lens-filtered views
 
-### Backend (Express + Anthropic Claude)
+### Backend (Express + Google Gemini / Anthropic Claude)
 - `POST /api/analyze` - Analyzes text, generates lenses and provocations
 - `POST /api/expand` - Expands outline headings into paragraphs
 - `POST /api/refine` - Refines text with tone and length adjustments
@@ -58,7 +59,7 @@ Provocations is a cognitive enhancement tool designed to challenge users and enh
 
 ## Tech Stack
 - Frontend: React 18, Vite, TailwindCSS, shadcn/ui, TanStack Query
-- Backend: Express, Anthropic Claude Opus 4.6 (claude-opus-4-20250918)
+- Backend: Express, Google Gemini 2.0 Flash (default) / Anthropic Claude (configurable via LLM_PROVIDER)
 - State: React useState/useCallback (session-based, no persistence)
 
 ## Running the Project
