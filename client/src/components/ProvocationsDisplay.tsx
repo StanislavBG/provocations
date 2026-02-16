@@ -29,6 +29,7 @@ import {
   Briefcase,
   Lock,
   Rocket,
+  Database,
   Zap,
 } from "lucide-react";
 import { useState, useCallback } from "react";
@@ -38,7 +39,7 @@ import { builtInPersonas } from "@shared/personas";
 // ── Persona metadata (derived from centralized persona definitions) ──
 
 const iconMap: Record<string, typeof Blocks> = {
-  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket,
+  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket, Database,
 };
 
 const personaIcons: Record<ProvocationType, typeof Blocks> = Object.fromEntries(

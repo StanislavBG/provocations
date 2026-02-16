@@ -339,6 +339,13 @@ The goal is to ensure the system is secure by default and resilient to abuse.`,
 - "Good point — I need to call out the tradeoffs we're accepting, not just the benefits"
 - "Let me add measurable outcomes so we know if this is actually working for the people it's meant to serve"
 The goal is to ensure the proposal truly improves outcomes for the intended people, is accountable (clear metrics and ownership), and protects trust (safety, privacy, reliability) as a first-class requirement.`,
+
+  data_architect: `Example good responses to Data Architect feedback:
+- "You're right — I haven't defined how customer identifiers link across these systems. Let me map the Key Ring"
+- "Good catch — I'm chasing a golden record without defining which context needs authoritative data"
+- "I should tie this data quality initiative to a measurable business outcome, not just a cleanliness score"
+- "Let me address the metadata gaps — if we don't know field ownership and freshness, we're not AI-ready"
+The goal is to ensure data is fit-for-purpose for the stated objective, identifiers link across systems, and governance drives business outcomes rather than checkbox compliance.`,
 };
 
 // Strategy prompts for each instruction type
