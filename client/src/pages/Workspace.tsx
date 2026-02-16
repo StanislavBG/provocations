@@ -16,6 +16,7 @@ import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -452,6 +453,9 @@ export default function Workspace() {
         challengeTitle: topic,
         challengeContent: question,
         personaId,
+        discussionHistory: discussionMessages.length > 0
+          ? discussionMessages.slice(-10).map(m => ({ role: m.role, content: m.content, topic: m.topic }))
+          : undefined,
       });
       return (await response.json()) as { advice: Advice };
     },
@@ -989,17 +993,18 @@ export default function Workspace() {
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
         <MessageCircleQuestion className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Discussion</h3>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="cursor-help inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted/60 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors text-[10px] font-bold">
-              2
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[300px]">
-            <p className="text-xs font-medium mb-1">The Interview</p>
-            <p className="text-xs text-muted-foreground">This is where the AI challenges your thinking. It asks provocative questions based on your personas and direction. Answer using voice or text — each response deepens and refines your document. Use "Merge to Draft" to push your answers into the document at any time.</p>
-          </TooltipContent>
-        </Tooltip>
+        {isInterviewActive && interviewDirection?.mode && (
+          <Badge
+            variant="outline"
+            className={`text-xs ${
+              interviewDirection.mode === "challenge"
+                ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400"
+                : "border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400"
+            }`}
+          >
+            {interviewDirection.mode === "challenge" ? "Challenge" : "Advise"}
+          </Badge>
+        )}
         {isInterviewActive && (
           <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
         )}

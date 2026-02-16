@@ -79,7 +79,6 @@ export function InterviewPanel({
   currentTopic,
   isLoadingQuestion,
   isMerging,
-  directionMode,
   onAnswer,
   onEnd,
   onViewAdvice,
@@ -184,25 +183,6 @@ export function InterviewPanel({
   // Active interview session — Q&A conversation
   return (
     <div className="h-full flex flex-col">
-      {/* Session controls bar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/10 shrink-0">
-        {directionMode && (
-          <Badge
-            variant="outline"
-            className={`text-xs ${
-              directionMode === "challenge"
-                ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400"
-                : "border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400"
-            }`}
-          >
-            {directionMode === "challenge" ? "Challenge" : "Advise"}
-          </Badge>
-        )}
-        <Badge variant="outline" className="ml-auto text-xs">
-          {entries.length} answered
-        </Badge>
-      </div>
-
       {/* Conversation thread */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3" ref={scrollRef}>
