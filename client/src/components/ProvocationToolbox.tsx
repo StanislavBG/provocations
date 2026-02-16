@@ -17,6 +17,7 @@ import {
   Briefcase,
   Lock,
   Rocket,
+  Database,
   Crosshair,
   Globe,
   Wrench,
@@ -37,7 +38,7 @@ export type ToolboxApp = "provoke" | "website" | "context";
 // ── Persona metadata (derived from centralized persona definitions) ──
 
 const iconMap: Record<string, typeof Blocks> = {
-  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket,
+  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket, Database,
 };
 
 const personaIcons: Record<ProvocationType, typeof Blocks> = Object.fromEntries(

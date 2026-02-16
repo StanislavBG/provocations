@@ -30,7 +30,7 @@ npm run db:push  # Push Drizzle schema to database
 | Layer | Technologies |
 |-------|-------------|
 | **Frontend** | React 18, TypeScript 5.6, Vite 7, Tailwind CSS 3.4, shadcn/ui (47 components) |
-| **Backend** | Express 5.0, Anthropic Claude Opus 4.6 (`claude-opus-4-6`) |
+| **Backend** | Express 5.0, Google Gemini 2.0 Flash (default) / Anthropic Claude (configurable) |
 | **Database** | PostgreSQL via Drizzle ORM, server-side AES-GCM encryption |
 | **Auth** | Clerk (authentication & user ownership) |
 | **Validation** | Zod schemas shared between frontend/backend |
@@ -82,6 +82,7 @@ provocations/
 ├── server/
 │   ├── index.ts                    # Express app setup
 │   ├── routes.ts                   # All API endpoints (21 routes)
+│   ├── llm.ts                      # Configurable LLM provider (Gemini/Anthropic)
 │   ├── storage.ts                  # Database operations (Drizzle ORM)
 │   ├── crypto.ts                   # AES-GCM encryption/decryption
 │   └── db.ts                       # Database connection
@@ -229,8 +230,9 @@ Requirement discovery through:
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key (or `ANTHROPIC_KEY`) |
-| `ANTHROPIC_BASE_URL` | Optional proxy base URL |
+| `GEMINI_API_KEY` | Google Gemini API key (default provider) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (fallback, or `ANTHROPIC_KEY`) |
+| `LLM_PROVIDER` | Force provider: `gemini` or `anthropic` (auto-detects by default) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
 | `CLERK_PUBLISHABLE_KEY` | Clerk frontend authentication |
@@ -242,7 +244,7 @@ Requirement discovery through:
 1. Define Zod schema in `shared/schema.ts`
 2. Add endpoint in `server/routes.ts`
 3. Use `safeParse()` for validation
-4. All LLM calls go through `getAnthropic()` singleton
+4. All LLM calls go through `llm.generate()` / `llm.stream()` from `server/llm.ts`
 
 ### State Management
 - Local state in Workspace.tsx for app-wide concerns
