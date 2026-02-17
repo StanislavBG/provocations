@@ -1163,9 +1163,9 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
         ? `\n\nDOCUMENT TEMPLATE (sections that need to be covered):\n${template.slice(0, 2000)}`
         : "";
 
-      // Build document context
+      // Build document context — pass full text so the LLM sees everything
       const documentContext = docText
-        ? `\n\nCURRENT DOCUMENT STATE:\n${docText.slice(0, 2000)}`
+        ? `\n\nCURRENT DOCUMENT STATE:\n${docText}`
         : "";
 
       // Build provocations context
@@ -1179,7 +1179,7 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
       // Build direction context from selected personas and mode
       let directionContext = "";
       if (directionPersonas && directionPersonas.length > 0) {
-        const mode = directionMode || "challenge";
+        const mode = directionMode; // undefined = neutral (no forced stance)
         const personaDescs = directionPersonas.map(t => {
           const prompt = provocationPrompts[t];
           return `- ${t}: ${prompt}`;
@@ -1187,7 +1187,9 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
 
         const modeInstruction = mode === "advise"
           ? "Take an ADVISORY stance — suggest improvements, recommend approaches, and offer constructive guidance. Frame questions as opportunities to strengthen the document."
-          : "Take a CHALLENGING stance — push back on assumptions, probe for weaknesses, and question claims. Frame questions as provocations that demand better answers.";
+          : mode === "challenge"
+            ? "Take a CHALLENGING stance — push back on assumptions, probe for weaknesses, and question claims. Frame questions as provocations that demand better answers."
+            : "";
 
         // Build CEO vectors context if the ceo persona is active
         let ceoContext = "";
@@ -1204,11 +1206,12 @@ ${vectorDescs}
 When acting as the CEO, focus your questions on these specific vectors. Push the user to think about how their product handles these concerns at scale while staying grounded in who it serves.`;
         }
 
-        directionContext = `\n\nDIRECTION (the user has chosen specific personas and a mode):
-MODE: ${mode.toUpperCase()}
-${modeInstruction}
+        const modeBlock = mode
+          ? `MODE: ${mode.toUpperCase()}\n${modeInstruction}\n\n`
+          : "";
 
-ACTIVE PERSONAS:
+        directionContext = `\n\nDIRECTION (the user has chosen specific personas):
+${modeBlock}ACTIVE PERSONAS:
 ${personaDescs}
 
 Embody these personas when crafting your questions. Each question should reflect the perspective and expertise of one of the active personas. Include the persona name in the topic label.${ceoContext}`;
