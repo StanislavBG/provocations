@@ -518,10 +518,11 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={() => {
-              navigator.clipboard.writeText(text);
+              const textOnly = text.replace(/!\[[^\]]*\]\([^)]+\)/g, "").replace(/\n{3,}/g, "\n\n").trim();
+              navigator.clipboard.writeText(textOnly);
               toast({
                 title: "Copied",
-                description: "Document copied to clipboard.",
+                description: "Document text copied to clipboard.",
               });
             }}
             title="Copy document"
