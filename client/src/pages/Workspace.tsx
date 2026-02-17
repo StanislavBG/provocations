@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
+import { getAppWorkspaceConfig } from "@/lib/appWorkspaceConfig";
 import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
@@ -86,6 +87,9 @@ export default function Workspace() {
     }
     setSecondaryObjectiveRaw(value);
   }, [objective]);
+
+  // Which template was selected in step 1 — drives workspace behavior
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
@@ -560,18 +564,22 @@ export default function Workspace() {
 
   const isInputPhase = !document.rawText;
 
-  // Auto-start interview with Think Big persona when entering workspace
+  // Auto-start interview when entering workspace — respects per-app config
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (!isInputPhase && !autoStartedRef.current) {
       autoStartedRef.current = true;
-      const direction = { personas: ["thinking_bigger" as ProvocationType] };
-      setInterviewDirection(direction);
-      setIsInterviewActive(true);
-      interviewQuestionMutation.mutate({ direction });
+      const config = getAppWorkspaceConfig(selectedTemplateId);
+      if (config.autoStartInterview) {
+        const personas = config.autoStartPersonas ?? ["thinking_bigger" as ProvocationType];
+        const direction = { personas };
+        setInterviewDirection(direction);
+        setIsInterviewActive(true);
+        interviewQuestionMutation.mutate({ direction });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInputPhase]);
+  }, [isInputPhase, selectedTemplateId]);
 
   // ── Interview handlers ──
 
@@ -920,7 +928,8 @@ export default function Workspace() {
         </header>
         <div className="flex-1 overflow-y-auto">
           <TextInputForm
-            onSubmit={(text, obj, refs) => {
+            onSubmit={(text, obj, refs, templateId) => {
+              setSelectedTemplateId(templateId ?? null);
               createDraftMutation.mutate({ context: text, obj, refs });
             }}
             isLoading={createDraftMutation.isPending}
@@ -928,11 +937,13 @@ export default function Workspace() {
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
             }}
-            onStreamingMode={(obj, url) => {
+            onStreamingMode={(obj, url, templateId) => {
+              const config = getAppWorkspaceConfig(templateId);
+              setSelectedTemplateId(templateId ?? null);
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
               if (url) setWebsiteUrl(url);
-              setActiveToolboxApp("website");
+              setActiveToolboxApp(config.defaultToolboxTab as ToolboxApp);
               const initialVersion: DocumentVersion = {
                 id: generateId("v"),
                 text: " ",
