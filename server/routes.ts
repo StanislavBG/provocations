@@ -451,18 +451,22 @@ ${refContext}${guidanceContext}
 Respond with a JSON object containing a "challenges" array. Generate ${perPersonaCount} challenges per persona.
 For each challenge:
 - personaId: The persona ID (one of: ${personaIdsList})
-- title: A punchy headline (max 60 chars)
-- content: A 2-3 sentence challenge that identifies a specific gap, weakness, or assumption relative to the objective
-- sourceExcerpt: A relevant quote from the source text (max 150 chars)
+- title: A punchy headline (max 60 chars) that names the specific document gap
+- content: A 2-3 sentence challenge that (a) quotes or references a specific section, sentence, or claim from the document, (b) explains why it's a gap, weakness, or assumption relative to the objective, and (c) frames a pointed question the user must answer
+- sourceExcerpt: An exact quote from the document that this challenge targets (max 150 chars). MUST be a verbatim substring — do not paraphrase.
 - scale: Impact level from 1-5 (1=minor, 2=small, 3=moderate, 4=significant, 5=critical)
 
-Focus on completeness: what's missing, what's thin, what could break. Be constructive, not destructive.
+GROUNDING RULES:
+- Every challenge MUST reference a specific part of the document (a heading, paragraph, claim, or notable omission).
+- Generic questions like "What's the most important thing you haven't covered?" are NOT acceptable. Instead, name what is missing and why it matters for the objective.
+- If the document is thin in a particular area, name that area explicitly and explain what the objective demands there.
+- The sourceExcerpt must be a real quote from the document, not a summary.
 
 Output only valid JSON, no markdown.`,
         messages: [
           {
             role: "user",
-            content: `Generate challenges for this document:\n\n${analysisText}`
+            content: `OBJECTIVE: ${objective}\n\nDOCUMENT TO CHALLENGE:\n\n${analysisText}\n\nGenerate grounded challenges — each must cite a specific part of this document or a specific omission relative to the objective.`
           }
         ],
       });
@@ -552,21 +556,24 @@ Output only valid JSON, no markdown.`,
       //   5. discussion — the ongoing conversation for continuity
       const systemPrompt = `${persona.prompts.advice}
 
-DOCUMENT OBJECTIVE: ${objective}
+You are the ${persona.label}. A colleague has raised a provocation against the user's document. Your job is to provide expert advice that helps the user resolve that provocation.
 
-CHALLENGE (issued by you, the ${persona.label}):
+THE PROVOCATION (this is your primary grounding — your advice must directly address this):
 Title: ${challengeTitle}
 Detail: ${challengeContent}
+
+DOCUMENT OBJECTIVE: ${objective}
 ${discussionContext}
 
-Now provide advice on how to address this challenge. Your advice must:
-1. Be grounded in the OBJECTIVE — explain how your advice serves the stated goal
-2. Reference the CURRENT DOCUMENT STATE — point to specific sections, gaps, or content that need attention
-3. Build on the DISCUSSION HISTORY — if the user has been answering questions or asking things, acknowledge that context and avoid repeating what was already discussed
-4. Be concrete and actionable — the user should know exactly what to do next
-5. Be different from the challenge — do NOT restate the problem, provide the solution
-6. Speak from your persona's perspective (${persona.label})
-7. Be 2-4 sentences of practical guidance
+ADVICE RULES:
+1. Start from the PROVOCATION — your advice must directly answer the specific gap, weakness, or assumption raised. Do NOT provide generic guidance.
+2. Reference the CURRENT DOCUMENT — point to specific sections, paragraphs, or claims that need attention to resolve this provocation.
+3. Serve the OBJECTIVE — explain how resolving this provocation advances the stated goal.
+4. Build on the DISCUSSION HISTORY — if the user has already answered or discussed related points, acknowledge that and don't repeat.
+5. Be concrete and actionable — the user should know exactly what to write, change, or add.
+6. Be different from the provocation — do NOT restate the problem, provide the solution.
+7. Speak from your persona's expertise (${persona.label}).
+8. Be 2-4 sentences of practical guidance.
 
 Respond with a JSON object:
 {
@@ -581,7 +588,7 @@ Output only valid JSON, no markdown.`;
         messages: [
           {
             role: "user",
-            content: `Here is the current document:\n\n${analysisText}\n\nPlease provide advice for the challenge: "${challengeTitle}"`
+            content: `PROVOCATION TO ADDRESS:\n"${challengeTitle}": ${challengeContent}\n\nCURRENT DOCUMENT:\n\n${analysisText}\n\nProvide your expert advice as the ${persona.label} to resolve this specific provocation.`
           }
         ],
       });
