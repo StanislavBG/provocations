@@ -32,9 +32,9 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
       "Write a clear, structured prompt using the AIM framework (Actor, Input, Mission) that an AI can execute with precision",
     starterText: "",
     draftQuestions: [
-      "Who should the AI be? Define the role, expertise, or persona — the more specific you are, the better the output. (Actor)",
-      "What does the AI need to know? Paste text, data, examples, or describe the situation and constraints it should work within. (Input)",
-      "What should the AI produce? Be specific about the task, the format you want, and what a great result looks like. (Mission)",
+      "Who should I pretend to be? Think about who would be best at this task. If you want a recipe, the AI should be a \"Professional Chef.\" If you want to fix a bug, it should be a \"Senior Software Engineer.\"",
+      "Tell me the story. Share the details — paste in a long email you need to reply to, or describe the problem you're trying to solve. The more \"clues\" you give me, the better the result will be.",
+      "What are we making? Be specific about the final product. Do you want a 5-paragraph essay, a list of 10 ideas, or a friendly text message to a friend?",
     ],
     templateContent: "", // No template — freeform is the point
     provocationSources: ["Clarity Coach", "Intent Detector"],

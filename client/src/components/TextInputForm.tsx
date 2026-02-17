@@ -272,10 +272,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
           {isWritePrompt ? (
             <div className="shrink-0 text-center">
               <h2 className="text-base font-semibold">
-                Write your prompt using the AIM framework
+                Let's Transform Your Idea Into Reality
               </h2>
               <p className="text-sm text-muted-foreground mt-1 mx-auto max-w-2xl">
-                <strong className="text-foreground/80">Actor</strong> (who the AI should be) · <strong className="text-foreground/80">Input</strong> (context and data you provide) · <strong className="text-foreground/80">Mission</strong> (what you want done)
+                Think of this as a conversation with a world-class assistant. To get the best results, we've broken the process into three easy pieces. Just tell us who you need, what you're working with, and what you hope to achieve.
               </p>
             </div>
           ) : (
@@ -367,8 +367,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                     className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
                     aria-hidden="true"
                   >
-                    <p className="text-muted-foreground/50 text-lg font-serif italic">
-                      Start your draft here...
+                    <p className="text-muted-foreground/40 text-base font-serif italic text-center max-w-md px-4 leading-relaxed">
+                      I want you to act as a [Expert Role]. I'm going to provide you with [These Specific Notes] and I want you to create [This Specific Result].
+                      <br />
+                      <span className="text-sm">Don't worry about being perfect — just type naturally and we'll polish it together!</span>
                     </p>
                   </div>
                 )}
