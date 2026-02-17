@@ -689,12 +689,22 @@ export default function Workspace() {
   const handleReset = useCallback(() => {
     setDocument({ id: generateId("doc"), rawText: "" });
     setObjective("");
+    setSecondaryObjectiveRaw("");
     setReferenceDocuments([]);
     setCapturedContext([]);
     setVersions([]);
     setShowDiffView(false);
     setEditHistory([]);
     setLastSuggestions([]);
+    // Reset transcript / voice state
+    setShowTranscriptOverlay(false);
+    setRawTranscript("");
+    setCleanedTranscript(undefined);
+    setTranscriptSummary("");
+    setIsRecordingFromMain(false);
+    setPendingVoiceContext(null);
+    setIsRecordingObjective(false);
+    setObjectiveInterimTranscript("");
     // Reset interview state
     setIsInterviewActive(false);
     setInterviewEntries([]);
@@ -711,6 +721,9 @@ export default function Workspace() {
     setWireframeAnalysis(null);
     setShowLogPanel(false);
     lastAnalyzedUrl.current = "";
+    // Reset UI state
+    setIsObjectiveCollapsed(true);
+    setBrowserExpanded(false);
     // Reset toolbox
     setActiveToolboxApp("provoke");
     autoStartedRef.current = false;
