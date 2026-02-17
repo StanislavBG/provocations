@@ -157,16 +157,41 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
   // Whether step 1 is complete (user picked a type)
   const hasObjectiveType = !!(activePrebuilt || isCustomObjective);
+  const isWritePrompt = activePrebuilt?.id === "write-a-prompt" && hasObjectiveType;
+
+  // Shared context section — rendered in left column (default) or right column (write-a-prompt)
+  const renderContextSection = () => (
+    <>
+      <div className="rounded-lg border bg-card/50 p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Layers className="w-4 h-4 text-primary" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Supporting Context
+          </span>
+        </div>
+        <ContextCapturePanel
+          items={capturedContext}
+          onItemsChange={onCapturedContextChange}
+        />
+      </div>
+      <ContextStatusPanel items={capturedContext} />
+    </>
+  );
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="w-full max-w-6xl mx-auto flex flex-col flex-1 min-h-0 px-6 py-4 gap-3">
+      <div className={`w-full mx-auto flex flex-col flex-1 min-h-0 px-6 py-4 gap-3 ${
+        isWritePrompt ? "" : "max-w-6xl"
+      }`}>
 
         {/* ── STEP ONE: Your objective ── */}
         <div className="shrink-0 space-y-2" ref={stepOneRef}>
-          <h2 className="text-base font-semibold">
-            What do <em>you</em> want to create?
-          </h2>
+          {/* Hide heading when write-a-prompt is selected (AIM description replaces it below) */}
+          {!(isWritePrompt && !cardsExpanded) && (
+            <h2 className="text-base font-semibold">
+              What do <em>you</em> want to create?
+            </h2>
+          )}
 
           {/* Compact chip grid — always visible unless a selection collapses it */}
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
@@ -258,11 +283,23 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
         {/* ── STEP TWO: Your context ── */}
         {hasObjectiveType && (
         <div className="flex flex-col flex-1 min-h-0 gap-2">
-          <h2 className="shrink-0 text-base font-semibold">
-            {activePrebuilt?.id === "streaming"
-              ? "Describe what you're capturing requirements for"
-              : "Share your thinking — notes, ideas, or speak your mind"}
-          </h2>
+          {/* Heading — customized for write-a-prompt */}
+          {isWritePrompt ? (
+            <div className="shrink-0">
+              <h2 className="text-base font-semibold">
+                Write your prompt using the AIM framework
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+                The AIM framework structures your prompt into three parts: <strong className="text-foreground/80">Actor</strong> (who the AI should be), <strong className="text-foreground/80">Input</strong> (context and data you provide), and <strong className="text-foreground/80">Mission</strong> (what you want done). Use the guiding questions to shape your thinking, or write freely in the draft area.
+              </p>
+            </div>
+          ) : (
+            <h2 className="shrink-0 text-base font-semibold">
+              {activePrebuilt?.id === "streaming"
+                ? "Describe what you're capturing requirements for"
+                : "Share your thinking — notes, ideas, or speak your mind"}
+            </h2>
+          )}
 
           {activePrebuilt?.id === "streaming" && onStreamingMode ? (
             <div className="space-y-3">
@@ -323,7 +360,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             </div>
           ) : (
           <div className="flex flex-1 min-h-0 gap-4">
-            {/* Left column: draft questions + supporting context + context status */}
+            {/* Left column: draft questions (+ context for non-write-a-prompt) */}
             <div className="w-72 shrink-0 flex flex-col gap-3 min-h-0 overflow-y-auto">
               {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
                 <DraftQuestionsPanel
@@ -332,33 +369,25 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 />
               )}
 
-              {/* Context capture area */}
-              <div className="rounded-lg border bg-card/50 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Layers className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Supporting Context
-                  </span>
-                </div>
-                <ContextCapturePanel
-                  items={capturedContext}
-                  onItemsChange={onCapturedContextChange}
-                />
-              </div>
-
-              {/* Context status — directly under capture */}
-              <ContextStatusPanel items={capturedContext} />
+              {/* Context stays in left column for non-write-a-prompt templates */}
+              {!isWritePrompt && renderContextSection()}
             </div>
 
-            {/* Right column: main text area (hero) */}
+            {/* Center column: main text area (hero) */}
             <ProvokeText
               chrome="container"
-              label="Your context"
-              labelIcon={NotebookPen}
-              description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
+              label={isWritePrompt ? "Your prompt draft" : "Your context"}
+              labelIcon={isWritePrompt ? Crosshair : NotebookPen}
+              description={isWritePrompt
+                ? "Write your prompt here. Answer the guiding questions or free-write — we'll help you structure and refine it."
+                : "Your notes, references, or spoken thoughts — we'll shape them into a first draft."
+              }
               containerClassName="flex-1 min-h-0 flex flex-col min-w-0"
               data-testid="input-source-text"
-              placeholder="Paste your notes or click the mic to speak your ideas..."
+              placeholder={isWritePrompt
+                ? "Start drafting your prompt... Define who the AI should be, what context it needs, and what you want it to do."
+                : "Paste your notes or click the mic to speak your ideas..."
+              }
               className="text-sm leading-relaxed font-serif"
               value={text}
               onChange={setText}
@@ -383,6 +412,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               maxCharCount={10000}
               maxAudioDuration="5min"
             />
+
+            {/* Right column: context (only for write-a-prompt) */}
+            {isWritePrompt && (
+              <div className="w-72 shrink-0 flex flex-col gap-3 min-h-0 overflow-y-auto">
+                {renderContextSection()}
+              </div>
+            )}
           </div>
           )}
         </div>
@@ -392,7 +428,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
       {/* Fixed bottom bar: step progress + action */}
       {hasObjectiveType && activePrebuilt?.id !== "streaming" && (
         <div className="shrink-0 border-t bg-card">
-          <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-4 px-6 py-2">
+          <div className={`w-full mx-auto flex items-center justify-between gap-4 px-6 py-2 ${
+            isWritePrompt ? "" : "max-w-6xl"
+          }`}>
             <StepProgressBar
               steps={activePrebuilt?.steps ?? [{ id: "context", label: "Share your context" }]}
               currentStep={0}
