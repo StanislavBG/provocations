@@ -32,9 +32,9 @@ import { generateId } from "@/lib/utils";
 
 
 interface TextInputFormProps {
-  onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[]) => void;
+  onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[], templateId?: string) => void;
   onBlankDocument?: (objective: string) => void;
-  onStreamingMode?: (objective: string, websiteUrl?: string) => void;
+  onStreamingMode?: (objective: string, websiteUrl?: string, templateId?: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -103,7 +103,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
       const effectiveObjective = isWritePrompt
         ? "Reformat and structure this draft into a clear, effective prompt using the AIM framework (Actor, Input, Mission). Preserve the user's intent while organizing it into the three AIM sections."
         : (objective.trim() || "Create a compelling, well-structured document");
-      onSubmit(text.trim(), effectiveObjective, referenceDocuments);
+      onSubmit(text.trim(), effectiveObjective, referenceDocuments, activePrebuilt?.id);
     }
   };
 
@@ -333,6 +333,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 onClick={() => onStreamingMode(
                   objective.trim() || "Discover and refine requirements through screen capture and annotations",
                   captureUrl.trim() || undefined,
+                  activePrebuilt?.id,
                 )}
                 disabled={isLoading}
                 size="lg"
