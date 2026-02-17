@@ -773,12 +773,12 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
         <div className={cn("relative", panelClassName)}>
           {variant === "input" ? (
             <div className="flex items-center gap-1">
-              {inputControl}
+              <div className="flex-1 min-w-0">{inputControl}</div>
               {toolbarButtons}
             </div>
           ) : (
             <>
-              {inputControl}
+              <div className="[&_textarea]:pr-24">{inputControl}</div>
               <div className="absolute top-2 right-2 flex items-center gap-0.5">
                 {toolbarButtons}
               </div>
