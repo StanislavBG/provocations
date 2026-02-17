@@ -309,7 +309,7 @@ export function ScreenCaptureButton({
     [websiteUrl],
   );
 
-  // ─── Capture (server → html2canvas → Screen Capture API fallback) ──
+  // ─── Capture (server → Screen Capture API → html2canvas fallback) ──
 
   const handleCapture = useCallback(async () => {
     setIsCapturing(true);
@@ -326,7 +326,12 @@ export function ScreenCaptureButton({
       // 1. Try server-side screenshot first (captures any URL reliably, no prompt)
       let dataUrl = await captureViaServer();
 
-      // 2. Try html2canvas (DOM-based, no prompt required)
+      // 2. Try Screen Capture API (captures cross-origin iframe content)
+      if (!dataUrl) {
+        dataUrl = await captureViaDisplayMedia(targetEl);
+      }
+
+      // 3. Fall back to html2canvas (DOM-based, no iframe content but no prompt)
       if (!dataUrl) {
         try {
           const target = targetEl || window.document.body;
@@ -345,9 +350,13 @@ export function ScreenCaptureButton({
         }
       }
 
-      // 3. Last resort: Screen Capture API (requires browser permission prompt)
       if (!dataUrl) {
-        dataUrl = await captureViaDisplayMedia(targetEl);
+        toast({
+          title: "Capture Failed",
+          description: "Could not capture the screen. Please try again.",
+          variant: "destructive",
+        });
+        return;
       }
 
       setCapturedImage(dataUrl);
