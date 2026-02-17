@@ -309,7 +309,7 @@ export function ScreenCaptureButton({
     [websiteUrl],
   );
 
-  // ─── Capture (server → Screen Capture API → html2canvas fallback) ──
+  // ─── Capture (server → html2canvas → Screen Capture API fallback) ──
 
   const handleCapture = useCallback(async () => {
     setIsCapturing(true);
@@ -323,27 +323,31 @@ export function ScreenCaptureButton({
         ? window.document.getElementById(targetElementId)
         : null;
 
-      // 1. Try server-side screenshot first (captures any URL reliably)
+      // 1. Try server-side screenshot first (captures any URL reliably, no prompt)
       let dataUrl = await captureViaServer();
 
-      // 2. Try Screen Capture API (captures cross-origin iframe content)
+      // 2. Try html2canvas (DOM-based, no prompt required)
       if (!dataUrl) {
-        dataUrl = await captureViaDisplayMedia(targetEl);
+        try {
+          const target = targetEl || window.document.body;
+          const computedBg = getComputedStyle(target).backgroundColor;
+
+          const canvas = await html2canvas(target, {
+            useCORS: true,
+            allowTaint: true,
+            scale: 1,
+            logging: false,
+            backgroundColor: computedBg || "#ffffff",
+          });
+          dataUrl = canvas.toDataURL("image/png");
+        } catch {
+          dataUrl = null;
+        }
       }
 
-      // 3. Fall back to html2canvas
+      // 3. Last resort: Screen Capture API (requires browser permission prompt)
       if (!dataUrl) {
-        const target = targetEl || window.document.body;
-        const computedBg = getComputedStyle(target).backgroundColor;
-
-        const canvas = await html2canvas(target, {
-          useCORS: true,
-          allowTaint: true,
-          scale: 1,
-          logging: false,
-          backgroundColor: computedBg || "#ffffff",
-        });
-        dataUrl = canvas.toDataURL("image/png");
+        dataUrl = await captureViaDisplayMedia(targetEl);
       }
 
       setCapturedImage(dataUrl);
