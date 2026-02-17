@@ -482,17 +482,6 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
         <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
         <h3 className="font-semibold text-sm">Document</h3>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="cursor-help inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted/60 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors text-[10px] font-bold">
-              3
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[300px]">
-            <p className="text-xs font-medium mb-1">Your Living Document</p>
-            <p className="text-xs text-muted-foreground">This is the output — your document evolves as you answer interview questions and merge responses. Edit directly with the pencil icon, use voice to dictate changes, or select text and speak to refine specific sections. Every version is tracked so you can compare changes.</p>
-          </TooltipContent>
-        </Tooltip>
         <Badge variant="outline" className="text-xs ml-1">{wordCount.toLocaleString()} words</Badge>
         <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
         <div className="flex-1" />
