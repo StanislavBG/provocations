@@ -346,9 +346,25 @@ export function InterviewPanel({
                         Generating advice...
                       </div>
                     ) : adviceText ? (
-                      <p className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed">
-                        {adviceText}
-                      </p>
+                      <>
+                        <p className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed">
+                          {adviceText}
+                        </p>
+                        {/* Accept advice as the answer and move to next question */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs h-7 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                          onClick={() => {
+                            onAnswer(adviceText);
+                            setAnswerText("");
+                            setShowAdvice(false);
+                          }}
+                        >
+                          <Check className="w-3 h-3" />
+                          Use as my response
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 )}
