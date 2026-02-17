@@ -332,7 +332,10 @@ export function ScreenCaptureButton({
       }
 
       // 3. Fall back to html2canvas (DOM-based, no iframe content but no prompt)
-      if (!dataUrl) {
+      //    Skip when target contains iframes — html2canvas can't capture cross-origin
+      //    iframe content and would produce a blank white image.
+      const targetHasIframe = targetEl && targetEl.querySelector("iframe");
+      if (!dataUrl && !targetHasIframe) {
         try {
           const target = targetEl || window.document.body;
           const computedBg = getComputedStyle(target).backgroundColor;
@@ -353,9 +356,12 @@ export function ScreenCaptureButton({
       if (!dataUrl) {
         toast({
           title: "Capture Failed",
-          description: "Could not capture the screen. Please try again.",
+          description: targetHasIframe
+            ? "Screen capture requires browser permission. Please allow screen sharing when prompted."
+            : "Could not capture the screen. Please try again.",
           variant: "destructive",
         });
+        onPostCapture?.();
         return;
       }
 
