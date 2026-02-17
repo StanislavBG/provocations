@@ -121,7 +121,7 @@ export default function Workspace() {
 
   // Direction state for the provoke panel
   const [interviewDirection, setInterviewDirection] = useState<{
-    mode: DirectionMode;
+    mode?: DirectionMode;
     personas: ProvocationType[];
     guidance?: string;
   } | null>(null);
@@ -272,7 +272,7 @@ export default function Workspace() {
   // ── Interview mutations ──
 
   const interviewQuestionMutation = useMutation({
-    mutationFn: async ({ overrideEntries, direction }: { overrideEntries?: InterviewEntry[]; direction?: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string } } = {}) => {
+    mutationFn: async ({ overrideEntries, direction }: { overrideEntries?: InterviewEntry[]; direction?: { mode?: DirectionMode; personas: ProvocationType[]; guidance?: string } } = {}) => {
       if (!document) throw new Error("No document");
       const templateDoc = referenceDocuments.find(d => d.type === "template");
       const entries = overrideEntries ?? interviewEntries;
@@ -565,7 +565,7 @@ export default function Workspace() {
   useEffect(() => {
     if (!isInputPhase && !autoStartedRef.current) {
       autoStartedRef.current = true;
-      const direction = { mode: "challenge" as DirectionMode, personas: ["thinking_bigger" as ProvocationType] };
+      const direction = { personas: ["thinking_bigger" as ProvocationType] };
       setInterviewDirection(direction);
       setIsInterviewActive(true);
       interviewQuestionMutation.mutate({ direction });
@@ -575,7 +575,7 @@ export default function Workspace() {
 
   // ── Interview handlers ──
 
-  const handleStartInterview = useCallback((direction: { mode: DirectionMode; personas: ProvocationType[]; guidance?: string }) => {
+  const handleStartInterview = useCallback((direction: { mode?: DirectionMode; personas: ProvocationType[]; guidance?: string }) => {
     setInterviewDirection(direction);
     setIsInterviewActive(true);
     interviewQuestionMutation.mutate({ direction });
@@ -689,12 +689,22 @@ export default function Workspace() {
   const handleReset = useCallback(() => {
     setDocument({ id: generateId("doc"), rawText: "" });
     setObjective("");
+    setSecondaryObjectiveRaw("");
     setReferenceDocuments([]);
     setCapturedContext([]);
     setVersions([]);
     setShowDiffView(false);
     setEditHistory([]);
     setLastSuggestions([]);
+    // Reset transcript / voice state
+    setShowTranscriptOverlay(false);
+    setRawTranscript("");
+    setCleanedTranscript(undefined);
+    setTranscriptSummary("");
+    setIsRecordingFromMain(false);
+    setPendingVoiceContext(null);
+    setIsRecordingObjective(false);
+    setObjectiveInterimTranscript("");
     // Reset interview state
     setIsInterviewActive(false);
     setInterviewEntries([]);
@@ -711,6 +721,9 @@ export default function Workspace() {
     setWireframeAnalysis(null);
     setShowLogPanel(false);
     lastAnalyzedUrl.current = "";
+    // Reset UI state
+    setIsObjectiveCollapsed(true);
+    setBrowserExpanded(false);
     // Reset toolbox
     setActiveToolboxApp("provoke");
     autoStartedRef.current = false;

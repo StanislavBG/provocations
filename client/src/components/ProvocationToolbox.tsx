@@ -68,7 +68,7 @@ interface ProvocationToolboxProps {
   isMerging: boolean;
   interviewEntryCount: number;
   onStartInterview: (direction: {
-    mode: DirectionMode;
+    mode?: DirectionMode;
     personas: ProvocationType[];
     guidance?: string;
   }) => void;
@@ -314,7 +314,7 @@ interface ProvokeConfigAppProps {
   isMerging: boolean;
   interviewEntryCount: number;
   onStartInterview: (direction: {
-    mode: DirectionMode;
+    mode?: DirectionMode;
     personas: ProvocationType[];
     guidance?: string;
   }) => void;
