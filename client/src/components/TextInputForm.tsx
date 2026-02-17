@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
@@ -21,7 +21,6 @@ import {
   Globe,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
-import type { SmartModeDef } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { ContextCapturePanel } from "@/components/ContextCapturePanel";
@@ -89,23 +88,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   // Ref for scrolling back to top on selection
   const stepOneRef = useRef<HTMLDivElement>(null);
 
-  // AIM smart mode — shown only when "Write a Prompt" template is active
-  const aimSmartModes = useMemo<SmartModeDef[]>(
-    () =>
-      activePrebuilt?.id === "write-a-prompt"
-        ? [
-            {
-              mode: "aim",
-              label: "Apply AIM",
-              loadingLabel: "Applying AIM...",
-              description:
-                "Restructure your draft using the AIM framework — Actor (who the AI should be), Input (context you're providing), Mission (what it should do).",
-              icon: Crosshair,
-            },
-          ]
-        : [],
-    [activePrebuilt?.id],
-  );
 
   const handleSubmit = () => {
     if (text.trim()) {
@@ -118,7 +100,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
           type: "template",
         });
       }
-      onSubmit(text.trim(), objective.trim() || "Create a compelling, well-structured document", referenceDocuments);
+      const effectiveObjective = isWritePrompt
+        ? "Reformat and structure this draft into a clear, effective prompt using the AIM framework (Actor, Input, Mission). Preserve the user's intent while organizing it into the three AIM sections."
+        : (objective.trim() || "Create a compelling, well-structured document");
+      onSubmit(text.trim(), effectiveObjective, referenceDocuments);
     }
   };
 
@@ -285,12 +270,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
         <div className="flex flex-col flex-1 min-h-0 gap-2">
           {/* Heading — customized for write-a-prompt */}
           {isWritePrompt ? (
-            <div className="shrink-0">
+            <div className="shrink-0 text-center">
               <h2 className="text-base font-semibold">
                 Write your prompt using the AIM framework
               </h2>
-              <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                The AIM framework structures your prompt into three parts: <strong className="text-foreground/80">Actor</strong> (who the AI should be), <strong className="text-foreground/80">Input</strong> (context and data you provide), and <strong className="text-foreground/80">Mission</strong> (what you want done). Use the guiding questions to shape your thinking, or write freely in the draft area.
+              <p className="text-sm text-muted-foreground mt-1 mx-auto max-w-2xl">
+                <strong className="text-foreground/80">Actor</strong> (who the AI should be) · <strong className="text-foreground/80">Input</strong> (context and data you provide) · <strong className="text-foreground/80">Mission</strong> (what you want done)
               </p>
             </div>
           ) : (
@@ -374,44 +359,81 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             </div>
 
             {/* Center column: main text area (hero) */}
-            <ProvokeText
-              chrome="container"
-              label={isWritePrompt ? "Your prompt draft" : "Your context"}
-              labelIcon={isWritePrompt ? Crosshair : NotebookPen}
-              description={isWritePrompt
-                ? "Write your prompt here. Answer the guiding questions or free-write — we'll help you structure and refine it."
-                : "Your notes, references, or spoken thoughts — we'll shape them into a first draft."
-              }
-              containerClassName="flex-1 min-h-0 flex flex-col min-w-0"
-              data-testid="input-source-text"
-              placeholder={isWritePrompt
-                ? "Start drafting your prompt... Define who the AI should be, what context it needs, and what you want it to do."
-                : "Paste your notes or click the mic to speak your ideas..."
-              }
-              className="text-sm leading-relaxed font-serif"
-              value={text}
-              onChange={setText}
-              minRows={6}
-              maxRows={30}
-              autoFocus
-              voice={{ mode: "append" }}
-              onVoiceTranscript={(transcript) =>
-                setText((prev) => (prev ? prev + " " + transcript : transcript))
-              }
-              onRecordingChange={(recording) => {
-                if (recording && autoRecordDraft) {
-                  setAutoRecordDraft(false);
+            {isWritePrompt ? (
+              <div className="flex-1 min-h-0 flex flex-col min-w-0 relative">
+                {/* Centered placeholder that disappears when user types */}
+                {!text && (
+                  <div
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+                    aria-hidden="true"
+                  >
+                    <p className="text-muted-foreground/50 text-lg font-serif italic">
+                      Start your draft here...
+                    </p>
+                  </div>
+                )}
+                <ProvokeText
+                  chrome="bare"
+                  containerClassName="flex-1 min-h-0 flex flex-col min-w-0 rounded-lg border bg-card/50"
+                  data-testid="input-source-text"
+                  placeholder=""
+                  className="text-sm leading-relaxed font-serif p-4"
+                  value={text}
+                  onChange={setText}
+                  minRows={6}
+                  maxRows={30}
+                  autoFocus
+                  voice={{ mode: "append" }}
+                  onVoiceTranscript={(transcript) =>
+                    setText((prev) => (prev ? prev + " " + transcript : transcript))
+                  }
+                  onRecordingChange={(recording) => {
+                    if (recording && autoRecordDraft) {
+                      setAutoRecordDraft(false);
+                    }
+                  }}
+                  autoRecord={autoRecordDraft}
+                  textProcessor={(t, mode) =>
+                    processText(t, mode, mode === "clean" ? "source" : undefined)
+                  }
+                  showCharCount
+                  maxCharCount={10000}
+                  maxAudioDuration="5min"
+                />
+              </div>
+            ) : (
+              <ProvokeText
+                chrome="container"
+                label="Your context"
+                labelIcon={NotebookPen}
+                description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
+                containerClassName="flex-1 min-h-0 flex flex-col min-w-0"
+                data-testid="input-source-text"
+                placeholder="Paste your notes or click the mic to speak your ideas..."
+                className="text-sm leading-relaxed font-serif"
+                value={text}
+                onChange={setText}
+                minRows={6}
+                maxRows={30}
+                autoFocus
+                voice={{ mode: "append" }}
+                onVoiceTranscript={(transcript) =>
+                  setText((prev) => (prev ? prev + " " + transcript : transcript))
                 }
-              }}
-              autoRecord={autoRecordDraft}
-              textProcessor={(t, mode) =>
-                processText(t, mode, mode === "clean" ? "source" : undefined)
-              }
-              extraSmartModes={aimSmartModes}
-              showCharCount
-              maxCharCount={10000}
-              maxAudioDuration="5min"
-            />
+                onRecordingChange={(recording) => {
+                  if (recording && autoRecordDraft) {
+                    setAutoRecordDraft(false);
+                  }
+                }}
+                autoRecord={autoRecordDraft}
+                textProcessor={(t, mode) =>
+                  processText(t, mode, mode === "clean" ? "source" : undefined)
+                }
+                showCharCount
+                maxCharCount={10000}
+                maxAudioDuration="5min"
+              />
+            )}
 
             {/* Right column: context (only for write-a-prompt) */}
             {isWritePrompt && (
@@ -445,12 +467,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               {isLoading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Creating first draft...
+                  {isWritePrompt ? "Formatting with AIM..." : "Creating first draft..."}
                 </>
               ) : (
                 <>
-                  Create First Draft
-                  <PenLine className="w-4 h-4" />
+                  {isWritePrompt ? "Format as AIM" : "Create First Draft"}
+                  {isWritePrompt ? <Crosshair className="w-4 h-4" /> : <PenLine className="w-4 h-4" />}
                 </>
               )}
             </Button>
