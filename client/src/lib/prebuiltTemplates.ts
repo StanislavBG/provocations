@@ -1,3 +1,8 @@
+export interface TemplateStep {
+  id: string;
+  label: string;
+}
+
 export interface PrebuiltTemplate {
   id: string;
   title: string;
@@ -11,6 +16,7 @@ export interface PrebuiltTemplate {
   templateContent: string; // added as a reference document (empty = freeform)
   provocationSources: string[]; // who/what generates the provocations
   provocationExamples: string[]; // example provocations for the card preview
+  steps: TemplateStep[]; // workflow steps shown in the bottom progress bar
 }
 
 export const prebuiltTemplates: PrebuiltTemplate[] = [
@@ -37,6 +43,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
       "Who is the Actor here? You haven't defined what role the AI should take.",
       "What's the Mission? I see context but no clear task or expected output.",
     ],
+    steps: [{ id: "write", label: "Write your prompt" }],
   },
   {
     id: "product-requirement",
@@ -97,6 +104,7 @@ What specifically changes for the user? Walk through the new flow step by step.
       "Our support team gets 50 tickets/week on this flow. Does this make it better or worse? — Support Lead",
       "I clicked the button and nothing happened. What am I supposed to do now? — Confused Customer",
     ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
   {
     id: "new-application",
@@ -180,6 +188,7 @@ Key endpoints the backend needs:
       "How do users discover this? What's the acquisition channel? — Growth Marketer",
       "Where are you storing user data? What happens if there's a breach? — Security Auditor",
     ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
   {
     id: "streaming",
@@ -206,6 +215,7 @@ Key endpoints the backend needs:
       "Which of these requirements are MVP vs. nice-to-have? Everything can't be P0. — Product Manager",
       "The wireframe shows a search bar but the requirements don't mention search. Is it functional or decorative? — Developer",
     ],
+    steps: [{ id: "capture", label: "Capture & annotate" }],
   },
   {
     id: "research-paper",
@@ -302,6 +312,7 @@ What questions remain open? What should be explored next?
       "What if the opposite of your thesis is true? What evidence would you expect to see? — Devil's Advocate",
       "I don't understand why this matters. Can you explain the real-world impact in plain language? — Curious Student",
     ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
   {
     id: "infographic-description",
@@ -380,6 +391,7 @@ Color palette, fonts, brand guidelines, or mood references.
       "I glanced at this for two seconds. I have no idea what it's about. — Distracted Scroller",
       "Your color-coded chart relies entirely on red vs. green. How does a colorblind viewer read this? — Accessibility Reviewer",
     ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
   {
     id: "persona-definition",
@@ -488,6 +500,7 @@ Typical way they end an interaction.
       "What happens if someone asks this persona to do something outside its boundaries? You haven't defined the failure mode. — Red Teamer",
       "The communication style says 'casual' but the example exchange is formal. Which is it? — Consistency Checker",
     ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
   {
     id: "ai-video-host",
@@ -614,5 +627,6 @@ Aspect ratio (16:9, 9:16, 1:1), resolution, export format.`,
       "The host voice disappears after Slide 2 and becomes generic narration. Keep the persona consistent. — Persona Critic",
       "The source article says 'reportedly' and 'according to sources.' Your script states it as fact. — Fact Checker",
     ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
 ];
