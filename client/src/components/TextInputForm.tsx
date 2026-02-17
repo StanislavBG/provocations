@@ -26,6 +26,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { ContextCapturePanel } from "@/components/ContextCapturePanel";
 import { ContextStatusPanel } from "@/components/ContextStatusPanel";
+import { StepProgressBar } from "@/components/StepProgressBar";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument, ContextItem } from "@shared/schema";
 import { generateId } from "@/lib/utils";
@@ -163,14 +164,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
         {/* ── STEP ONE: Your objective ── */}
         <div className="shrink-0 space-y-2" ref={stepOneRef}>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-              1
-            </div>
-            <h2 className="text-base font-semibold">
-              What do <em>you</em> want to create?
-            </h2>
-          </div>
+          <h2 className="text-base font-semibold">
+            What do <em>you</em> want to create?
+          </h2>
 
           {/* Compact chip grid — always visible unless a selection collapses it */}
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
@@ -262,16 +258,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
         {/* ── STEP TWO: Your context ── */}
         {hasObjectiveType && (
         <div className="flex flex-col flex-1 min-h-0 gap-2">
-          <div className="shrink-0 flex items-center gap-2">
-            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-              2
-            </div>
-            <h2 className="text-base font-semibold">
-              {activePrebuilt?.id === "streaming"
-                ? "Describe what you're capturing requirements for"
-                : "Share your thinking — notes, ideas, or speak your mind"}
-            </h2>
-          </div>
+          <h2 className="shrink-0 text-base font-semibold">
+            {activePrebuilt?.id === "streaming"
+              ? "Describe what you're capturing requirements for"
+              : "Share your thinking — notes, ideas, or speak your mind"}
+          </h2>
 
           {activePrebuilt?.id === "streaming" && onStreamingMode ? (
             <div className="space-y-3">
@@ -398,16 +389,20 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
         )}
       </div>
 
-      {/* Fixed bottom action bar */}
+      {/* Fixed bottom bar: step progress + action */}
       {hasObjectiveType && activePrebuilt?.id !== "streaming" && (
-        <div className="shrink-0 border-t bg-card px-6 py-2">
-          <div className="w-full max-w-6xl mx-auto flex items-center justify-end gap-3">
+        <div className="shrink-0 border-t bg-card">
+          <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-4 px-6 py-2">
+            <StepProgressBar
+              steps={activePrebuilt?.steps ?? [{ id: "context", label: "Share your context" }]}
+              currentStep={0}
+            />
             <Button
               data-testid="button-analyze"
               onClick={handleSubmit}
               disabled={!text.trim() || isLoading}
               size="lg"
-              className="gap-2"
+              className="gap-2 shrink-0"
             >
               {isLoading ? (
                 <>
