@@ -1180,7 +1180,7 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
         ? provocations.filter(p => p.status === "pending")
         : [];
       const provocationsContext = pendingProvocations.length > 0
-        ? `\n\nPENDING PROVOCATIONS (challenges not yet addressed):\n${pendingProvocations.map(p => `- [${p.type}] ${p.title}: ${p.content}`).join("\n")}`
+        ? `\n\nPENDING PROVOCATIONS (challenges not yet addressed):\n${pendingProvocations.map(p => `- [${builtInPersonas[p.type as ProvocationType]?.label || p.type}] ${p.title}: ${p.content}`).join("\n")}`
         : "";
 
       // Build direction context from selected personas and mode
@@ -1188,8 +1188,10 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
       if (directionPersonas && directionPersonas.length > 0) {
         const mode = directionMode; // undefined = neutral (no forced stance)
         const personaDescs = directionPersonas.map(t => {
+          const persona = builtInPersonas[t];
+          const label = persona?.label || t;
           const prompt = provocationPrompts[t];
-          return `- ${t}: ${prompt}`;
+          return `- ${label}: ${prompt}`;
         }).join("\n");
 
         const modeInstruction = mode === "advise"
