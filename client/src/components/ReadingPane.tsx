@@ -479,9 +479,9 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       onClick={handleContainerClick}
     >
       {/* Panel Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-b bg-amber-50/40 dark:bg-amber-950/10 shrink-0">
         <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-        <h3 className="font-semibold text-sm">Document</h3>
+        <h3 className="font-semibold text-sm text-amber-900/80 dark:text-amber-200/80">Draft</h3>
         <Badge variant="outline" className="text-xs ml-1">{wordCount.toLocaleString()} words</Badge>
         <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
         <div className="flex-1" />
@@ -664,8 +664,8 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
         </div>
       )}
 
-      {/* Content area — either markdown preview or raw editor */}
-      <div className="flex-1 overflow-hidden relative min-h-0">
+      {/* Content area — notebook-style draft canvas */}
+      <div className="flex-1 overflow-hidden relative min-h-0 notebook-canvas">
         {viewMode === "preview" ? (
           <MarkdownRenderer
             content={text}
