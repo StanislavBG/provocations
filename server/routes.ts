@@ -1187,13 +1187,20 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
 
       // Build direction context from selected personas and mode
       let directionContext = "";
+      // Track active persona labels for fallback and topic generation
+      let activePersonaLabels: string[] = [];
+
       if (directionPersonas && directionPersonas.length > 0) {
         const mode = directionMode; // undefined = neutral (no forced stance)
+
+        // Use concise persona summaries (not the full challenge prompt) to keep the signal strong
         const personaDescs = directionPersonas.map(t => {
           const persona = builtInPersonas[t];
           const label = persona?.label || t;
-          const prompt = provocationPrompts[t];
-          return `- ${label}: ${prompt}`;
+          activePersonaLabels.push(label);
+          const role = persona?.role || "";
+          const summary = persona?.summary?.challenge || "";
+          return `- **${label}** (${role}): ${summary}`;
         }).join("\n");
 
         const modeInstruction = mode === "advise"
@@ -1221,11 +1228,19 @@ When acting as the CEO, focus your questions on these specific vectors. Push the
           ? `MODE: ${mode.toUpperCase()}\n${modeInstruction}\n\n`
           : "";
 
-        directionContext = `\n\nDIRECTION (the user has chosen specific personas):
-${modeBlock}ACTIVE PERSONAS:
+        directionContext = `\n\n## YOUR ACTIVE PERSONA ROLE (MANDATORY)
+${modeBlock}You MUST adopt one of these personas for EVERY question. Your question MUST reflect the specific expertise and perspective of the chosen persona. Generic questions are FORBIDDEN.
+
+ACTIVE PERSONAS:
 ${personaDescs}
 
-Embody these personas when crafting your questions. Each question should reflect the perspective and expertise of one of the active personas. Include the persona name in the topic label.${ceoContext}`;
+RULES FOR PERSONA QUESTIONS:
+- Your "topic" field MUST start with the persona name, e.g. "${activePersonaLabels[0]}: <specific topic>"
+- Your question MUST use the vocabulary, concerns, and perspective of that persona
+- If you are the Architect, ask about system boundaries, contracts, data flow — NOT generic "what about scale?"
+- If you are QA, ask about test coverage, failure modes, edge cases — NOT generic "what could go wrong?"
+- If you are Security, ask about threat models, auth, data exposure — NOT generic "is it secure?"
+- Rotate between active personas across questions. Check PREVIOUS Q&A to avoid repeating the same persona.${ceoContext}`;
       }
 
       // Build guidance context
@@ -1233,13 +1248,19 @@ Embody these personas when crafting your questions. Each question should reflect
         ? `\n\nUSER GUIDANCE: ${directionGuidance}`
         : "";
 
+      // Determine the persona instruction for the user message
+      const personaReminder = activePersonaLabels.length > 0
+        ? ` You are acting as one of: ${activePersonaLabels.join(", ")}. Your question MUST reflect that persona's unique expertise. Your topic MUST be prefixed with the persona name.`
+        : "";
+
       const response = await llm.generate({
         maxTokens: 1024,
         temperature: 0.9,
         system: `You are a thought-provoking interviewer who reads the user's ACTUAL document and objectives carefully, then asks deeply personal, specific questions that only make sense for THIS document. You are NOT a generic questionnaire.
+${directionContext}
 
 OBJECTIVE: ${objective}
-${templateContext}${documentContext}${provocationsContext}${directionContext}${guidanceContext}
+${templateContext}${documentContext}${provocationsContext}${guidanceContext}
 
 PREVIOUS Q&A:
 ${previousContext}
@@ -1250,49 +1271,65 @@ ${previousContext}
 
 2. **Be a thought partner, not a checklist.** Your question should feel like a smart colleague who read their draft and noticed something interesting, contradictory, or unexplored. Ask the question that would make them say "oh, I hadn't thought of that."
 
-3. **Vary your question types.** Rotate between:
-   - Spotting a tension or contradiction in what they wrote
-   - Asking about the human/emotional dimension they may have overlooked
-   - Challenging a specific assumption or claim in their text
-   - Asking "what would X person think of this?" (where X is relevant to their context)
-   - Probing the "why" behind a decision they stated
-   - Asking about what they deliberately left out and why
-   - Exploring edge cases specific to their scenario
+3. **Vary your question types through the persona lens.** Each persona has a unique vocabulary and set of concerns:
+   - Architect: system boundaries, API contracts, coupling, data flow, separation of concerns
+   - QA Engineer: test gaps, edge cases, failure modes, acceptance criteria, regression risk
+   - Security: threat models, auth flows, data exposure, input validation, least privilege
+   - CEO: mission alignment, accountability, trust, measurable outcomes, who benefits
+   - UX Designer: user flows, discoverability, accessibility, error states, first-time experience
+   - Tech Writer: clarity, naming, jargon, missing context, reader comprehension
+   - Product Manager: business value, success metrics, user stories, prioritization
+   - Think Big: bolder outcomes, adjacent opportunities, what success looks like at scale
+   - Data Architect: data fitness, identifier linkage, metadata, governance outcomes
 
-4. **NEVER repeat the same pattern.** If previous questions were about scalability, don't ask about scalability again. If they were about users, shift to process, culture, risks, tradeoffs, or a completely different angle.
+4. **NEVER repeat the same pattern.** Check PREVIOUS Q&A above. If the last question was from the Architect about API contracts, the NEXT question must come from a DIFFERENT persona or a completely different angle.
 
-5. **Use the persona lens, but stay grounded in the document.** If acting as an Architect, don't ask a generic architecture question — ask about the specific architectural implications of what THIS user wrote.
+5. **The persona IS the question.** Don't just ask a generic question and label it with a persona name. The question itself should only make sense coming from that specific expert. An Architect would never ask about test coverage; a QA Engineer would never ask about API contracts.
 
 6. **Keep it conversational and direct.** Write like a human, not a form. "You mention X — but what happens when Y?" is better than "How does X handle Y at scale?"
 
-Respond with a JSON object:
-- question: The question to ask (conversational, direct, max 200 chars). MUST reference something specific from the user's document or objectives.
-- topic: A short label (max 40 chars). If a direction persona is active, prefix with the persona name, e.g. "Architect: API Contracts"
-- reasoning: Brief internal reasoning for why this question matters (max 100 chars)
+Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
+{"question": "...", "topic": "PersonaName: Specific Topic", "reasoning": "..."}
 
-Output only valid JSON, no markdown.`,
+- question: Conversational, direct, max 200 chars. MUST reference something specific from the document.
+- topic: Max 40 chars. MUST be prefixed with the active persona name (e.g. "Architect: API Contracts", "QA: Error Recovery").
+- reasoning: Brief internal reasoning, max 100 chars.`,
         messages: [
           {
             role: "user",
-            content: `Generate the next interview question to help me develop my document. Remember: be SPECIFIC to my content — quote or reference something I actually wrote.`
+            content: `Generate the next interview question to help me develop my document. Remember: be SPECIFIC to my content — quote or reference something I actually wrote.${personaReminder}`
           }
         ],
       });
 
-      const content = response.text || "{}";
+      let content = (response.text || "{}").trim();
+      // Strip markdown code fences if the LLM wrapped the JSON
+      const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        content = fenceMatch[1].trim();
+      }
+
+      // Build a persona-aware fallback using the active personas
+      const fallbackPersona = activePersonaLabels.length > 0 ? activePersonaLabels[0] : "";
+      const fallbackTopic = fallbackPersona ? `${fallbackPersona}: Key Concern` : "General";
+      const fallbackQuestion = fallbackPersona
+        ? `From a ${fallbackPersona} perspective — what's the biggest gap in what you've written so far?`
+        : "What's the most important thing you haven't covered yet?";
+
       let result: InterviewQuestionResponse;
       try {
         const parsed = JSON.parse(content);
         result = {
-          question: typeof parsed.question === 'string' ? parsed.question : "What's the most important thing you haven't covered yet?",
-          topic: typeof parsed.topic === 'string' ? parsed.topic : "General",
+          question: typeof parsed.question === 'string' ? parsed.question : fallbackQuestion,
+          topic: typeof parsed.topic === 'string' ? parsed.topic : fallbackTopic,
           reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : "",
         };
       } catch {
+        console.warn("Interview question: failed to parse LLM JSON response, using fallback. Raw:", content.slice(0, 200));
         result = {
-          question: "What's the most important thing you haven't covered yet?",
-          topic: "General",
-          reasoning: "Fallback question",
+          question: fallbackQuestion,
+          topic: fallbackTopic,
+          reasoning: "Fallback — LLM response was not valid JSON",
         };
       }
 
