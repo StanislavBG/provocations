@@ -96,10 +96,16 @@ export function InterviewPanel({
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [showAdvice, setShowAdvice] = useState(false);
+  const [editableAdvice, setEditableAdvice] = useState(adviceText || "");
   const [askQuestionText, setAskQuestionText] = useState("");
   const [respondingToId, setRespondingToId] = useState<string | null>(null);
   const [respondText, setRespondText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync editable advice when new advice arrives from the API
+  useEffect(() => {
+    if (adviceText) setEditableAdvice(adviceText);
+  }, [adviceText]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -347,16 +353,27 @@ export function InterviewPanel({
                       </div>
                     ) : adviceText ? (
                       <>
-                        <p className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed">
-                          {adviceText}
-                        </p>
+                        <ProvokeText
+                          chrome="bare"
+                          variant="editor"
+                          value={editableAdvice}
+                          onChange={setEditableAdvice}
+                          className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed bg-transparent"
+                          minRows={2}
+                          maxRows={10}
+                          placeholder="Edit the advice or dictate changes..."
+                          voice={{ mode: "replace" }}
+                          onVoiceTranscript={(transcript) => setEditableAdvice(transcript)}
+                          showCopy={false}
+                          showClear={false}
+                        />
                         {/* Accept advice as the answer and move to next question */}
                         <Button
                           variant="outline"
                           size="sm"
                           className="gap-1.5 text-xs h-7 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
                           onClick={() => {
-                            onAnswer(adviceText);
+                            onAnswer(editableAdvice);
                             setAnswerText("");
                             setShowAdvice(false);
                           }}
