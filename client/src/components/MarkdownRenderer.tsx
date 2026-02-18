@@ -114,6 +114,20 @@ export function MarkdownRenderer({
 
   const isLongDoc = chunks.length > 1;
 
+  // Show a placeholder when there's no real content — prevents
+  // the pane from appearing empty / "blacked out" in dark mode.
+  if (!content || !content.trim()) {
+    return (
+      <ScrollArea className="h-full" ref={scrollRef}>
+        <div className={`flex items-center justify-center h-full min-h-[200px] px-8 py-6 ${className}`}>
+          <p className="text-muted-foreground text-sm italic">
+            Your document will appear here as you build it.
+          </p>
+        </div>
+      </ScrollArea>
+    );
+  }
+
   return (
     <ScrollArea className="h-full" ref={scrollRef}>
       <div

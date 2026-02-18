@@ -1087,7 +1087,7 @@ export default function Workspace() {
   );
 
   const documentPanel = (
-    <div className="h-full flex flex-col relative">
+    <div className="h-full flex flex-col relative min-h-0">
       {showDiffView && previousVersion && currentVersion ? (
         <Suspense fallback={
           <div className="h-full flex flex-col p-4 space-y-4">
