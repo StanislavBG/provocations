@@ -475,7 +475,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   return (
     <div
       ref={containerRef}
-      className="h-full relative flex flex-col"
+      className="h-full relative flex flex-col min-h-0"
       onClick={handleContainerClick}
     >
       {/* Panel Header */}
@@ -665,7 +665,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       )}
 
       {/* Content area — either markdown preview or raw editor */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative min-h-0">
         {viewMode === "preview" ? (
           <MarkdownRenderer
             content={text}
