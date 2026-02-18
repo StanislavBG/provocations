@@ -13,6 +13,7 @@ import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { StoragePanel } from "@/components/StoragePanel";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import {
   Loader2,
   Share2,
   Copy,
+  HardDrive,
 } from "lucide-react";
 import type {
   Document,
@@ -145,6 +147,11 @@ export default function Workspace() {
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const lastAnalyzedUrl = useRef<string>("");
+
+  // Storage panel state
+  const [showStoragePanel, setShowStoragePanel] = useState(false);
+  const [savedDocId, setSavedDocId] = useState<number | null>(null);
+  const [savedDocTitle, setSavedDocTitle] = useState<string>("");
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
@@ -735,7 +742,45 @@ export default function Workspace() {
     // Reset toolbox
     setActiveToolboxApp("provoke");
     autoStartedRef.current = false;
+    // Reset storage state
+    setSavedDocId(null);
+    setSavedDocTitle("");
   }, []);
+
+  // ── Storage save/load handlers ──
+
+  const handleStorageSave = useCallback(async (title: string, folderId: number | null) => {
+    if (!document.rawText.trim()) return;
+    if (savedDocId) {
+      // Update existing document
+      await apiRequest("PUT", `/api/documents/${savedDocId}`, {
+        title,
+        content: document.rawText,
+        folderId,
+      });
+      setSavedDocTitle(title);
+    } else {
+      // Save new document
+      const res = await apiRequest("POST", "/api/documents", {
+        title,
+        content: document.rawText,
+        folderId,
+      });
+      const data = await res.json();
+      setSavedDocId(data.id);
+      setSavedDocTitle(title);
+    }
+  }, [document, savedDocId]);
+
+  const handleStorageLoad = useCallback((doc: { id: number; title: string; content: string }) => {
+    setDocument({ id: generateId("doc"), rawText: doc.content });
+    setSavedDocId(doc.id);
+    setSavedDocTitle(doc.title);
+    // Set objective from title if empty
+    if (!objective) {
+      setObjective(doc.title);
+    }
+  }, [objective]);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
     if (document) {
@@ -911,6 +956,16 @@ export default function Workspace() {
             </div>
             <div className="flex items-center gap-2">
               <Button
+                data-testid="button-storage-input"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowStoragePanel(true)}
+                className="gap-1.5"
+              >
+                <HardDrive className="w-4 h-4" />
+                <span className="hidden sm:inline">Storage</span>
+              </Button>
+              <Button
                 data-testid="button-reset-input"
                 variant="ghost"
                 size="sm"
@@ -926,6 +981,15 @@ export default function Workspace() {
             </div>
           </div>
         </header>
+        <StoragePanel
+          isOpen={showStoragePanel}
+          onClose={() => setShowStoragePanel(false)}
+          onLoadDocument={handleStorageLoad}
+          onSave={handleStorageSave}
+          hasContent={!!document.rawText.trim()}
+          currentDocId={savedDocId}
+          currentTitle={savedDocTitle || objective}
+        />
         <div className="flex-1 overflow-y-auto">
           <TextInputForm
             onSubmit={(text, obj, refs, templateId) => {
@@ -1150,6 +1214,16 @@ export default function Workspace() {
               </Button>
             )}
             <Button
+              data-testid="button-storage"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowStoragePanel(true)}
+              className="gap-1.5"
+            >
+              <HardDrive className="w-4 h-4" />
+              <span className="hidden sm:inline">Storage</span>
+            </Button>
+            <Button
               data-testid="button-reset"
               variant="ghost"
               size="sm"
@@ -1363,6 +1437,16 @@ export default function Workspace() {
           </ResizablePanelGroup>
         </div>
       )}
+
+      <StoragePanel
+        isOpen={showStoragePanel}
+        onClose={() => setShowStoragePanel(false)}
+        onLoadDocument={handleStorageLoad}
+        onSave={handleStorageSave}
+        hasContent={!!document.rawText.trim()}
+        currentDocId={savedDocId}
+        currentTitle={savedDocTitle || objective}
+      />
     </div>
   );
 }

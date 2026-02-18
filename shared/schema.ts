@@ -407,6 +407,7 @@ export interface WorkspaceState {
 export const saveDocumentRequestSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   content: z.string().min(1, "Content is required"),
+  folderId: z.number().nullable().optional(),
 });
 
 export type SaveDocumentRequest = z.infer<typeof saveDocumentRequestSchema>;
@@ -414,6 +415,7 @@ export type SaveDocumentRequest = z.infer<typeof saveDocumentRequestSchema>;
 export const updateDocumentRequestSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   content: z.string().min(1, "Content is required"),
+  folderId: z.number().nullable().optional(),
 });
 
 export const renameDocumentRequestSchema = z.object({
@@ -427,6 +429,7 @@ export type UpdateDocumentRequest = z.infer<typeof updateDocumentRequestSchema>;
 export interface DocumentListItem {
   id: number;
   title: string;
+  folderId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -435,6 +438,29 @@ export interface DocumentPayload {
   id: number;
   title: string;
   content: string;
+  folderId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Folder schemas
+export const createFolderRequestSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200),
+  parentFolderId: z.number().nullable().optional(),
+});
+
+export type CreateFolderRequest = z.infer<typeof createFolderRequestSchema>;
+
+export const renameFolderRequestSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200),
+});
+
+export type RenameFolderRequest = z.infer<typeof renameFolderRequestSchema>;
+
+export interface FolderItem {
+  id: number;
+  name: string;
+  parentFolderId: number | null;
   createdAt: string;
   updatedAt: string;
 }
