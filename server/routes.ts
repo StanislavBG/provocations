@@ -14,6 +14,8 @@ import {
   saveDocumentRequestSchema,
   updateDocumentRequestSchema,
   renameDocumentRequestSchema,
+  createFolderRequestSchema,
+  renameFolderRequestSchema,
   streamingQuestionRequestSchema,
   wireframeAnalysisRequestSchema,
   streamingRefineRequestSchema,
@@ -1180,7 +1182,7 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
         ? provocations.filter(p => p.status === "pending")
         : [];
       const provocationsContext = pendingProvocations.length > 0
-        ? `\n\nPENDING PROVOCATIONS (challenges not yet addressed):\n${pendingProvocations.map(p => `- [${p.type}] ${p.title}: ${p.content}`).join("\n")}`
+        ? `\n\nPENDING PROVOCATIONS (challenges not yet addressed):\n${pendingProvocations.map(p => `- [${builtInPersonas[p.type as ProvocationType]?.label || p.type}] ${p.title}: ${p.content}`).join("\n")}`
         : "";
 
       // Build direction context from selected personas and mode
@@ -1188,8 +1190,10 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
       if (directionPersonas && directionPersonas.length > 0) {
         const mode = directionMode; // undefined = neutral (no forced stance)
         const personaDescs = directionPersonas.map(t => {
+          const persona = builtInPersonas[t];
+          const label = persona?.label || t;
           const prompt = provocationPrompts[t];
-          return `- ${t}: ${prompt}`;
+          return `- ${label}: ${prompt}`;
         }).join("\n");
 
         const modeInstruction = mode === "advise"
@@ -1524,7 +1528,7 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { title, content } = parsed.data;
+      const { title, content, folderId } = parsed.data;
       const encrypted = encrypt(content, getEncryptionKey());
 
       const doc = await storage.saveDocument({
@@ -1533,6 +1537,7 @@ Output only valid JSON, no markdown.`,
         ciphertext: encrypted.ciphertext,
         salt: encrypted.salt,
         iv: encrypted.iv,
+        folderId: folderId ?? null,
       });
 
       res.json({ id: doc.id, createdAt: doc.createdAt });
@@ -1643,6 +1648,7 @@ Output only valid JSON, no markdown.`,
         id: doc.id,
         title: doc.title,
         content,
+        folderId: doc.folderId,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
       });
@@ -1715,6 +1721,99 @@ Output only valid JSON, no markdown.`,
       console.error("Delete document error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to delete document", details: errorMessage });
+    }
+  });
+
+  // ==========================================
+  // Folder Management (hierarchical document organization)
+  // ==========================================
+
+  // List folders for a user (optionally scoped to a parent folder)
+  app.get("/api/folders", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parentFolderId = req.query.parentFolderId != null
+        ? parseInt(req.query.parentFolderId as string, 10)
+        : undefined;
+
+      const items = await storage.listFolders(userId, parentFolderId === undefined ? undefined : (isNaN(parentFolderId!) ? undefined : parentFolderId));
+      res.json({ folders: items });
+    } catch (error) {
+      console.error("List folders error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to list folders", details: errorMessage });
+    }
+  });
+
+  // Create a new folder
+  app.post("/api/folders", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = createFolderRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { name, parentFolderId } = parsed.data;
+      const folder = await storage.createFolder(userId, name, parentFolderId ?? null);
+      res.json(folder);
+    } catch (error) {
+      console.error("Create folder error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to create folder", details: errorMessage });
+    }
+  });
+
+  // Rename a folder
+  app.patch("/api/folders/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid folder ID" });
+
+      const parsed = renameFolderRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const existing = await storage.getFolder(id);
+      if (!existing) return res.status(404).json({ error: "Folder not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+
+      const result = await storage.renameFolder(id, parsed.data.name);
+      res.json(result);
+    } catch (error) {
+      console.error("Rename folder error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to rename folder", details: errorMessage });
+    }
+  });
+
+  // Delete a folder (cascade deletes children)
+  app.delete("/api/folders/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid folder ID" });
+
+      const existing = await storage.getFolder(id);
+      if (!existing) return res.status(404).json({ error: "Folder not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+
+      await storage.deleteFolder(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete folder error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to delete folder", details: errorMessage });
     }
   });
 
