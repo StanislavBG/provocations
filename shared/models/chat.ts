@@ -1,7 +1,37 @@
-import { pgTable, serial, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
+
+// Folders — hierarchical organization for documents, owned by Clerk userId
+export const folders = pgTable("folders", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  parentFolderId: integer("parent_folder_id"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertFolderSchema = createInsertSchema(folders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type StoredFolder = typeof folders.$inferSelect;
+export type InsertFolder = z.infer<typeof insertFolderSchema>;
+
+// Key versions — tracks encryption keys per user for rotation support
+export const keyVersions = pgTable("key_versions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  keyEncryptionData: text("key_encryption_data").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type StoredKeyVersion = typeof keyVersions.$inferSelect;
 
 // Documents - server-side encrypted at rest, owned by Clerk userId
 export const documents = pgTable("documents", {
@@ -16,6 +46,10 @@ export const documents = pgTable("documents", {
   salt: varchar("salt", { length: 64 }).notNull(),
   // Random IV used for AES-GCM encryption (base64)
   iv: varchar("iv", { length: 32 }).notNull(),
+  // Optional folder for hierarchical organization
+  folderId: integer("folder_id"),
+  // Optional key version for encryption key rotation
+  keyVersionId: integer("key_version_id"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
