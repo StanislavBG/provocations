@@ -8,7 +8,7 @@ import { ensureTables } from "./db";
 const app = express();
 const httpServer = createServer(app);
 
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(clerkMiddleware());
 
 app.get("/api/clerk-config", (_req, res) => {
