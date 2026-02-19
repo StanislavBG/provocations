@@ -14,6 +14,8 @@ import { MetricExtractorPanel } from "@/components/MetricExtractorPanel";
 import { QueryDiscoveriesPanel, type QueryAnalysisResult } from "@/components/QueryDiscoveriesPanel";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
+import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
+import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { StoragePanel } from "@/components/StoragePanel";
@@ -801,6 +803,14 @@ export default function Workspace() {
 
   const isInputPhase = !document.rawText;
 
+  // Compute workflow phase for StepTracker
+  const workflowPhase: WorkflowPhase = isInputPhase
+    ? (selectedTemplateId ? "draft" : "select")
+    : "edit";
+  const selectedTemplateName = selectedTemplateId
+    ? prebuiltTemplates.find((t) => t.id === selectedTemplateId)?.title
+    : undefined;
+
   // Auto-start interview when entering workspace — respects per-app config
   const autoStartedRef = useRef(false);
   useEffect(() => {
@@ -1275,8 +1285,13 @@ export default function Workspace() {
             }}
             capturedContext={capturedContext}
             onCapturedContextChange={setCapturedContext}
+            onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
           />
         </div>
+        <StepTracker
+          currentPhase={workflowPhase}
+          selectedTemplate={selectedTemplateName}
+        />
       </div>
     );
   }
@@ -1768,6 +1783,12 @@ export default function Workspace() {
           </ResizablePanelGroup>
         </div>
       )}
+
+      <StepTracker
+        currentPhase="edit"
+        selectedTemplate={selectedTemplateName}
+        activeToolboxApp={activeToolboxApp}
+      />
 
       <StoragePanel
         isOpen={showStoragePanel}

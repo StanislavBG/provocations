@@ -1,0 +1,434 @@
+/**
+ * Unified Context Builder — standardizes how all LLM invocations
+ * construct their prompt context.
+ *
+ * Every task type uses this builder to assemble context sections
+ * in a consistent format. This replaces the per-endpoint ad-hoc
+ * context construction scattered across routes.ts.
+ */
+
+import type {
+  ReferenceDocument,
+  ContextItem,
+  EditHistoryEntry,
+  InterviewEntry,
+  DiscussionMessage,
+  StreamingDialogueEntry,
+  StreamingRequirement,
+  InstructionType,
+  WireframeAnalysisResponse,
+} from "@shared/schema";
+import { builtInPersonas, getPersonaById } from "@shared/personas";
+
+// ---------------------------------------------------------------------------
+// Shared constants
+// ---------------------------------------------------------------------------
+
+/** Default truncation limits — one place to change them */
+export const LIMITS = {
+  document: 8000,
+  documentShort: 6000,
+  documentBrief: 2000,
+  documentFull: 50000,
+  reference: 500,
+  wireframe: 3000,
+  historyEntries: 5,
+  discussionEntries: 10,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Speech artifact detection
+// ---------------------------------------------------------------------------
+
+const speechArtifacts = [
+  /\b(um|uh|er|ah|like|you know|basically|so basically|I mean|kind of|sort of)\b/gi,
+  /\b(gonna|wanna|gotta|kinda|sorta)\b/gi,
+  /(\w+)\s+\1\b/gi,
+  /^(so|and|but|okay|alright|well)\s/i,
+];
+
+export function isLikelyVoiceTranscript(text: string): boolean {
+  let artifactCount = 0;
+  for (const pattern of speechArtifacts) {
+    const matches = text.match(pattern);
+    if (matches) artifactCount += matches.length;
+  }
+  const wordCount = text.split(/\s+/).length;
+  return artifactCount > 0 && artifactCount / wordCount > 0.02;
+}
+
+// ---------------------------------------------------------------------------
+// Instruction classification
+// ---------------------------------------------------------------------------
+
+const instructionPatterns: Record<InstructionType, RegExp[]> = {
+  expand: [/expand/i, /elaborate/i, /add.*detail/i, /develop/i, /flesh out/i, /more about/i, /tell me more/i, /explain.*further/i],
+  condense: [/condense/i, /shorten/i, /shorter/i, /summarize/i, /brief/i, /concise/i, /cut/i, /reduce/i, /tighten/i, /trim/i],
+  restructure: [/restructure/i, /reorganize/i, /reorder/i, /move/i, /rearrange/i, /add.*section/i, /add.*heading/i, /split/i, /merge.*section/i],
+  clarify: [/clarify/i, /simplify/i, /clearer/i, /easier.*understand/i, /plain/i, /straightforward/i, /confus/i],
+  style: [/tone/i, /voice/i, /formal/i, /informal/i, /professional/i, /casual/i, /friendly/i, /academic/i, /style/i],
+  correct: [/fix/i, /correct/i, /error/i, /mistake/i, /typo/i, /grammar/i, /spelling/i, /wrong/i, /inaccurate/i],
+  general: [],
+};
+
+export function classifyInstruction(instruction: string): InstructionType {
+  const lower = instruction.toLowerCase();
+  for (const [type, patterns] of Object.entries(instructionPatterns)) {
+    if (type === "general") continue;
+    for (const pattern of patterns) {
+      if (pattern.test(lower)) return type as InstructionType;
+    }
+  }
+  return "general";
+}
+
+export const instructionStrategies: Record<InstructionType, string> = {
+  expand: "Add depth, examples, supporting details, and elaboration. Develop ideas more fully while maintaining coherence.",
+  condense: "Remove redundancy, tighten prose, eliminate filler words. Preserve core meaning while reducing length.",
+  restructure: "Reorganize content for better flow. Add or modify headings, reorder sections, improve logical progression.",
+  clarify: "Simplify language, add transitions, break down complex ideas. Make the text more accessible without losing meaning.",
+  style: "Adjust the voice and tone. Maintain the content while shifting the register, formality, or emotional quality.",
+  correct: "Fix errors in grammar, spelling, facts, or logic. Make precise corrections without unnecessary changes.",
+  general: "Make targeted improvements based on the specific instruction. Balance multiple considerations appropriately.",
+};
+
+// ---------------------------------------------------------------------------
+// Section builders — each returns a formatted string or empty
+// ---------------------------------------------------------------------------
+
+/** Format a document for inclusion in context, with consistent truncation */
+export function formatDocument(
+  doc: string | undefined,
+  maxLen: number = LIMITS.document,
+): string {
+  if (!doc || !doc.trim()) return "";
+  if (doc.length <= maxLen) return doc;
+  return doc.slice(0, maxLen) + `\n...(truncated at ${maxLen} chars)`;
+}
+
+/** Format the objective section */
+export function formatObjective(
+  objective: string | undefined,
+  secondaryObjective?: string,
+): string {
+  if (!objective) return "";
+  let out = `DOCUMENT OBJECTIVE: ${objective}`;
+  if (secondaryObjective?.trim()) {
+    out += `\nSECONDARY OBJECTIVE: ${secondaryObjective}`;
+  }
+  return out;
+}
+
+/** Format edit history consistently */
+export function formatEditHistory(
+  history: EditHistoryEntry[] | undefined,
+  maxEntries = LIMITS.historyEntries,
+): string {
+  if (!history || history.length === 0) return "";
+  const items = history
+    .slice(-maxEntries)
+    .map(
+      (e) =>
+        `- [${e.instructionType}] ${e.instruction.slice(0, 80)}${e.instruction.length > 80 ? "..." : ""}`,
+    )
+    .join("\n");
+  return `RECENT EDIT HISTORY (maintain consistency with previous changes):\n${items}`;
+}
+
+/** Format interview entries consistently */
+export function formatInterviewEntries(
+  entries: InterviewEntry[] | undefined,
+): string {
+  if (!entries || entries.length === 0) return "";
+  return entries
+    .map((e) => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`)
+    .join("\n\n");
+}
+
+/** Format discussion messages consistently */
+export function formatDiscussionHistory(
+  messages: DiscussionMessage[] | undefined,
+  maxEntries = LIMITS.discussionEntries,
+): string {
+  if (!messages || messages.length === 0) return "";
+  const items = messages
+    .slice(-maxEntries)
+    .map((m) => {
+      const label =
+        m.role === "user-question"
+          ? "User asks"
+          : m.role === "user-answer"
+            ? "User answers"
+            : m.role === "persona-response"
+              ? "Persona team"
+              : "System";
+      return `[${label}]: ${m.content}`;
+    })
+    .join("\n\n");
+  return `RECENT DISCUSSION:\n${items}`;
+}
+
+/** Format streaming dialogue entries consistently */
+export function formatDialogueEntries(
+  entries: StreamingDialogueEntry[] | undefined,
+): string {
+  if (!entries || entries.length === 0) return "";
+  return entries.map((e) => `[${e.role}]: ${e.content}`).join("\n\n");
+}
+
+/** Format reference documents with style metrics */
+export function formatReferenceDocuments(
+  docs: ReferenceDocument[] | undefined,
+): string {
+  if (!docs || docs.length === 0) return "";
+
+  const sections: string[] = ["STYLE GUIDANCE (extracted from reference documents):"];
+
+  for (const doc of docs) {
+    const metrics = extractStyleMetrics(doc.content);
+    const typeLabel =
+      doc.type === "style" ? "STYLE GUIDE" : doc.type === "template" ? "TEMPLATE" : "EXAMPLE";
+
+    sections.push(`\n[${typeLabel}: ${doc.name}]`);
+    sections.push(`- Average sentence length: ${metrics.avgSentenceLength} words`);
+    sections.push(`- Average paragraph length: ${metrics.avgParagraphLength} sentences`);
+    if (metrics.formalityIndicators.length > 0) {
+      sections.push(`- Formality: ${metrics.formalityIndicators.join(", ")}`);
+    }
+    if (metrics.structurePatterns.length > 0) {
+      sections.push(`- Structure: ${metrics.structurePatterns.join(", ")}`);
+    }
+  }
+
+  sections.push("\nMatch these style characteristics in your edits.");
+
+  // Also include brief excerpts
+  const excerpts = docs
+    .map((d) => {
+      const label =
+        d.type === "style" ? "STYLE GUIDE" : d.type === "template" ? "TEMPLATE" : "EXAMPLE";
+      return `[${label}: ${d.name}]\n${d.content.slice(0, LIMITS.reference)}${d.content.length > LIMITS.reference ? "..." : ""}`;
+    })
+    .join("\n\n---\n\n");
+
+  return `${sections.join("\n")}\n\nREFERENCE EXCERPTS:\n${excerpts}`;
+}
+
+/** Format captured context items consistently */
+export function formatCapturedContext(items: ContextItem[] | undefined): string {
+  if (!items || items.length === 0) return "";
+
+  const entries = items
+    .map((item, i) => {
+      const num = i + 1;
+      const annotation = item.annotation ? `\n   Why it matters: ${item.annotation}` : "";
+      if (item.type === "text") {
+        return `${num}. [TEXT] ${item.content.slice(0, 500)}${item.content.length > 500 ? "..." : ""}${annotation}`;
+      } else if (item.type === "image") {
+        return `${num}. [IMAGE] (visual reference provided by user)${annotation}`;
+      }
+      return `${num}. [DOCUMENT LINK] ${item.content}${annotation}`;
+    })
+    .join("\n\n");
+
+  return `CAPTURED CONTEXT (reference items the author collected):\n${entries}`;
+}
+
+/** Format requirements consistently */
+export function formatRequirements(
+  reqs: StreamingRequirement[] | undefined,
+): string {
+  if (!reqs || reqs.length === 0) return "";
+  return reqs.map((r) => `- [${r.status}] ${r.text}`).join("\n");
+}
+
+/** Format wireframe analysis for context */
+export function formatWireframeContext(
+  url?: string,
+  analysis?: WireframeAnalysisResponse | null,
+  notes?: string,
+): string {
+  const parts: string[] = [];
+  if (url) parts.push(`TARGET WEBSITE: ${url}`);
+  if (analysis) {
+    if (analysis.analysis) parts.push(`Site analysis: ${analysis.analysis}`);
+    if (analysis.components?.length) parts.push(`UI components: ${analysis.components.join(", ")}`);
+    if (analysis.suggestions?.length) parts.push(`Patterns: ${analysis.suggestions.join(", ")}`);
+    if (analysis.primaryContent) parts.push(`Content: ${analysis.primaryContent.slice(0, 500)}`);
+    if (analysis.siteMap?.length) {
+      parts.push(`Site map: ${analysis.siteMap.map((p) => `${p.title} (${p.url})`).join(", ")}`);
+    }
+  }
+  if (notes) parts.push(`Wireframe notes: ${notes.slice(0, LIMITS.wireframe)}`);
+  return parts.length > 0 ? `WEBSITE CONTEXT:\n${parts.join("\n")}` : "";
+}
+
+/** Format persona context for prompts */
+export function formatPersonaContext(
+  personaIds?: string[],
+  mode?: string,
+): string {
+  if (!personaIds || personaIds.length === 0) return "";
+
+  const personas = personaIds
+    .map((id) => getPersonaById(id))
+    .filter(Boolean);
+
+  if (personas.length === 0) return "";
+
+  const lines = personas.map((p) => {
+    if (!p) return "";
+    const modeHint = mode === "advise" ? p.summary.advice : p.summary.challenge;
+    return `- ${p.label} (${p.role}): ${modeHint}`;
+  });
+
+  return `ACTIVE PERSONAS:\n${lines.join("\n")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Style metrics extraction (shared utility)
+// ---------------------------------------------------------------------------
+
+function extractStyleMetrics(content: string) {
+  const sentences = content.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+  const paragraphs = content.split(/\n\n+/).filter((p) => p.trim().length > 0);
+  const words = content.split(/\s+/).length;
+
+  const avgSentenceLength = sentences.length > 0 ? Math.round(words / sentences.length) : 0;
+  const avgParagraphLength =
+    paragraphs.length > 0 ? Math.round(sentences.length / paragraphs.length) : 0;
+
+  const formalityIndicators: string[] = [];
+  if (/\b(therefore|however|moreover|furthermore|consequently)\b/i.test(content)) {
+    formalityIndicators.push("uses formal transitions");
+  }
+  if (/\b(I|we|you)\b/i.test(content)) {
+    formalityIndicators.push("uses personal pronouns");
+  } else {
+    formalityIndicators.push("avoids personal pronouns");
+  }
+  if (/\b(don't|won't|can't|isn't|aren't)\b/.test(content)) {
+    formalityIndicators.push("uses contractions (informal)");
+  } else {
+    formalityIndicators.push("avoids contractions (formal)");
+  }
+
+  const structurePatterns: string[] = [];
+  if (/^#+\s/m.test(content)) structurePatterns.push("uses markdown headers");
+  if (/^[-*]\s/m.test(content)) structurePatterns.push("uses bullet lists");
+  if (/^\d+\.\s/m.test(content)) structurePatterns.push("uses numbered lists");
+  if (/\*\*[^*]+\*\*/.test(content)) structurePatterns.push("uses bold for emphasis");
+
+  return { avgSentenceLength, avgParagraphLength, formalityIndicators, structurePatterns };
+}
+
+// ---------------------------------------------------------------------------
+// Full context assembler — produces the CONTEXT section for any prompt
+// ---------------------------------------------------------------------------
+
+export interface ContextInput {
+  document?: string;
+  objective?: string;
+  secondaryObjective?: string;
+  instruction?: string;
+  selectedText?: string;
+
+  // History/conversation
+  editHistory?: EditHistoryEntry[];
+  interviewEntries?: InterviewEntry[];
+  discussionMessages?: DiscussionMessage[];
+  dialogueEntries?: StreamingDialogueEntry[];
+
+  // References and grounding
+  referenceDocuments?: ReferenceDocument[];
+  capturedContext?: ContextItem[];
+  requirements?: StreamingRequirement[];
+
+  // Persona
+  personaIds?: string[];
+  directionMode?: string;
+
+  // Website/wireframe
+  websiteUrl?: string;
+  wireframeNotes?: string;
+  wireframeAnalysis?: WireframeAnalysisResponse | null;
+
+  // Limits override
+  maxDocLength?: number;
+}
+
+export interface BuiltContext {
+  /** Truncated document text */
+  document: string;
+  /** "DOCUMENT OBJECTIVE: ..." section */
+  objective: string;
+  /** Formatted edit history */
+  editHistory: string;
+  /** Formatted interview Q&A */
+  interviewEntries: string;
+  /** Formatted discussion */
+  discussionHistory: string;
+  /** Formatted dialogue */
+  dialogueEntries: string;
+  /** Reference documents with style metrics */
+  references: string;
+  /** Captured context items */
+  capturedContext: string;
+  /** Requirements list */
+  requirements: string;
+  /** Website/wireframe context */
+  wireframe: string;
+  /** Persona context */
+  personas: string;
+
+  /**
+   * All non-empty sections joined as a single CONTEXT block,
+   * ready to embed in a system prompt.
+   */
+  assembled: string;
+}
+
+/**
+ * Build context from input — the single entry point for all task types.
+ * Returns individual sections plus the full assembled block.
+ */
+export function buildContext(input: ContextInput): BuiltContext {
+  const doc = formatDocument(input.document, input.maxDocLength ?? LIMITS.document);
+  const obj = formatObjective(input.objective, input.secondaryObjective);
+  const hist = formatEditHistory(input.editHistory);
+  const interview = formatInterviewEntries(input.interviewEntries);
+  const discussion = formatDiscussionHistory(input.discussionMessages);
+  const dialogue = formatDialogueEntries(input.dialogueEntries);
+  const refs = formatReferenceDocuments(input.referenceDocuments);
+  const captured = formatCapturedContext(input.capturedContext);
+  const reqs = formatRequirements(input.requirements);
+  const wire = formatWireframeContext(
+    input.websiteUrl,
+    input.wireframeAnalysis,
+    input.wireframeNotes,
+  );
+  const personas = formatPersonaContext(input.personaIds, input.directionMode);
+
+  // Assemble non-empty sections
+  const sections = [obj, hist, interview, discussion, dialogue, refs, captured, reqs, wire, personas].filter(
+    (s) => s.length > 0,
+  );
+
+  const assembled =
+    sections.length > 0 ? `\nCONTEXT:\n${sections.join("\n\n")}` : "";
+
+  return {
+    document: doc,
+    objective: obj,
+    editHistory: hist,
+    interviewEntries: interview,
+    discussionHistory: discussion,
+    dialogueEntries: dialogue,
+    references: refs,
+    capturedContext: captured,
+    requirements: reqs,
+    wireframe: wire,
+    personas: personas,
+    assembled,
+  };
+}
