@@ -9,8 +9,10 @@ import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
 import { ReadingPane } from "@/components/ReadingPane";
-import { QueryTabBar, type QueryTab } from "@/components/QueryTabBar";
+import { QueryTabBar, type QueryTab, ANALYZER_TAB_ID } from "@/components/QueryTabBar";
 import { MetricExtractorPanel } from "@/components/MetricExtractorPanel";
+import { QueryAnalyzerView } from "@/components/QueryAnalyzerView";
+import { QueryDiscoveriesPanel, type QueryAnalysisResult } from "@/components/QueryDiscoveriesPanel";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -45,6 +47,7 @@ import {
   HardDrive,
   BarChart3,
   MessageCircle,
+  Zap,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import type {
@@ -181,8 +184,15 @@ export default function Workspace() {
   const [tabs, setTabs] = useState<TabState[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
 
-  // Right panel mode: "discussion" or "metrics"
-  const [rightPanelMode, setRightPanelMode] = useState<"discussion" | "metrics">("discussion");
+  // Right panel mode: "discussion", "metrics", or "discoveries"
+  const [rightPanelMode, setRightPanelMode] = useState<"discussion" | "metrics" | "discoveries">("discussion");
+
+  // ── Query Analyzer state ──
+  const [queryAnalysis, setQueryAnalysis] = useState<QueryAnalysisResult | null>(null);
+  const [selectedSubqueryId, setSelectedSubqueryId] = useState<string | null>(null);
+  const [hoveredSubqueryId, setHoveredSubqueryId] = useState<string | null>(null);
+  // Track which tab was active before switching to analyzer (to go back)
+  const [lastEditorTabId, setLastEditorTabId] = useState<string>("");
 
   // ── Tab operations ──
 
@@ -209,9 +219,26 @@ export default function Workspace() {
 
   const handleTabSelect = useCallback((tabId: string) => {
     if (tabId === activeTabId) return;
-    // Save current tab state
+
+    // Switching TO analyzer tab — save current editor tab and remember it
+    if (tabId === ANALYZER_TAB_ID) {
+      if (activeTabId && activeTabId !== ANALYZER_TAB_ID) {
+        setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
+        setLastEditorTabId(activeTabId);
+      }
+      setActiveTabId(ANALYZER_TAB_ID);
+      return;
+    }
+
+    // Switching FROM analyzer to an editor tab — just restore the target
+    if (activeTabId === ANALYZER_TAB_ID) {
+      const target = tabs.find(t => t.id === tabId);
+      if (target) restoreTabState(target);
+      return;
+    }
+
+    // Normal editor-to-editor tab switch
     setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
-    // Restore target tab
     const target = tabs.find(t => t.id === tabId);
     if (target) restoreTabState(target);
   }, [activeTabId, tabs, saveCurrentTabState, restoreTabState]);
@@ -278,6 +305,35 @@ export default function Workspace() {
       ));
     }
   }, [document.rawText, savedDocTitle, objective]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Query Analyzer mutation ──
+
+  const analyzeQueryMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/analyze-query", {
+        query: document.rawText,
+      });
+      return await response.json() as QueryAnalysisResult;
+    },
+    onSuccess: (data) => {
+      setQueryAnalysis(data);
+      setSelectedSubqueryId(null);
+      setHoveredSubqueryId(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Analysis Failed",
+        description: error instanceof Error ? error.message : "Could not analyze query",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAnalyzeQuery = useCallback(() => {
+    analyzeQueryMutation.mutate();
+    // Auto-switch right panel to Discoveries when analyzing
+    setRightPanelMode("discoveries");
+  }, [analyzeQueryMutation]);
 
   // ── Writer mutation ──
 
@@ -885,6 +941,11 @@ export default function Workspace() {
     setTabs([]);
     setActiveTabId("");
     setRightPanelMode("discussion");
+    // Reset analyzer state
+    setQueryAnalysis(null);
+    setSelectedSubqueryId(null);
+    setHoveredSubqueryId(null);
+    setLastEditorTabId("");
   }, []);
 
   const handleCaptureMetrics = useCallback((items: ContextItem[]) => {
@@ -1221,10 +1282,10 @@ export default function Workspace() {
         context={pendingVoiceContext?.context || "document"}
       />
 
-      {/* Right panel tab toggle: Discussion | Metrics */}
+      {/* Right panel tab toggle: Discussion | Metrics | Discoveries */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         <button
-          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 ${
+          className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
             rightPanelMode === "discussion"
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1235,7 +1296,7 @@ export default function Workspace() {
           Discussion
         </button>
         <button
-          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 ${
+          className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
             rightPanelMode === "metrics"
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1244,6 +1305,17 @@ export default function Workspace() {
         >
           <BarChart3 className="w-3.5 h-3.5" />
           Metrics
+        </button>
+        <button
+          className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
+            rightPanelMode === "discoveries"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => setRightPanelMode("discoveries")}
+        >
+          <Zap className="w-3.5 h-3.5" />
+          Discoveries
         </button>
         <div className="flex-1" />
         {/* Discussion-specific actions (only when discussion tab is active) */}
@@ -1297,10 +1369,20 @@ export default function Workspace() {
             onRespondToMessage={handleRespondToMessage}
           />
         </div>
-      ) : (
+      ) : rightPanelMode === "metrics" ? (
         <MetricExtractorPanel
           documentText={document.rawText}
           onCaptureAsContext={handleCaptureMetrics}
+        />
+      ) : (
+        <QueryDiscoveriesPanel
+          analysis={queryAnalysis}
+          isAnalyzing={analyzeQueryMutation.isPending}
+          selectedSubqueryId={selectedSubqueryId}
+          hoveredSubqueryId={hoveredSubqueryId}
+          onSubqueryHover={setHoveredSubqueryId}
+          onSubquerySelect={setSelectedSubqueryId}
+          onCaptureMetrics={handleCaptureMetrics}
         />
       )}
     </div>
@@ -1308,6 +1390,7 @@ export default function Workspace() {
 
   // Tab bar data derived from state
   const tabBarTabs: QueryTab[] = tabs.map(t => ({ id: t.id, title: t.title }));
+  const isAnalyzerActive = activeTabId === ANALYZER_TAB_ID;
 
   const documentPanel = (
     <div className="h-full flex flex-col relative min-h-0">
@@ -1323,7 +1406,19 @@ export default function Workspace() {
         />
       )}
 
-      {showDiffView && previousVersion && currentVersion ? (
+      {isAnalyzerActive ? (
+        /* Query Analyzer view — annotated SQL with hover summaries */
+        <QueryAnalyzerView
+          sqlText={document.rawText}
+          subqueries={queryAnalysis?.subqueries ?? []}
+          isAnalyzing={analyzeQueryMutation.isPending}
+          selectedSubqueryId={selectedSubqueryId}
+          hoveredSubqueryId={hoveredSubqueryId}
+          onSubqueryHover={setHoveredSubqueryId}
+          onSubquerySelect={setSelectedSubqueryId}
+          onAnalyze={handleAnalyzeQuery}
+        />
+      ) : showDiffView && previousVersion && currentVersion ? (
         <Suspense fallback={
           <div className="h-full flex flex-col p-4 space-y-4">
             <Skeleton className="h-8 w-48" />
