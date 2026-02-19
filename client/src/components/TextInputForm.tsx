@@ -21,6 +21,8 @@ import {
   Globe,
   Wand2,
   DatabaseZap,
+  BookOpenCheck,
+  Mic,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -56,6 +58,8 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "monitor-play": MonitorPlay,
   "user-round-cog": UserRoundCog,
   "database-zap": DatabaseZap,
+  "book-open-check": BookOpenCheck,
+  mic: Mic,
 };
 
 /**
