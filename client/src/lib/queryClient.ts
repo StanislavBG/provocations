@@ -41,6 +41,21 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+/**
+ * Unified LLM invoke helper — single function for all LLM interactions.
+ * Replaces direct calls to individual API endpoints.
+ *
+ * Usage:
+ *   const result = await invokeApi("write", { document, objective, instruction });
+ */
+export async function invokeApi<T = Record<string, unknown>>(
+  taskType: string,
+  params: Record<string, unknown>,
+): Promise<T> {
+  const res = await apiRequest("POST", "/api/invoke", { taskType, ...params });
+  return res.json() as Promise<T>;
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

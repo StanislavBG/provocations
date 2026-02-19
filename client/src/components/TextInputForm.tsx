@@ -41,6 +41,8 @@ interface TextInputFormProps {
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
   onCapturedContextChange: (items: ContextItem[]) => void;
+  /** Notifies parent when a template is selected (for StepTracker) */
+  onTemplateSelect?: (templateId: string | null) => void;
 }
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -75,7 +77,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading, capturedContext, onCapturedContextChange }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
   const [captureUrl, setCaptureUrl] = useState("");
@@ -119,6 +121,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
     }
     setActivePrebuilt(template);
     setIsCustomObjective(false);
+    onTemplateSelect?.(template.id);
 
     setCardsExpanded(false);
   };
@@ -126,6 +129,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   const handleSelectCustom = () => {
     setActivePrebuilt(null);
     setIsCustomObjective(true);
+    onTemplateSelect?.("custom");
 
     setObjective("");
     setCardsExpanded(false);
