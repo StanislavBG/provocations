@@ -99,7 +99,7 @@ export function TranscriptOverlay({
   };
 
   return (
-    <div className="absolute inset-0 z-10 bg-background/95 backdrop-blur-sm flex flex-col p-4">
+    <div className="absolute inset-0 z-10 bg-background/80 flex flex-col p-4 overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-sm flex items-center gap-2">
           <Mic className={`w-4 h-4 ${isRecording ? "text-destructive animate-pulse" : "text-primary"}`} />
