@@ -163,6 +163,7 @@ export default function Workspace() {
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const lastAnalyzedUrl = useRef<string>("");
+  const pendingAutoAnalyze = useRef(false);
 
   // Storage panel state
   const [showStoragePanel, setShowStoragePanel] = useState(false);
@@ -324,16 +325,29 @@ export default function Workspace() {
     setRightPanelMode("discoveries");
   }, [analyzeQueryMutation]);
 
+  // Auto-trigger analysis after SQL document is set (deferred from createDraftMutation.onSuccess)
+  useEffect(() => {
+    if (pendingAutoAnalyze.current && document.rawText && isLikelySqlQuery(document.rawText)) {
+      pendingAutoAnalyze.current = false;
+      analyzeQueryMutation.mutate();
+    }
+  }, [document.rawText]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Writer mutation ──
 
   const writeMutation = useMutation({
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory" | "capturedContext"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
 
-      // Auto-detect SQL query mode: if document looks like SQL, enable queryMode
-      // so the writer beautifies the SQL instead of rewriting it as prose
-      const isLikelySql = isLikelySqlQuery(document.rawText);
-      const queryMode = request.queryMode ?? (isLikelySql ? true : undefined);
+      // Route SQL documents to dedicated query-write endpoint
+      if (isLikelySqlQuery(document.rawText)) {
+        const response = await apiRequest("POST", "/api/query-write", {
+          query: document.rawText,
+          instruction: request.instruction,
+          capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        });
+        return await response.json() as WriteResponse;
+      }
 
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
@@ -342,7 +356,6 @@ export default function Workspace() {
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
-        queryMode,
         ...request,
       });
       return await response.json() as WriteResponse;
@@ -409,18 +422,22 @@ export default function Workspace() {
 
   const createDraftMutation = useMutation({
     mutationFn: async ({ context, obj, refs }: { context: string; obj: string; refs: ReferenceDocument[] }) => {
-      // Auto-detect SQL query mode
-      const isLikelySql = isLikelySqlQuery(context);
+      // Route SQL to dedicated query-write endpoint
+      if (isLikelySqlQuery(context)) {
+        const response = await apiRequest("POST", "/api/query-write", {
+          query: context,
+          instruction: "Beautify and format this SQL query. Apply proper indentation, consistent keyword casing, readable structure, and line breaks.",
+          capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        });
+        return await response.json() as WriteResponse;
+      }
 
       const response = await apiRequest("POST", "/api/write", {
         document: context,
         objective: obj,
-        instruction: isLikelySql
-          ? "Beautify and format this SQL query. Apply proper indentation, consistent keyword casing, readable structure, and line breaks. Keep it as SQL — do not convert to prose."
-          : "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
+        instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
         referenceDocuments: refs.length > 0 ? refs : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-        queryMode: isLikelySql || undefined,
       });
       return await response.json() as WriteResponse;
     },
@@ -440,6 +457,13 @@ export default function Workspace() {
         description: "First draft",
       };
       setVersions([initialVersion]);
+
+      // Auto-run query analysis and default to Analyzer tab for SQL documents
+      if (isLikelySqlQuery(data.document)) {
+        setActiveToolboxApp("analyzer");
+        setRightPanelMode("discoveries");
+        pendingAutoAnalyze.current = true;
+      }
 
       if (data.summary) {
         toast({
@@ -521,17 +545,21 @@ export default function Workspace() {
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
       // Step 2: Use the writer to merge into document
-      const isSql = isLikelySqlQuery(document.rawText);
-      const writeResponse = await apiRequest("POST", "/api/write", {
-        document: document.rawText,
-        objective,
-        secondaryObjective: secondaryObjective.trim() || undefined,
-        instruction,
-        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
-        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-        editHistory: editHistory.length > 0 ? editHistory : undefined,
-        queryMode: isSql || undefined,
-      });
+      const writeResponse = isLikelySqlQuery(document.rawText)
+        ? await apiRequest("POST", "/api/query-write", {
+            query: document.rawText,
+            instruction,
+            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+          })
+        : await apiRequest("POST", "/api/write", {
+            document: document.rawText,
+            objective,
+            secondaryObjective: secondaryObjective.trim() || undefined,
+            instruction,
+            referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+            editHistory: editHistory.length > 0 ? editHistory : undefined,
+          });
       return await writeResponse.json() as WriteResponse;
     },
     onSuccess: (data) => {
@@ -584,17 +612,21 @@ export default function Workspace() {
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
-      const isSqlDoc = isLikelySqlQuery(document.rawText);
-      const writeResponse = await apiRequest("POST", "/api/write", {
-        document: document.rawText,
-        objective,
-        secondaryObjective: secondaryObjective.trim() || undefined,
-        instruction,
-        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
-        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-        editHistory: editHistory.length > 0 ? editHistory : undefined,
-        queryMode: isSqlDoc || undefined,
-      });
+      const writeResponse = isLikelySqlQuery(document.rawText)
+        ? await apiRequest("POST", "/api/query-write", {
+            query: document.rawText,
+            instruction,
+            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+          })
+        : await apiRequest("POST", "/api/write", {
+            document: document.rawText,
+            objective,
+            secondaryObjective: secondaryObjective.trim() || undefined,
+            instruction,
+            referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+            editHistory: editHistory.length > 0 ? editHistory : undefined,
+          });
       return await writeResponse.json() as WriteResponse;
     },
     onSuccess: (data) => {

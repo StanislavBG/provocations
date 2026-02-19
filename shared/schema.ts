@@ -254,13 +254,18 @@ export const writeRequestSchema = z.object({
 
   // Edit history for coherent iteration
   editHistory: z.array(editHistoryEntrySchema).optional(),
-
-  // Query mode — when true, the document is a SQL query that should be
-  // beautified/formatted instead of rewritten as prose
-  queryMode: z.boolean().optional(),
 });
 
 export type WriteRequest = z.infer<typeof writeRequestSchema>;
+
+// Dedicated query write schema — SQL-focused, no prose generation
+export const queryWriteRequestSchema = z.object({
+  query: z.string().min(1, "SQL query is required"),
+  instruction: z.string().min(1, "Instruction is required"),
+  capturedContext: z.array(contextItemSchema).optional(),
+});
+
+export type QueryWriteRequest = z.infer<typeof queryWriteRequestSchema>;
 
 // Change tracking for structured output
 export const changeEntrySchema = z.object({
