@@ -54,7 +54,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
       "For analyzing and optimizing complex SQL queries. Paste a query (and optionally your database schema) and the system breaks it into components — SELECT clauses, JOINs, subqueries — with explanations, optimization suggestions, and schema-aware insights. Provocations challenge your query's readability, performance, and correctness.",
     icon: "database-zap",
     objective:
-      "Analyze a complex SQL query component by component, identify optimization opportunities, validate against the provided schema, and produce a clearer, more efficient version with full version history",
+      "Help the analyst groom their SQL query for performance, readability, and improved visibility. Provide constructive, non-judgmental feedback — frame suggestions as improvements, not criticisms. The document IS the SQL query itself.",
     starterText: "",
     draftQuestions: [
       "What database engine is this query for? (PostgreSQL, MySQL, SQL Server, Oracle, SQLite) — syntax and optimization advice depend on the dialect.",
