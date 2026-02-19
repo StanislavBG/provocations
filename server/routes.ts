@@ -649,7 +649,8 @@ Output only valid JSON, no markdown.`;
         targetLength,
         referenceDocuments,
         capturedContext,
-        editHistory
+        editHistory,
+        queryMode,
       } = parsed.data;
 
       // Step 1: Clean voice transcripts before processing
@@ -659,6 +660,50 @@ Output only valid JSON, no markdown.`;
         wasVoiceTranscript = true;
         instruction = await cleanVoiceTranscript(rawInstruction);
         console.log(`[Write API] Cleaned voice transcript: "${rawInstruction.slice(0, 50)}..." → "${instruction.slice(0, 50)}..."`);
+      }
+
+      // Query mode: beautify/format SQL instead of writing prose about it
+      if (queryMode) {
+        const queryResponse = await llm.generate({
+          maxTokens: 16384,
+          temperature: 0.1,
+          system: `You are an expert SQL formatter and beautifier. Your job is to take a SQL query and return it BEAUTIFULLY FORMATTED while applying any requested changes.
+
+CRITICAL RULES:
+1. The output MUST be valid SQL — never convert SQL into prose, documentation, or markdown
+2. Apply proper indentation, consistent casing, and readable formatting
+3. Add line breaks for readability: each clause (SELECT, FROM, WHERE, JOIN, GROUP BY, ORDER BY, HAVING) on its own line
+4. Indent subqueries, CTEs, and nested expressions
+5. Align columns in SELECT lists and JOIN conditions
+6. Use consistent keyword casing (uppercase for SQL keywords)
+7. Add blank lines between CTEs and major clauses for readability
+8. If the user instruction mentions changes (e.g., "add a WHERE clause", "rename this column"), apply those changes to the SQL
+9. Preserve ALL comments in the original query
+10. Do NOT wrap output in markdown code fences — return raw SQL only
+
+The output must be the complete, beautified SQL query. Nothing else.`,
+          messages: [
+            {
+              role: "user",
+              content: `ORIGINAL SQL QUERY:
+${document}
+
+USER INSTRUCTION: ${instruction}
+
+Return the beautified SQL query with any requested changes applied.`
+            }
+          ],
+        });
+
+        const beautifiedSql = (queryResponse.text || document).trim()
+          .replace(/^```(?:sql)?\n?/i, "").replace(/\n?```$/i, "").trim();
+
+        return res.json({
+          document: beautifiedSql,
+          summary: "SQL query beautified and formatted",
+          instructionType: "style" as InstructionType,
+          changes: [{ type: "modified" as const, description: "Query formatted and beautified" }],
+        });
       }
 
       // Classify the instruction type
@@ -1220,27 +1265,35 @@ If no metrics are found, return: { "metrics": [] }`,
       }
 
       const response = await llm.generate({
-        maxTokens: 8000,
+        maxTokens: 16000,
         temperature: 0.2,
-        system: `You are a senior SQL architect and performance analyst. You perform deep, rigorous analysis of SQL queries.
+        system: `You are a senior SQL architect and performance analyst. You perform deep, rigorous, and highly detailed analysis of SQL queries. Your analysis must be ELABORATE — justify every finding with specific code references and provide concrete, actionable change recommendations with before/after SQL code.
 
 Given a SQL query, you must:
 
 1. **Decompose** the query into logical subparts (CTEs, subqueries, UNION branches, JOINs, aggregations, window functions, CASE blocks, etc.). Each subpart gets an id, a human-readable name, the exact SQL snippet, and character offsets (start/end) into the original query.
 
-2. **Summarize** each subpart: what it does in plain English (1-2 sentences).
+2. **Summarize** each subpart: what it does in plain English (2-3 sentences). Be specific about tables, columns, and logic involved.
 
-3. **Evaluate** each subpart: correctness, efficiency, readability, potential issues. Rate severity as "good", "info", "warning", or "critical".
+3. **Evaluate** each subpart thoroughly: correctness, efficiency, readability, potential issues. Explain WHY something is good or problematic with specific references to the SQL code. Rate severity as "good", "info", "warning", or "critical".
 
-4. **Provide recommendations** per subpart: specific, actionable suggestions for improvement. Only include if relevant.
+4. **Provide recommendations** per subpart: specific, actionable text suggestions.
 
-5. **Extract metrics**: any aggregations, calculated fields, KPIs, or business measures found in the query.
+5. **Provide changeRecommendations** per subpart: concrete before/after SQL code changes the user can preview and accept. Each change recommendation must include:
+   - title: short name for the change
+   - rationale: WHY this change improves the query (cite specific issues in the current code)
+   - beforeCode: the exact current SQL snippet that should change
+   - afterCode: the improved SQL snippet to replace it with
+   - impact: what improves (performance, readability, correctness, etc.)
+   Only include changeRecommendations for subqueries with severity "info", "warning", or "critical". Each subquery can have 0-3 change recommendations.
 
-6. **Overall evaluation**: a holistic assessment of the entire query — structure, performance, maintainability, and any cross-cutting concerns.
+6. **Extract metrics**: any aggregations, calculated fields, KPIs, or business measures found in the query.
 
-7. **Optimization opportunities**: top-level suggestions for simplification, performance, or structural improvements across the whole query.
+7. **Overall evaluation**: a thorough holistic assessment (3-5 sentences) of the entire query — structure, performance, maintainability, and cross-cutting concerns. Be specific and reference actual code patterns.
 
-Be opportunistic: discover hidden opportunities, suggest simplifications, flag anti-patterns, and note anything noteworthy.
+8. **Optimization opportunities**: top-level suggestions with CONCRETE before/after SQL code examples showing exactly what to change. Each opportunity must include beforeCode, afterCode, and impact fields when a code change is applicable.
+
+Be opportunistic and thorough: discover hidden opportunities, suggest simplifications, flag anti-patterns, identify missing indexes, redundant joins, unnecessary subqueries, and note anything noteworthy. Every recommendation must be justified with specific code references.
 
 Respond with valid JSON only, in this exact format:
 {
@@ -1251,22 +1304,34 @@ Respond with valid JSON only, in this exact format:
       "sqlSnippet": "The exact SQL text for this subpart",
       "startOffset": 0,
       "endOffset": 100,
-      "summary": "What this subpart does in plain English",
-      "evaluation": "Assessment of quality, correctness, efficiency",
+      "summary": "Detailed explanation of what this subpart does",
+      "evaluation": "Thorough assessment citing specific code patterns and explaining WHY",
       "severity": "good|info|warning|critical",
-      "recommendations": ["Specific suggestion 1", "Suggestion 2"]
+      "recommendations": ["Specific suggestion 1", "Suggestion 2"],
+      "changeRecommendations": [
+        {
+          "title": "Short change name",
+          "rationale": "Detailed explanation of why this change is needed, citing specific code",
+          "beforeCode": "SELECT * FROM table WHERE ...",
+          "afterCode": "SELECT col1, col2 FROM table WHERE ...",
+          "impact": "Reduces I/O by selecting only needed columns"
+        }
+      ]
     }
   ],
   "metrics": [
     { "name": "Metric Name", "definition": "What it measures", "formula": "SQL expression" }
   ],
-  "overallEvaluation": "Holistic assessment of the entire query",
+  "overallEvaluation": "Thorough holistic assessment (3-5 sentences) with specific code references",
   "optimizationOpportunities": [
     {
       "title": "Short title",
-      "description": "Detailed explanation of the opportunity",
+      "description": "Detailed explanation with specific code references",
       "severity": "info|warning|critical",
-      "affectedSubquery": "sq1 or null"
+      "affectedSubquery": "sq1 or null",
+      "beforeCode": "Current SQL pattern",
+      "afterCode": "Improved SQL pattern",
+      "impact": "What improves and by how much"
     }
   ]
 }`,

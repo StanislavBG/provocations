@@ -6,6 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ProvokeText } from "./ProvokeText";
 import { BrowserExplorer } from "./BrowserExplorer";
 import { ContextCapturePanel } from "./ContextCapturePanel";
+import { QueryAnalyzerView } from "./QueryAnalyzerView";
+import type { SubqueryAnalysis } from "./QueryDiscoveriesPanel";
 import {
   MessageCircleQuestion,
   Play,
@@ -27,13 +29,14 @@ import {
   Layers,
   FileText,
   Target,
+  Search,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument } from "@shared/schema";
 import { builtInPersonas, getAllPersonas } from "@shared/personas";
 
 // ── Toolbox app type ──
 
-export type ToolboxApp = "provoke" | "website" | "context";
+export type ToolboxApp = "provoke" | "website" | "context" | "analyzer";
 
 // ── Persona metadata (derived from centralized persona definitions) ──
 
@@ -97,6 +100,16 @@ interface ProvocationToolboxProps {
   // Context app props (captured context items)
   capturedContext?: ContextItem[];
   onCapturedContextChange?: (items: ContextItem[]) => void;
+
+  // Query Analyzer app props
+  analyzerSqlText?: string;
+  analyzerSubqueries?: SubqueryAnalysis[];
+  analyzerIsAnalyzing?: boolean;
+  analyzerSelectedSubqueryId?: string | null;
+  analyzerHoveredSubqueryId?: string | null;
+  onAnalyzerSubqueryHover?: (id: string | null) => void;
+  onAnalyzerSubquerySelect?: (id: string | null) => void;
+  onAnalyze?: () => void;
 }
 
 export function ProvocationToolbox({
@@ -119,6 +132,14 @@ export function ProvocationToolbox({
   referenceDocuments,
   capturedContext,
   onCapturedContextChange,
+  analyzerSqlText,
+  analyzerSubqueries,
+  analyzerIsAnalyzing,
+  analyzerSelectedSubqueryId,
+  analyzerHoveredSubqueryId,
+  onAnalyzerSubqueryHover,
+  onAnalyzerSubquerySelect,
+  onAnalyze,
 }: ProvocationToolboxProps) {
   const hasContextCollection = !!(contextCollection?.text || contextCollection?.objective);
   const hasCapturedContext = !!(capturedContext && capturedContext.length > 0);
@@ -178,6 +199,15 @@ export function ProvocationToolbox({
             <Globe className="w-3 h-3" />
             Website
           </Button>
+          <Button
+            size="sm"
+            variant={activeApp === "analyzer" ? "default" : "ghost"}
+            className="gap-1 text-xs h-7 px-2"
+            onClick={() => onAppChange("analyzer")}
+          >
+            <Search className="w-3 h-3" />
+            Analyzer
+          </Button>
         </div>
       </div>
 
@@ -196,6 +226,17 @@ export function ProvocationToolbox({
             referenceDocuments={referenceDocuments}
             capturedContext={capturedContext}
             onCapturedContextChange={onCapturedContextChange}
+          />
+        ) : activeApp === "analyzer" ? (
+          <QueryAnalyzerView
+            sqlText={analyzerSqlText ?? ""}
+            subqueries={analyzerSubqueries ?? []}
+            isAnalyzing={analyzerIsAnalyzing ?? false}
+            selectedSubqueryId={analyzerSelectedSubqueryId ?? null}
+            hoveredSubqueryId={analyzerHoveredSubqueryId ?? null}
+            onSubqueryHover={onAnalyzerSubqueryHover ?? (() => {})}
+            onSubquerySelect={onAnalyzerSubquerySelect ?? (() => {})}
+            onAnalyze={onAnalyze ?? (() => {})}
           />
         ) : (
           <BrowserExplorer
