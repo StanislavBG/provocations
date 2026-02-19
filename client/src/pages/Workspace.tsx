@@ -77,6 +77,15 @@ async function processObjectiveText(text: string, mode: string): Promise<string>
   return data.summary ?? text;
 }
 
+/** Detect whether text looks like a SQL query (not markdown/prose) */
+function isLikelySqlQuery(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  // Must start with a SQL keyword and NOT look like markdown
+  const sqlStart = /^\s*(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|EXPLAIN)\b/i;
+  return sqlStart.test(trimmed) && !trimmed.startsWith("#") && !trimmed.startsWith("*");
+}
+
 export default function Workspace() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -323,9 +332,7 @@ export default function Workspace() {
 
       // Auto-detect SQL query mode: if document looks like SQL, enable queryMode
       // so the writer beautifies the SQL instead of rewriting it as prose
-      const docText = document.rawText.trim();
-      const sqlKeywords = /^\s*(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|EXPLAIN)\b/i;
-      const isLikelySql = sqlKeywords.test(docText) && !docText.startsWith("#") && !docText.startsWith("*");
+      const isLikelySql = isLikelySqlQuery(document.rawText);
       const queryMode = request.queryMode ?? (isLikelySql ? true : undefined);
 
       const response = await apiRequest("POST", "/api/write", {
@@ -402,12 +409,18 @@ export default function Workspace() {
 
   const createDraftMutation = useMutation({
     mutationFn: async ({ context, obj, refs }: { context: string; obj: string; refs: ReferenceDocument[] }) => {
+      // Auto-detect SQL query mode
+      const isLikelySql = isLikelySqlQuery(context);
+
       const response = await apiRequest("POST", "/api/write", {
         document: context,
         objective: obj,
-        instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
+        instruction: isLikelySql
+          ? "Beautify and format this SQL query. Apply proper indentation, consistent keyword casing, readable structure, and line breaks. Keep it as SQL — do not convert to prose."
+          : "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
         referenceDocuments: refs.length > 0 ? refs : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        queryMode: isLikelySql || undefined,
       });
       return await response.json() as WriteResponse;
     },
@@ -508,6 +521,7 @@ export default function Workspace() {
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
       // Step 2: Use the writer to merge into document
+      const isSql = isLikelySqlQuery(document.rawText);
       const writeResponse = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
@@ -516,6 +530,7 @@ export default function Workspace() {
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
+        queryMode: isSql || undefined,
       });
       return await writeResponse.json() as WriteResponse;
     },
@@ -569,6 +584,7 @@ export default function Workspace() {
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
+      const isSqlDoc = isLikelySqlQuery(document.rawText);
       const writeResponse = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
@@ -577,6 +593,7 @@ export default function Workspace() {
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
+        queryMode: isSqlDoc || undefined,
       });
       return await writeResponse.json() as WriteResponse;
     },
