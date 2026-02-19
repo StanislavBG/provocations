@@ -342,10 +342,11 @@ export default function Workspace() {
       if (!document) throw new Error("No document to write to");
 
       // Route SQL documents to dedicated query-write endpoint
-      if (isLikelySqlQuery(document.rawText)) {
+      if (selectedTemplateId === "query-editor" || isLikelySqlQuery(document.rawText)) {
         const response = await apiRequest("POST", "/api/query-write", {
           query: document.rawText,
           instruction: request.instruction,
+          appType: selectedTemplateId || undefined,
           capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         });
         return await response.json() as WriteResponse;
@@ -355,6 +356,7 @@ export default function Workspace() {
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
+        appType: selectedTemplateId || undefined,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
@@ -423,12 +425,13 @@ export default function Workspace() {
   // ── Create first draft mutation (input phase → workspace) ──
 
   const createDraftMutation = useMutation({
-    mutationFn: async ({ context, obj, refs }: { context: string; obj: string; refs: ReferenceDocument[] }) => {
-      // Route SQL to dedicated query-write endpoint
-      if (isLikelySqlQuery(context)) {
+    mutationFn: async ({ context, obj, refs, templateId }: { context: string; obj: string; refs: ReferenceDocument[]; templateId?: string }) => {
+      // Route query-editor template (or detected SQL) to query-write endpoint
+      if (templateId === "query-editor" || isLikelySqlQuery(context)) {
         const response = await apiRequest("POST", "/api/query-write", {
           query: context,
-          instruction: "Beautify and format this SQL query. Apply proper indentation, consistent keyword casing, readable structure, and line breaks.",
+          instruction: "Beautify and format this SQL query. Apply proper indentation, consistent keyword casing, readable structure, and line breaks. If the input is not SQL, extract any SQL from it and format that. Output ONLY the SQL query.",
+          appType: templateId || "query-editor",
           capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         });
         return await response.json() as WriteResponse;
@@ -437,6 +440,7 @@ export default function Workspace() {
       const response = await apiRequest("POST", "/api/write", {
         document: context,
         objective: obj,
+        appType: templateId || undefined,
         instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
         referenceDocuments: refs.length > 0 ? refs : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -495,6 +499,7 @@ export default function Workspace() {
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         document: document.rawText,
+        appType: selectedTemplateId || undefined,
         template: templateDoc?.content,
         previousEntries: entries.length > 0 ? entries : undefined,
         directionMode: dir?.mode,
@@ -543,20 +548,23 @@ export default function Workspace() {
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
+        appType: selectedTemplateId || undefined,
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
       // Step 2: Use the writer to merge into document
-      const writeResponse = isLikelySqlQuery(document.rawText)
+      const writeResponse = (selectedTemplateId === "query-editor" || isLikelySqlQuery(document.rawText))
         ? await apiRequest("POST", "/api/query-write", {
             query: document.rawText,
             instruction,
+            appType: selectedTemplateId || undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
           })
         : await apiRequest("POST", "/api/write", {
             document: document.rawText,
             objective,
             secondaryObjective: secondaryObjective.trim() || undefined,
+            appType: selectedTemplateId || undefined,
             instruction,
             referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -611,19 +619,22 @@ export default function Workspace() {
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
+        appType: selectedTemplateId || undefined,
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
-      const writeResponse = isLikelySqlQuery(document.rawText)
+      const writeResponse = (selectedTemplateId === "query-editor" || isLikelySqlQuery(document.rawText))
         ? await apiRequest("POST", "/api/query-write", {
             query: document.rawText,
             instruction,
+            appType: selectedTemplateId || undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
           })
         : await apiRequest("POST", "/api/write", {
             document: document.rawText,
             objective,
             secondaryObjective: secondaryObjective.trim() || undefined,
+            appType: selectedTemplateId || undefined,
             instruction,
             referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -692,6 +703,7 @@ export default function Workspace() {
       const response = await apiRequest("POST", "/api/generate-advice", {
         document: document.rawText,
         objective,
+        appType: selectedTemplateId || undefined,
         challengeId: `interview-${Date.now()}`,
         challengeTitle: topic,
         challengeContent: question,
@@ -721,6 +733,7 @@ export default function Workspace() {
         question,
         document: document.rawText,
         objective,
+        appType: selectedTemplateId || undefined,
         secondaryObjective: secondaryObjective.trim() || undefined,
         activePersonas: interviewDirection?.personas || [],
         previousMessages: discussionMessages.length > 0 ? discussionMessages.slice(-10) : undefined,
@@ -1261,7 +1274,7 @@ export default function Workspace() {
           <TextInputForm
             onSubmit={(text, obj, refs, templateId) => {
               setSelectedTemplateId(templateId ?? null);
-              createDraftMutation.mutate({ context: text, obj, refs });
+              createDraftMutation.mutate({ context: text, obj, refs, templateId: templateId ?? undefined });
             }}
             isLoading={createDraftMutation.isPending}
             onBlankDocument={(obj) => {

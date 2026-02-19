@@ -19,6 +19,7 @@ import {
   instructionStrategies,
   isLikelyVoiceTranscript,
   formatDocument,
+  getAppTypeConfig,
   LIMITS,
   type ContextInput,
 } from "./context-builder";
@@ -247,6 +248,17 @@ const taskHandlers: Record<TaskType, (params: any) => Promise<InvokeResult>> = {
 // ---------------------------------------------------------------------------
 
 async function handleWrite(params: WriteParams): Promise<InvokeResult> {
+  // If appType is "query-editor", delegate to query-write handler
+  const appConfig = getAppTypeConfig(params.appType);
+  if (appConfig?.outputFormat === "sql") {
+    return handleQueryWrite({
+      query: params.document || "",
+      instruction: params.instruction,
+      appType: params.appType,
+      capturedContext: params.capturedContext,
+    });
+  }
+
   let instruction = params.instruction;
 
   // Pre-process: clean voice transcripts
@@ -424,6 +436,7 @@ Output the complete SQL query. Nothing else.`,
 
 async function handleChallenge(params: ChallengeParams): Promise<InvokeResult> {
   const ctx = buildContext(params);
+  const isQueryEditor = ctx.appConfig?.outputFormat === "sql";
 
   const personaIds = params.personaIds?.length
     ? params.personaIds
@@ -446,28 +459,54 @@ async function handleChallenge(params: ChallengeParams): Promise<InvokeResult> {
     ? `\n\n${ctx.references}`
     : "";
 
-  const response = await llm.generate({
-    maxTokens: 4096,
-    system: `You are a critical thinking partner. Your job is to generate thought-provoking challenges from multiple expert perspectives.
+  // App-specific system prompt
+  const systemRole = isQueryEditor
+    ? `You are a supportive SQL peer reviewer. Your job is to provide constructive, non-judgmental feedback on SQL queries from multiple expert perspectives.
+Frame all feedback as opportunities for improvement, not criticisms. The analyst is grooming their query — help them make it better.
 
-${ctx.objective}
+${ctx.appContext}
+${ctx.objective}`
+    : `You are a critical thinking partner. Your job is to generate thought-provoking challenges from multiple expert perspectives.
 
-AVAILABLE PERSONAS:
-${personaDescriptions}
-${guidanceSection}${referenceSection}
+${ctx.objective}`;
 
-For each persona, generate ONE challenge that:
+  const challengeInstructions = isQueryEditor
+    ? `For each persona, generate ONE suggestion that:
+1. References a specific part of the SQL query (a clause, join, subquery, or pattern)
+2. Identifies an opportunity for improvement (performance, readability, correctness, or best practices)
+3. Has a clear title (max 60 chars) and constructive explanation (2-3 sentences)
+4. Includes an impact scale (1-5, where 5 is highest impact improvement)
+5. Frames feedback positively ("Consider..." / "This could benefit from..." / "A CTE here would...")
+
+Output valid JSON array:
+[{"personaId": "...", "title": "...", "content": "...", "sourceExcerpt": "...", "scale": N}]`
+    : `For each persona, generate ONE challenge that:
 1. Cites a specific section of the document
 2. Identifies a gap, assumption, or weakness
 3. Has a clear title (max 60 chars) and explanation (2-3 sentences)
 4. Includes a relevance scale (1-5, where 5 is most critical)
 
 Output valid JSON array of challenges:
-[{"personaId": "...", "title": "...", "content": "...", "sourceExcerpt": "...", "scale": N}]`,
+[{"personaId": "...", "title": "...", "content": "...", "sourceExcerpt": "...", "scale": N}]`;
+
+  const userLabel = isQueryEditor ? "SQL QUERY TO REVIEW" : "DOCUMENT TO CHALLENGE";
+  const userInstruction = isQueryEditor
+    ? "Provide constructive suggestions — each must reference a specific part of the query."
+    : "Generate grounded challenges — each must cite a specific part.";
+
+  const response = await llm.generate({
+    maxTokens: 4096,
+    system: `${systemRole}
+
+AVAILABLE PERSONAS:
+${personaDescriptions}
+${guidanceSection}${referenceSection}
+
+${challengeInstructions}`,
     messages: [
       {
         role: "user",
-        content: `DOCUMENT TO CHALLENGE:\n${ctx.document}\n\nGenerate grounded challenges — each must cite a specific part.`,
+        content: `${userLabel}:\n${ctx.document}\n\n${userInstruction}`,
       },
     ],
   });
@@ -489,6 +528,7 @@ Output valid JSON array of challenges:
 
 async function handleAdvice(params: AdviceParams): Promise<InvokeResult> {
   const ctx = buildContext({ ...params, maxDocLength: LIMITS.documentShort });
+  const isQueryEditor = ctx.appConfig?.outputFormat === "sql";
 
   const persona = getPersonaById(params.personaId);
   const personaPrompt = persona?.prompts.advice || "Provide expert advice.";
@@ -496,6 +536,11 @@ async function handleAdvice(params: AdviceParams): Promise<InvokeResult> {
 
   const historySection = ctx.discussionHistory
     ? `\n\n${ctx.discussionHistory}`
+    : "";
+
+  const toneGuidance = isQueryEditor
+    ? `\nTONE: Be constructive and non-judgmental. Frame advice as "Consider..." or "You could improve this by..." — not "This is wrong" or "You should have...".
+The document is a SQL query, not prose. Provide SQL-specific advice (query patterns, indexing, CTEs, formatting).`
     : "";
 
   const response = await llm.generate({
@@ -509,19 +554,19 @@ Title: ${params.challengeTitle}
 Detail: ${params.challengeContent}
 
 ${ctx.objective}
-${historySection}
+${historySection}${toneGuidance}
 
 ADVICE RULES:
 1. Start from the provocation — don't repeat it
-2. Reference the current document
+2. Reference the current ${isQueryEditor ? "SQL query" : "document"}
 3. Serve the objective
 4. Build on discussion history if present
-5. Be concrete with actionable steps
+5. Be concrete with actionable steps${isQueryEditor ? " — include SQL code examples where helpful" : ""}
 6. Speak from your persona expertise`,
     messages: [
       {
         role: "user",
-        content: `PROVOCATION: ${params.challengeTitle}\n${params.challengeContent}\n\nCURRENT DOCUMENT:\n${ctx.document}\n\nProvide expert advice as the ${personaLabel}.`,
+        content: `PROVOCATION: ${params.challengeTitle}\n${params.challengeContent}\n\nCURRENT ${isQueryEditor ? "SQL QUERY" : "DOCUMENT"}:\n${ctx.document}\n\nProvide expert advice as the ${personaLabel}.`,
       },
     ],
   });
@@ -546,6 +591,7 @@ async function handleInterviewQuestion(params: InterviewQuestionParams): Promise
     ...params,
     maxDocLength: LIMITS.document,
   });
+  const isQueryEditor = ctx.appConfig?.outputFormat === "sql";
 
   const hasEntries = (params.interviewEntries?.length ?? 0) > 0;
 
@@ -577,10 +623,17 @@ async function handleInterviewQuestion(params: InterviewQuestionParams): Promise
     ? "Acknowledge the user's input, extract requirements, then ask ONE clarification question if genuinely needed."
     : "Greet the user briefly. Do NOT ask a question yet — say 'Ready when you are.'";
 
+  // App-specific interviewer role
+  const interviewerRole = isQueryEditor
+    ? `You are a supportive SQL peer reviewer gathering context about the analyst's query.
+Ask about: database engine, schema context, what the query powers, known performance issues, team conventions.
+Be conversational and non-judgmental. You're helping them provide context so you can give better feedback.`
+    : "You are a thought-provoking interviewer helping develop a document.";
+
   const response = await llm.generate({
     maxTokens: 1024,
     temperature: 0.9,
-    system: `You are a thought-provoking interviewer helping develop a document.
+    system: `${interviewerRole}
 
 ${ctx.objective}
 ${templateSection}
@@ -593,15 +646,15 @@ BEHAVIOR:
 - Keep responses concise
 
 ${ctx.interviewEntries ? `PREVIOUS Q&A:\n${ctx.interviewEntries}` : ""}
-${ctx.document ? `CURRENT DOCUMENT:\n${ctx.document}` : ""}
+${ctx.document ? `CURRENT ${isQueryEditor ? "SQL QUERY" : "DOCUMENT"}:\n${ctx.document}` : ""}
 
 Output JSON: {"question": "...", "topic": "...", "suggestedRequirement": "..."(optional)}`,
     messages: [
       {
         role: "user",
         content: hasEntries
-          ? `Generate the next interview question to develop my document.${params.personaIds?.length ? " Be SPECIFIC — reference something I actually wrote." : ""}`
-          : "I'm ready to start developing my document.",
+          ? `Generate the next interview question to ${isQueryEditor ? "understand my query better" : "develop my document"}.${params.personaIds?.length ? " Be SPECIFIC — reference something I actually wrote." : ""}`
+          : `I'm ready to start ${isQueryEditor ? "reviewing my SQL query" : "developing my document"}.`,
       },
     ],
   });

@@ -286,6 +286,54 @@ export function formatPersonaContext(
 }
 
 // ---------------------------------------------------------------------------
+// App-type context — injects application-aware guidance into every prompt
+// ---------------------------------------------------------------------------
+
+/** App-specific configurations that shape LLM behavior */
+export interface AppTypeConfig {
+  /** What the document IS (used in system prompts) */
+  documentType: string;
+  /** How the LLM should treat the document */
+  systemGuidance: string;
+  /** Tone for feedback/challenges */
+  feedbackTone: string;
+  /** Whether output should be code (SQL) vs prose (markdown) */
+  outputFormat: "sql" | "markdown";
+}
+
+const APP_TYPE_CONFIGS: Record<string, AppTypeConfig> = {
+  "query-editor": {
+    documentType: "SQL query",
+    systemGuidance: `APPLICATION CONTEXT: Query Editor
+The document is a SQL query, NOT a prose document. The user is an analyst grooming their query.
+
+YOUR ROLE: Help the analyst improve their query's performance, readability, and visibility.
+Be constructive and non-judgmental — you are a supportive peer reviewer, not an adversarial critic.
+
+RULES:
+- The document output MUST always be valid SQL (no markdown wrapping, no prose)
+- Focus on: readability (formatting, naming, CTEs), performance (index usage, join efficiency, SARGability), correctness (NULL handling, edge cases, type safety)
+- Frame suggestions as improvements, not criticisms ("Consider using a CTE here for clarity" not "This subquery is unreadable")
+- Preserve the query's semantic intent unless the user explicitly asks for logic changes`,
+    feedbackTone: "constructive and non-judgmental — frame as improvements, not criticisms",
+    outputFormat: "sql",
+  },
+};
+
+/** Get app-specific config, or undefined for default behavior */
+export function getAppTypeConfig(appType?: string): AppTypeConfig | undefined {
+  if (!appType) return undefined;
+  return APP_TYPE_CONFIGS[appType];
+}
+
+/** Format app-type context for inclusion in prompts */
+export function formatAppTypeContext(appType?: string): string {
+  const config = getAppTypeConfig(appType);
+  if (!config) return "";
+  return config.systemGuidance;
+}
+
+// ---------------------------------------------------------------------------
 // Style metrics extraction (shared utility)
 // ---------------------------------------------------------------------------
 
@@ -332,6 +380,13 @@ export interface ContextInput {
   secondaryObjective?: string;
   instruction?: string;
   selectedText?: string;
+
+  /**
+   * Application type — tells every LLM call what kind of document we're working with.
+   * When set, overrides default behavior for prompt construction, output format, and tone.
+   * Examples: "query-editor", "write-a-prompt", "product-requirement", etc.
+   */
+  appType?: string;
 
   // History/conversation
   editHistory?: EditHistoryEntry[];
@@ -380,6 +435,10 @@ export interface BuiltContext {
   wireframe: string;
   /** Persona context */
   personas: string;
+  /** App-type context (e.g. "query-editor" guidance) */
+  appContext: string;
+  /** App-type config for conditional logic in handlers */
+  appConfig: AppTypeConfig | undefined;
 
   /**
    * All non-empty sections joined as a single CONTEXT block,
@@ -408,9 +467,11 @@ export function buildContext(input: ContextInput): BuiltContext {
     input.wireframeNotes,
   );
   const personas = formatPersonaContext(input.personaIds, input.directionMode);
+  const appCtx = formatAppTypeContext(input.appType);
+  const appConfig = getAppTypeConfig(input.appType);
 
-  // Assemble non-empty sections
-  const sections = [obj, hist, interview, discussion, dialogue, refs, captured, reqs, wire, personas].filter(
+  // Assemble non-empty sections — app context goes first so it frames everything
+  const sections = [appCtx, obj, hist, interview, discussion, dialogue, refs, captured, reqs, wire, personas].filter(
     (s) => s.length > 0,
   );
 
@@ -429,6 +490,8 @@ export function buildContext(input: ContextInput): BuiltContext {
     requirements: reqs,
     wireframe: wire,
     personas: personas,
+    appContext: appCtx,
+    appConfig: appConfig,
     assembled,
   };
 }
