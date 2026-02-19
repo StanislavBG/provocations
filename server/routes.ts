@@ -6,6 +6,7 @@ import { encrypt, decrypt } from "./crypto";
 import { llm } from "./llm";
 import {
   writeRequestSchema,
+  queryWriteRequestSchema,
   generateChallengeRequestSchema,
   generateAdviceRequestSchema,
   interviewQuestionRequestSchema,
@@ -650,7 +651,6 @@ Output only valid JSON, no markdown.`;
         referenceDocuments,
         capturedContext,
         editHistory,
-        queryMode,
       } = parsed.data;
 
       // Step 1: Clean voice transcripts before processing
@@ -660,50 +660,6 @@ Output only valid JSON, no markdown.`;
         wasVoiceTranscript = true;
         instruction = await cleanVoiceTranscript(rawInstruction);
         console.log(`[Write API] Cleaned voice transcript: "${rawInstruction.slice(0, 50)}..." → "${instruction.slice(0, 50)}..."`);
-      }
-
-      // Query mode: beautify/format SQL instead of writing prose about it
-      if (queryMode) {
-        const queryResponse = await llm.generate({
-          maxTokens: 16384,
-          temperature: 0.1,
-          system: `You are an expert SQL formatter and beautifier. Your job is to take a SQL query and return it BEAUTIFULLY FORMATTED while applying any requested changes.
-
-CRITICAL RULES:
-1. The output MUST be valid SQL — never convert SQL into prose, documentation, or markdown
-2. Apply proper indentation, consistent casing, and readable formatting
-3. Add line breaks for readability: each clause (SELECT, FROM, WHERE, JOIN, GROUP BY, ORDER BY, HAVING) on its own line
-4. Indent subqueries, CTEs, and nested expressions
-5. Align columns in SELECT lists and JOIN conditions
-6. Use consistent keyword casing (uppercase for SQL keywords)
-7. Add blank lines between CTEs and major clauses for readability
-8. If the user instruction mentions changes (e.g., "add a WHERE clause", "rename this column"), apply those changes to the SQL
-9. Preserve ALL comments in the original query
-10. Do NOT wrap output in markdown code fences — return raw SQL only
-
-The output must be the complete, beautified SQL query. Nothing else.`,
-          messages: [
-            {
-              role: "user",
-              content: `ORIGINAL SQL QUERY:
-${document}
-
-USER INSTRUCTION: ${instruction}
-
-Return the beautified SQL query with any requested changes applied.`
-            }
-          ],
-        });
-
-        const beautifiedSql = (queryResponse.text || document).trim()
-          .replace(/^```(?:sql)?\n?/i, "").replace(/\n?```$/i, "").trim();
-
-        return res.json({
-          document: beautifiedSql,
-          summary: "SQL query beautified and formatted",
-          instructionType: "style" as InstructionType,
-          changes: [{ type: "modified" as const, description: "Query formatted and beautified" }],
-        });
       }
 
       // Classify the instruction type
@@ -959,6 +915,90 @@ INSTRUCTION APPLIED: ${instruction}`
       console.error("Write error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to evolve document", details: errorMessage });
+    }
+  });
+
+  // ── Dedicated SQL query writer ──
+  // Focused on writing/editing SQL queries — never generates prose.
+  // Uses captured context (if any) to inform the changes.
+  app.post("/api/query-write", async (req, res) => {
+    try {
+      const parsed = queryWriteRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { query, instruction: rawInstruction, capturedContext } = parsed.data;
+
+      // Clean voice transcripts
+      let instruction = rawInstruction;
+      if (isLikelyVoiceTranscript(rawInstruction)) {
+        instruction = await cleanVoiceTranscript(rawInstruction);
+      }
+
+      // Build context section from captured items
+      let contextSection = "";
+      if (capturedContext && capturedContext.length > 0) {
+        const contextEntries = capturedContext.map((item, i) => {
+          const num = i + 1;
+          const annotation = item.annotation ? `\n   Note: ${item.annotation}` : "";
+          if (item.type === "text") {
+            return `${num}. [TEXT] ${item.content.slice(0, 1000)}${item.content.length > 1000 ? "..." : ""}${annotation}`;
+          } else if (item.type === "image") {
+            return `${num}. [IMAGE] (visual reference)${annotation}`;
+          } else {
+            return `${num}. [LINK] ${item.content}${annotation}`;
+          }
+        }).join("\n\n");
+
+        contextSection = `\n\nREFERENCE CONTEXT (use to inform your SQL edits — these are materials the author collected):
+${contextEntries}`;
+      }
+
+      const response = await llm.generate({
+        maxTokens: 16384,
+        temperature: 0.1,
+        system: `You are an expert SQL query writer, formatter, and editor. Your ONLY output is SQL.
+
+ABSOLUTE RULES:
+1. Output MUST be valid SQL — NEVER output prose, markdown, documentation, explanations, or commentary
+2. NEVER wrap output in code fences (\`\`\`) — return raw SQL only
+3. NEVER add text before or after the SQL query
+4. Apply proper indentation with consistent style throughout
+5. Each major clause (SELECT, FROM, WHERE, JOIN, GROUP BY, ORDER BY, HAVING, UNION) starts on a new line
+6. Indent subqueries, CTEs, CASE blocks, and nested expressions
+7. Use UPPERCASE for SQL keywords consistently
+8. Add blank lines between CTEs and between major query sections for readability
+9. Align related items (SELECT columns, JOIN conditions) for scannability
+10. Preserve ALL comments from the original query
+11. When the instruction asks for changes (add column, modify WHERE, etc.), apply them precisely
+12. When the instruction is vague (like "beautify" or "format"), focus on formatting and readability only
+13. SEMANTIC EQUIVALENCE: unless the instruction explicitly requests a logic change, the output query MUST return the same results as the input query
+
+The output is the complete SQL query. Nothing else — no explanations, no summaries, no markdown.${contextSection}`,
+        messages: [
+          {
+            role: "user",
+            content: `SQL QUERY:
+${query}
+
+INSTRUCTION: ${instruction}`
+          }
+        ],
+      });
+
+      const resultSql = (response.text || query).trim()
+        .replace(/^```(?:sql)?\n?/i, "").replace(/\n?```$/i, "").trim();
+
+      res.json({
+        document: resultSql,
+        summary: "SQL query updated",
+        instructionType: "style" as InstructionType,
+      });
+    } catch (error) {
+      console.error("Query write error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to write query", details: errorMessage });
     }
   });
 
