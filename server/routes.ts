@@ -41,6 +41,7 @@ import {
   type StreamingRequirement,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById } from "@shared/personas";
+import { invoke, TASK_TYPES, type TaskType } from "./invoke";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -381,6 +382,34 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // UNIFIED INVOKE ENDPOINT — single entry point for all LLM interactions
+  // ═══════════════════════════════════════════════════════════════════════
+  app.post("/api/invoke", async (req, res) => {
+    try {
+      const { taskType, ...params } = req.body;
+
+      if (!taskType || !TASK_TYPES.includes(taskType)) {
+        return res.status(400).json({
+          error: "Invalid taskType",
+          validTypes: TASK_TYPES,
+        });
+      }
+
+      console.log(`[Invoke] taskType=${taskType}`);
+      const result = await invoke(taskType as TaskType, params);
+      res.json(result);
+    } catch (error) {
+      console.error("[Invoke] error:", error);
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Invoke failed", details: msg });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LEGACY ENDPOINTS — kept for backward compatibility, delegate to invoke()
+  // ═══════════════════════════════════════════════════════════════════════
 
   // ── Generate challenges (persona-aware, no advice) ──
   // Generates challenges from selected personas. Each challenge includes the

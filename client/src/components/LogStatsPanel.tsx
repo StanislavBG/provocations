@@ -48,7 +48,7 @@ export function LogStatsPanel({
     : 0;
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col bg-background/95 backdrop-blur-sm border-l animate-in slide-in-from-right-2 duration-200">
+    <div className="absolute inset-0 z-40 flex flex-col bg-background/80 border-l animate-in slide-in-from-right-2 duration-200">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-card/80 shrink-0">
         <ScrollText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />

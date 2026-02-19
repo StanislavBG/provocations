@@ -14,6 +14,8 @@ import { MetricExtractorPanel } from "@/components/MetricExtractorPanel";
 import { QueryDiscoveriesPanel, type QueryAnalysisResult } from "@/components/QueryDiscoveriesPanel";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
+import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
+import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { StoragePanel } from "@/components/StoragePanel";
@@ -801,6 +803,14 @@ export default function Workspace() {
 
   const isInputPhase = !document.rawText;
 
+  // Compute workflow phase for StepTracker
+  const workflowPhase: WorkflowPhase = isInputPhase
+    ? (selectedTemplateId ? "draft" : "select")
+    : "edit";
+  const selectedTemplateName = selectedTemplateId
+    ? prebuiltTemplates.find((t) => t.id === selectedTemplateId)?.title
+    : undefined;
+
   // Auto-start interview when entering workspace — respects per-app config
   const autoStartedRef = useRef(false);
   useEffect(() => {
@@ -1172,6 +1182,21 @@ export default function Workspace() {
     }
   }, []);
 
+  // Auto-dismiss the transcript overlay after the result summary is shown
+  useEffect(() => {
+    if (transcriptSummary && showTranscriptOverlay && !writeMutation.isPending) {
+      const timer = setTimeout(() => {
+        setShowTranscriptOverlay(false);
+        setRawTranscript("");
+        setCleanedTranscript(undefined);
+        setTranscriptSummary("");
+        setIsRecordingFromMain(false);
+        setPendingVoiceContext(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [transcriptSummary, showTranscriptOverlay, writeMutation.isPending]);
+
   // ── Computed values ──
 
   const canShowDiff = versions.length >= 2;
@@ -1260,8 +1285,13 @@ export default function Workspace() {
             }}
             capturedContext={capturedContext}
             onCapturedContextChange={setCapturedContext}
+            onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
           />
         </div>
+        <StepTracker
+          currentPhase={workflowPhase}
+          selectedTemplate={selectedTemplateName}
+        />
       </div>
     );
   }
@@ -1311,7 +1341,7 @@ export default function Workspace() {
   );
 
   const discussionPanel = (
-    <div className="h-full flex flex-col relative">
+    <div className="h-full flex flex-col relative overflow-hidden">
       <TranscriptOverlay
         isVisible={showTranscriptOverlay}
         isRecording={isRecordingFromMain}
@@ -1753,6 +1783,12 @@ export default function Workspace() {
           </ResizablePanelGroup>
         </div>
       )}
+
+      <StepTracker
+        currentPhase="edit"
+        selectedTemplate={selectedTemplateName}
+        activeToolboxApp={activeToolboxApp}
+      />
 
       <StoragePanel
         isOpen={showStoragePanel}
