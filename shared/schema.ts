@@ -98,6 +98,7 @@ export const generateChallengeRequestSchema = z.object({
   personaIds: z.array(z.string()).optional(),                  // filter to specific personas; empty = all
   guidance: z.string().optional(),                             // user-specific focus area
   referenceDocuments: z.array(z.lazy(() => referenceDocumentSchema)).optional(),
+  appType: z.string().optional(),                              // application type (e.g. "query-editor")
 });
 
 export type GenerateChallengeRequest = z.infer<typeof generateChallengeRequestSchema>;
@@ -107,6 +108,7 @@ export type GenerateChallengeRequest = z.infer<typeof generateChallengeRequestSc
 export const generateAdviceRequestSchema = z.object({
   document: z.string().min(1, "Document is required"),        // current draft — the persona reads this
   objective: z.string().min(1, "Objective is required"),      // what the document is trying to achieve
+  appType: z.string().optional(),                             // application type (e.g. "query-editor")
   challengeId: z.string().min(1, "Challenge ID is required"), // which challenge to advise on
   challengeTitle: z.string().min(1, "Challenge title is required"),
   challengeContent: z.string().min(1, "Challenge content is required"),
@@ -233,6 +235,9 @@ export const writeRequestSchema = z.object({
   document: z.string().min(1, "Document is required"),
   objective: z.string().min(1, "Objective is required"),
 
+  // Application type — tells the LLM what kind of document this is (e.g. "query-editor")
+  appType: z.string().optional(),
+
   // Focus (optional - what part of document)
   selectedText: z.string().optional(),
 
@@ -262,6 +267,7 @@ export type WriteRequest = z.infer<typeof writeRequestSchema>;
 export const queryWriteRequestSchema = z.object({
   query: z.string().min(1, "SQL query is required"),
   instruction: z.string().min(1, "Instruction is required"),
+  appType: z.string().optional(),
   capturedContext: z.array(contextItemSchema).optional(),
 });
 
@@ -358,6 +364,7 @@ export const askQuestionRequestSchema = z.object({
   secondaryObjective: z.string().optional(),
   activePersonas: z.array(z.string()).optional(),
   previousMessages: z.array(discussionMessageSchema).optional(),
+  appType: z.string().optional(),
 });
 
 export type AskQuestionRequest = z.infer<typeof askQuestionRequestSchema>;
@@ -374,6 +381,7 @@ export interface AskQuestionResponse {
 export const interviewQuestionRequestSchema = z.object({
   objective: z.string().min(1, "Objective is required"),
   document: z.string().optional(),
+  appType: z.string().optional(),
   template: z.string().optional(),
   previousEntries: z.array(interviewEntrySchema).optional(),
   provocations: z.array(provocationSchema).optional(),
@@ -398,6 +406,7 @@ export const interviewSummaryRequestSchema = z.object({
   objective: z.string().min(1, "Objective is required"),
   entries: z.array(interviewEntrySchema).min(1, "At least one entry is required"),
   document: z.string().optional(),
+  appType: z.string().optional(),
 });
 
 export type InterviewSummaryRequest = z.infer<typeof interviewSummaryRequestSchema>;

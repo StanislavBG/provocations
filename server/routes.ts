@@ -42,6 +42,7 @@ import {
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById } from "@shared/personas";
 import { invoke, TASK_TYPES, type TaskType } from "./invoke";
+import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -422,7 +423,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { document: docText, objective, personaIds, guidance, referenceDocuments } = parsed.data;
+      const { document: docText, objective, personaIds, guidance, referenceDocuments, appType: challengeAppType } = parsed.data;
+
+      const challengeAppConfig = getAppTypeConfig(challengeAppType);
+      const challengeAppContext = formatAppTypeContext(challengeAppType);
 
       const MAX_ANALYSIS_LENGTH = 8000;
       const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
@@ -467,16 +471,17 @@ export async function registerRoutes(
       const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
+      const isSQLChallenge = challengeAppConfig?.outputFormat === "sql";
       const response = await llm.generate({
         maxTokens: 4096,
-        system: `You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
+        system: `${challengeAppContext ? challengeAppContext + "\n\n" : ""}You are a ${isSQLChallenge ? "supportive SQL peer reviewer" : "critical thinking partner"}. Your job is to ${isSQLChallenge ? "provide constructive suggestions for the user's SQL query — identify opportunities for improvement in performance, readability, and maintainability. Frame suggestions positively, not as criticisms." : "CHALLENGE the user's document — identify gaps, weaknesses, and assumptions."}
 
 DOCUMENT OBJECTIVE: ${objective}
-Evaluate the document against this objective. Every challenge must relate to how well the document achieves this goal.
+Evaluate the ${challengeAppConfig?.documentType || "document"} against this objective. Every ${isSQLChallenge ? "suggestion" : "challenge"} must relate to how well the ${challengeAppConfig?.documentType || "document"} achieves this goal.
 
-IMPORTANT: Only generate challenges. Do NOT provide advice, solutions, or suggestions. The user will request advice separately.
+IMPORTANT: Only generate ${isSQLChallenge ? "suggestions" : "challenges"}. Do NOT provide ${isSQLChallenge ? "rewritten SQL" : "advice, solutions, or suggestions"}. The user will request advice separately.
 
-Generate challenges from these personas:
+Generate ${isSQLChallenge ? "suggestions" : "challenges"} from these personas:
 ${personaDescriptions}
 ${refContext}${guidanceContext}
 
@@ -556,12 +561,15 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { document: docText, objective, challengeId, challengeTitle, challengeContent, personaId, discussionHistory } = parsed.data;
+      const { document: docText, objective, appType, challengeId, challengeTitle, challengeContent, personaId, discussionHistory } = parsed.data;
 
       const persona = getPersonaById(personaId);
       if (!persona) {
         return res.status(400).json({ error: `Unknown persona: ${personaId}` });
       }
+
+      const appConfig = getAppTypeConfig(appType);
+      const appContext = formatAppTypeContext(appType);
 
       const MAX_ANALYSIS_LENGTH = 6000;
       const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
@@ -586,9 +594,10 @@ Output only valid JSON, no markdown.`,
       //   3. challenge  — the specific gap/weakness identified earlier
       //   4. persona    — who is speaking and their advice prompt
       //   5. discussion — the ongoing conversation for continuity
-      const systemPrompt = `${persona.prompts.advice}
+      //   6. appType    — application-specific context (e.g. query-editor)
+      const systemPrompt = `${appContext ? appContext + "\n\n" : ""}${persona.prompts.advice}
 
-You are the ${persona.label}. A colleague has raised a provocation against the user's document. Your job is to provide expert advice that helps the user resolve that provocation.
+You are the ${persona.label}. ${appConfig?.outputFormat === "sql" ? "A colleague has raised a suggestion about the user's SQL query." : "A colleague has raised a provocation against the user's document."} Your job is to provide expert advice that helps the user resolve that ${appConfig?.outputFormat === "sql" ? "suggestion" : "provocation"}.
 
 THE PROVOCATION (this is your primary grounding — your advice must directly address this):
 Title: ${challengeTitle}
@@ -1513,7 +1522,10 @@ Respond with valid JSON only:
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, document: docText, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors } = parsed.data;
+      const { objective, document: docText, appType, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors } = parsed.data;
+
+      const appConfig = getAppTypeConfig(appType);
+      const appContext = formatAppTypeContext(appType);
 
       // Build context from previous Q&A
       const previousContext = previousEntries && previousEntries.length > 0
@@ -1609,7 +1621,7 @@ RULES FOR PERSONA QUESTIONS:
       const response = await llm.generate({
         maxTokens: 1024,
         temperature: 0.9,
-        system: `You are a thought-provoking interviewer who reads the user's ACTUAL document and objectives carefully, then asks deeply personal, specific questions that only make sense for THIS document. You are NOT a generic questionnaire.
+        system: `${appContext ? appContext + "\n\n" : ""}You are a ${appConfig?.outputFormat === "sql" ? "supportive SQL peer reviewer gathering context about the user's query" : "thought-provoking interviewer"} who reads the user's ACTUAL ${appConfig?.documentType || "document"} and objectives carefully, then asks deeply personal, specific questions that only make sense for THIS ${appConfig?.documentType || "document"}. You are NOT a generic questionnaire.
 ${directionContext}
 
 OBJECTIVE: ${objective}
@@ -1712,24 +1724,28 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, entries, document: docText } = parsed.data;
+      const { objective, entries, document: docText, appType: summaryAppType } = parsed.data;
+
+      const summaryAppConfig = getAppTypeConfig(summaryAppType);
+      const summaryAppContext = formatAppTypeContext(summaryAppType);
 
       const qaText = entries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n---\n\n");
 
+      const isSQL = summaryAppConfig?.outputFormat === "sql";
       const response = await llm.generate({
         maxTokens: 2048,
-        system: `You are an expert at synthesizing interview responses into clear editing instructions.
+        system: `${summaryAppContext ? summaryAppContext + "\n\n" : ""}You are an expert at synthesizing interview responses into clear editing instructions.
 
-Given a series of Q&A pairs from a document development interview, create a single comprehensive instruction that tells a document editor how to integrate all the information gathered.
+Given a series of Q&A pairs from a ${isSQL ? "SQL query review" : "document development"} interview, create a single comprehensive instruction that tells a ${isSQL ? "SQL query editor" : "document editor"} how to integrate all the information gathered.
 
 OBJECTIVE: ${objective}
 
 The instruction should:
 1. Group related answers by theme
-2. Specify where new content should be added or what should be modified
+2. Specify where ${isSQL ? "SQL clauses should be modified or what optimizations to apply" : "new content should be added or what should be modified"}
 3. Include all key points from the user's answers
-4. Be written as a clear directive to a document editor
-5. Remind the editor that the output document must be valid Markdown format
+4. Be written as a clear directive to a ${isSQL ? "SQL query editor" : "document editor"}
+5. ${isSQL ? "Remind the editor that the output must be valid SQL" : "Remind the editor that the output document must be valid Markdown format"}
 
 Output only the instruction text. No meta-commentary.`,
         messages: [
@@ -1761,7 +1777,10 @@ Output only the instruction text. No meta-commentary.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { question, document: docText, objective, secondaryObjective, activePersonas, previousMessages } = parsed.data;
+      const { question, document: docText, objective, appType: askAppType, secondaryObjective, activePersonas, previousMessages } = parsed.data;
+
+      const askAppConfig = getAppTypeConfig(askAppType);
+      const askAppContext = formatAppTypeContext(askAppType);
 
       const MAX_DOC_LENGTH = 6000;
       const analysisText = docText.slice(0, MAX_DOC_LENGTH);
@@ -1844,7 +1863,7 @@ Output only valid JSON.`,
 
       const response = await llm.generate({
         maxTokens: 3072,
-        system: `You are a panel of expert advisors responding to a user's question about their document. Each advisor provides their unique perspective.
+        system: `${askAppContext ? askAppContext + "\n\n" : ""}You are a panel of expert advisors responding to a user's question about their ${askAppConfig?.documentType || "document"}. Each advisor provides their unique perspective.
 
 DOCUMENT OBJECTIVE: ${objective}${secondaryObjective ? `\nSECONDARY OBJECTIVE: ${secondaryObjective}` : ""}
 ${conversationContext}
