@@ -9,6 +9,10 @@ import {
   Clapperboard,
   MonitorPlay,
   Check,
+  UserRoundCog,
+  DatabaseZap,
+  BookOpenCheck,
+  Mic,
 } from "lucide-react";
 import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 
@@ -21,6 +25,10 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   "bar-chart-3": BarChart3,
   clapperboard: Clapperboard,
   "monitor-play": MonitorPlay,
+  "user-round-cog": UserRoundCog,
+  "database-zap": DatabaseZap,
+  "book-open-check": BookOpenCheck,
+  mic: Mic,
 };
 
 interface PrebuiltTemplatesProps {

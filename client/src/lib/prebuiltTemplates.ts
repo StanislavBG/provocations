@@ -736,4 +736,144 @@ Aspect ratio (16:9, 9:16, 1:1), resolution, export format.`,
     ],
     steps: [{ id: "context", label: "Share your context" }],
   },
+  {
+    id: "research-context",
+    title: "Research / Context",
+    shortLabel: "Research",
+    subtitle: "Capture, organize, and build context",
+    description:
+      "For building a rich context library around a topic. Capture links, excerpts, notes, and references — then let the AI help you organize, cross-reference, and identify gaps. The output is a structured research brief you can feed into any other app or project. Perfect for pre-work before writing a PRD, paper, or strategy doc.",
+    icon: "book-open-check",
+    objective:
+      "Build a structured research context by capturing, organizing, and cross-referencing sources, notes, and references into a coherent knowledge base",
+    starterText: "",
+    draftQuestions: [
+      "What topic or question are you researching?",
+      "What do you already know — paste existing notes, links, or excerpts?",
+      "What are the key gaps in your understanding right now?",
+      "How will this research be used? (feeding a PRD, writing a paper, informing a decision)",
+    ],
+    templateContent: `# Research Context
+
+## Research Objective
+What question are you trying to answer or what topic are you building context on?
+
+## Key Questions
+What specific questions need answers?
+1.
+2.
+3.
+
+## Sources & References
+### Primary Sources
+| Source | Type | Key Insight | Link |
+|--------|------|-------------|------|
+| name | article/paper/doc/interview | what it tells us | URL |
+
+### Secondary Sources
+Supporting materials, background reading, related work.
+
+## Captured Notes
+### From Reading
+Key excerpts, highlights, and observations from sources.
+
+### From Conversations
+Notes from interviews, meetings, or discussions.
+
+### From Observation
+Screenshots, recordings, or first-hand observations.
+
+## Themes & Patterns
+What recurring themes, agreements, or contradictions emerge across sources?
+
+## Knowledge Gaps
+What's still unknown? What needs further research?
+
+## Synthesis
+### Key Findings
+The most important things learned so far, organized by theme.
+
+### Implications
+What do the findings suggest for the next step?
+
+### Recommendations
+Based on the research, what should be done?
+
+## Context Library
+Organized collection of reusable context items that can be shared with other projects.`,
+    provocationSources: [
+      "Research Librarian",
+      "Skeptical Reviewer",
+      "Domain Expert",
+      "Synthesis Coach",
+      "Gap Finder",
+    ],
+    provocationExamples: [
+      "You have 6 sources but they all say the same thing. Where's the opposing view? — Skeptical Reviewer",
+      "Three of your sources are from 2019. Has anything changed since then? — Research Librarian",
+      "You've captured a lot of facts but haven't synthesized them into insights. What does it all mean? — Synthesis Coach",
+      "Your research objective is broad. Can you narrow it to something actionable? — Domain Expert",
+      "You haven't addressed [specific subtopic]. That's a critical gap for your stated objective. — Gap Finder",
+    ],
+    steps: [{ id: "context", label: "Capture your sources" }],
+  },
+  {
+    id: "voice-capture",
+    title: "Voice Capture",
+    shortLabel: "Voice",
+    subtitle: "Speak your ideas, structure them later",
+    description:
+      "For when your ideas flow better out loud than on a keyboard. Start by talking — ramble, brainstorm, think out loud — and the AI captures, cleans, and structures your spoken thoughts into organized content. No typing required to get started. Perfect for early ideation, meeting summaries, brain dumps, or when you're on the go.",
+    icon: "mic",
+    objective:
+      "Capture spoken ideas and transform them into a structured, well-organized document that preserves the speaker's intent and key points",
+    starterText: "",
+    draftQuestions: [
+      "What are you going to talk about? (Just a few words to set the context — e.g., 'my startup idea', 'feedback on the design', 'meeting notes from today')",
+      "Who is the audience for the final document? (yourself, your team, a client, the public)",
+      "What format should the output be? (bullet points, narrative, meeting minutes, action items)",
+    ],
+    templateContent: `# Voice Capture
+
+## Session Context
+What is this voice session about?
+
+## Raw Transcript
+The unedited voice capture goes here. The system will clean and organize it.
+
+## Cleaned Notes
+### Key Points
+The main ideas extracted from the voice capture, in order of importance.
+
+### Action Items
+- [ ] Task with owner and deadline
+- [ ] Task with owner and deadline
+
+### Decisions Made
+Explicit decisions stated during the capture.
+
+### Questions Raised
+Open questions that came up and need follow-up.
+
+## Structured Summary
+A coherent narrative version of the voice capture, organized by theme.
+
+## Follow-Up
+What needs to happen next based on this capture?`,
+    provocationSources: [
+      "Clarity Editor",
+      "Intent Detector",
+      "Structure Coach",
+      "Devil's Advocate",
+      "Action Tracker",
+    ],
+    provocationExamples: [
+      "You said three different things about the timeline. Which one is the real deadline? — Clarity Editor",
+      "You mentioned 'we should probably' four times but never committed. What are you actually going to do? — Action Tracker",
+      "The first half of your capture contradicts the second half. Did you change your mind, or are these separate topics? — Intent Detector",
+      "These are good ideas but they're scattered. What's the one main thing you're trying to say? — Structure Coach",
+      "You sound very confident about this approach. What's the biggest risk you're not mentioning? — Devil's Advocate",
+    ],
+    steps: [{ id: "capture", label: "Record your thoughts" }],
+  },
 ];
