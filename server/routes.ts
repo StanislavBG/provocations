@@ -1210,6 +1210,91 @@ If no metrics are found, return: { "metrics": [] }`,
     }
   });
 
+  // ── Deep SQL query analysis ──
+  app.post("/api/analyze-query", async (req, res) => {
+    try {
+      const { query } = req.body;
+
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "Query text is required" });
+      }
+
+      const response = await llm.generate({
+        maxTokens: 8000,
+        temperature: 0.2,
+        system: `You are a senior SQL architect and performance analyst. You perform deep, rigorous analysis of SQL queries.
+
+Given a SQL query, you must:
+
+1. **Decompose** the query into logical subparts (CTEs, subqueries, UNION branches, JOINs, aggregations, window functions, CASE blocks, etc.). Each subpart gets an id, a human-readable name, the exact SQL snippet, and character offsets (start/end) into the original query.
+
+2. **Summarize** each subpart: what it does in plain English (1-2 sentences).
+
+3. **Evaluate** each subpart: correctness, efficiency, readability, potential issues. Rate severity as "good", "info", "warning", or "critical".
+
+4. **Provide recommendations** per subpart: specific, actionable suggestions for improvement. Only include if relevant.
+
+5. **Extract metrics**: any aggregations, calculated fields, KPIs, or business measures found in the query.
+
+6. **Overall evaluation**: a holistic assessment of the entire query — structure, performance, maintainability, and any cross-cutting concerns.
+
+7. **Optimization opportunities**: top-level suggestions for simplification, performance, or structural improvements across the whole query.
+
+Be opportunistic: discover hidden opportunities, suggest simplifications, flag anti-patterns, and note anything noteworthy.
+
+Respond with valid JSON only, in this exact format:
+{
+  "subqueries": [
+    {
+      "id": "sq1",
+      "name": "Human-readable name (e.g. 'Cost Tracking CTE')",
+      "sqlSnippet": "The exact SQL text for this subpart",
+      "startOffset": 0,
+      "endOffset": 100,
+      "summary": "What this subpart does in plain English",
+      "evaluation": "Assessment of quality, correctness, efficiency",
+      "severity": "good|info|warning|critical",
+      "recommendations": ["Specific suggestion 1", "Suggestion 2"]
+    }
+  ],
+  "metrics": [
+    { "name": "Metric Name", "definition": "What it measures", "formula": "SQL expression" }
+  ],
+  "overallEvaluation": "Holistic assessment of the entire query",
+  "optimizationOpportunities": [
+    {
+      "title": "Short title",
+      "description": "Detailed explanation of the opportunity",
+      "severity": "info|warning|critical",
+      "affectedSubquery": "sq1 or null"
+    }
+  ]
+}`,
+        messages: [
+          {
+            role: "user",
+            content: `Analyze the following SQL query in depth:\n\n${query.slice(0, 50000)}`
+          }
+        ],
+      });
+
+      const text = response.text.trim();
+      const jsonStr = text.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
+      const parsed = JSON.parse(jsonStr);
+
+      res.json({
+        subqueries: Array.isArray(parsed.subqueries) ? parsed.subqueries : [],
+        metrics: Array.isArray(parsed.metrics) ? parsed.metrics : [],
+        overallEvaluation: parsed.overallEvaluation || "",
+        optimizationOpportunities: Array.isArray(parsed.optimizationOpportunities) ? parsed.optimizationOpportunities : [],
+      });
+    } catch (error) {
+      console.error("Analyze query error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to analyze query", details: errorMessage });
+    }
+  });
+
   // Generate next interview question based on context
   app.post("/api/interview/question", async (req, res) => {
     try {

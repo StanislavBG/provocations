@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Search, FileCode } from "lucide-react";
 
 export interface QueryTab {
   id: string;
   title: string;
 }
+
+export const ANALYZER_TAB_ID = "__query_analyzer__";
 
 interface QueryTabBarProps {
   tabs: QueryTab[];
@@ -36,6 +38,8 @@ export function QueryTabBar({
   }, [editingTabId]);
 
   const handleDoubleClick = (tab: QueryTab) => {
+    // Don't allow renaming the analyzer tab
+    if (tab.id === ANALYZER_TAB_ID) return;
     setEditingTabId(tab.id);
     setEditValue(tab.title);
   };
@@ -47,12 +51,18 @@ export function QueryTabBar({
     setEditingTabId(null);
   };
 
+  const isAnalyzerActive = activeTabId === ANALYZER_TAB_ID;
+
+  // Separate document tabs from the analyzer tab
+  const docTabs = tabs.filter(t => t.id !== ANALYZER_TAB_ID);
+
   return (
     <div
       ref={scrollRef}
       className="flex items-end gap-0.5 px-2 pt-1.5 bg-muted/30 border-b overflow-x-auto scrollbar-none shrink-0"
     >
-      {tabs.map((tab) => {
+      {/* Document tabs */}
+      {docTabs.map((tab) => {
         const isActive = tab.id === activeTabId;
         const isEditing = tab.id === editingTabId;
 
@@ -67,6 +77,7 @@ export function QueryTabBar({
             onClick={() => !isEditing && onTabSelect(tab.id)}
             onDoubleClick={() => handleDoubleClick(tab)}
           >
+            <FileCode className="w-3.5 h-3.5 shrink-0 opacity-50" />
             {isEditing ? (
               <input
                 ref={inputRef}
@@ -83,7 +94,7 @@ export function QueryTabBar({
             ) : (
               <span className="truncate max-w-[160px]">{tab.title}</span>
             )}
-            {tabs.length > 1 && !isEditing && (
+            {docTabs.length > 1 && !isEditing && (
               <button
                 className={`rounded p-0.5 transition-opacity shrink-0 ${
                   isActive
@@ -103,6 +114,7 @@ export function QueryTabBar({
         );
       })}
 
+      {/* New tab button */}
       <button
         className="flex items-center justify-center w-7 h-7 rounded-t-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground mb-0.5 shrink-0"
         onClick={onNewTab}
@@ -110,6 +122,22 @@ export function QueryTabBar({
       >
         <Plus className="w-3.5 h-3.5" />
       </button>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Fixed Query Analyzer tab (always present, right-aligned) */}
+      <div
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-t-lg cursor-pointer transition-colors select-none shrink-0 ${
+          isAnalyzerActive
+            ? "bg-background border border-b-background border-border font-medium -mb-px z-10"
+            : "bg-muted/50 border border-transparent hover:bg-muted text-muted-foreground"
+        }`}
+        onClick={() => onTabSelect(ANALYZER_TAB_ID)}
+      >
+        <Search className={`w-3.5 h-3.5 shrink-0 ${isAnalyzerActive ? "text-primary" : "opacity-50"}`} />
+        <span className="truncate">Query Analyzer</span>
+      </div>
     </div>
   );
 }
