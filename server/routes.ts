@@ -1325,12 +1325,22 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
           reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : "",
         };
       } catch {
-        console.warn("Interview question: failed to parse LLM JSON response, using fallback. Raw:", content.slice(0, 200));
+        console.warn("[interview/question] JSON parse failed. Active personas:", activePersonaLabels, "Raw LLM:", content.slice(0, 300));
         result = {
           question: fallbackQuestion,
           topic: fallbackTopic,
           reasoning: "Fallback — LLM response was not valid JSON",
         };
+      }
+
+      // Diagnostic logging — helps trace "General" topic issues
+      console.log(`[interview/question] personas=${activePersonaLabels.join(",") || "none"} topic="${result.topic}" question="${result.question.slice(0, 80)}..."`);
+
+      // Server-side safeguard: if the LLM still returned "General" but we have active personas,
+      // override the topic to use the first persona
+      if (activePersonaLabels.length > 0 && result.topic === "General") {
+        console.warn(`[interview/question] Topic was "General" despite active personas [${activePersonaLabels.join(", ")}]. Overriding.`);
+        result.topic = fallbackTopic;
       }
 
       res.json(result);
