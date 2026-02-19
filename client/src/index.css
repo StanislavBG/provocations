@@ -301,6 +301,12 @@
     position: relative;
   }
 
+  /* Ensure scrollable content renders above decorative pseudo-element */
+  .notebook-canvas > * {
+    position: relative;
+    z-index: 2;
+  }
+
   /* Soften the ruled lines for the top area */
   .notebook-canvas::before {
     content: "";
