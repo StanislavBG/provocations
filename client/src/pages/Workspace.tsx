@@ -1172,6 +1172,21 @@ export default function Workspace() {
     }
   }, []);
 
+  // Auto-dismiss the transcript overlay after the result summary is shown
+  useEffect(() => {
+    if (transcriptSummary && showTranscriptOverlay && !writeMutation.isPending) {
+      const timer = setTimeout(() => {
+        setShowTranscriptOverlay(false);
+        setRawTranscript("");
+        setCleanedTranscript(undefined);
+        setTranscriptSummary("");
+        setIsRecordingFromMain(false);
+        setPendingVoiceContext(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [transcriptSummary, showTranscriptOverlay, writeMutation.isPending]);
+
   // ── Computed values ──
 
   const canShowDiff = versions.length >= 2;
@@ -1311,7 +1326,7 @@ export default function Workspace() {
   );
 
   const discussionPanel = (
-    <div className="h-full flex flex-col relative">
+    <div className="h-full flex flex-col relative overflow-hidden">
       <TranscriptOverlay
         isVisible={showTranscriptOverlay}
         isRecording={isRecordingFromMain}
