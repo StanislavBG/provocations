@@ -9,6 +9,8 @@ import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
 import { ReadingPane } from "@/components/ReadingPane";
+import { QueryTabBar, type QueryTab } from "@/components/QueryTabBar";
+import { MetricExtractorPanel } from "@/components/MetricExtractorPanel";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -41,6 +43,8 @@ import {
   Share2,
   Copy,
   HardDrive,
+  BarChart3,
+  MessageCircle,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import type {
@@ -160,6 +164,120 @@ export default function Workspace() {
 
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
+
+  // ── Query tab state ──
+
+  interface TabState {
+    id: string;
+    title: string;
+    document: Document;
+    savedDocId: number | null;
+    savedDocTitle: string;
+    objective: string;
+    versions: DocumentVersion[];
+    editHistory: EditHistoryEntry[];
+  }
+
+  const [tabs, setTabs] = useState<TabState[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string>("");
+
+  // Right panel mode: "discussion" or "metrics"
+  const [rightPanelMode, setRightPanelMode] = useState<"discussion" | "metrics">("discussion");
+
+  // ── Tab operations ──
+
+  const saveCurrentTabState = useCallback((): TabState => ({
+    id: activeTabId || generateId("tab"),
+    title: savedDocTitle || objective || "Untitled",
+    document: { ...document },
+    savedDocId,
+    savedDocTitle,
+    objective,
+    versions: [...versions],
+    editHistory: [...editHistory],
+  }), [activeTabId, document, savedDocId, savedDocTitle, objective, versions, editHistory]);
+
+  const restoreTabState = useCallback((tab: TabState) => {
+    setDocument(tab.document);
+    setSavedDocId(tab.savedDocId);
+    setSavedDocTitle(tab.savedDocTitle);
+    setObjective(tab.objective);
+    setVersions(tab.versions);
+    setEditHistory(tab.editHistory);
+    setActiveTabId(tab.id);
+  }, []);
+
+  const handleTabSelect = useCallback((tabId: string) => {
+    if (tabId === activeTabId) return;
+    // Save current tab state
+    setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
+    // Restore target tab
+    const target = tabs.find(t => t.id === tabId);
+    if (target) restoreTabState(target);
+  }, [activeTabId, tabs, saveCurrentTabState, restoreTabState]);
+
+  const handleNewTab = useCallback(() => {
+    // Save current tab before creating new
+    if (activeTabId) {
+      setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
+    }
+    const newTab: TabState = {
+      id: generateId("tab"),
+      title: `Query ${tabs.length + 1}`,
+      document: { id: generateId("doc"), rawText: " " },
+      savedDocId: null,
+      savedDocTitle: "",
+      objective: "",
+      versions: [{ id: generateId("v"), text: " ", timestamp: Date.now(), description: "New tab" }],
+      editHistory: [],
+    };
+    setTabs(prev => [...prev, newTab]);
+    restoreTabState(newTab);
+  }, [activeTabId, tabs.length, saveCurrentTabState, restoreTabState]);
+
+  const handleTabClose = useCallback((tabId: string) => {
+    if (tabs.length <= 1) return;
+    const idx = tabs.findIndex(t => t.id === tabId);
+    const remaining = tabs.filter(t => t.id !== tabId);
+    setTabs(remaining);
+    if (tabId === activeTabId) {
+      const nextTab = remaining[Math.min(idx, remaining.length - 1)];
+      restoreTabState(nextTab);
+    }
+  }, [tabs, activeTabId, restoreTabState]);
+
+  const handleTabRename = useCallback((tabId: string, newTitle: string) => {
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, title: newTitle } : t));
+  }, []);
+
+  // Initialize tabs from current document state when entering workspace
+  useEffect(() => {
+    if (document.rawText && tabs.length === 0) {
+      const initialTab: TabState = {
+        id: generateId("tab"),
+        title: savedDocTitle || objective || "Query 1",
+        document: { ...document },
+        savedDocId,
+        savedDocTitle,
+        objective,
+        versions: [...versions],
+        editHistory: [...editHistory],
+      };
+      setTabs([initialTab]);
+      setActiveTabId(initialTab.id);
+    }
+  }, [document.rawText]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep active tab in sync with current document state
+  useEffect(() => {
+    if (activeTabId && tabs.length > 0) {
+      setTabs(prev => prev.map(t =>
+        t.id === activeTabId
+          ? { ...t, title: savedDocTitle || objective || t.title, document: { ...document }, savedDocId, savedDocTitle, objective, versions, editHistory }
+          : t
+      ));
+    }
+  }, [document.rawText, savedDocTitle, objective]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Writer mutation ──
 
@@ -763,6 +881,10 @@ export default function Workspace() {
     // Reset storage state
     setSavedDocId(null);
     setSavedDocTitle("");
+    // Reset tab state
+    setTabs([]);
+    setActiveTabId("");
+    setRightPanelMode("discussion");
   }, []);
 
   // ── Storage save/load handlers ──
@@ -1078,6 +1200,10 @@ export default function Workspace() {
     />
   );
 
+  const handleCaptureMetrics = useCallback((items: ContextItem[]) => {
+    setCapturedContext(prev => [...prev, ...items]);
+  }, []);
+
   const discussionPanel = (
     <div className="h-full flex flex-col relative">
       <TranscriptOverlay
@@ -1095,81 +1221,108 @@ export default function Workspace() {
         context={pendingVoiceContext?.context || "document"}
       />
 
-      {/* Panel Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20 shrink-0">
-        <MessageCircleQuestion className="w-4 h-4 text-primary" />
-        <h3 className="font-semibold text-sm">Discussion</h3>
-        {isInterviewActive && interviewDirection?.mode && (
-          <Badge
-            variant="outline"
-            className={`text-xs ${
-              interviewDirection.mode === "challenge"
-                ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400"
-                : "border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400"
-            }`}
-          >
-            {interviewDirection.mode === "challenge" ? "Challenge" : "Advise"}
-          </Badge>
-        )}
-        {isInterviewActive && (
-          <span className="ml-1 w-2 h-2 bg-primary rounded-full animate-pulse" />
-        )}
+      {/* Right panel tab toggle: Discussion | Metrics */}
+      <div className="flex items-center border-b bg-muted/20 shrink-0">
+        <button
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 ${
+            rightPanelMode === "discussion"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => setRightPanelMode("discussion")}
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          Discussion
+        </button>
+        <button
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 ${
+            rightPanelMode === "metrics"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => setRightPanelMode("metrics")}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          Metrics
+        </button>
         <div className="flex-1" />
-        {interviewEntries.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs h-7"
-            onClick={handleMergeToDraft}
-            disabled={interviewMergeMutation.isPending}
-          >
-            {interviewMergeMutation.isPending ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Evolving...
-              </>
-            ) : (
-              <>
-                <ArrowRightToLine className="w-3 h-3" />
-                Evolve Document
-              </>
-            )}
-          </Button>
+        {/* Discussion-specific actions (only when discussion tab is active) */}
+        {rightPanelMode === "discussion" && interviewEntries.length > 0 && (
+          <div className="pr-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-7"
+              onClick={handleMergeToDraft}
+              disabled={interviewMergeMutation.isPending}
+            >
+              {interviewMergeMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Evolving...
+                </>
+              ) : (
+                <>
+                  <ArrowRightToLine className="w-3 h-3" />
+                  Evolve Document
+                </>
+              )}
+            </Button>
+          </div>
         )}
       </div>
 
-      {/* Panel content */}
-      <div className="flex-1 overflow-hidden">
-        <InterviewPanel
-          isActive={isInterviewActive}
-          entries={interviewEntries}
-          currentQuestion={currentInterviewQuestion}
-          currentTopic={currentInterviewTopic}
-          isLoadingQuestion={interviewQuestionMutation.isPending}
-          isMerging={interviewSummaryMutation.isPending}
-          directionMode={interviewDirection?.mode}
-          onAnswer={handleInterviewAnswer}
-          onEnd={handleEndInterview}
-          // Advice and dismiss
-          onViewAdvice={handleViewAdvice}
-          onDismissQuestion={handleDismissQuestion}
-          adviceText={currentAdviceText}
-          isLoadingAdvice={adviceMutation.isPending}
-          // Ask question
-          onAskQuestion={handleAskQuestion}
-          isLoadingAskResponse={askQuestionMutation.isPending}
-          // Discussion messages
-          discussionMessages={discussionMessages}
-          onAcceptResponse={handleAcceptResponse}
-          onDismissResponse={handleDismissResponse}
-          onRespondToMessage={handleRespondToMessage}
+      {/* Panel content — swapped based on active mode */}
+      {rightPanelMode === "discussion" ? (
+        <div className="flex-1 overflow-hidden">
+          <InterviewPanel
+            isActive={isInterviewActive}
+            entries={interviewEntries}
+            currentQuestion={currentInterviewQuestion}
+            currentTopic={currentInterviewTopic}
+            isLoadingQuestion={interviewQuestionMutation.isPending}
+            isMerging={interviewSummaryMutation.isPending}
+            directionMode={interviewDirection?.mode}
+            onAnswer={handleInterviewAnswer}
+            onEnd={handleEndInterview}
+            onViewAdvice={handleViewAdvice}
+            onDismissQuestion={handleDismissQuestion}
+            adviceText={currentAdviceText}
+            isLoadingAdvice={adviceMutation.isPending}
+            onAskQuestion={handleAskQuestion}
+            isLoadingAskResponse={askQuestionMutation.isPending}
+            discussionMessages={discussionMessages}
+            onAcceptResponse={handleAcceptResponse}
+            onDismissResponse={handleDismissResponse}
+            onRespondToMessage={handleRespondToMessage}
+          />
+        </div>
+      ) : (
+        <MetricExtractorPanel
+          documentText={document.rawText}
+          onCaptureAsContext={handleCaptureMetrics}
         />
-      </div>
+      )}
     </div>
   );
 
+  // Tab bar data derived from state
+  const tabBarTabs: QueryTab[] = tabs.map(t => ({ id: t.id, title: t.title }));
+
   const documentPanel = (
     <div className="h-full flex flex-col relative min-h-0">
+      {/* Chrome-like tab bar */}
+      {tabs.length > 0 && (
+        <QueryTabBar
+          tabs={tabBarTabs}
+          activeTabId={activeTabId}
+          onTabSelect={handleTabSelect}
+          onTabClose={handleTabClose}
+          onTabRename={handleTabRename}
+          onNewTab={handleNewTab}
+        />
+      )}
+
       {showDiffView && previousVersion && currentVersion ? (
         <Suspense fallback={
           <div className="h-full flex flex-col p-4 space-y-4">
