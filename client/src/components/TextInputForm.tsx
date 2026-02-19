@@ -383,7 +383,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                   processText(t, mode, mode === "clean" ? "source" : undefined)
                 }
                 showCharCount
-                maxCharCount={10000}
+                maxCharCount={500000}
                 maxAudioDuration="5min"
                 headerActions={
                   <Button
@@ -438,7 +438,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                   processText(t, mode, mode === "clean" ? "source" : undefined)
                 }
                 showCharCount
-                maxCharCount={10000}
+                maxCharCount={500000}
                 maxAudioDuration="5min"
               />
             )}
