@@ -42,6 +42,7 @@ import {
   Copy,
   HardDrive,
 } from "lucide-react";
+import { builtInPersonas } from "@shared/personas";
 import type {
   Document,
   ProvocationType,
@@ -303,7 +304,24 @@ export default function Workspace() {
     },
     onSuccess: (data) => {
       setCurrentInterviewQuestion(data.question);
-      setCurrentInterviewTopic(data.topic);
+
+      // Client-side safeguard: if the LLM returned "General" but we have active personas,
+      // prefix the topic with the first active persona so the badge is never misleading.
+      let topic = data.topic;
+      const dir = interviewDirection;
+      if (dir?.personas && dir.personas.length > 0) {
+        const personaLabels = dir.personas.map(id => {
+          const p = (builtInPersonas as Record<string, { label?: string }>)[id];
+          return p?.label || id;
+        });
+        const hasPersonaPrefix = personaLabels.some(label =>
+          topic.toLowerCase().startsWith(label.toLowerCase())
+        );
+        if (!hasPersonaPrefix && (topic === "General" || !topic)) {
+          topic = `${personaLabels[0]}: Key Concern`;
+        }
+      }
+      setCurrentInterviewTopic(topic);
     },
     onError: (error) => {
       toast({

@@ -270,19 +270,14 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
         <div className="flex flex-col flex-1 min-h-0 gap-2">
           {/* Heading — customized for write-a-prompt */}
           {isWritePrompt ? (
-            <div className="shrink-0 text-center">
-              <h2 className="text-base font-semibold">
-                Let's Transform Your Idea Into Reality
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1 mx-auto max-w-2xl">
-                Think of this as a conversation with a world-class assistant. To get the best results, we've broken the process into three easy pieces. Just tell us who you need, what you're working with, and what you hope to achieve.
-              </p>
-            </div>
+            <p className="shrink-0 text-xs text-muted-foreground leading-relaxed">
+              Draft your prompt below. It will be reformatted into the <strong>AIM framework</strong> (Actor, Input, Mission) for clarity and precision.
+            </p>
           ) : (
             <h2 className="shrink-0 text-base font-semibold">
               {activePrebuilt?.id === "streaming"
                 ? "Describe what you're capturing requirements for"
-                : "Share your thinking — notes, ideas, or speak your mind"}
+                : "Provide your starting material"}
             </h2>
           )}
 
@@ -365,14 +360,23 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 {/* Centered placeholder that disappears when user types */}
                 {!text && (
                   <div
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+                    className="absolute inset-0 flex items-start justify-center pointer-events-none z-10 pt-6"
                     aria-hidden="true"
                   >
-                    <p className="text-muted-foreground/40 text-base font-serif italic text-center max-w-md px-4 leading-relaxed">
-                      I want you to act as a [Expert Role]. I'm going to provide you with [These Specific Notes] and I want you to create [This Specific Result].
-                      <br />
-                      <span className="text-sm">Don't worry about being perfect — just type naturally and we'll polish it together!</span>
-                    </p>
+                    <div className="text-muted-foreground/40 text-sm font-serif text-left max-w-lg px-6 leading-relaxed space-y-3">
+                      <p className="font-semibold text-base text-muted-foreground/50">Start drafting here</p>
+                      <p>
+                        Type or dictate your initial thoughts — rough notes, bullet points, or a brain dump.
+                        This becomes the starting material that AI personas will review and challenge.
+                      </p>
+                      <p className="text-xs text-muted-foreground/30 space-y-1.5">
+                        <span className="block"><strong>Example formats that work well:</strong></span>
+                        <span className="block pl-2">• A rough outline with section headings</span>
+                        <span className="block pl-2">• Bullet points of key ideas or requirements</span>
+                        <span className="block pl-2">• A spoken stream of consciousness (use the mic button)</span>
+                        <span className="block pl-2">• Pasted notes from another source</span>
+                      </p>
+                    </div>
                   </div>
                 )}
                 <ProvokeText
@@ -409,7 +413,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
                 chrome="container"
                 label="Your context"
                 labelIcon={NotebookPen}
-                description="Your notes, references, or spoken thoughts — we'll shape them into a first draft."
+                description="Paste notes, references, or use the mic to dictate. This becomes the starting material for your document."
                 containerClassName="flex-1 min-h-0 flex flex-col min-w-0"
                 data-testid="input-source-text"
                 placeholder="Paste your notes or click the mic to speak your ideas..."
