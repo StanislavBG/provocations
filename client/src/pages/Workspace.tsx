@@ -1426,16 +1426,17 @@ export default function Workspace() {
       )}
 
       {/* ── Panel Layout (responsive: stacked on mobile, side-by-side on desktop) ── */}
+      {/* Document is center — it's the core artifact. Discussion is on the right. */}
       {isMobile ? (
         <div className="flex-1 overflow-y-auto">
           <section className="h-[60vh] min-h-[350px] border-b">
             {toolboxPanel}
           </section>
-          <section className="h-[70vh] min-h-[400px] border-b">
-            {discussionPanel}
-          </section>
-          <section className="h-[80vh] min-h-[450px]">
+          <section className="h-[80vh] min-h-[450px] border-b">
             {documentPanel}
+          </section>
+          <section className="h-[70vh] min-h-[400px]">
+            {discussionPanel}
           </section>
         </div>
       ) : (
@@ -1446,11 +1447,11 @@ export default function Workspace() {
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={40} minSize={20}>
-              {discussionPanel}
+              {documentPanel}
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={35} minSize={20}>
-              {documentPanel}
+              {discussionPanel}
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
