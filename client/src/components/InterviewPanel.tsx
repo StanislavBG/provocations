@@ -163,18 +163,19 @@ export function InterviewPanel({
       <div className="h-full flex items-center justify-center p-8">
         <div className="text-center space-y-4 max-w-md">
           <MessageCircleQuestion className="w-12 h-12 text-primary/30 mx-auto" />
-          <div className="space-y-2">
-            <h3 className="text-base font-semibold">Your AI Interview</h3>
+          <div className="space-y-3">
+            <h3 className="text-base font-semibold">Discussion Panel</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              This panel hosts a structured conversation between you and expert AI personas.
-              Each persona brings a unique professional lens — challenging your assumptions,
-              spotting gaps, and pushing you to think deeper about your document.
+              This is where expert AI personas challenge your draft. Each persona asks questions
+              from their professional domain — an Architect probes system design, a QA Engineer
+              hunts for edge cases, a Security Engineer examines threat models.
             </p>
-            <p className="text-xs text-muted-foreground/80 leading-relaxed">
-              Select one or more personas in the <strong>Toolbox</strong> panel on the left,
-              then click <strong>Start Interview</strong>. Answer each question using text or
-              voice — your responses will be merged into the document when you're ready.
-            </p>
+            <div className="text-xs text-muted-foreground/80 leading-relaxed text-left space-y-1 bg-muted/30 rounded-lg p-3">
+              <p className="font-medium text-muted-foreground mb-1">To start:</p>
+              <p>1. Open the <strong>Toolbox</strong> panel (left) and select one or more personas</p>
+              <p>2. The interview begins automatically — questions appear here</p>
+              <p>3. Answer via text or voice, then click <strong>Evolve Document</strong> to merge</p>
+            </div>
           </div>
           {entries.length > 0 && (
             <p className="text-xs text-muted-foreground border-t pt-3">
@@ -194,14 +195,23 @@ export function InterviewPanel({
         <div className="p-4 space-y-3" ref={scrollRef}>
           {/* Onboarding hint — visible until user engages */}
           {entries.length === 0 && discussionMessages.length === 0 && showOnboarding && !answerText && (
-            <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 space-y-1.5">
-              <p className="text-xs font-medium text-primary">How this works</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                The AI will ask you thought-provoking questions based on your selected personas.
-                Answer each one using the text field or mic. You can also <strong>view advice</strong> for
-                guidance, <strong>skip</strong> questions, or <strong>ask your own questions</strong> to the team.
-                Use <strong>Merge to Draft</strong> to integrate responses into your document.
-              </p>
+            <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 space-y-2">
+              <p className="text-xs font-medium text-primary">Provoke Flow</p>
+              <div className="text-xs text-muted-foreground leading-relaxed space-y-1.5">
+                <p>
+                  Expert personas you selected in the <strong>Toolbox</strong> panel will challenge your
+                  draft with questions drawn from their domain expertise (architecture, security, UX, etc.).
+                </p>
+                <p className="pl-2 border-l-2 border-primary/20 space-y-0.5">
+                  <span className="block"><strong>Answer</strong> each question via text or mic — your responses shape the document.</span>
+                  <span className="block"><strong>Advice</strong> — get the persona's own suggestion before you respond.</span>
+                  <span className="block"><strong>Skip</strong> — move to the next question if this one isn't relevant.</span>
+                  <span className="block"><strong>Ask the team</strong> — pose your own question to the persona panel above.</span>
+                </p>
+                <p>
+                  When ready, click <strong>Evolve Document</strong> to merge your answers into the draft.
+                </p>
+              </div>
             </div>
           )}
 
