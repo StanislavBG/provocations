@@ -19,6 +19,8 @@ import {
   UserRoundCog,
   Layers,
   Globe,
+  Wand2,
+  DatabaseZap,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -51,6 +53,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   clapperboard: Clapperboard,
   "monitor-play": MonitorPlay,
   "user-round-cog": UserRoundCog,
+  "database-zap": DatabaseZap,
 };
 
 /**
@@ -268,12 +271,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
         {/* ── STEP TWO: Your context ── */}
         {hasObjectiveType && (
         <div className="flex flex-col flex-1 min-h-0 gap-2">
-          {/* Heading — customized for write-a-prompt */}
-          {isWritePrompt ? (
-            <p className="shrink-0 text-xs text-muted-foreground leading-relaxed">
-              Draft your prompt below. It will be reformatted into the <strong>AIM framework</strong> (Actor, Input, Mission) for clarity and precision.
-            </p>
-          ) : (
+          {/* Heading — hidden for write-a-prompt (label is inside the container) */}
+          {isWritePrompt ? null : (
             <h2 className="shrink-0 text-base font-semibold">
               {activePrebuilt?.id === "streaming"
                 ? "Describe what you're capturing requirements for"
@@ -354,60 +353,62 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               {!isWritePrompt && renderContextSection()}
             </div>
 
-            {/* Center column: main text area (hero) */}
+            {/* Center column: main text area (hero) — visible container */}
             {isWritePrompt ? (
-              <div className="flex-1 min-h-0 flex flex-col min-w-0 relative">
-                {/* Centered placeholder that disappears when user types */}
-                {!text && (
-                  <div
-                    className="absolute inset-0 flex items-start justify-center pointer-events-none z-10 pt-6"
-                    aria-hidden="true"
+              <ProvokeText
+                chrome="container"
+                label="Your Draft"
+                labelIcon={PenLine}
+                description="Type or dictate your prompt. It will be reformatted into the AIM framework (Actor, Input, Mission)."
+                containerClassName="flex-1 min-h-0 flex flex-col min-w-0"
+                data-testid="input-source-text"
+                placeholder="Describe what you need the AI to do — who it should be, what context it has, and what output you expect..."
+                className="text-sm leading-relaxed font-serif"
+                value={text}
+                onChange={setText}
+                minRows={6}
+                maxRows={30}
+                autoFocus
+                voice={{ mode: "append" }}
+                onVoiceTranscript={(transcript) =>
+                  setText((prev) => (prev ? prev + " " + transcript : transcript))
+                }
+                onRecordingChange={(recording) => {
+                  if (recording && autoRecordDraft) {
+                    setAutoRecordDraft(false);
+                  }
+                }}
+                autoRecord={autoRecordDraft}
+                textProcessor={(t, mode) =>
+                  processText(t, mode, mode === "clean" ? "source" : undefined)
+                }
+                showCharCount
+                maxCharCount={10000}
+                maxAudioDuration="5min"
+                headerActions={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-7"
+                    onClick={() => {
+                      const starter = [
+                        "## Actor",
+                        "You are a [role — e.g. Senior Software Engineer, Professional Chef, Marketing Strategist].",
+                        "",
+                        "## Input",
+                        "[Paste or describe the context here — the longer and more specific, the better the output.]",
+                        "",
+                        "## Mission",
+                        "Create a [specific output — e.g. step-by-step guide, code review, meal plan] that [key quality — e.g. is beginner-friendly, follows best practices, fits a 30-minute time limit].",
+                      ].join("\n");
+                      setText(starter);
+                    }}
                   >
-                    <div className="text-muted-foreground/40 text-sm font-serif text-left max-w-lg px-6 leading-relaxed space-y-3">
-                      <p className="font-semibold text-base text-muted-foreground/50">Start drafting here</p>
-                      <p>
-                        Type or dictate your initial thoughts — rough notes, bullet points, or a brain dump.
-                        This becomes the starting material that AI personas will review and challenge.
-                      </p>
-                      <p className="text-xs text-muted-foreground/30 space-y-1.5">
-                        <span className="block"><strong>Example formats that work well:</strong></span>
-                        <span className="block pl-2">• A rough outline with section headings</span>
-                        <span className="block pl-2">• Bullet points of key ideas or requirements</span>
-                        <span className="block pl-2">• A spoken stream of consciousness (use the mic button)</span>
-                        <span className="block pl-2">• Pasted notes from another source</span>
-                      </p>
-                    </div>
-                  </div>
-                )}
-                <ProvokeText
-                  chrome="bare"
-                  containerClassName="flex-1 min-h-0 flex flex-col min-w-0 rounded-lg border bg-card/50"
-                  data-testid="input-source-text"
-                  placeholder=""
-                  className="text-sm leading-relaxed font-serif p-4"
-                  value={text}
-                  onChange={setText}
-                  minRows={6}
-                  maxRows={30}
-                  autoFocus
-                  voice={{ mode: "append" }}
-                  onVoiceTranscript={(transcript) =>
-                    setText((prev) => (prev ? prev + " " + transcript : transcript))
-                  }
-                  onRecordingChange={(recording) => {
-                    if (recording && autoRecordDraft) {
-                      setAutoRecordDraft(false);
-                    }
-                  }}
-                  autoRecord={autoRecordDraft}
-                  textProcessor={(t, mode) =>
-                    processText(t, mode, mode === "clean" ? "source" : undefined)
-                  }
-                  showCharCount
-                  maxCharCount={10000}
-                  maxAudioDuration="5min"
-                />
-              </div>
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Practice
+                  </Button>
+                }
+              />
             ) : (
               <ProvokeText
                 chrome="container"
