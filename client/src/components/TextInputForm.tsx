@@ -20,6 +20,7 @@ import {
   Layers,
   Globe,
   Wand2,
+  DatabaseZap,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -52,6 +53,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   clapperboard: Clapperboard,
   "monitor-play": MonitorPlay,
   "user-round-cog": UserRoundCog,
+  "database-zap": DatabaseZap,
 };
 
 /**
