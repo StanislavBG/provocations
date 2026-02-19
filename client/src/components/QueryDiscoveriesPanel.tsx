@@ -11,8 +11,19 @@ import {
   FileText,
   BarChart3,
   Lightbulb,
+  Check,
+  ArrowRight,
+  Code2,
 } from "lucide-react";
 import type { ContextItem } from "@shared/schema";
+
+export interface ChangeRecommendation {
+  title: string;
+  rationale: string;
+  beforeCode: string;
+  afterCode: string;
+  impact: string;
+}
 
 export interface SubqueryAnalysis {
   id: string;
@@ -24,6 +35,7 @@ export interface SubqueryAnalysis {
   evaluation: string;
   severity: "good" | "info" | "warning" | "critical";
   recommendations: string[];
+  changeRecommendations?: ChangeRecommendation[];
 }
 
 export interface OptimizationOpportunity {
@@ -31,6 +43,9 @@ export interface OptimizationOpportunity {
   description: string;
   severity: "info" | "warning" | "critical";
   affectedSubquery?: string;
+  beforeCode?: string;
+  afterCode?: string;
+  impact?: string;
 }
 
 export interface ExtractedMetric {
@@ -54,6 +69,7 @@ interface QueryDiscoveriesPanelProps {
   onSubqueryHover: (id: string | null) => void;
   onSubquerySelect: (id: string | null) => void;
   onCaptureMetrics: (items: ContextItem[]) => void;
+  onAcceptChange?: (beforeCode: string, afterCode: string) => void;
 }
 
 const SeverityIcon = ({ severity, className }: { severity: string; className?: string }) => {
@@ -87,6 +103,7 @@ export function QueryDiscoveriesPanel({
   onSubqueryHover,
   onSubquerySelect,
   onCaptureMetrics,
+  onAcceptChange,
 }: QueryDiscoveriesPanelProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(["subqueries", "overall", "opportunities", "metrics"])
@@ -195,7 +212,7 @@ export function QueryDiscoveriesPanel({
                         <h4 className="text-sm font-semibold leading-tight">{sq.name}</h4>
                         <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{sq.summary}</p>
 
-                        {/* Show evaluation and recommendations when selected */}
+                        {/* Show evaluation, recommendations, and code changes when selected */}
                         {isSelected && (
                           <div className="mt-2 space-y-2">
                             <div className="text-xs leading-relaxed text-foreground/80 bg-muted/30 rounded p-2">
@@ -212,6 +229,54 @@ export function QueryDiscoveriesPanel({
                                     </li>
                                   ))}
                                 </ul>
+                              </div>
+                            )}
+                            {/* Change recommendations with before/after code */}
+                            {sq.changeRecommendations && sq.changeRecommendations.length > 0 && (
+                              <div className="space-y-2 mt-2">
+                                <span className="text-xs font-semibold text-foreground/80 flex items-center gap-1">
+                                  <Code2 className="w-3 h-3" />
+                                  Suggested Changes:
+                                </span>
+                                {sq.changeRecommendations.map((cr, ci) => (
+                                  <div key={ci} className="rounded border bg-background/80 overflow-hidden">
+                                    <div className="px-2.5 py-1.5 border-b bg-muted/30">
+                                      <div className="text-xs font-medium text-foreground/90">{cr.title}</div>
+                                      <div className="text-xs text-muted-foreground mt-0.5">{cr.rationale}</div>
+                                    </div>
+                                    <div className="grid grid-cols-2 divide-x text-xs font-mono">
+                                      <div className="p-2">
+                                        <div className="text-[10px] uppercase tracking-wider text-red-500/70 font-sans font-medium mb-1">Before</div>
+                                        <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-red-500/5 rounded p-1.5 overflow-x-auto">{cr.beforeCode}</pre>
+                                      </div>
+                                      <div className="p-2">
+                                        <div className="text-[10px] uppercase tracking-wider text-emerald-500/70 font-sans font-medium mb-1">After</div>
+                                        <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{cr.afterCode}</pre>
+                                      </div>
+                                    </div>
+                                    {cr.impact && (
+                                      <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-t bg-muted/20">
+                                        Impact: {cr.impact}
+                                      </div>
+                                    )}
+                                    {onAcceptChange && (
+                                      <div className="px-2.5 py-1.5 border-t bg-muted/10 flex justify-end">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAcceptChange(cr.beforeCode, cr.afterCode);
+                                          }}
+                                        >
+                                          <Check className="w-3 h-3" />
+                                          Accept Change
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
@@ -251,6 +316,42 @@ export function QueryDiscoveriesPanel({
                     <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-semibold leading-tight">{opp.title}</h4>
                       <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{opp.description}</p>
+                      {/* Before/After code for optimization opportunities */}
+                      {opp.beforeCode && opp.afterCode && (
+                        <div className="mt-2 rounded border bg-background/80 overflow-hidden">
+                          <div className="grid grid-cols-2 divide-x text-xs font-mono">
+                            <div className="p-2">
+                              <div className="text-[10px] uppercase tracking-wider text-red-500/70 font-sans font-medium mb-1">Before</div>
+                              <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-red-500/5 rounded p-1.5 overflow-x-auto">{opp.beforeCode}</pre>
+                            </div>
+                            <div className="p-2">
+                              <div className="text-[10px] uppercase tracking-wider text-emerald-500/70 font-sans font-medium mb-1">After</div>
+                              <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{opp.afterCode}</pre>
+                            </div>
+                          </div>
+                          {opp.impact && (
+                            <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-t bg-muted/20">
+                              Impact: {opp.impact}
+                            </div>
+                          )}
+                          {onAcceptChange && (
+                            <div className="px-2.5 py-1.5 border-t bg-muted/10 flex justify-end">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAcceptChange(opp.beforeCode!, opp.afterCode!);
+                                }}
+                              >
+                                <Check className="w-3 h-3" />
+                                Accept Change
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {opp.affectedSubquery && (
                         <span className="inline-flex items-center gap-1 mt-1.5 text-xs text-primary/80">
                           <Zap className="w-3 h-3" />

@@ -254,6 +254,10 @@ export const writeRequestSchema = z.object({
 
   // Edit history for coherent iteration
   editHistory: z.array(editHistoryEntrySchema).optional(),
+
+  // Query mode — when true, the document is a SQL query that should be
+  // beautified/formatted instead of rewritten as prose
+  queryMode: z.boolean().optional(),
 });
 
 export type WriteRequest = z.infer<typeof writeRequestSchema>;

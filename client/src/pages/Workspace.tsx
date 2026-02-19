@@ -9,9 +9,8 @@ import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
 import { ReadingPane } from "@/components/ReadingPane";
-import { QueryTabBar, type QueryTab, ANALYZER_TAB_ID } from "@/components/QueryTabBar";
+import { QueryTabBar, type QueryTab } from "@/components/QueryTabBar";
 import { MetricExtractorPanel } from "@/components/MetricExtractorPanel";
-import { QueryAnalyzerView } from "@/components/QueryAnalyzerView";
 import { QueryDiscoveriesPanel, type QueryAnalysisResult } from "@/components/QueryDiscoveriesPanel";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
@@ -191,8 +190,6 @@ export default function Workspace() {
   const [queryAnalysis, setQueryAnalysis] = useState<QueryAnalysisResult | null>(null);
   const [selectedSubqueryId, setSelectedSubqueryId] = useState<string | null>(null);
   const [hoveredSubqueryId, setHoveredSubqueryId] = useState<string | null>(null);
-  // Track which tab was active before switching to analyzer (to go back)
-  const [lastEditorTabId, setLastEditorTabId] = useState<string>("");
 
   // ── Tab operations ──
 
@@ -219,26 +216,9 @@ export default function Workspace() {
 
   const handleTabSelect = useCallback((tabId: string) => {
     if (tabId === activeTabId) return;
-
-    // Switching TO analyzer tab — save current editor tab and remember it
-    if (tabId === ANALYZER_TAB_ID) {
-      if (activeTabId && activeTabId !== ANALYZER_TAB_ID) {
-        setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
-        setLastEditorTabId(activeTabId);
-      }
-      setActiveTabId(ANALYZER_TAB_ID);
-      return;
-    }
-
-    // Switching FROM analyzer to an editor tab — just restore the target
-    if (activeTabId === ANALYZER_TAB_ID) {
-      const target = tabs.find(t => t.id === tabId);
-      if (target) restoreTabState(target);
-      return;
-    }
-
-    // Normal editor-to-editor tab switch
+    // Save current tab state
     setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
+    // Restore target tab
     const target = tabs.find(t => t.id === tabId);
     if (target) restoreTabState(target);
   }, [activeTabId, tabs, saveCurrentTabState, restoreTabState]);
@@ -340,6 +320,14 @@ export default function Workspace() {
   const writeMutation = useMutation({
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory" | "capturedContext"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
+
+      // Auto-detect SQL query mode: if document looks like SQL, enable queryMode
+      // so the writer beautifies the SQL instead of rewriting it as prose
+      const docText = document.rawText.trim();
+      const sqlKeywords = /^\s*(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|EXPLAIN)\b/i;
+      const isLikelySql = sqlKeywords.test(docText) && !docText.startsWith("#") && !docText.startsWith("*");
+      const queryMode = request.queryMode ?? (isLikelySql ? true : undefined);
+
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
@@ -347,6 +335,7 @@ export default function Workspace() {
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
+        queryMode,
         ...request,
       });
       return await response.json() as WriteResponse;
@@ -945,7 +934,6 @@ export default function Workspace() {
     setQueryAnalysis(null);
     setSelectedSubqueryId(null);
     setHoveredSubqueryId(null);
-    setLastEditorTabId("");
   }, []);
 
   const handleCaptureMetrics = useCallback((items: ContextItem[]) => {
@@ -1262,6 +1250,14 @@ export default function Workspace() {
       }
       capturedContext={capturedContext}
       onCapturedContextChange={setCapturedContext}
+      analyzerSqlText={document.rawText}
+      analyzerSubqueries={queryAnalysis?.subqueries ?? []}
+      analyzerIsAnalyzing={analyzeQueryMutation.isPending}
+      analyzerSelectedSubqueryId={selectedSubqueryId}
+      analyzerHoveredSubqueryId={hoveredSubqueryId}
+      onAnalyzerSubqueryHover={setHoveredSubqueryId}
+      onAnalyzerSubquerySelect={setSelectedSubqueryId}
+      onAnalyze={handleAnalyzeQuery}
     />
   );
 
@@ -1383,6 +1379,24 @@ export default function Workspace() {
           onSubqueryHover={setHoveredSubqueryId}
           onSubquerySelect={setSelectedSubqueryId}
           onCaptureMetrics={handleCaptureMetrics}
+          onAcceptChange={(beforeCode, afterCode) => {
+            const currentText = document.rawText;
+            const idx = currentText.indexOf(beforeCode);
+            if (idx !== -1) {
+              const newText = currentText.slice(0, idx) + afterCode + currentText.slice(idx + beforeCode.length);
+              setDocument({ ...document, rawText: newText });
+              toast({
+                title: "Change Applied",
+                description: "The SQL change has been applied to your query.",
+              });
+            } else {
+              toast({
+                title: "Could Not Apply",
+                description: "The exact code snippet was not found in the current query. It may have already been changed.",
+                variant: "destructive",
+              });
+            }
+          }}
         />
       )}
     </div>
@@ -1390,8 +1404,6 @@ export default function Workspace() {
 
   // Tab bar data derived from state
   const tabBarTabs: QueryTab[] = tabs.map(t => ({ id: t.id, title: t.title }));
-  const isAnalyzerActive = activeTabId === ANALYZER_TAB_ID;
-
   const documentPanel = (
     <div className="h-full flex flex-col relative min-h-0">
       {/* Chrome-like tab bar */}
@@ -1406,19 +1418,7 @@ export default function Workspace() {
         />
       )}
 
-      {isAnalyzerActive ? (
-        /* Query Analyzer view — annotated SQL with hover summaries */
-        <QueryAnalyzerView
-          sqlText={document.rawText}
-          subqueries={queryAnalysis?.subqueries ?? []}
-          isAnalyzing={analyzeQueryMutation.isPending}
-          selectedSubqueryId={selectedSubqueryId}
-          hoveredSubqueryId={hoveredSubqueryId}
-          onSubqueryHover={setHoveredSubqueryId}
-          onSubquerySelect={setSelectedSubqueryId}
-          onAnalyze={handleAnalyzeQuery}
-        />
-      ) : showDiffView && previousVersion && currentVersion ? (
+      {showDiffView && previousVersion && currentVersion ? (
         <Suspense fallback={
           <div className="h-full flex flex-col p-4 space-y-4">
             <Skeleton className="h-8 w-48" />
