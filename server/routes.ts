@@ -1152,6 +1152,64 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
     }
   });
 
+  // ── Extract metrics from SQL queries ──
+  app.post("/api/extract-metrics", async (req, res) => {
+    try {
+      const { query } = req.body;
+
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "Query text is required" });
+      }
+
+      const response = await llm.generate({
+        maxTokens: 4000,
+        temperature: 0.2,
+        system: `You are a senior data analyst who extracts business metrics and KPIs from SQL queries and database documents.
+
+Analyze the provided query or document and extract every identifiable metric, measure, or KPI. For each metric, provide:
+- **name**: A concise, human-readable metric name (e.g., "Monthly Active Users", "Average Order Value")
+- **definition**: A clear 1–2 sentence business definition explaining what this metric measures and why it matters
+- **formula**: (optional) The SQL expression, aggregation, or calculation that computes this metric
+
+Look for:
+- Aggregations (COUNT, SUM, AVG, MIN, MAX)
+- Calculated fields and derived columns
+- Ratios and percentages
+- Window functions that compute running totals, ranks, or moving averages
+- CASE expressions that categorize or bucket data
+- Any column alias that suggests a business metric
+
+If the document describes metrics in prose rather than SQL, extract those definitions as well.
+
+Respond with valid JSON only, in this exact format:
+{
+  "metrics": [
+    { "name": "Metric Name", "definition": "What this metric measures.", "formula": "SQL expression or null" }
+  ]
+}
+
+If no metrics are found, return: { "metrics": [] }`,
+        messages: [
+          {
+            role: "user",
+            content: `Extract all metrics and KPIs from the following:\n\n${query.slice(0, 15000)}`
+          }
+        ],
+      });
+
+      const text = response.text.trim();
+      // Parse JSON from the response, handling markdown code fences
+      const jsonStr = text.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
+      const parsed = JSON.parse(jsonStr);
+
+      res.json({ metrics: Array.isArray(parsed.metrics) ? parsed.metrics : [] });
+    } catch (error) {
+      console.error("Extract metrics error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to extract metrics", details: errorMessage });
+    }
+  });
+
   // Generate next interview question based on context
   app.post("/api/interview/question", async (req, res) => {
     try {
