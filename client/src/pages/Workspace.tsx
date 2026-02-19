@@ -49,6 +49,8 @@ import {
   BarChart3,
   MessageCircle,
   Zap,
+  FileText,
+  Wrench,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import type {
@@ -113,6 +115,10 @@ export default function Workspace() {
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
+
+  // Mobile workspace tab — controls which panel is visible on mobile
+  type MobileTab = "document" | "toolbox" | "discussion";
+  const [mobileTab, setMobileTab] = useState<MobileTab>("document");
 
   // Voice and version tracking
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -1765,43 +1771,67 @@ export default function Workspace() {
         </div>
       )}
 
-      {/* ── Panel Layout (responsive: stacked on mobile, side-by-side on desktop) ── */}
-      {/* Document is center — it's the core artifact. Discussion is on the right. */}
+      {/* ── Panel Layout (responsive: tabbed on mobile, side-by-side on desktop) ── */}
       {isMobile ? (
-        <div className="flex-1 overflow-y-auto">
-          <section className="h-[60vh] min-h-[350px] border-b">
-            {toolboxPanel}
-          </section>
-          <section className="h-[80vh] min-h-[450px] border-b">
-            {documentPanel}
-          </section>
-          <section className="h-[70vh] min-h-[400px]">
-            {discussionPanel}
-          </section>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-hidden">
-          <ResizablePanelGroup direction="horizontal">
-            <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
-              {toolboxPanel}
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={40} minSize={20}>
-              {documentPanel}
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={35} minSize={20}>
-              {discussionPanel}
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
-      )}
+        <>
+          {/* Mobile: single visible panel with bottom tab bar */}
+          <div className="flex-1 overflow-hidden">
+            {mobileTab === "document" && documentPanel}
+            {mobileTab === "toolbox" && toolboxPanel}
+            {mobileTab === "discussion" && discussionPanel}
+          </div>
 
-      <StepTracker
-        currentPhase="edit"
-        selectedTemplate={selectedTemplateName}
-        activeToolboxApp={activeToolboxApp}
-      />
+          {/* Mobile bottom tab bar */}
+          <div className="shrink-0 border-t bg-card flex">
+            {([
+              { id: "document" as MobileTab, icon: FileText, label: "Document" },
+              { id: "toolbox" as MobileTab, icon: Wrench, label: "Tools" },
+              { id: "discussion" as MobileTab, icon: MessageCircle, label: "Discussion" },
+            ]).map((tab) => {
+              const Icon = tab.icon;
+              const isActive = mobileTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setMobileTab(tab.id)}
+                  className={`flex-1 flex flex-col items-center gap-0.5 py-2 text-xs transition-colors ${
+                    isActive
+                      ? "text-primary font-semibold border-t-2 border-primary -mt-px"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex-1 overflow-hidden">
+            <ResizablePanelGroup direction="horizontal">
+              <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
+                {toolboxPanel}
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={40} minSize={20}>
+                {documentPanel}
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={35} minSize={20}>
+                {discussionPanel}
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+
+          <StepTracker
+            currentPhase="edit"
+            selectedTemplate={selectedTemplateName}
+            activeToolboxApp={activeToolboxApp}
+          />
+        </>
+      )}
 
       <StoragePanel
         isOpen={showStoragePanel}

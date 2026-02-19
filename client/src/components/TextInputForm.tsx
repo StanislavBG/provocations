@@ -172,7 +172,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className={`w-full mx-auto flex flex-col flex-1 min-h-0 px-6 py-4 gap-3 ${
+      <div className={`w-full mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto px-3 md:px-6 py-4 gap-3 ${
         isWritePrompt ? "" : "max-w-6xl"
       }`}>
 
@@ -187,7 +187,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
 
           {/* Compact chip grid — always visible unless a selection collapses it */}
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
               {prebuiltTemplates.map((template) => {
                 const Icon = iconMap[template.icon] || PencilLine;
                 const isActive = activePrebuilt?.id === template.id;
@@ -343,9 +343,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               </Button>
             </div>
           ) : (
-          <div className="flex flex-1 min-h-0 gap-4">
-            {/* Left column: draft questions (+ context for non-write-a-prompt) */}
-            <div className="w-72 shrink-0 flex flex-col gap-3 min-h-0 overflow-y-auto">
+          <div className="flex flex-col md:flex-row flex-1 min-h-0 gap-4">
+            {/* Left column: draft questions (+ context for non-write-a-prompt) — hidden on mobile, shown below text area */}
+            <div className="hidden md:flex w-72 shrink-0 flex-col gap-3 min-h-0 overflow-y-auto">
               {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
                 <DraftQuestionsPanel
                   questions={activePrebuilt.draftQuestions}
@@ -447,12 +447,23 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               />
             )}
 
-            {/* Right column: context (only for write-a-prompt) */}
+            {/* Right column: context (only for write-a-prompt) — desktop only */}
             {isWritePrompt && (
-              <div className="w-72 shrink-0 flex flex-col gap-3 min-h-0 overflow-y-auto">
+              <div className="hidden md:flex w-72 shrink-0 flex-col gap-3 min-h-0 overflow-y-auto">
                 {renderContextSection()}
               </div>
             )}
+
+            {/* Mobile: draft questions + context below text area */}
+            <div className="flex md:hidden flex-col gap-3 shrink-0">
+              {activePrebuilt?.draftQuestions && activePrebuilt.draftQuestions.length > 0 && (
+                <DraftQuestionsPanel
+                  questions={activePrebuilt.draftQuestions}
+                  onResponse={handleDraftQuestionResponse}
+                />
+              )}
+              {renderContextSection()}
+            </div>
           </div>
           )}
         </div>
@@ -462,7 +473,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
       {/* Fixed bottom bar: step progress + action */}
       {hasObjectiveType && activePrebuilt?.id !== "streaming" && (
         <div className="shrink-0 border-t bg-card">
-          <div className={`w-full mx-auto flex items-center justify-between gap-4 px-6 py-2 ${
+          <div className={`w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 px-3 md:px-6 py-2 ${
             isWritePrompt ? "" : "max-w-6xl"
           }`}>
             <StepProgressBar
@@ -474,7 +485,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
               onClick={handleSubmit}
               disabled={!text.trim() || isLoading}
               size="lg"
-              className="gap-2 shrink-0"
+              className="gap-2 shrink-0 w-full sm:w-auto"
             >
               {isLoading ? (
                 <>
