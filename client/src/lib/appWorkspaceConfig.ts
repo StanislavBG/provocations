@@ -28,6 +28,11 @@ const overrides: Partial<Record<string, Partial<AppWorkspaceConfig>>> = {
     defaultToolboxTab: "website",
     autoStartInterview: false,
   },
+  "research-context": {
+    defaultToolboxTab: "context",
+    autoStartInterview: true,
+    autoStartPersonas: ["thinking_bigger"],
+  },
 };
 
 const DEFAULT_CONFIG: AppWorkspaceConfig = {
