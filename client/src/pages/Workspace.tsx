@@ -887,6 +887,10 @@ export default function Workspace() {
     setRightPanelMode("discussion");
   }, []);
 
+  const handleCaptureMetrics = useCallback((items: ContextItem[]) => {
+    setCapturedContext(prev => [...prev, ...items]);
+  }, []);
+
   // ── Storage save/load handlers ──
 
   const handleStorageSave = useCallback(async (title: string, folderId: number | null) => {
@@ -1199,10 +1203,6 @@ export default function Workspace() {
       onCapturedContextChange={setCapturedContext}
     />
   );
-
-  const handleCaptureMetrics = useCallback((items: ContextItem[]) => {
-    setCapturedContext(prev => [...prev, ...items]);
-  }, []);
 
   const discussionPanel = (
     <div className="h-full flex flex-col relative">
