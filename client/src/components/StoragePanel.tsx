@@ -415,7 +415,7 @@ export function StoragePanel({
         </div>
 
         {/* ── MIDDLE PANEL: Documents in current folder ── */}
-        <div className="flex-1 min-w-[280px] flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Breadcrumb */}
           <div className="flex items-center gap-1 px-4 py-2 border-b text-xs overflow-x-auto shrink-0 bg-card/20">
             {folderPath.map((entry, idx) => (
@@ -461,12 +461,9 @@ export function StoragePanel({
                 const isSelected = selectedDocId === doc.id;
                 const isCurrent = currentDocId === doc.id;
                 return (
-                  <button
+                  <div
                     key={`d-${doc.id}`}
-                    type="button"
-                    onClick={() => handlePreviewDocument(doc.id)}
-                    onDoubleClick={() => handleOpenDocument(doc.id)}
-                    className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                    className={`group w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors overflow-hidden ${
                       isSelected
                         ? "bg-primary/10 border border-primary/30"
                         : isCurrent
@@ -474,47 +471,58 @@ export function StoragePanel({
                           : "hover:bg-muted/40 border border-transparent"
                     }`}
                   >
-                    <FileText className={`w-4 h-4 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
-                    <div className="flex-1 min-w-0">
-                      {renamingDocId === doc.id ? (
-                        <Input
-                          value={renameText}
-                          onChange={(e) => setRenameText(e.target.value)}
-                          className="h-7 text-sm"
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Enter" && renameText.trim()) {
-                              renameDocMutation.mutate({ id: doc.id, title: renameText.trim() });
-                            }
-                            if (e.key === "Escape") {
-                              setRenamingDocId(null);
-                              setRenameText("");
-                            }
-                          }}
-                        />
-                      ) : (
-                        <>
-                          <p className="text-sm font-medium truncate">{doc.title}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {new Date(doc.updatedAt).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        </>
-                      )}
-                    </div>
+                    {/* Click area — file icon + title/date */}
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewDocument(doc.id)}
+                      onDoubleClick={() => handleOpenDocument(doc.id)}
+                      className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                    >
+                      <FileText className={`w-4 h-4 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        {renamingDocId === doc.id ? (
+                          <Input
+                            value={renameText}
+                            onChange={(e) => setRenameText(e.target.value)}
+                            className="h-7 text-sm"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter" && renameText.trim()) {
+                                renameDocMutation.mutate({ id: doc.id, title: renameText.trim() });
+                              }
+                              if (e.key === "Escape") {
+                                setRenamingDocId(null);
+                                setRenameText("");
+                              }
+                            }}
+                          />
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium truncate">{doc.title}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {new Date(doc.updatedAt).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </button>
 
-                    {/* Actions */}
-                    <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                    {/* Always-visible actions: rename (hover) + delete (always) */}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {isCurrent && (
+                        <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
+                      )}
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Rename"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -527,21 +535,19 @@ export function StoragePanel({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6 text-destructive"
+                        className="h-6 w-6 text-destructive/60 hover:text-destructive"
                         title="Delete"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteDocMutation.mutate(doc.id);
+                          if (window.confirm(`Delete "${doc.title}"?`)) {
+                            deleteDocMutation.mutate(doc.id);
+                          }
                         }}
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
-
-                    {isCurrent && (
-                      <Badge variant="secondary" className="text-[10px] shrink-0">Current</Badge>
-                    )}
-                  </button>
+                  </div>
                 );
               })}
             </div>

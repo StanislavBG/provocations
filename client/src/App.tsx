@@ -7,10 +7,12 @@ import {
   SignedIn,
   SignedOut,
   SignInButton,
+  ClerkLoaded,
+  ClerkLoading,
   UserButton,
 } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { LogIn } from "lucide-react";
+import { LogIn, Sparkles } from "lucide-react";
 import Workspace from "@/pages/Workspace";
 import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
@@ -30,25 +32,35 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <SignedOut>
+        <ClerkLoading>
           <div className="flex items-center justify-center min-h-screen bg-background">
-            <div className="flex flex-col items-center gap-6 p-8 max-w-md text-center">
-              <h1 className="text-3xl font-bold font-serif tracking-tight text-foreground">Provocations</h1>
-              <p className="text-muted-foreground">
-                A cognitive tool that challenges your thinking. Sign in to get started.
-              </p>
-              <SignInButton mode="modal">
-                <Button data-testid="button-sign-in" variant="default">
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Sign In
-                </Button>
-              </SignInButton>
+            <div className="flex flex-col items-center gap-4">
+              <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+              <p className="text-sm text-muted-foreground">Loading...</p>
             </div>
           </div>
-        </SignedOut>
-        <SignedIn>
-          <Router />
-        </SignedIn>
+        </ClerkLoading>
+        <ClerkLoaded>
+          <SignedOut>
+            <div className="flex items-center justify-center min-h-screen bg-background">
+              <div className="flex flex-col items-center gap-6 p-8 max-w-md text-center">
+                <h1 className="text-3xl font-bold font-serif tracking-tight text-foreground">Provocations</h1>
+                <p className="text-muted-foreground">
+                  A cognitive tool that challenges your thinking. Sign in to get started.
+                </p>
+                <SignInButton mode="modal">
+                  <Button data-testid="button-sign-in" variant="default">
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign In
+                  </Button>
+                </SignInButton>
+              </div>
+            </div>
+          </SignedOut>
+          <SignedIn>
+            <Router />
+          </SignedIn>
+        </ClerkLoaded>
       </TooltipProvider>
     </QueryClientProvider>
   );

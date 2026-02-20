@@ -1019,6 +1019,56 @@ Output only valid JSON, no markdown.`;
     }
   });
 
+  // ── Admin: voice capture config (summary schedule + persist interval) ──
+  // In-memory store — survives server restarts on Replit (process stays alive)
+  // but resets on deploy. Promote to DB when needed.
+  let voiceCaptureConfig = {
+    summarySchedule: [
+      { after: 0,    interval: 5 },
+      { after: 30,   interval: 15 },
+      { after: 60,   interval: 30 },
+      { after: 300,  interval: 60 },
+      { after: 1200, interval: 300 },
+    ],
+    persistIntervalMs: 15_000,
+  };
+
+  app.get("/api/admin/voice-capture-config", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+      res.json(voiceCaptureConfig);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get config" });
+    }
+  });
+
+  app.put("/api/admin/voice-capture-config", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const { summarySchedule, persistIntervalMs } = req.body;
+      if (summarySchedule && Array.isArray(summarySchedule)) {
+        voiceCaptureConfig.summarySchedule = summarySchedule;
+      }
+      if (typeof persistIntervalMs === "number" && persistIntervalMs >= 5000) {
+        voiceCaptureConfig.persistIntervalMs = persistIntervalMs;
+      }
+      console.log("[admin] Voice capture config updated:", voiceCaptureConfig);
+      res.json(voiceCaptureConfig);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update config" });
+    }
+  });
+
+  // Public endpoint — clients fetch the config to use at runtime
+  app.get("/api/voice-capture-config", (_req, res) => {
+    res.json(voiceCaptureConfig);
+  });
+
   // Unified write endpoint - single interface to the AI writer
   app.post("/api/write", async (req, res) => {
     try {
@@ -1563,13 +1613,56 @@ The AIM framework:
         });
       }
 
+      const mode = req.body.mode || "clean";
+
+      // Voice-capture mode uses a dedicated topic-paragraph prompt
+      if (context === "voice-capture" && mode === "summarize") {
+        const vcResponse = await llm.generate({
+          maxTokens: 4000,
+          temperature: 0.3,
+          system: `You are an expert at synthesizing live voice transcripts into structured, readable summaries.
+
+The user is dictating ideas in real time. Your job is to merge everything they've said so far into a single cohesive summary organized by **major topics**.
+
+## Output rules
+
+1. **Identify the major topics** the speaker has covered. Each topic becomes its own paragraph with a bold topic heading.
+2. If there is only **one** topic, that's perfectly fine — output a single headed paragraph.
+3. Each paragraph should be a **complete, self-contained summary** of what was said about that topic — not bullet points, not fragments.
+4. Remove speech artifacts (um, uh, false starts, repetitions) but **preserve every substantive idea**.
+5. Within each topic paragraph, organize the ideas logically (even if the speaker jumped around).
+6. If the speaker revisited a topic at different times, **merge those mentions** into one paragraph rather than repeating the topic.
+7. Keep the speaker's voice and intent — don't add information they didn't mention.
+8. Aim for 30-50% of the original length.
+
+## Format
+
+**Topic Name**
+Clear, well-written paragraph summarizing everything said about this topic...
+
+**Another Topic**
+Another paragraph...`,
+          messages: [
+            {
+              role: "user",
+              content: `Summarize this voice transcript into topic-based paragraphs:\n\n${transcript}`
+            }
+          ],
+        });
+
+        const vcText = vcResponse.text.trim() || transcript;
+        return res.json({
+          summary: vcText,
+          originalLength: transcript.length,
+          summaryLength: vcText.length,
+        });
+      }
+
       const contextLabel = context === "objective"
         ? "document objective/goal"
         : context === "source"
         ? "source material for a document"
         : "general content";
-
-      const mode = req.body.mode || "clean";
 
       let systemPrompt: string;
       if (mode === "summarize") {
