@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
-import { getAppWorkspaceConfig } from "@/lib/appWorkspaceConfig";
+import { getAppFlowConfig, type AppFlowConfig, type RightPanelTabId } from "@/lib/appWorkspaceConfig";
 import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
@@ -118,6 +118,9 @@ export default function Workspace() {
   // Which template was selected in step 1 — drives workspace behavior
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
+  // Computed flow config — the single source of truth for app-specific behavior
+  const appFlowConfig: AppFlowConfig = getAppFlowConfig(selectedTemplateId);
+
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
 
@@ -206,8 +209,8 @@ export default function Workspace() {
   const [tabs, setTabs] = useState<TabState[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
 
-  // Right panel mode: "discussion", "metrics", or "discoveries"
-  const [rightPanelMode, setRightPanelMode] = useState<"discussion" | "metrics" | "discoveries">("discussion");
+  // Right panel mode — defaults to first tab in config
+  const [rightPanelMode, setRightPanelMode] = useState<RightPanelTabId>("discussion");
 
   // ── Query Analyzer state ──
   const [queryAnalysis, setQueryAnalysis] = useState<QueryAnalysisResult | null>(null);
@@ -334,9 +337,12 @@ export default function Workspace() {
 
   const handleAnalyzeQuery = useCallback(() => {
     analyzeQueryMutation.mutate();
-    // Auto-switch right panel to Discoveries when analyzing
-    setRightPanelMode("discoveries");
-  }, [analyzeQueryMutation]);
+    // Auto-switch right panel to Discoveries when analyzing (if available in config)
+    const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
+    if (hasDiscoveries) {
+      setRightPanelMode("discoveries");
+    }
+  }, [analyzeQueryMutation, appFlowConfig.rightPanelTabs]);
 
   // Auto-trigger analysis after SQL document is set (deferred from createDraftMutation.onSuccess)
   useEffect(() => {
@@ -352,8 +358,9 @@ export default function Workspace() {
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory" | "capturedContext"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
 
-      // Route SQL documents to dedicated query-write endpoint
-      if (selectedTemplateId === "query-editor" || isLikelySqlQuery(document.rawText)) {
+      // Route based on app config outputFormat (with SQL auto-detection fallback)
+      const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
+      if (useSqlEndpoint) {
         const response = await apiRequest("POST", "/api/query-write", {
           query: document.rawText,
           instruction: request.instruction,
@@ -440,8 +447,12 @@ export default function Workspace() {
 
   const createDraftMutation = useMutation({
     mutationFn: async ({ context, obj, refs, templateId }: { context: string; obj: string; refs: ReferenceDocument[]; templateId?: string }) => {
-      // Route query-editor template (or detected SQL) to query-write endpoint
-      if (templateId === "query-editor" || isLikelySqlQuery(context)) {
+      // Resolve config for the template being created (may differ from current selectedTemplateId
+      // because the draft mutation fires before state is fully updated)
+      const draftConfig = getAppFlowConfig(templateId);
+      const useSqlEndpoint = draftConfig.writer.outputFormat === "sql" || isLikelySqlQuery(context);
+
+      if (useSqlEndpoint) {
         const response = await apiRequest("POST", "/api/query-write", {
           query: context,
           instruction: "Beautify and format this SQL query. Apply proper indentation, consistent keyword casing, readable structure, and line breaks. If the input is not SQL, extract any SQL from it and format that. Output ONLY the SQL query.",
@@ -482,10 +493,12 @@ export default function Workspace() {
       trackEvent("document_created", { templateId: variables.templateId });
       trackEvent("phase_changed", { metadata: { from: "input", to: "workspace" } });
 
-      // Auto-run query analysis and default to Analyzer tab for SQL documents
-      if (isLikelySqlQuery(data.document)) {
-        setActiveToolboxApp("analyzer");
-        setRightPanelMode("discoveries");
+      // Auto-run query analysis for SQL documents — use config to determine defaults
+      const draftFlowConfig = getAppFlowConfig(variables.templateId);
+      if (draftFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(data.document)) {
+        setActiveToolboxApp(draftFlowConfig.defaultToolboxTab as ToolboxApp);
+        // Set right panel to first configured tab
+        setRightPanelMode(draftFlowConfig.rightPanelTabs[0]?.id ?? "discussion");
         pendingAutoAnalyze.current = true;
       }
 
@@ -570,8 +583,9 @@ export default function Workspace() {
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
-      // Step 2: Use the writer to merge into document
-      const writeResponse = (selectedTemplateId === "query-editor" || isLikelySqlQuery(document.rawText))
+      // Step 2: Use the writer to merge into document (route via config)
+      const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
+      const writeResponse = useSqlEndpoint
         ? await apiRequest("POST", "/api/query-write", {
             query: document.rawText,
             instruction,
@@ -641,7 +655,8 @@ export default function Workspace() {
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
-      const writeResponse = (selectedTemplateId === "query-editor" || isLikelySqlQuery(document.rawText))
+      const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
+      const writeResponse = useSqlEndpoint
         ? await apiRequest("POST", "/api/query-write", {
             query: document.rawText,
             instruction,
@@ -847,9 +862,8 @@ export default function Workspace() {
   useEffect(() => {
     if (!isInputPhase && !autoStartedRef.current) {
       autoStartedRef.current = true;
-      const config = getAppWorkspaceConfig(selectedTemplateId);
-      if (config.autoStartInterview) {
-        const personas = config.autoStartPersonas ?? ["thinking_bigger" as ProvocationType];
+      if (appFlowConfig.autoStartInterview) {
+        const personas = appFlowConfig.autoStartPersonas ?? ["thinking_bigger" as ProvocationType];
         const direction = { personas };
         setInterviewDirection(direction);
         setIsInterviewActive(true);
@@ -1023,6 +1037,8 @@ export default function Workspace() {
     setTabs([]);
     setActiveTabId("");
     setRightPanelMode("discussion");
+    // Reset template selection (so appFlowConfig resets to default)
+    setSelectedTemplateId(null);
     // Reset analyzer state
     setQueryAnalysis(null);
     setSelectedSubqueryId(null);
@@ -1311,12 +1327,12 @@ export default function Workspace() {
               setObjective(obj);
             }}
             onStreamingMode={(obj, url, templateId) => {
-              const config = getAppWorkspaceConfig(templateId);
+              const streamConfig = getAppFlowConfig(templateId);
               setSelectedTemplateId(templateId ?? null);
               setDocument({ id: generateId("doc"), rawText: " " });
               setObjective(obj);
               if (url) setWebsiteUrl(url);
-              setActiveToolboxApp(config.defaultToolboxTab as ToolboxApp);
+              setActiveToolboxApp(streamConfig.defaultToolboxTab as ToolboxApp);
               const initialVersion: DocumentVersion = {
                 id: generateId("v"),
                 text: " ",
@@ -1333,6 +1349,8 @@ export default function Workspace() {
         <StepTracker
           currentPhase={workflowPhase}
           selectedTemplate={selectedTemplateName}
+          appFlowSteps={appFlowConfig.flowSteps}
+          appLeftPanelTabs={appFlowConfig.leftPanelTabs}
         />
       </div>
     );
@@ -1344,6 +1362,7 @@ export default function Workspace() {
     <ProvocationToolbox
       activeApp={activeToolboxApp}
       onAppChange={(app: ToolboxApp) => { setActiveToolboxApp(app); trackEvent("app_switched", { appSection: app }); }}
+      availableTabs={appFlowConfig.leftPanelTabs}
       isInterviewActive={isInterviewActive}
       isMerging={interviewSummaryMutation.isPending}
       interviewEntryCount={interviewEntries.length}
@@ -1399,41 +1418,25 @@ export default function Workspace() {
         context={pendingVoiceContext?.context || "document"}
       />
 
-      {/* Right panel tab toggle: Discussion | Metrics | Discoveries */}
+      {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
-        <button
-          className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
-            rightPanelMode === "discussion"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          onClick={() => setRightPanelMode("discussion")}
-        >
-          <MessageCircle className="w-3.5 h-3.5" />
-          Discussion
-        </button>
-        <button
-          className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
-            rightPanelMode === "metrics"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          onClick={() => setRightPanelMode("metrics")}
-        >
-          <BarChart3 className="w-3.5 h-3.5" />
-          Metrics
-        </button>
-        <button
-          className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
-            rightPanelMode === "discoveries"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          onClick={() => setRightPanelMode("discoveries")}
-        >
-          <Zap className="w-3.5 h-3.5" />
-          Discoveries
-        </button>
+        {appFlowConfig.rightPanelTabs.map((tab) => {
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "metrics" ? BarChart3 : Zap;
+          return (
+            <button
+              key={tab.id}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
+                rightPanelMode === tab.id
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setRightPanelMode(tab.id)}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
         <div className="flex-1" />
         {/* Discussion-specific actions (only when discussion tab is active) */}
         {rightPanelMode === "discussion" && interviewEntries.length > 0 && (
@@ -1860,6 +1863,8 @@ export default function Workspace() {
             currentPhase="edit"
             selectedTemplate={selectedTemplateName}
             activeToolboxApp={activeToolboxApp}
+            appFlowSteps={appFlowConfig.flowSteps}
+            appLeftPanelTabs={appFlowConfig.leftPanelTabs}
           />
         </>
       )}

@@ -37,6 +37,7 @@ import {
   Search,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument } from "@shared/schema";
+import type { LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
 import { builtInPersonas, getAllPersonas } from "@shared/personas";
 
 // ── Toolbox app type ──
@@ -70,6 +71,11 @@ const allPersonaTypes: ProvocationType[] = getAllPersonas().map((p) => p.id as P
 interface ProvocationToolboxProps {
   activeApp: ToolboxApp;
   onAppChange: (app: ToolboxApp) => void;
+
+  /** Application-specific left panel tabs from AppFlowConfig.
+   *  When provided, only these tabs are rendered (in order).
+   *  When omitted, falls back to legacy behavior showing all tabs. */
+  availableTabs?: LeftPanelTabConfig[];
 
   // Provoke app props
   isInterviewActive: boolean;
@@ -117,9 +123,18 @@ interface ProvocationToolboxProps {
   onAnalyze?: () => void;
 }
 
+/** Icon lookup for left-panel tab IDs */
+const LEFT_TAB_ICONS: Record<string, typeof Blocks> = {
+  provoke: MessageCircleQuestion,
+  website: Globe,
+  context: Layers,
+  analyzer: Search,
+};
+
 export function ProvocationToolbox({
   activeApp,
   onAppChange,
+  availableTabs,
   isInterviewActive,
   isMerging,
   interviewEntryCount,
@@ -146,9 +161,15 @@ export function ProvocationToolbox({
   onAnalyzerSubquerySelect,
   onAnalyze,
 }: ProvocationToolboxProps) {
-  const hasContextCollection = !!(contextCollection?.text || contextCollection?.objective);
   const hasCapturedContext = !!(capturedContext && capturedContext.length > 0);
-  const hasContext = hasContextCollection || hasCapturedContext;
+
+  // Use config-driven tabs when available, otherwise fall back to all tabs
+  const tabsToRender = availableTabs ?? [
+    { id: "provoke" as const, label: "Provoke", description: "" },
+    { id: "context" as const, label: "Context", description: "" },
+    { id: "website" as const, label: "Website", description: "" },
+    { id: "analyzer" as const, label: "Analyzer", description: "" },
+  ];
 
   return (
     <div className="h-full flex flex-col">
@@ -168,51 +189,37 @@ export function ProvocationToolbox({
           </TooltipContent>
         </Tooltip>
         <div className="flex-1" />
-        {/* App switcher tabs */}
+        {/* App switcher tabs — driven by config */}
         <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant={activeApp === "provoke" ? "default" : "ghost"}
-            className="gap-1 text-xs h-7 px-2"
-            onClick={() => onAppChange("provoke")}
-          >
-            <MessageCircleQuestion className="w-3 h-3" />
-            Provoke
-          </Button>
-          {hasContext && (
-            <Button
-              size="sm"
-              variant={activeApp === "context" ? "default" : "ghost"}
-              className="gap-1 text-xs h-7 px-2"
-              onClick={() => onAppChange("context")}
-            >
-              <Layers className="w-3 h-3" />
-              Context
-              {hasCapturedContext && (
-                <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px]">
-                  {capturedContext!.length}
-                </Badge>
-              )}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant={activeApp === "website" ? "default" : "ghost"}
-            className="gap-1 text-xs h-7 px-2"
-            onClick={() => onAppChange("website")}
-          >
-            <Globe className="w-3 h-3" />
-            Website
-          </Button>
-          <Button
-            size="sm"
-            variant={activeApp === "analyzer" ? "default" : "ghost"}
-            className="gap-1 text-xs h-7 px-2"
-            onClick={() => onAppChange("analyzer")}
-          >
-            <Search className="w-3 h-3" />
-            Analyzer
-          </Button>
+          {tabsToRender.map((tab) => {
+            const Icon = LEFT_TAB_ICONS[tab.id] || Wrench;
+            const isActive = activeApp === tab.id;
+            return (
+              <Tooltip key={tab.id}>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant={isActive ? "default" : "ghost"}
+                    className="gap-1 text-xs h-7 px-2"
+                    onClick={() => onAppChange(tab.id)}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {tab.label}
+                    {tab.id === "context" && hasCapturedContext && (
+                      <Badge variant="secondary" className="ml-0.5 h-4 min-w-[16px] px-1 text-[10px]">
+                        {capturedContext!.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                {tab.description && (
+                  <TooltipContent side="bottom" className="max-w-[260px]">
+                    <p className="text-xs">{tab.description}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            );
+          })}
         </div>
       </div>
 
