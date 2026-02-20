@@ -48,6 +48,7 @@ import {
   type InfographicSpec,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
+import { personaSchema } from "@shared/schema";
 import { trackingEventSchema } from "@shared/schema";
 import { invoke, TASK_TYPES, type TaskType } from "./invoke";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
@@ -72,6 +73,46 @@ async function isAdminUser(userId: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── Effective persona resolution ──
+// Merges code defaults (builtInPersonas) with DB overrides (persona_overrides table).
+// DB wins when both exist for the same persona ID.
+async function getEffectivePersonas(): Promise<Record<string, Persona>> {
+  const overrides = await storage.getAllPersonaOverrides();
+  const result: Record<string, Persona> = {};
+  for (const [id, persona] of Object.entries(builtInPersonas)) {
+    result[id] = { ...persona };
+  }
+  for (const override of overrides) {
+    try {
+      const parsed = JSON.parse(override.definition) as Persona;
+      parsed.humanCurated = override.humanCurated;
+      parsed.curatedBy = override.curatedBy ?? null;
+      parsed.curatedAt = override.curatedAt?.toISOString() ?? null;
+      result[parsed.id] = parsed;
+    } catch {
+      console.error(`Invalid persona override for ${override.personaId}, skipping`);
+    }
+  }
+  return result;
+}
+
+/** Get effective persona by ID (DB override or code default) */
+async function getEffectivePersonaById(id: string): Promise<Persona | undefined> {
+  const override = await storage.getPersonaOverride(id);
+  if (override) {
+    try {
+      const parsed = JSON.parse(override.definition) as Persona;
+      parsed.humanCurated = override.humanCurated;
+      parsed.curatedBy = override.curatedBy ?? null;
+      parsed.curatedAt = override.curatedAt?.toISOString() ?? null;
+      return parsed;
+    } catch {
+      // Fall through to built-in
+    }
+  }
+  return builtInPersonas[id as ProvocationType];
 }
 
 // ── Zero-knowledge helpers ──
@@ -526,14 +567,15 @@ export async function registerRoutes(
       const MAX_ANALYSIS_LENGTH = 8000;
       const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
 
-      // Resolve personas — use all built-in if none specified
+      // Resolve personas — use effective (DB override + code default), fall back to built-in
       const requestedIds = personaIds && personaIds.length > 0
         ? personaIds
         : Object.keys(builtInPersonas);
 
-      const personas: Persona[] = requestedIds
-        .map((id) => getPersonaById(id))
-        .filter((p): p is Persona => p !== undefined);
+      const personaResults = await Promise.all(
+        requestedIds.map((id) => getEffectivePersonaById(id))
+      );
+      const personas: Persona[] = personaResults.filter((p): p is Persona => p !== undefined);
 
       if (personas.length === 0) {
         return res.status(400).json({ error: "No valid personas found for the given IDs" });
@@ -542,6 +584,25 @@ export async function registerRoutes(
       const personaDescriptions = personas
         .map((p) => `- ${p.id} (${p.label}): ${p.prompts.challenge}`)
         .join("\n");
+
+      // Master Researcher guardrail: if master_researcher is among selected personas,
+      // inject lock awareness so it learns from human-curated personas instead of overriding them.
+      let lockGuardrail = "";
+      if (requestedIds.includes("master_researcher")) {
+        const allEffective = await getEffectivePersonas();
+        const lockedPersonas = Object.values(allEffective).filter((p) => p.humanCurated);
+        if (lockedPersonas.length > 0) {
+          const lockedList = lockedPersonas.map((p) => `"${p.label}" (${p.id})`).join(", ");
+          lockGuardrail = `\n\nHUMAN-CURATED PERSONA LOCK POLICY:
+The following personas are HUMAN-CURATED and LOCKED: ${lockedList}.
+You MUST NOT suggest replacing, overriding, or fundamentally redefining these personas.
+Instead:
+1. STUDY their patterns — tone, structure, specificity level, non-negotiable behaviors.
+2. APPLY those quality patterns when evaluating or proposing changes to non-curated personas.
+3. You MAY recommend enhancements to locked personas, but frame them as advisory suggestions that require human approval.
+4. Treat locked personas as the quality standard that other personas should aspire to match.`;
+        }
+      }
 
       // ── Context assembly ──
       // All required context for grounded challenges:
@@ -578,7 +639,7 @@ IMPORTANT: Only generate ${isSQLChallenge ? "suggestions" : "challenges"}. Do NO
 
 Generate ${isSQLChallenge ? "suggestions" : "challenges"} from these personas:
 ${personaDescriptions}
-${refContext}${guidanceContext}
+${refContext}${guidanceContext}${lockGuardrail}
 
 Respond with a JSON object containing a "challenges" array. Generate ${perPersonaCount} challenges per persona.
 For each challenge:
@@ -760,38 +821,78 @@ Output only valid JSON, no markdown.`;
 
   // ── Persona listing endpoint ──
   // Returns all user-facing personas (excludes master_researcher).
-  app.get("/api/personas", (_req, res) => {
-    const personas = getAllPersonas();
-    res.json({ personas });
+  // Merges code defaults with DB overrides.
+  app.get("/api/personas", async (_req, res) => {
+    try {
+      const all = await getEffectivePersonas();
+      const personas = Object.values(all).filter((p) => p.id !== "master_researcher");
+      res.json({ personas });
+    } catch {
+      // Fallback to code defaults if DB unavailable
+      res.json({ personas: getAllPersonas() });
+    }
   });
 
   // ── Persona hierarchy endpoint ──
   // Returns the full hierarchy tree rooted at master_researcher.
-  app.get("/api/personas/hierarchy", (_req, res) => {
-    const hierarchy = getPersonaHierarchy();
-    res.json(hierarchy);
+  app.get("/api/personas/hierarchy", async (_req, res) => {
+    try {
+      const all = await getEffectivePersonas();
+      const root = all["master_researcher"] ?? builtInPersonas.master_researcher;
+      const children = Object.values(all)
+        .filter((p) => p.parentId === "master_researcher")
+        .map((p) => ({
+          persona: p,
+          children: Object.values(all)
+            .filter((child) => child.parentId === p.id)
+            .map((child) => ({ persona: child, children: [] })),
+        }));
+      res.json({ persona: root, children });
+    } catch {
+      res.json(getPersonaHierarchy());
+    }
   });
 
   // ── All personas including root (for admin) ──
-  app.get("/api/personas/all", (_req, res) => {
-    const personas = getAllPersonasWithRoot();
-    res.json({ personas });
+  app.get("/api/personas/all", async (_req, res) => {
+    try {
+      const all = await getEffectivePersonas();
+      res.json({ personas: Object.values(all) });
+    } catch {
+      res.json({ personas: getAllPersonasWithRoot() });
+    }
   });
 
   // ── Personas by domain ──
-  app.get("/api/personas/domain/:domain", (req, res) => {
+  app.get("/api/personas/domain/:domain", async (req, res) => {
     const domain = req.params.domain;
-    if (!["root", "technology", "business"].includes(domain)) {
-      return res.status(400).json({ error: "Invalid domain. Must be: root, technology, or business" });
+    if (!["root", "technology", "business", "marketing"].includes(domain)) {
+      return res.status(400).json({ error: "Invalid domain. Must be: root, technology, business, or marketing" });
     }
-    const personas = getPersonasByDomain(domain as any);
-    res.json({ personas });
+    try {
+      const all = await getEffectivePersonas();
+      const personas = Object.values(all).filter((p) => p.domain === domain);
+      res.json({ personas });
+    } catch {
+      res.json({ personas: getPersonasByDomain(domain as any) });
+    }
   });
 
   // ── Stale personas (need research refresh) ──
-  app.get("/api/personas/stale", (_req, res) => {
-    const stale = getStalePersonas();
-    res.json({ stalePersonas: stale.map((p) => ({ id: p.id, label: p.label, domain: p.domain, lastResearchedAt: p.lastResearchedAt })) });
+  app.get("/api/personas/stale", async (_req, res) => {
+    try {
+      const all = await getEffectivePersonas();
+      const threshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const stale = Object.values(all).filter((p) => {
+        if (p.id === "master_researcher") return false;
+        if (!p.lastResearchedAt) return true;
+        return new Date(p.lastResearchedAt).getTime() < threshold;
+      });
+      res.json({ stalePersonas: stale.map((p) => ({ id: p.id, label: p.label, domain: p.domain, lastResearchedAt: p.lastResearchedAt, humanCurated: p.humanCurated })) });
+    } catch {
+      const stale = getStalePersonas();
+      res.json({ stalePersonas: stale.map((p) => ({ id: p.id, label: p.label, domain: p.domain, lastResearchedAt: p.lastResearchedAt })) });
+    }
   });
 
   // ── Persona version history (archival) ──
@@ -801,6 +902,140 @@ Output only valid JSON, no markdown.`;
       res.json({ versions });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch persona versions" });
+    }
+  });
+
+  // ── Admin: Persona override management ──
+
+  // List all DB overrides with lock status
+  app.get("/api/admin/persona-overrides", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const overrides = await storage.getAllPersonaOverrides();
+      res.json({
+        overrides: overrides.map((o) => ({
+          personaId: o.personaId,
+          humanCurated: o.humanCurated,
+          curatedBy: o.curatedBy,
+          curatedAt: o.curatedAt?.toISOString() ?? null,
+          updatedAt: o.updatedAt.toISOString(),
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch persona overrides" });
+    }
+  });
+
+  // Save persona override (admin-only)
+  app.put("/api/admin/personas/:personaId", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { personaId } = req.params;
+      const { definition, humanCurated } = req.body;
+
+      // Validate the persona definition
+      const parsed = personaSchema.safeParse(definition);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid persona definition", details: parsed.error.issues });
+      }
+
+      // Ensure ID matches
+      if (parsed.data.id !== personaId) {
+        return res.status(400).json({ error: "Persona ID in definition must match URL parameter" });
+      }
+
+      const override = await storage.upsertPersonaOverride({
+        personaId,
+        definition: JSON.stringify(parsed.data),
+        humanCurated: humanCurated ?? false,
+        curatedBy: auth.userId,
+      });
+
+      // Archive version for audit trail
+      await storage.savePersonaVersion(personaId, JSON.stringify(parsed.data));
+
+      res.json({
+        personaId: override.personaId,
+        humanCurated: override.humanCurated,
+        curatedBy: override.curatedBy,
+        curatedAt: override.curatedAt?.toISOString() ?? null,
+        updatedAt: override.updatedAt.toISOString(),
+      });
+    } catch (error) {
+      console.error("Save persona override error:", error);
+      res.status(500).json({ error: "Failed to save persona override" });
+    }
+  });
+
+  // Toggle human-curated lock (admin-only)
+  app.patch("/api/admin/personas/:personaId/lock", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { personaId } = req.params;
+      const { humanCurated } = req.body;
+      if (typeof humanCurated !== "boolean") {
+        return res.status(400).json({ error: "humanCurated must be a boolean" });
+      }
+
+      // Get current persona definition (effective)
+      const persona = await getEffectivePersonaById(personaId);
+      if (!persona) {
+        return res.status(404).json({ error: "Persona not found" });
+      }
+
+      const override = await storage.upsertPersonaOverride({
+        personaId,
+        definition: JSON.stringify(persona),
+        humanCurated,
+        curatedBy: humanCurated ? auth.userId : null,
+      });
+
+      res.json({
+        personaId: override.personaId,
+        humanCurated: override.humanCurated,
+        curatedBy: override.curatedBy,
+        curatedAt: override.curatedAt?.toISOString() ?? null,
+      });
+    } catch (error) {
+      console.error("Toggle persona lock error:", error);
+      res.status(500).json({ error: "Failed to toggle persona lock" });
+    }
+  });
+
+  // Delete override — revert to code default (admin-only)
+  app.delete("/api/admin/personas/:personaId/override", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      await storage.deletePersonaOverride(req.params.personaId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete persona override" });
+    }
+  });
+
+  // Export all effective personas as JSON (for deployment sync pipeline)
+  app.get("/api/admin/personas/export", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const all = await getEffectivePersonas();
+      res.json({ personas: all });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to export personas" });
     }
   });
 
@@ -965,7 +1200,7 @@ Output only valid JSON, no markdown.`;
       const allMetrics = await storage.getAllUsageMetrics();
 
       // Collect unique user IDs
-      const userIds = [...new Set(allMetrics.map((m) => m.userId))];
+      const userIds = Array.from(new Set(allMetrics.map((m) => m.userId)));
 
       // Resolve user info from Clerk
       const userInfoMap: Record<string, { email: string; displayName: string }> = {};
@@ -991,7 +1226,7 @@ Output only valid JSON, no markdown.`;
         "documents_copied",
         "total_words_produced",
       ];
-      const allKeys = [...new Set(allMetrics.map((m) => m.metricKey))];
+      const allKeys = Array.from(new Set(allMetrics.map((m) => m.metricKey)));
       const sortedKeys = [
         ...METRIC_ORDER.filter((k) => allKeys.includes(k)),
         ...allKeys.filter((k) => !METRIC_ORDER.includes(k)).sort(),
