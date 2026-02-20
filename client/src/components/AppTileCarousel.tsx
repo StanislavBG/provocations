@@ -1,12 +1,6 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useRef, useState, useEffect } from "react";
 import { Star, Heart, ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselPrevious,
-  CarouselNext,
-} from "@/components/ui/carousel";
+import { Button } from "@/components/ui/button";
 import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +61,7 @@ function StarRating({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onChange(value === n ? 0 : n); // toggle off if same star clicked
+            onChange(value === n ? 0 : n);
           }}
           className="p-0.5 transition-colors hover:scale-110"
           aria-label={`${n} star${n > 1 ? "s" : ""}`}
@@ -186,7 +180,7 @@ function AppTile({
 }
 
 // ---------------------------------------------------------------------------
-// Carousel
+// Scroll-based carousel (no external library)
 // ---------------------------------------------------------------------------
 
 interface AppTileCarouselProps {
@@ -206,8 +200,10 @@ export function AppTileCarousel({
   onToggleFavorite,
   onRate,
 }: AppTileCarouselProps) {
-  // Memoize the ordering so it stays stable during a session
-  // (re-shuffles only when the component remounts or favorites change)
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
   const ordered = useMemo(
     () => orderTemplates(templates, favorites),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,53 +215,91 @@ export function AppTileCarousel({
     [onSelect],
   );
 
-  return (
-    <div className="w-full">
-      <Carousel
-        opts={{
-          align: "start",
-          loop: true,
-          slidesToScroll: 1,
-        }}
-        className="w-full"
-      >
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-base font-semibold">
-              Explore applications
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Pick one to get started. Favorite the ones you use most.
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            <CarouselPrevious
-              className="static translate-y-0 h-8 w-8"
-            />
-            <CarouselNext
-              className="static translate-y-0 h-8 w-8"
-            />
-          </div>
-        </div>
+  // Update scroll button states
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+  }, []);
 
-        <CarouselContent className="-ml-3">
-          {ordered.map((template) => (
-            <CarouselItem
-              key={template.id}
-              className="pl-3 basis-full sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"
-            >
-              <AppTile
-                template={template}
-                isFavorite={favorites.has(template.id)}
-                rating={ratings[template.id] ?? 0}
-                onSelect={handleSelect}
-                onToggleFavorite={onToggleFavorite}
-                onRate={onRate}
-              />
-            </CarouselItem>
-          ))}
-        </CarouselContent>
-      </Carousel>
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [updateScrollState]);
+
+  const scroll = useCallback((direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // Scroll by roughly one card width + gap
+    const cardWidth = el.querySelector<HTMLElement>("[data-tile]")?.offsetWidth ?? 300;
+    el.scrollBy({ left: direction === "left" ? -cardWidth : cardWidth, behavior: "smooth" });
+  }, []);
+
+  return (
+    <div className="w-full space-y-3">
+      {/* Header with nav buttons */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Explore applications</h2>
+          <p className="text-xs text-muted-foreground">
+            Pick one to get started. Favorite the ones you use most.
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            disabled={!canScrollLeft}
+            onClick={() => scroll("left")}
+            aria-label="Previous applications"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            disabled={!canScrollRight}
+            onClick={() => scroll("right")}
+            aria-label="Next applications"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Scrollable tile row */}
+      <div
+        ref={scrollRef}
+        className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-2"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        {ordered.map((template) => (
+          <div
+            key={template.id}
+            data-tile
+            className="snap-start shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]"
+          >
+            <AppTile
+              template={template}
+              isFavorite={favorites.has(template.id)}
+              rating={ratings[template.id] ?? 0}
+              onSelect={handleSelect}
+              onToggleFavorite={onToggleFavorite}
+              onRate={onRate}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
