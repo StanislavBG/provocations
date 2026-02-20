@@ -170,9 +170,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className={`w-full mx-auto flex flex-col flex-1 min-h-0 overflow-y-auto px-3 md:px-6 py-4 gap-3 ${
-        isWritePrompt ? "" : "max-w-6xl"
-      }`}>
+      <div className={`w-full mx-auto flex flex-col flex-1 min-h-0 px-3 md:px-6 py-4 gap-3 ${
+        hasObjectiveType ? "overflow-y-auto" : "overflow-hidden"
+      } ${isWritePrompt ? "" : "max-w-6xl"}`}>
 
         {/* ── STEP ONE: Your objective ── */}
         <div className="shrink-0 space-y-2" ref={stepOneRef}>
