@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ProvokeText } from "@/components/ProvokeText";
 import {
   Mic,
   MicOff,
@@ -132,6 +133,19 @@ export function VoiceCaptureWorkspace({
 
   // Word count
   const wordCount = totalTranscript.trim() ? totalTranscript.trim().split(/\s+/).length : 0;
+
+  // Display transcript with interim text appended
+  const displayTranscript = interimText
+    ? totalTranscript + interimText
+    : totalTranscript;
+
+  // Format questions as copyable text for ProvokeText
+  const questionsText = questions.length > 0
+    ? questions.map((q) => {
+        const style = CATEGORY_STYLES[q.category] || CATEGORY_STYLES.clarify;
+        return `[${style.label}] ${q.question}`;
+      }).join("\n\n")
+    : "";
 
   // Ref for transcript auto-scroll
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -515,31 +529,25 @@ export function VoiceCaptureWorkspace({
 
         {/* ── LEFT PANE: Streaming transcript ── */}
         <div className="w-1/3 min-w-[250px] border-r flex flex-col overflow-hidden">
-          <div className="px-4 py-2.5 border-b bg-card/40">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Transcript
-            </h3>
-          </div>
-          <div className="flex-1 overflow-y-auto px-4 py-3">
-            {totalTranscript.trim() ? (
-              <div className="prose prose-sm dark:prose-invert max-w-none font-serif leading-relaxed text-foreground/80 whitespace-pre-wrap text-sm">
-                {totalTranscript}
-                {interimText && (
-                  <span className="text-foreground/40 italic"> {interimText}</span>
-                )}
-                <div ref={transcriptEndRef} />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
-                <FileText className="w-8 h-8" />
-                <p className="text-sm">
-                  {isRecording
-                    ? "Listening... transcript will appear here"
-                    : "Start recording to see transcript"}
-                </p>
-              </div>
-            )}
-          </div>
+          <ProvokeText
+            chrome="container"
+            variant="editor"
+            label="Transcript"
+            labelIcon={FileText}
+            value={displayTranscript}
+            onChange={() => {}}
+            readOnly
+            showCopy
+            showClear={false}
+            placeholder={
+              isRecording
+                ? "Listening... transcript will appear here"
+                : "Start recording to see transcript"
+            }
+            className="text-sm leading-relaxed font-serif"
+            containerClassName="flex-1 min-h-0"
+          />
+          <div ref={transcriptEndRef} />
         </div>
 
         {/* ── CENTER PANE: Recording controls ── */}
@@ -626,83 +634,67 @@ export function VoiceCaptureWorkspace({
         <div className="w-1/3 min-w-[250px] border-l flex flex-col overflow-hidden">
           {/* Summary sub-panel */}
           <div className="flex-1 flex flex-col overflow-hidden border-b">
-            <div className="px-4 py-2.5 border-b bg-card/40 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                Summary
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={handleRefreshInsights}
-                disabled={isSummarizing || !totalTranscript.trim() || totalTranscript.trim().split(/\s+/).length < 30}
-                title="Refresh summary & questions"
-              >
-                {isSummarizing ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-3.5 h-3.5" />
-                )}
-              </Button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              {summary ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
-                  {summary}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
-                  <Sparkles className="w-6 h-6" />
-                  <p className="text-xs">
-                    {wordCount >= 30
-                      ? "Click refresh to generate a summary"
-                      : "Summary generates after ~30 words"}
-                  </p>
-                </div>
-              )}
-            </div>
+            <ProvokeText
+              chrome="container"
+              variant="editor"
+              label="Summary"
+              labelIcon={Sparkles}
+              value={summary}
+              onChange={() => {}}
+              readOnly
+              showCopy
+              showClear={false}
+              placeholder={
+                wordCount >= 30
+                  ? "Click refresh to generate a summary"
+                  : "Summary generates after ~30 words"
+              }
+              className="text-sm leading-relaxed"
+              containerClassName="flex-1 min-h-0"
+              headerActions={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={handleRefreshInsights}
+                  disabled={isSummarizing || !totalTranscript.trim() || wordCount < 30}
+                  title="Refresh summary & questions"
+                >
+                  {isSummarizing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              }
+            />
           </div>
 
           {/* Questions sub-panel */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-4 py-2.5 border-b bg-card/40 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <HelpCircle className="w-3.5 h-3.5" />
-                Questions
-              </h3>
-              {isGeneratingQuestions && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-              )}
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              {questions.length > 0 ? (
-                <div className="space-y-2.5">
-                  {questions.map((q, i) => {
-                    const style = CATEGORY_STYLES[q.category] || CATEGORY_STYLES.clarify;
-                    return (
-                      <div key={i} className="rounded-md border bg-card/60 p-2.5 space-y-1">
-                        <span className={`text-[10px] font-semibold uppercase ${style.color}`}>
-                          {style.label}
-                        </span>
-                        <p className="text-sm leading-snug">
-                          {q.question}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
-                  <HelpCircle className="w-6 h-6" />
-                  <p className="text-xs">
-                    {summary
-                      ? "Questions generate with each summary refresh"
-                      : "Questions appear after the first summary"}
-                  </p>
-                </div>
-              )}
-            </div>
+            <ProvokeText
+              chrome="container"
+              variant="editor"
+              label="Questions"
+              labelIcon={HelpCircle}
+              value={questionsText}
+              onChange={() => {}}
+              readOnly
+              showCopy
+              showClear={false}
+              placeholder={
+                summary
+                  ? "Questions generate with each summary refresh"
+                  : "Questions appear after the first summary"
+              }
+              className="text-sm leading-relaxed"
+              containerClassName="flex-1 min-h-0"
+              headerActions={
+                isGeneratingQuestions ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                ) : undefined
+              }
+            />
           </div>
         </div>
       </div>
