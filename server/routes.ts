@@ -1599,6 +1599,50 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
     }
   });
 
+  // ── Generate probing questions from a transcript summary ──
+  app.post("/api/generate-questions", async (req, res) => {
+    try {
+      const { summary, objective } = req.body;
+
+      if (!summary || typeof summary !== "string") {
+        return res.status(400).json({ error: "Summary is required" });
+      }
+
+      const response = await llm.generate({
+        maxTokens: 1500,
+        temperature: 0.5,
+        system: `You are an expert facilitator and critical thinker. Given a summary of a voice discussion, generate 3-5 probing questions that would help the speaker:
+1. Clarify vague or ambiguous points
+2. Explore unstated assumptions
+3. Deepen their thinking on key topics
+4. Identify gaps or missing perspectives
+5. Connect ideas to practical next steps
+
+Return ONLY a JSON array of objects with "question" (string) and "category" (one of: "clarify", "deepen", "gaps", "action"). No markdown, no explanation — just the JSON array.`,
+        messages: [
+          {
+            role: "user",
+            content: `${objective ? `Topic: ${objective}\n\n` : ""}Summary of discussion so far:\n\n${summary}`
+          }
+        ],
+      });
+
+      const text = response.text.trim();
+      // Parse JSON array from response — handle potential markdown wrapping
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const questions = JSON.parse(jsonMatch[0]);
+        return res.json({ questions });
+      }
+
+      res.json({ questions: [] });
+    } catch (error) {
+      console.error("Generate questions error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate questions", details: errorMessage });
+    }
+  });
+
   // ── Extract metrics from SQL queries ──
   app.post("/api/extract-metrics", async (req, res) => {
     try {
