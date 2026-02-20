@@ -1,3 +1,18 @@
+import type { ComponentType } from "react";
+import {
+  PencilLine,
+  ClipboardList,
+  Rocket,
+  Radio,
+  GraduationCap,
+  BarChart3,
+  MonitorPlay,
+  UserRoundCog,
+  DatabaseZap,
+  BookOpenCheck,
+  Mic,
+} from "lucide-react";
+
 export interface TemplateStep {
   id: string;
   label: string;
@@ -9,7 +24,7 @@ export interface PrebuiltTemplate {
   shortLabel: string; // compact label for quick-select buttons
   subtitle: string;
   description: string;
-  icon: string; // lucide icon name key
+  icon: ComponentType<{ className?: string }>; // lucide icon component — single source of truth
   objective: string;
   starterText: string;
   draftQuestions: string[]; // probing questions shown in a side panel (not in the draft)
@@ -27,7 +42,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     subtitle: "AIM framework, any format",
     description:
       "For when you need to write a clear, high-quality prompt for an AI tool. Uses the AIM framework (Actor, Input, Mission) to structure your thinking. Write in whatever format feels natural — the AI will push you on clarity and structure so the resulting prompt gets the best possible output.",
-    icon: "pencil-line",
+    icon: PencilLine,
     objective:
       "Write a clear, structured prompt using the AIM framework (Actor, Input, Mission) that an AI can execute with precision",
     starterText: "",
@@ -52,7 +67,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     subtitle: "SQL analysis, schema-aware optimization",
     description:
       "For analyzing and optimizing complex SQL queries. Paste a query (and optionally your database schema) and the system breaks it into components — SELECT clauses, JOINs, subqueries — with explanations, optimization suggestions, and schema-aware insights. Provocations challenge your query's readability, performance, and correctness.",
-    icon: "database-zap",
+    icon: DatabaseZap,
     objective:
       "Help the analyst groom their SQL query for performance, readability, and improved visibility. Provide constructive, non-judgmental feedback — frame suggestions as improvements, not criticisms. The document IS the SQL query itself.",
     starterText: "",
@@ -159,7 +174,7 @@ Track each modification with a brief description of what changed.`,
     subtitle: "Incremental feature, enterprise-grade",
     description:
       "For shipping an incremental feature in a software product. Uses a semi-structured format: who is the user, what's their workflow, what changes, and what does done look like. Provocations come from your toughest colleagues — the people who will poke holes in your spec before engineering starts.",
-    icon: "clipboard-list",
+    icon: ClipboardList,
     objective:
       "Write a clear product requirements document for an incremental feature with defined user, workflow, scope, and acceptance criteria",
     starterText: "",
@@ -220,7 +235,7 @@ What specifically changes for the user? Walk through the new flow step by step.
     subtitle: "Full SaaS spec from scratch",
     description:
       "Starting from zero? This mode walks you through the questions needed to build a complete requirement document for a new SaaS application. It starts broad (what problem, who's the user) and progressively drills into specifics (data model, auth, deployment). By the end, you'll have a spec an AI or a team can build from.",
-    icon: "rocket",
+    icon: Rocket,
     objective:
       "Write a comprehensive application specification for a new SaaS product that covers users, features, technical architecture, and deployment",
     starterText: "",
@@ -304,7 +319,7 @@ Key endpoints the backend needs:
     subtitle: "Screenshots & annotations to requirements",
     description:
       "Capture screenshots, annotate them, and transform your observations into structured requirements. An agent asks sequential questions — exploring what you've captured — until the spec is crystal clear. The output is a markdown requirements document.",
-    icon: "radio",
+    icon: Radio,
     objective:
       "Discover and refine requirements through captured screenshots, annotations, and iterative questioning",
     starterText: "",
@@ -331,7 +346,7 @@ Key endpoints the backend needs:
     subtitle: "Structured academic or exploratory writing",
     description:
       "For writing a research paper or structured analysis. Guides you through defining a thesis, reviewing existing work, presenting methodology and findings, and drawing conclusions. Provocations come from reviewers and peers who will challenge your rigor, originality, and clarity.",
-    icon: "graduation-cap",
+    icon: GraduationCap,
     objective:
       "Write a well-structured research paper with a clear thesis, supporting evidence, methodology, findings, and conclusions",
     starterText: "",
@@ -428,7 +443,7 @@ What questions remain open? What should be explored next?
     subtitle: "Visual content brief, ready for design",
     description:
       "For creating a detailed description of an infographic — the narrative, data points, visual hierarchy, and messaging. This document becomes the brief a designer or tool uses to produce the final visual. Provocations challenge you on clarity, data integrity, and whether the story actually works at a glance.",
-    icon: "bar-chart-3",
+    icon: BarChart3,
     objective:
       "Write a clear infographic description covering the narrative, key data points, visual structure, and messaging so a designer can produce it without ambiguity",
     starterText: "",
@@ -507,7 +522,7 @@ Color palette, fonts, brand guidelines, or mood references.
     subtitle: "Character, role, or AI agent profile",
     description:
       "For defining a persona, character, or AI agent in structured detail. Captures identity, motivations, behavioral traits, communication style, expertise, constraints, and interaction patterns. The output is a complete profile — usable as a character brief, user persona, or agent system prompt.",
-    icon: "user-round-cog",
+    icon: UserRoundCog,
     objective:
       "Write a complete, structured persona definition covering identity, motivations, expertise, behavioral traits, communication style, and constraints",
     starterText: "",
@@ -616,7 +631,7 @@ Typical way they end an interaction.
     subtitle: "Slide-show video with a presenter voice",
     description:
       "For creating a slide-show video script driven by a presenter persona or key story. You define who the host is (a cynical veteran, an excited educator, a cautionary narrator) and what they should focus on — the AI shapes the narration around that voice. Works best when you set a clear persona or analogy, define the target audience, constrain what to highlight, and command the structure.",
-    icon: "monitor-play",
+    icon: MonitorPlay,
     objective:
       "Write a presenter-driven slide-show video script with a clear host voice, targeted audience, focused content, and commanded structure",
     starterText: "",
@@ -743,7 +758,7 @@ Aspect ratio (16:9, 9:16, 1:1), resolution, export format.`,
     subtitle: "Capture, organize, and build context",
     description:
       "For building a rich context library around a topic. Capture links, excerpts, notes, and references — then let the AI help you organize, cross-reference, and identify gaps. The output is a structured research brief you can feed into any other app or project. Perfect for pre-work before writing a PRD, paper, or strategy doc.",
-    icon: "book-open-check",
+    icon: BookOpenCheck,
     objective:
       "Build a structured research context by capturing, organizing, and cross-referencing sources, notes, and references into a coherent knowledge base",
     starterText: "",
@@ -824,7 +839,7 @@ Organized collection of reusable context items that can be shared with other pro
     subtitle: "Speak your ideas, structure them later",
     description:
       "For when your ideas flow better out loud than on a keyboard. Start by talking — ramble, brainstorm, think out loud — and the AI captures, cleans, and structures your spoken thoughts into organized content. No typing required to get started. Perfect for early ideation, meeting summaries, brain dumps, or when you're on the go.",
-    icon: "mic",
+    icon: Mic,
     objective:
       "Capture spoken ideas and transform them into a structured, well-organized document that preserves the speaker's intent and key points",
     starterText: "",

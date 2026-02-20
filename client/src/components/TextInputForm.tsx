@@ -5,24 +5,14 @@ import {
   Target,
   PenLine,
   PencilLine,
-  ClipboardList,
-  Rocket,
-  GraduationCap,
-  BarChart3,
-  Clapperboard,
-  MonitorPlay,
   Check,
   ChevronDown,
   Crosshair,
   Radio,
   NotebookPen,
-  UserRoundCog,
   Layers,
   Globe,
   Wand2,
-  DatabaseZap,
-  BookOpenCheck,
-  Mic,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -46,21 +36,6 @@ interface TextInputFormProps {
   /** Notifies parent when a template is selected (for StepTracker) */
   onTemplateSelect?: (templateId: string | null) => void;
 }
-
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  "pencil-line": PencilLine,
-  "clipboard-list": ClipboardList,
-  rocket: Rocket,
-  radio: Radio,
-  "graduation-cap": GraduationCap,
-  "bar-chart-3": BarChart3,
-  clapperboard: Clapperboard,
-  "monitor-play": MonitorPlay,
-  "user-round-cog": UserRoundCog,
-  "database-zap": DatabaseZap,
-  "book-open-check": BookOpenCheck,
-  mic: Mic,
-};
 
 /**
  * Shared text processor that calls `/api/summarize-intent`.
@@ -193,7 +168,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
             <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
               {prebuiltTemplates.map((template) => {
-                const Icon = iconMap[template.icon] || PencilLine;
+                const Icon = template.icon;
                 const isActive = activePrebuilt?.id === template.id;
 
                 return (
@@ -237,7 +212,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             >
               {activePrebuilt ? (
                 <>
-                  {(() => { const I = iconMap[activePrebuilt.icon] || PencilLine; return <I className="w-4 h-4 text-primary" />; })()}
+                  {(() => { const I = activePrebuilt.icon; return <I className="w-4 h-4 text-primary" />; })()}
                   <span className="font-medium">{activePrebuilt.title}</span>
                 </>
               ) : (
