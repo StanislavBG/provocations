@@ -30,7 +30,7 @@ npm run db:push  # Push Drizzle schema to database
 | Layer | Technologies |
 |-------|-------------|
 | **Frontend** | React 18, TypeScript 5.6, Vite 7, Tailwind CSS 3.4, shadcn/ui (47 components) |
-| **Backend** | Express 5.0, Google Gemini 2.0 Flash (default) / Anthropic Claude (configurable) |
+| **Backend** | Express 5.0, OpenAI GPT-4o (default) / Google Gemini 2.0 Flash / Anthropic Claude (configurable via `LLM_PROVIDER`) |
 | **Database** | PostgreSQL via Drizzle ORM, zero-knowledge AES-256-GCM encryption (all user text encrypted at rest) |
 | **Auth** | Clerk (authentication & user ownership) |
 | **Validation** | Zod schemas shared between frontend/backend |
@@ -271,9 +271,10 @@ Requirement discovery through:
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Google Gemini API key (default provider) |
-| `ANTHROPIC_API_KEY` | Anthropic API key (fallback, or `ANTHROPIC_KEY`) |
-| `LLM_PROVIDER` | Force provider: `gemini` or `anthropic` (auto-detects by default) |
+| `OPENAI_API_KEY` | OpenAI API key (preferred provider) |
+| `GEMINI_API_KEY` | Google Gemini API key (via OpenAI-compatible endpoint) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (or `ANTHROPIC_KEY`) |
+| `LLM_PROVIDER` | Force provider: `openai`, `gemini`, or `anthropic` (auto-detects by default) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
 | `CLERK_PUBLISHABLE_KEY` | Clerk frontend authentication |
@@ -296,6 +297,28 @@ Requirement discovery through:
 - Zod validation on all API inputs
 - Defensive null-checks in components
 - Toast notifications for user feedback
+
+### ADR: Always Use ProvokeText for Text Display
+
+**All text panels in the application MUST use `ProvokeText`** — never raw `<div>`, `<p>`, `<textarea>`, or `<pre>` for displaying or editing user-facing text content. This is an architectural decision record (ADR) that applies to every component.
+
+**Why:** ProvokeText provides a unified text experience with built-in copy, voice, smart processing, and consistent styling. Using raw elements creates inconsistency and loses capabilities.
+
+**Rules:**
+1. **Read-only text panels** (transcripts, summaries, previews): Use `<ProvokeText readOnly showCopy showClear={false} />` with `chrome="container"` or `chrome="bare"`.
+2. **Editable text areas**: Use `<ProvokeText chrome="container" variant="textarea" />` with appropriate voice/processor props.
+3. **Document editors**: Use `<ProvokeText chrome="container" variant="editor" />`.
+4. **Minimum visible action**: `showCopy` must always be `true` — users must always be able to copy text. Other actions (clear, voice, smart modes) can be hidden via props.
+5. **Streaming content**: Set `readOnly` and update the `value` prop as data arrives — ProvokeText handles re-rendering without interrupting the display.
+6. **Configuration extension**: If ProvokeText lacks a needed capability, extend its props interface rather than bypassing it with a raw element.
+
+**Props quick reference:**
+- `chrome`: `"container"` (bordered card with header) | `"inline"` (floating toolbar) | `"bare"` (no chrome)
+- `variant`: `"input"` | `"textarea"` | `"editor"`
+- `showCopy` / `showClear`: Control toolbar button visibility
+- `readOnly`: Disable editing while keeping copy functional
+- `headerActions`: Slot for extra buttons in the container header
+- `label` / `labelIcon`: Container header label
 
 ### Document Storage — Zero-Knowledge Encryption
 - **All user-provided text is encrypted at rest** with AES-256-GCM (server-side)

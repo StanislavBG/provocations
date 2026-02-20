@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ProvokeText } from "@/components/ProvokeText";
 import {
   Mic,
   MicOff,
@@ -107,6 +108,8 @@ export function VoiceCaptureWorkspace({
   const [interimText, setInterimText] = useState("");
   // Total accumulated text (everything flushed + buffer)
   const [totalTranscript, setTotalTranscript] = useState("");
+  // Ref mirror so interval callbacks always read the latest transcript
+  const totalTranscriptRef = useRef("");
 
   // ── Timer ──
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -130,6 +133,19 @@ export function VoiceCaptureWorkspace({
 
   // Word count
   const wordCount = totalTranscript.trim() ? totalTranscript.trim().split(/\s+/).length : 0;
+
+  // Display transcript with interim text appended
+  const displayTranscript = interimText
+    ? totalTranscript + interimText
+    : totalTranscript;
+
+  // Format questions as copyable text for ProvokeText
+  const questionsText = questions.length > 0
+    ? questions.map((q) => {
+        const style = CATEGORY_STYLES[q.category] || CATEGORY_STYLES.clarify;
+        return `[${style.label}] ${q.question}`;
+      }).join("\n\n")
+    : "";
 
   // Ref for transcript auto-scroll
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -163,9 +179,11 @@ export function VoiceCaptureWorkspace({
 
       if (finalTranscript) {
         transcriptBufferRef.current += finalTranscript + " ";
-        setTotalTranscript(
-          (prev) => prev + finalTranscript + " "
-        );
+        setTotalTranscript((prev) => {
+          const next = prev + finalTranscript + " ";
+          totalTranscriptRef.current = next;
+          return next;
+        });
       }
 
       setInterimText(interim);
@@ -233,9 +251,11 @@ export function VoiceCaptureWorkspace({
 
   // ── Generate AI summary from transcript ──
   const generateSummary = useCallback(async (text: string) => {
-    if (!text.trim() || text.trim().split(/\s+/).length < 30) return;
-    // Only re-summarize if transcript grew significantly (>50 new words)
-    if (text.length - lastSummarizedLengthRef.current < 200) return;
+    const words = text.trim().split(/\s+/).length;
+    if (!text.trim() || words < 30) return null;
+    // Only re-summarize if significant new content since last summary
+    const newChars = text.length - lastSummarizedLengthRef.current;
+    if (lastSummarizedLengthRef.current > 0 && newChars < 100) return null;
 
     setIsSummarizing(true);
     try {
@@ -279,18 +299,32 @@ export function VoiceCaptureWorkspace({
     }
   }, [objective]);
 
+  // Keep stable refs for callbacks used inside the interval
+  const flushBufferRef = useRef(flushBuffer);
+  flushBufferRef.current = flushBuffer;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const objectiveRef = useRef(objective);
+  objectiveRef.current = objective;
+  const generateSummaryRef = useRef(generateSummary);
+  generateSummaryRef.current = generateSummary;
+  const generateQuestionsRef = useRef(generateQuestions);
+  generateQuestionsRef.current = generateQuestions;
+
   // ── Auto-save: flush buffer + persist + summarize every ~30s ──
+  // Only depends on isRecording/isPaused so the interval is stable and
+  // doesn't restart on every transcript word.
   useEffect(() => {
     if (isRecording && !isPaused) {
       autoSaveTimerRef.current = setInterval(async () => {
         // Flush buffer to document state
-        flushBuffer();
+        flushBufferRef.current();
 
         // Persist to storage
         setIsSaving(true);
         try {
-          const title = objective || `Voice Capture ${new Date().toLocaleDateString()}`;
-          await onSave(title, null);
+          const title = objectiveRef.current || `Voice Capture ${new Date().toLocaleDateString()}`;
+          await onSaveRef.current(title, null);
           setLastSaveTime(Date.now());
         } catch {
           // Silent failure — will retry next interval
@@ -298,10 +332,11 @@ export function VoiceCaptureWorkspace({
           setIsSaving(false);
         }
 
-        // Generate summary + questions (fire-and-forget, non-blocking)
-        generateSummary(totalTranscript).then((newSummary) => {
+        // Generate summary + questions using the latest transcript via ref
+        const currentText = totalTranscriptRef.current;
+        generateSummaryRef.current(currentText).then((newSummary) => {
           if (newSummary) {
-            generateQuestions(newSummary);
+            generateQuestionsRef.current(newSummary);
           }
         });
       }, 30000);
@@ -313,7 +348,7 @@ export function VoiceCaptureWorkspace({
         autoSaveTimerRef.current = null;
       }
     };
-  }, [isRecording, isPaused, flushBuffer, onSave, objective, totalTranscript, generateSummary, generateQuestions]);
+  }, [isRecording, isPaused]);
 
   // ── Timer tick ──
   useEffect(() => {
@@ -330,6 +365,19 @@ export function VoiceCaptureWorkspace({
       }
     };
   }, [isRecording, isPaused]);
+
+  // ── First-summary trigger: fire once the transcript crosses 30 words ──
+  const initialSummaryFiredRef = useRef(false);
+  useEffect(() => {
+    if (initialSummaryFiredRef.current) return;
+    const words = totalTranscript.trim().split(/\s+/).length;
+    if (words >= 30) {
+      initialSummaryFiredRef.current = true;
+      generateSummary(totalTranscript).then((s) => {
+        if (s) generateQuestions(s);
+      });
+    }
+  }, [totalTranscript, generateSummary, generateQuestions]);
 
   // ── Auto-scroll transcript ──
   useEffect(() => {
@@ -481,31 +529,25 @@ export function VoiceCaptureWorkspace({
 
         {/* ── LEFT PANE: Streaming transcript ── */}
         <div className="w-1/3 min-w-[250px] border-r flex flex-col overflow-hidden">
-          <div className="px-4 py-2.5 border-b bg-card/40">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Transcript
-            </h3>
-          </div>
-          <div className="flex-1 overflow-y-auto px-4 py-3">
-            {totalTranscript.trim() ? (
-              <div className="prose prose-sm dark:prose-invert max-w-none font-serif leading-relaxed text-foreground/80 whitespace-pre-wrap text-sm">
-                {totalTranscript}
-                {interimText && (
-                  <span className="text-foreground/40 italic"> {interimText}</span>
-                )}
-                <div ref={transcriptEndRef} />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
-                <FileText className="w-8 h-8" />
-                <p className="text-sm">
-                  {isRecording
-                    ? "Listening... transcript will appear here"
-                    : "Start recording to see transcript"}
-                </p>
-              </div>
-            )}
-          </div>
+          <ProvokeText
+            chrome="container"
+            variant="editor"
+            label="Transcript"
+            labelIcon={FileText}
+            value={displayTranscript}
+            onChange={() => {}}
+            readOnly
+            showCopy
+            showClear={false}
+            placeholder={
+              isRecording
+                ? "Listening... transcript will appear here"
+                : "Start recording to see transcript"
+            }
+            className="text-sm leading-relaxed font-serif"
+            containerClassName="flex-1 min-h-0"
+          />
+          <div ref={transcriptEndRef} />
         </div>
 
         {/* ── CENTER PANE: Recording controls ── */}
@@ -592,83 +634,67 @@ export function VoiceCaptureWorkspace({
         <div className="w-1/3 min-w-[250px] border-l flex flex-col overflow-hidden">
           {/* Summary sub-panel */}
           <div className="flex-1 flex flex-col overflow-hidden border-b">
-            <div className="px-4 py-2.5 border-b bg-card/40 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                Summary
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={handleRefreshInsights}
-                disabled={isSummarizing || !totalTranscript.trim() || totalTranscript.trim().split(/\s+/).length < 30}
-                title="Refresh summary & questions"
-              >
-                {isSummarizing ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-3.5 h-3.5" />
-                )}
-              </Button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              {summary ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
-                  {summary}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
-                  <Sparkles className="w-6 h-6" />
-                  <p className="text-xs">
-                    {wordCount >= 30
-                      ? "Click refresh to generate a summary"
-                      : "Summary generates after ~30 words"}
-                  </p>
-                </div>
-              )}
-            </div>
+            <ProvokeText
+              chrome="container"
+              variant="editor"
+              label="Summary"
+              labelIcon={Sparkles}
+              value={summary}
+              onChange={() => {}}
+              readOnly
+              showCopy
+              showClear={false}
+              placeholder={
+                wordCount >= 30
+                  ? "Click refresh to generate a summary"
+                  : "Summary generates after ~30 words"
+              }
+              className="text-sm leading-relaxed"
+              containerClassName="flex-1 min-h-0"
+              headerActions={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={handleRefreshInsights}
+                  disabled={isSummarizing || !totalTranscript.trim() || wordCount < 30}
+                  title="Refresh summary & questions"
+                >
+                  {isSummarizing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              }
+            />
           </div>
 
           {/* Questions sub-panel */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-4 py-2.5 border-b bg-card/40 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <HelpCircle className="w-3.5 h-3.5" />
-                Questions
-              </h3>
-              {isGeneratingQuestions && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-              )}
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              {questions.length > 0 ? (
-                <div className="space-y-2.5">
-                  {questions.map((q, i) => {
-                    const style = CATEGORY_STYLES[q.category] || CATEGORY_STYLES.clarify;
-                    return (
-                      <div key={i} className="rounded-md border bg-card/60 p-2.5 space-y-1">
-                        <span className={`text-[10px] font-semibold uppercase ${style.color}`}>
-                          {style.label}
-                        </span>
-                        <p className="text-sm leading-snug">
-                          {q.question}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
-                  <HelpCircle className="w-6 h-6" />
-                  <p className="text-xs">
-                    {summary
-                      ? "Questions generate with each summary refresh"
-                      : "Questions appear after the first summary"}
-                  </p>
-                </div>
-              )}
-            </div>
+            <ProvokeText
+              chrome="container"
+              variant="editor"
+              label="Questions"
+              labelIcon={HelpCircle}
+              value={questionsText}
+              onChange={() => {}}
+              readOnly
+              showCopy
+              showClear={false}
+              placeholder={
+                summary
+                  ? "Questions generate with each summary refresh"
+                  : "Questions appear after the first summary"
+              }
+              className="text-sm leading-relaxed"
+              containerClassName="flex-1 min-h-0"
+              headerActions={
+                isGeneratingQuestions ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                ) : undefined
+              }
+            />
           </div>
         </div>
       </div>

@@ -30,6 +30,16 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
@@ -184,6 +194,8 @@ export default function Workspace() {
 
   // Storage panel state
   const [showStoragePanel, setShowStoragePanel] = useState(false);
+  // New button confirmation
+  const [showNewConfirm, setShowNewConfirm] = useState(false);
   const [savedDocId, setSavedDocId] = useState<number | null>(null);
   const [savedDocTitle, setSavedDocTitle] = useState<string>("");
 
@@ -1194,6 +1206,16 @@ RULES:
     setHoveredSubqueryId(null);
   }, []);
 
+  // Show confirmation when there's work in progress, otherwise reset immediately
+  const handleNewClick = useCallback(() => {
+    const hasWork = document.rawText.trim().length > 0;
+    if (hasWork) {
+      setShowNewConfirm(true);
+    } else {
+      handleReset();
+    }
+  }, [document.rawText, handleReset]);
+
   const handleCaptureMetrics = useCallback((items: ContextItem[]) => {
     setCapturedContext(prev => [...prev, ...items]);
   }, []);
@@ -1442,227 +1464,123 @@ RULES:
       (wireframeAnalysis.images?.length || 0)
     : 0;
 
-  if (isInputPhase) {
-    return (
-      <div className="h-screen flex flex-col">
-        <header className="border-b bg-card">
-          <div className="flex items-center justify-between gap-4 px-4 py-2">
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5 text-primary" />
-              <h1 className="font-semibold text-lg">Provocations</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                data-testid="button-storage-input"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowStoragePanel(true)}
-                className="gap-1.5"
-              >
-                <HardDrive className="w-4 h-4" />
-                <span className="hidden sm:inline">Storage</span>
-              </Button>
-              <Button
-                data-testid="button-reset-input"
-                variant="ghost"
-                size="sm"
-                onClick={handleReset}
-                className="gap-1.5"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span className="hidden sm:inline">New</span>
-              </Button>
-              <AutoDictateToggle />
-              <ThemeToggle />
-              {isAdmin && (
-                <Link href="/admin">
-                  <Button variant="ghost" size="sm" className="gap-1.5">
-                    <Shield className="w-4 h-4" />
-                    <span className="hidden sm:inline">Admin</span>
-                  </Button>
-                </Link>
-              )}
-              <UserButton data-testid="button-user-menu" />
-            </div>
-          </div>
-        </header>
-        <StoragePanel
-          isOpen={showStoragePanel}
-          onClose={() => setShowStoragePanel(false)}
-          onLoadDocument={handleStorageLoad}
-          onSave={handleStorageSave}
-          hasContent={!!document.rawText.trim()}
-          currentDocId={savedDocId}
-          currentTitle={savedDocTitle || objective}
-        />
-        <div className="flex-1 overflow-y-auto">
-          <TextInputForm
-            onSubmit={(text, obj, refs, templateId) => {
-              setSelectedTemplateId(templateId ?? null);
-              createDraftMutation.mutate({ context: text, obj, refs, templateId: templateId ?? undefined });
-            }}
-            isLoading={createDraftMutation.isPending}
-            onBlankDocument={(obj) => {
-              setDocument({ id: generateId("doc"), rawText: " " });
-              setObjective(obj);
-            }}
-            onStreamingMode={(obj, url, templateId) => {
-              const streamConfig = getAppFlowConfig(templateId);
-              setSelectedTemplateId(templateId ?? null);
-              setDocument({ id: generateId("doc"), rawText: " " });
-              setObjective(obj);
-              if (url) setWebsiteUrl(url);
-              setActiveToolboxApp(streamConfig.defaultToolboxTab as ToolboxApp);
-              const initialVersion: DocumentVersion = {
-                id: generateId("v"),
-                text: " ",
-                timestamp: Date.now(),
-                description: "Capture workspace initialized",
-              };
-              setVersions([initialVersion]);
-            }}
-            onVoiceCaptureMode={(obj, templateId) => {
-              setSelectedTemplateId(templateId ?? null);
-              setDocument({ id: generateId("doc"), rawText: `# ${obj}\n\n*Voice capture started ${new Date().toLocaleString()}*` });
-              setObjective(obj);
-              const initialVersion: DocumentVersion = {
-                id: generateId("v"),
-                text: `# ${obj}\n\n*Voice capture started ${new Date().toLocaleString()}*`,
-                timestamp: Date.now(),
-                description: "Voice capture initialized",
-              };
-              setVersions([initialVersion]);
-            }}
-            onYouTubeInfographicMode={(obj, channelUrl, templateId) => {
-              setSelectedTemplateId(templateId);
-              setDocument({ id: generateId("doc"), rawText: `# YouTube to Infographic\n\n*Loading channel: ${channelUrl}...*` });
-              setObjective(obj);
-              setWebsiteUrl(channelUrl);
-              const ytConfig = getAppFlowConfig(templateId);
-              setActiveToolboxApp(ytConfig.defaultToolboxTab as ToolboxApp);
-              const initialVersion: DocumentVersion = {
-                id: generateId("v"),
-                text: `# YouTube to Infographic\n\n*Loading channel...*`,
-                timestamp: Date.now(),
-                description: "YouTube infographic workspace initialized",
-              };
-              setVersions([initialVersion]);
-            }}
-            onVoiceInfographicMode={(obj, transcript, templateId) => {
-              setSelectedTemplateId(templateId);
-              const initialDoc = `# Voice to Infographic\n\n*Processing transcript (${transcript.split(/\s+/).length} words)...*`;
-              setDocument({ id: generateId("doc"), rawText: initialDoc });
-              setObjective(obj);
-              const viConfig = getAppFlowConfig(templateId);
-              setActiveToolboxApp(viConfig.defaultToolboxTab as ToolboxApp);
-              const initialVersion: DocumentVersion = {
-                id: generateId("v"),
-                text: initialDoc,
-                timestamp: Date.now(),
-                description: "Voice infographic workspace initialized",
-              };
-              setVersions([initialVersion]);
-              // Store transcript in context for processing
-              setCapturedContext(prev => [
-                ...prev,
-                {
-                  id: generateId("ctx"),
-                  type: "text" as const,
-                  content: transcript,
-                  annotation: "Voice transcript for infographic processing",
-                  createdAt: Date.now(),
-                },
-              ]);
-            }}
-            capturedContext={capturedContext}
-            onCapturedContextChange={setCapturedContext}
-            onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
-          />
-        </div>
-        <StepTracker
-          currentPhase={workflowPhase}
-          selectedTemplate={selectedTemplateName}
-          appFlowSteps={appFlowConfig.flowSteps}
-          appLeftPanelTabs={appFlowConfig.leftPanelTabs}
+  // Input phase content — rendered inside unified layout below
+  const inputPhaseContent = isInputPhase ? (
+    <>
+      <div className="flex-1 overflow-y-auto">
+        <TextInputForm
+          onSubmit={(text, obj, refs, templateId) => {
+            setSelectedTemplateId(templateId ?? null);
+            createDraftMutation.mutate({ context: text, obj, refs, templateId: templateId ?? undefined });
+          }}
+          isLoading={createDraftMutation.isPending}
+          onBlankDocument={(obj) => {
+            setDocument({ id: generateId("doc"), rawText: " " });
+            setObjective(obj);
+          }}
+          onStreamingMode={(obj, url, templateId) => {
+            const streamConfig = getAppFlowConfig(templateId);
+            setSelectedTemplateId(templateId ?? null);
+            setDocument({ id: generateId("doc"), rawText: " " });
+            setObjective(obj);
+            if (url) setWebsiteUrl(url);
+            setActiveToolboxApp(streamConfig.defaultToolboxTab as ToolboxApp);
+            const initialVersion: DocumentVersion = {
+              id: generateId("v"),
+              text: " ",
+              timestamp: Date.now(),
+              description: "Capture workspace initialized",
+            };
+            setVersions([initialVersion]);
+          }}
+          onVoiceCaptureMode={(obj, templateId) => {
+            setSelectedTemplateId(templateId ?? null);
+            setDocument({ id: generateId("doc"), rawText: `# ${obj}\n\n*Voice capture started ${new Date().toLocaleString()}*` });
+            setObjective(obj);
+            const initialVersion: DocumentVersion = {
+              id: generateId("v"),
+              text: `# ${obj}\n\n*Voice capture started ${new Date().toLocaleString()}*`,
+              timestamp: Date.now(),
+              description: "Voice capture initialized",
+            };
+            setVersions([initialVersion]);
+          }}
+          onYouTubeInfographicMode={(obj, channelUrl, templateId) => {
+            setSelectedTemplateId(templateId);
+            setDocument({ id: generateId("doc"), rawText: `# YouTube to Infographic\n\n*Loading channel: ${channelUrl}...*` });
+            setObjective(obj);
+            setWebsiteUrl(channelUrl);
+            const ytConfig = getAppFlowConfig(templateId);
+            setActiveToolboxApp(ytConfig.defaultToolboxTab as ToolboxApp);
+            const initialVersion: DocumentVersion = {
+              id: generateId("v"),
+              text: `# YouTube to Infographic\n\n*Loading channel...*`,
+              timestamp: Date.now(),
+              description: "YouTube infographic workspace initialized",
+            };
+            setVersions([initialVersion]);
+          }}
+          onVoiceInfographicMode={(obj, transcript, templateId) => {
+            setSelectedTemplateId(templateId);
+            const initialDoc = `# Voice to Infographic\n\n*Processing transcript (${transcript.split(/\s+/).length} words)...*`;
+            setDocument({ id: generateId("doc"), rawText: initialDoc });
+            setObjective(obj);
+            const viConfig = getAppFlowConfig(templateId);
+            setActiveToolboxApp(viConfig.defaultToolboxTab as ToolboxApp);
+            const initialVersion: DocumentVersion = {
+              id: generateId("v"),
+              text: initialDoc,
+              timestamp: Date.now(),
+              description: "Voice infographic workspace initialized",
+            };
+            setVersions([initialVersion]);
+            // Store transcript in context for processing
+            setCapturedContext(prev => [
+              ...prev,
+              {
+                id: generateId("ctx"),
+                type: "text" as const,
+                content: transcript,
+                annotation: "Voice transcript for infographic processing",
+                createdAt: Date.now(),
+              },
+            ]);
+          }}
+          capturedContext={capturedContext}
+          onCapturedContextChange={setCapturedContext}
+          onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
         />
       </div>
-    );
-  }
+      <StepTracker
+        currentPhase={workflowPhase}
+        selectedTemplate={selectedTemplateName}
+        appFlowSteps={appFlowConfig.flowSteps}
+        appLeftPanelTabs={appFlowConfig.leftPanelTabs}
+      />
+    </>
+  ) : null;
 
-  // ── Voice capture layout — single-page workspace variant ──
+  // Voice capture content — rendered inside unified layout below
+  const isVoiceCapture = !isInputPhase && appFlowConfig.workspaceLayout === "voice-capture";
+  const voiceCaptureContent = isVoiceCapture ? (
+    <>
+      <VoiceCaptureWorkspace
+        objective={objective}
+        onDocumentUpdate={(text) => setDocument({ ...document, rawText: text })}
+        documentText={document.rawText}
+        savedDocId={savedDocId}
+        onSave={handleStorageSave}
+        onSavedDocIdChange={setSavedDocId}
+      />
 
-  if (appFlowConfig.workspaceLayout === "voice-capture") {
-    return (
-      <div className="h-screen flex flex-col">
-        <header className="border-b bg-card">
-          <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5 text-primary" />
-              <h1 className="font-semibold text-lg">Voice Capture</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowStoragePanel(true)}
-                className="gap-1.5"
-              >
-                <HardDrive className="w-4 h-4" />
-                <span className="hidden sm:inline">Storage</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleReset}
-                className="gap-1.5"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span className="hidden sm:inline">New</span>
-              </Button>
-              <ThemeToggle />
-              <UserButton />
-            </div>
-          </div>
-
-          {/* Objective bar (collapsed) */}
-          {objective && (
-            <div className="border-t px-4 py-2 flex items-center gap-2">
-              <Target className="w-4 h-4 text-primary shrink-0" />
-              <span className="text-sm text-muted-foreground truncate">
-                {objective}
-              </span>
-            </div>
-          )}
-        </header>
-
-        <VoiceCaptureWorkspace
-          objective={objective}
-          onDocumentUpdate={(text) => setDocument({ ...document, rawText: text })}
-          documentText={document.rawText}
-          savedDocId={savedDocId}
-          onSave={handleStorageSave}
-          onSavedDocIdChange={setSavedDocId}
-        />
-
-        <StepTracker
-          currentPhase="edit"
-          selectedTemplate={selectedTemplateName}
-          appFlowSteps={appFlowConfig.flowSteps}
-          appLeftPanelTabs={appFlowConfig.leftPanelTabs}
-        />
-
-        <StoragePanel
-          isOpen={showStoragePanel}
-          onClose={() => setShowStoragePanel(false)}
-          onLoadDocument={handleStorageLoad}
-          onSave={handleStorageSave}
-          hasContent={!!document.rawText.trim()}
-          currentDocId={savedDocId}
-          currentTitle={savedDocTitle || objective}
-        />
-      </div>
-    );
-  }
+      <StepTracker
+        currentPhase="edit"
+        selectedTemplate={selectedTemplateName}
+        appFlowSteps={appFlowConfig.flowSteps}
+        appLeftPanelTabs={appFlowConfig.leftPanelTabs}
+      />
+    </>
+  ) : null;
 
   // ── Panel contents (shared between mobile and desktop layouts) ──
 
@@ -1891,19 +1809,24 @@ RULES:
     </div>
   );
 
-  // ── Layout ──
+  // ── Unified Layout — persistent global bar across all phases ──
+
+  const isStandardWorkspace = !isInputPhase && !isVoiceCapture;
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="border-b bg-card">
-        <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2 flex-wrap">
+      {/* ── Persistent global bar ── */}
+      <header className="border-b bg-card shrink-0">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
           <div className="flex items-center gap-3">
             <Sparkles className="w-5 h-5 text-primary" />
-            <h1 className="font-semibold text-lg">Provocations</h1>
+            <h1 className="font-semibold text-lg">
+              {isVoiceCapture ? "Voice Capture" : "Provocations"}
+            </h1>
           </div>
 
           <div className="flex items-center gap-2">
-            {canShowDiff && (
+            {isStandardWorkspace && canShowDiff && (
               <Button
                 data-testid="button-versions"
                 variant={showDiffView ? "default" : "outline"}
@@ -1929,7 +1852,7 @@ RULES:
               data-testid="button-reset"
               variant="ghost"
               size="sm"
-              onClick={handleReset}
+              onClick={handleNewClick}
               className="gap-1.5"
             >
               <RotateCcw className="w-4 h-4" />
@@ -1949,8 +1872,8 @@ RULES:
           </div>
         </div>
 
-        {/* Objective bar (collapsible, minimized by default) */}
-        {isObjectiveCollapsed ? (
+        {/* Objective bar — only in standard workspace mode */}
+        {isStandardWorkspace && (isObjectiveCollapsed ? (
           <button
             className="border-t px-4 py-2 flex items-center gap-2 w-full text-left hover:bg-muted/50 transition-colors"
             onClick={() => setIsObjectiveCollapsed(false)}
@@ -2014,8 +1937,44 @@ RULES:
               onVoiceTranscript={(text) => setSecondaryObjective(text)}
             />
           </div>
+        ))}
+
+        {/* Voice capture objective bar */}
+        {isVoiceCapture && objective && (
+          <div className="border-t px-4 py-2 flex items-center gap-2">
+            <Target className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm text-muted-foreground truncate">
+              {objective}
+            </span>
+          </div>
         )}
       </header>
+
+      {/* ── New button confirmation dialog ── */}
+      <AlertDialog open={showNewConfirm} onOpenChange={setShowNewConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start a new document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved work in progress. Starting a new document will discard your current changes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setShowNewConfirm(false); handleReset(); }}>
+              Start New
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Phase-specific content ── */}
+      {inputPhaseContent}
+      {voiceCaptureContent}
+
+      {/* ── Standard workspace content ── */}
+      {isStandardWorkspace && (
+      <>
 
       {/* Secondary objective panel (REQ-002, REQ-003) — prominent provocation text */}
       {secondaryObjective.trim() && (
@@ -2179,6 +2138,9 @@ RULES:
             appLeftPanelTabs={appFlowConfig.leftPanelTabs}
           />
         </>
+      )}
+
+      </>
       )}
 
       <StoragePanel
