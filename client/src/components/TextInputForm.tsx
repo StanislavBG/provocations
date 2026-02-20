@@ -1,5 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ArrowRight,
   Target,
@@ -18,9 +21,13 @@ import {
   FileAudio,
   Upload,
   Sparkles,
+  HardDrive,
+  FileText,
+  Loader2,
 } from "lucide-react";
-import { ProvokeText } from "@/components/ProvokeText";
+import { ProvokeText, type ProvokeAction } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { ContextCapturePanel } from "@/components/ContextCapturePanel";
 import { ContextStatusPanel } from "@/components/ContextStatusPanel";
@@ -67,6 +74,7 @@ async function processText(
 }
 
 export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
+  const { toast } = useToast();
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
   const [captureUrl, setCaptureUrl] = useState("");
@@ -77,6 +85,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
   const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
+
+  // Storage quick-load state
+  const [storageOpen, setStorageOpen] = useState(false);
+  const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
 
   // Category tab state for grouping templates
   const [activeCategory, setActiveCategory] = useState<TemplateCategory>("build");
@@ -90,6 +102,34 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   // Ref for scrolling back to top on selection
   const stepOneRef = useRef<HTMLDivElement>(null);
 
+  // ── Storage quick-load: fetch saved documents list ──
+  const { data: savedDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
+    queryKey: ["/api/documents"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/documents");
+      return res.json();
+    },
+    enabled: storageOpen, // only fetch when popover opens
+    staleTime: 30_000,
+  });
+
+  const handleLoadStorageDoc = useCallback(async (docId: number, docTitle: string) => {
+    setLoadingDocId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        setText((prev) => prev ? prev + "\n\n---\n\n" + data.content : data.content);
+        setStorageOpen(false);
+        toast({ title: "Context loaded", description: `"${docTitle}" added as starting material.` });
+      }
+    } catch (error) {
+      console.error("Failed to load document:", error);
+      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
+    } finally {
+      setLoadingDocId(null);
+    }
+  }, [toast]);
 
   const handleSubmit = () => {
     if (text.trim()) {
@@ -597,27 +637,73 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 maxCharCount={500000}
                 maxAudioDuration="5min"
                 headerActions={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 text-xs h-7"
-                    onClick={() => {
-                      const starter = [
-                        "## Actor",
-                        "You are a [role — e.g. Senior Software Engineer, Professional Chef, Marketing Strategist].",
-                        "",
-                        "## Input",
-                        "[Paste or describe the context here — the longer and more specific, the better the output.]",
-                        "",
-                        "## Mission",
-                        "Create a [specific output — e.g. step-by-step guide, code review, meal plan] that [key quality — e.g. is beginner-friendly, follows best practices, fits a 30-minute time limit].",
-                      ].join("\n");
-                      setText(starter);
-                    }}
-                  >
-                    <Wand2 className="w-3.5 h-3.5" />
-                    Practice
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Popover open={storageOpen} onOpenChange={setStorageOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs h-7"
+                          title="Load context from saved documents"
+                        >
+                          <HardDrive className="w-3.5 h-3.5" />
+                          Storage
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-72 p-0">
+                        <div className="px-3 py-2 border-b">
+                          <p className="text-sm font-medium">Load from storage</p>
+                          <p className="text-xs text-muted-foreground">Select a saved document to use as context</p>
+                        </div>
+                        <ScrollArea className="max-h-60">
+                          {!savedDocs?.documents?.length ? (
+                            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                              No saved documents yet
+                            </div>
+                          ) : (
+                            <div className="py-1">
+                              {savedDocs.documents.map((doc) => (
+                                <button
+                                  key={doc.id}
+                                  onClick={() => handleLoadStorageDoc(doc.id, doc.title)}
+                                  disabled={loadingDocId !== null}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
+                                >
+                                  {loadingDocId === doc.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
+                                  ) : (
+                                    <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                                  )}
+                                  <span className="truncate flex-1">{doc.title}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-7"
+                      onClick={() => {
+                        const starter = [
+                          "## Actor",
+                          "You are a [role — e.g. Senior Software Engineer, Professional Chef, Marketing Strategist].",
+                          "",
+                          "## Input",
+                          "[Paste or describe the context here — the longer and more specific, the better the output.]",
+                          "",
+                          "## Mission",
+                          "Create a [specific output — e.g. step-by-step guide, code review, meal plan] that [key quality — e.g. is beginner-friendly, follows best practices, fits a 30-minute time limit].",
+                        ].join("\n");
+                        setText(starter);
+                      }}
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Practice
+                    </Button>
+                  </div>
                 }
               />
             ) : (
@@ -651,6 +737,52 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 showCharCount
                 maxCharCount={500000}
                 maxAudioDuration="5min"
+                headerActions={
+                  <Popover open={storageOpen} onOpenChange={setStorageOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs h-7"
+                        title="Load context from saved documents"
+                      >
+                        <HardDrive className="w-3.5 h-3.5" />
+                        Storage
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-72 p-0">
+                      <div className="px-3 py-2 border-b">
+                        <p className="text-sm font-medium">Load from storage</p>
+                        <p className="text-xs text-muted-foreground">Select a saved document to use as context</p>
+                      </div>
+                      <ScrollArea className="max-h-60">
+                        {!savedDocs?.documents?.length ? (
+                          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                            No saved documents yet
+                          </div>
+                        ) : (
+                          <div className="py-1">
+                            {savedDocs.documents.map((doc) => (
+                              <button
+                                key={doc.id}
+                                onClick={() => handleLoadStorageDoc(doc.id, doc.title)}
+                                disabled={loadingDocId !== null}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
+                              >
+                                {loadingDocId === doc.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
+                                ) : (
+                                  <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                                )}
+                                <span className="truncate flex-1">{doc.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                }
               />
             )}
 
