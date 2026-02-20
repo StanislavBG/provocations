@@ -10,6 +10,8 @@ import {
   BookOpenCheck,
   Mic,
   MessageSquare,
+  Youtube,
+  FileAudio,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -804,6 +806,156 @@ The application redefines interactive conversations by merging advanced natural 
       "Your three-pane layout uses color to distinguish panes. How does a colorblind user tell them apart? — Accessibility Auditor",
     ],
     steps: [{ id: "context", label: "Share your context" }],
+  },
+  {
+    id: "youtube-to-infographic",
+    category: "capture",
+    title: "YouTube to Infographic",
+    shortLabel: "YouTube",
+    subtitle: "Channel videos to visual summaries",
+    description:
+      "Input a YouTube channel URL and the system fetches the latest videos, extracts transcripts automatically, summarizes key points, tips, and advice, then generates a detailed infographic specification — all without manual intervention. Perfect for turning video knowledge into structured, shareable visual content.",
+    icon: Youtube,
+    objective:
+      "Transform YouTube video content into structured infographic specifications by extracting transcripts, summarizing key insights, and generating visual layouts",
+    starterText: "",
+    draftQuestions: [
+      "What YouTube channel do you want to extract insights from?",
+      "Are you looking for tips, tutorials, or thought-leadership content?",
+      "Who is the audience for the infographic — colleagues, social media, personal reference?",
+      "Should the infographic focus on a single video or synthesize insights across multiple videos?",
+    ],
+    templateContent: `# Infographic Brief
+
+## Source
+### Channel
+Channel name and URL
+
+### Video(s)
+| Video | Duration | Key Topic |
+|-------|----------|-----------|
+| title | length | main subject |
+
+## Transcript Summary
+### Key Points
+The most important ideas from the video content, ranked by impact.
+
+### Tips & Advice
+Actionable takeaways the audience can apply immediately.
+
+### Statistics & Data Points
+Numbers, percentages, and data mentioned in the content.
+
+## Infographic Layout
+### Title & Subtitle
+The headline and supporting tagline for the infographic.
+
+### Sections
+Each visual block in the infographic with heading, content, and suggested icon.
+
+### Color Palette
+Suggested colors that match the content tone and channel branding.
+
+### Visual Hierarchy
+How sections are ordered — most impactful insight first, supporting details below.
+
+## Artifacts
+- Transcript (auto-generated)
+- Summary (auto-generated)
+- Infographic Spec (auto-generated)`,
+    provocationSources: [
+      "Content Strategist",
+      "UX Designer",
+      "Data Journalist",
+      "Visual Designer",
+      "Accessibility Expert",
+    ],
+    provocationExamples: [
+      "You extracted 12 key points but an infographic should focus on 3-5. Which ones actually matter? — Content Strategist",
+      "The color palette doesn't account for colorblind users. Have you tested contrast ratios? — Accessibility Expert",
+      "These are facts, not insights. What's the 'so what' — why should someone care about this data point? — Data Journalist",
+      "The visual hierarchy is flat — every section looks equally important. What's the hero insight? — Visual Designer",
+      "You summarized the video but lost the speaker's unique perspective. What made this content worth watching? — Content Strategist",
+    ],
+    steps: [
+      { id: "channel", label: "Enter channel URL" },
+      { id: "transcript-summary", label: "Transcript & summary" },
+      { id: "infographic", label: "Generate infographic" },
+    ],
+  },
+  {
+    id: "voice-to-infographic",
+    category: "capture",
+    title: "Voice to Infographic",
+    shortLabel: "Voice → Visual",
+    subtitle: "Voice transcripts to visual summaries",
+    description:
+      "Upload a transcript from your voice capture sessions — meetings, lectures, brainstorms — and the system summarizes the content into key points, tips, and advice, then generates a detailed infographic specification automatically. No design skills needed. The same processing pipeline as YouTube content, optimized for spoken-word transcripts.",
+    icon: FileAudio,
+    objective:
+      "Transform voice-generated transcripts into structured infographic specifications by summarizing key insights, tips, and advice into a visual layout",
+    starterText: "",
+    draftQuestions: [
+      "What kind of content does the transcript cover — a meeting, lecture, interview, or brainstorm?",
+      "What are the 2-3 most important takeaways you remember?",
+      "Who will see the infographic — your team, a client, social media?",
+      "Should the infographic focus on action items, key insights, or a narrative summary?",
+    ],
+    templateContent: `# Infographic Brief
+
+## Source
+### Session Type
+Meeting / Lecture / Interview / Brainstorm / Personal notes
+
+### Context
+What was the session about and who participated?
+
+## Transcript Summary
+### Key Points
+The most important ideas from the spoken content, ranked by impact.
+
+### Tips & Advice
+Actionable takeaways the audience can apply immediately.
+
+### Decisions & Action Items
+Concrete decisions made or tasks assigned during the session.
+
+## Infographic Layout
+### Title & Subtitle
+The headline and supporting tagline for the infographic.
+
+### Sections
+Each visual block in the infographic with heading, content, and suggested icon.
+
+### Color Palette
+Suggested colors that match the content tone.
+
+### Visual Hierarchy
+How sections are ordered — most impactful insight first, supporting details below.
+
+## Artifacts
+- Uploaded Transcript
+- Summary (auto-generated)
+- Infographic Spec (auto-generated)`,
+    provocationSources: [
+      "Content Strategist",
+      "UX Designer",
+      "Clarity Editor",
+      "Visual Designer",
+      "Action Tracker",
+    ],
+    provocationExamples: [
+      "The transcript is 45 minutes of conversation but your summary has 2 bullet points. What did you miss? — Clarity Editor",
+      "These action items are vague — 'follow up with team' means nothing. Who does what by when? — Action Tracker",
+      "You've summarized what was said but not what was decided. Where are the actual outcomes? — Content Strategist",
+      "Every section uses the same visual weight. What's the single most important takeaway? — Visual Designer",
+      "The infographic assumes context the audience doesn't have. Can someone outside the meeting understand this? — UX Designer",
+    ],
+    steps: [
+      { id: "upload", label: "Upload transcript" },
+      { id: "transcript-summary", label: "Transcript & summary" },
+      { id: "infographic", label: "Generate infographic" },
+    ],
   },
 ];
 

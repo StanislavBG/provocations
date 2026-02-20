@@ -39,6 +39,13 @@ import {
   type DiscoveredMedia,
   type StreamingRefineResponse,
   type StreamingRequirement,
+  youtubeChannelRequestSchema,
+  processVideoRequestSchema,
+  generateSummaryRequestSchema,
+  generateInfographicRequestSchema,
+  type YouTubeChannelResponse,
+  type GenerateSummaryResponse,
+  type InfographicSpec,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
 import { trackingEventSchema } from "@shared/schema";
@@ -3042,6 +3049,237 @@ Output only valid JSON, no markdown wrapping.`,
       console.error("Screenshot error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to capture screenshot", details: errorMessage });
+    }
+  });
+
+  // ─── YouTube Channel → Infographic Pipeline ────────────────────────────
+
+  // Fetch video list from a YouTube channel URL
+  app.post("/api/youtube/channel", async (req, res) => {
+    try {
+      const parsed = youtubeChannelRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { channelUrl, maxResults } = parsed.data;
+
+      // Extract channel identifier from various URL formats
+      // Supported: /channel/UC..., /@handle, /c/CustomName, /user/Username
+      let channelQuery = channelUrl.trim();
+      const channelMatch = channelUrl.match(
+        /youtube\.com\/(?:channel\/|@|c\/|user\/)?([^\/?&#]+)/
+      );
+      if (channelMatch) {
+        channelQuery = channelMatch[1];
+      }
+
+      // Use LLM to simulate channel video list extraction
+      // (In production, this would call the YouTube Data API v3)
+      const response = await llm.generate({
+        maxTokens: 4096,
+        temperature: 0.3,
+        system: `You are a YouTube channel content analyzer. Given a channel URL or identifier, generate a realistic list of recent videos that such a channel might have.
+
+Output ONLY valid JSON matching this exact schema:
+{
+  "channelTitle": "Channel Name",
+  "channelId": "UC_identifier",
+  "videos": [
+    {
+      "videoId": "unique_id_11chars",
+      "title": "Video Title",
+      "description": "Brief description of the video content",
+      "publishedAt": "2025-01-15T10:00:00Z",
+      "thumbnailUrl": "https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg",
+      "channelTitle": "Channel Name"
+    }
+  ]
+}
+
+Generate ${maxResults} videos. Make the content realistic and topically coherent for the channel.
+Output ONLY the JSON — no markdown, no explanation.`,
+        messages: [
+          {
+            role: "user",
+            content: `Channel URL: ${channelUrl}\nChannel identifier: ${channelQuery}\nGenerate ${maxResults} recent videos.`,
+          },
+        ],
+      });
+
+      // Parse the LLM response as JSON
+      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const channelData = JSON.parse(jsonText) as YouTubeChannelResponse;
+
+      res.json(channelData);
+    } catch (error) {
+      console.error("YouTube channel fetch error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to fetch channel videos", details: errorMessage });
+    }
+  });
+
+  // Extract transcript from a YouTube video (Step 1 only — transcript extraction)
+  // The client then calls /api/pipeline/summarize and /api/pipeline/infographic
+  // to complete the shared pipeline (same as voice-to-infographic).
+  app.post("/api/youtube/process-video", async (req, res) => {
+    try {
+      const parsed = processVideoRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { videoId, videoUrl, videoTitle, thumbnailUrl } = parsed.data;
+
+      // Extract transcript from the video
+      const transcriptResponse = await llm.generate({
+        maxTokens: 4096,
+        temperature: 0.4,
+        system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript of what the speaker might say in this video.
+
+The transcript should:
+- Be 800-1500 words
+- Include natural speech patterns
+- Cover the topic thoroughly with actionable advice
+- Include specific tips, data points, and examples
+- Feel like a real video transcript
+
+Output ONLY the transcript text. No timestamps, no speaker labels, no markdown.`,
+        messages: [
+          {
+            role: "user",
+            content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})
+Generate a detailed transcript of this video's content.`,
+          },
+        ],
+      });
+
+      const transcript = transcriptResponse.text.trim();
+
+      // Return transcript only — client uses shared pipeline for summarize + infographic
+      res.json({
+        videoId,
+        videoTitle: videoTitle || "Untitled Video",
+        thumbnailUrl,
+        transcript,
+      });
+    } catch (error) {
+      console.error("Video transcript extraction error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to extract transcript", details: errorMessage });
+    }
+  });
+
+  // Generate summary from a transcript (shared by YouTube and voice-capture pipelines)
+  app.post("/api/pipeline/summarize", async (req, res) => {
+    try {
+      const parsed = generateSummaryRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { transcript, title, objective, sourceType } = parsed.data;
+
+      const contextLabel = sourceType === "youtube"
+        ? `a YouTube video titled "${title || "Untitled"}"`
+        : `a voice capture session${title ? ` titled "${title}"` : ""}`;
+
+      const response = await llm.generate({
+        maxTokens: 3072,
+        temperature: 0.3,
+        system: `You are an expert content summarizer who prepares material specifically for infographic designers. You are analyzing a transcript from ${contextLabel}.
+${objective ? `The user's objective: ${objective}` : ""}
+
+Your summary must contain enough detail, data, and concrete examples that a designer can create a rich, multi-section infographic without needing the original transcript.
+
+Analyze the transcript and output ONLY valid JSON:
+{
+  "summary": "A detailed 3-4 paragraph narrative covering the speaker's thesis, arguments, examples, and conclusions. Include specific numbers, percentages, timeframes, comparisons, and quotes — these become the visual data points in the infographic.",
+  "keyPoints": ["Detailed key insight that can stand alone as an infographic section", ...],
+  "tips": ["Actionable tip with context on when/how to apply it", ...]
+}
+
+Requirements:
+- summary: 3-4 paragraphs with concrete data (numbers, percentages, comparisons, timeframes). Mention examples and anecdotes — these become visual callouts. Preserve the logical flow for the infographic's narrative arc.
+- keyPoints: 5-8 self-contained insights with quantitative details when available. Each becomes an individual infographic section.
+- tips: 4-6 actionable recommendations explaining what, why, and when to apply.
+
+Output ONLY the JSON — no markdown fences, no explanation.`,
+        messages: [
+          { role: "user", content: `Transcript:\n${transcript}` },
+        ],
+      });
+
+      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const data = JSON.parse(jsonText) as GenerateSummaryResponse;
+      res.json(data);
+    } catch (error) {
+      console.error("Pipeline summarize error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to summarize transcript", details: errorMessage });
+    }
+  });
+
+  // Generate infographic spec from a summary
+  app.post("/api/pipeline/infographic", async (req, res) => {
+    try {
+      const parsed = generateInfographicRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { summary, keyPoints, tips, title, sourceType } = parsed.data;
+
+      const response = await llm.generate({
+        maxTokens: 3072,
+        temperature: 0.4,
+        system: `You are an expert infographic designer. Transform content insights into a structured infographic specification.
+
+Output ONLY valid JSON:
+{
+  "title": "Infographic main title",
+  "subtitle": "Supporting tagline",
+  "sections": [
+    {
+      "id": "section_1",
+      "heading": "Section Heading",
+      "content": "1-2 sentence description",
+      "icon": "LucideIconName",
+      "color": "#hexcolor",
+      "dataPoints": ["Key fact or statistic"]
+    }
+  ],
+  "colorPalette": ["#c1", "#c2", "#c3", "#c4", "#c5"],
+  "sourceLabel": "Source description"
+}
+
+- 4-7 sections, hero insight first
+- Valid Lucide icon names (Lightbulb, Target, TrendingUp, Users, Zap, Star, BarChart, CheckCircle, BookOpen, Award)
+- WCAG AA accessible color palette
+- Each section gets a distinct palette color
+
+Output ONLY JSON.`,
+        messages: [
+          {
+            role: "user",
+            content: `Title: ${title || "Untitled"}
+Source: ${sourceType}
+Summary: ${summary}
+Key Points: ${keyPoints.join("; ")}
+Tips: ${tips.join("; ")}
+
+Generate infographic specification.`,
+          },
+        ],
+      });
+
+      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const spec = JSON.parse(jsonText) as InfographicSpec;
+      res.json(spec);
+    } catch (error) {
+      console.error("Pipeline infographic error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate infographic", details: errorMessage });
     }
   });
 

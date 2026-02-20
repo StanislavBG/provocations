@@ -126,3 +126,39 @@ export const usageMetrics = pgTable("usage_metrics", {
 
 export type StoredUsageMetric = typeof usageMetrics.$inferSelect;
 
+// Pipeline artifacts — stores transcripts, summaries, and infographics for
+// YouTube/voice capture → infographic pipelines. Encrypted at rest.
+// Relationships use a Key Ring approach: artifacts link to a parent document
+// via documentId, and sibling artifacts reference each other via parentArtifactId.
+export const pipelineArtifacts = pgTable("pipeline_artifacts", {
+  id: serial("id").primaryKey(),
+  uuid: varchar("uuid", { length: 36 }).notNull().unique(), // immutable external identifier
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  documentId: integer("document_id"), // owning document (nullable for standalone)
+  parentArtifactId: integer("parent_artifact_id"), // Key Ring: transcript → summary → infographic
+  artifactType: varchar("artifact_type", { length: 32 }).notNull(), // "transcript" | "summary" | "infographic"
+  sourceType: varchar("source_type", { length: 32 }).notNull(), // "youtube" | "voice-capture"
+  // Source metadata (not user text — no encryption needed)
+  sourceUrl: text("source_url"), // YouTube video URL (nullable for voice)
+  sourceTitle: varchar("source_title", { length: 500 }), // video/session title from API
+  thumbnailUrl: text("thumbnail_url"), // YouTube thumbnail
+  // AES-GCM encrypted content
+  ciphertext: text("ciphertext").notNull(),
+  salt: varchar("salt", { length: 64 }).notNull(),
+  iv: varchar("iv", { length: 32 }).notNull(),
+  // Processing status
+  status: varchar("status", { length: 16 }).default("pending").notNull(), // "pending" | "processing" | "complete" | "error"
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPipelineArtifactSchema = createInsertSchema(pipelineArtifacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type StoredPipelineArtifact = typeof pipelineArtifacts.$inferSelect;
+export type InsertPipelineArtifact = z.infer<typeof insertPipelineArtifactSchema>;
+
