@@ -167,7 +167,7 @@ const DEFAULT_CONFIG: AppFlowConfig = {
     { id: "edit", label: "Edit & Refine", description: "Use canvas tools to evolve your document" },
   ],
 
-  leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT, TAB_WEBSITE],
+  leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
 
   rightPanelTabs: [RIGHT_DISCUSSION],
 
