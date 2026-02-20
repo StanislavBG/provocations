@@ -297,6 +297,28 @@ Requirement discovery through:
 - Defensive null-checks in components
 - Toast notifications for user feedback
 
+### ADR: Always Use ProvokeText for Text Display
+
+**All text panels in the application MUST use `ProvokeText`** — never raw `<div>`, `<p>`, `<textarea>`, or `<pre>` for displaying or editing user-facing text content. This is an architectural decision record (ADR) that applies to every component.
+
+**Why:** ProvokeText provides a unified text experience with built-in copy, voice, smart processing, and consistent styling. Using raw elements creates inconsistency and loses capabilities.
+
+**Rules:**
+1. **Read-only text panels** (transcripts, summaries, previews): Use `<ProvokeText readOnly showCopy showClear={false} />` with `chrome="container"` or `chrome="bare"`.
+2. **Editable text areas**: Use `<ProvokeText chrome="container" variant="textarea" />` with appropriate voice/processor props.
+3. **Document editors**: Use `<ProvokeText chrome="container" variant="editor" />`.
+4. **Minimum visible action**: `showCopy` must always be `true` — users must always be able to copy text. Other actions (clear, voice, smart modes) can be hidden via props.
+5. **Streaming content**: Set `readOnly` and update the `value` prop as data arrives — ProvokeText handles re-rendering without interrupting the display.
+6. **Configuration extension**: If ProvokeText lacks a needed capability, extend its props interface rather than bypassing it with a raw element.
+
+**Props quick reference:**
+- `chrome`: `"container"` (bordered card with header) | `"inline"` (floating toolbar) | `"bare"` (no chrome)
+- `variant`: `"input"` | `"textarea"` | `"editor"`
+- `showCopy` / `showClear`: Control toolbar button visibility
+- `readOnly`: Disable editing while keeping copy functional
+- `headerActions`: Slot for extra buttons in the container header
+- `label` / `labelIcon`: Container header label
+
 ### Document Storage — Zero-Knowledge Encryption
 - **All user-provided text is encrypted at rest** with AES-256-GCM (server-side)
   - Document content: encrypted (ciphertext + salt + iv)
