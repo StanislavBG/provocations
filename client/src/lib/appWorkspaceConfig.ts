@@ -167,9 +167,9 @@ const DEFAULT_CONFIG: AppFlowConfig = {
     { id: "edit", label: "Edit & Refine", description: "Use canvas tools to evolve your document" },
   ],
 
-  leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT, TAB_WEBSITE],
+  leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
 
-  rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
+  rightPanelTabs: [RIGHT_DISCUSSION],
 
   writer: {
     mode: "edit",
@@ -213,7 +213,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_ANALYZER, TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCOVERIES, RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_DISCOVERIES, RIGHT_DISCUSSION, RIGHT_METRICS],
 
     writer: {
       mode: "analyze",
@@ -271,7 +271,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_WEBSITE, TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
+    rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
       mode: "edit",
@@ -297,22 +297,6 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
     },
   },
 
-  "infographic-description": {
-    ...DEFAULT_CONFIG,
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "story", label: "Define Story", description: "Set the narrative, audience, and key data" },
-      { id: "draft", label: "Build Brief", description: "Create the designer-ready infographic description" },
-      { id: "critique", label: "Visual Critique", description: "Challenge clarity, data integrity, and visual flow" },
-    ],
-    writer: {
-      mode: "edit",
-      outputFormat: "markdown",
-      documentType: "infographic description",
-      feedbackTone: "visually critical and data-aware",
-    },
-  },
-
   "persona-definition": {
     ...DEFAULT_CONFIG,
     flowSteps: [
@@ -326,22 +310,6 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "persona definition",
       feedbackTone: "character-focused and consistency-driven",
-    },
-  },
-
-  "ai-video-host": {
-    ...DEFAULT_CONFIG,
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "source", label: "Source Material", description: "Provide content and define the host persona" },
-      { id: "script", label: "Build Script", description: "Generate the slide-show narration" },
-      { id: "polish", label: "Polish & Review", description: "Refine voice consistency and slide pacing" },
-    ],
-    writer: {
-      mode: "edit",
-      outputFormat: "markdown",
-      documentType: "video host script",
-      feedbackTone: "storytelling-focused and audience-aware",
     },
   },
 
@@ -360,7 +328,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_WEBSITE],
 
-    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
+    rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
       mode: "aggregate",
@@ -390,6 +358,22 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "voice capture transcript",
       feedbackTone: "clarifying and structure-focused",
+    },
+  },
+
+  "conversational-ai": {
+    ...DEFAULT_CONFIG,
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "concept", label: "Define Concept", description: "Describe the conversation experience and user" },
+      { id: "draft", label: "Build Spec", description: "Design layout, controls, and conversation flow" },
+      { id: "critique", label: "UX Critique", description: "Challenge usability, privacy, and accessibility" },
+    ],
+    writer: {
+      mode: "edit",
+      outputFormat: "markdown",
+      documentType: "conversational AI application spec",
+      feedbackTone: "user-centric and conversation-design-aware",
     },
   },
 };
