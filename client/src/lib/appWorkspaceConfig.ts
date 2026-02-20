@@ -169,7 +169,7 @@ const DEFAULT_CONFIG: AppFlowConfig = {
 
   leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT, TAB_WEBSITE],
 
-  rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
+  rightPanelTabs: [RIGHT_DISCUSSION],
 
   writer: {
     mode: "edit",
@@ -213,7 +213,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_ANALYZER, TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCOVERIES, RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_DISCOVERIES, RIGHT_DISCUSSION, RIGHT_METRICS],
 
     writer: {
       mode: "analyze",
@@ -271,7 +271,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_WEBSITE, TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
+    rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
       mode: "edit",
@@ -360,7 +360,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_WEBSITE],
 
-    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
+    rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
       mode: "aggregate",
