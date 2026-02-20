@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
-import { getAppFlowConfig, type AppFlowConfig, type RightPanelTabId } from "@/lib/appWorkspaceConfig";
+import { getAppFlowConfig, type AppFlowConfig, type RightPanelTabId, type WorkspaceLayout } from "@/lib/appWorkspaceConfig";
 import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
@@ -15,6 +15,7 @@ import { QueryDiscoveriesPanel, type QueryAnalysisResult } from "@/components/Qu
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
+import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -1489,6 +1490,18 @@ RULES:
               };
               setVersions([initialVersion]);
             }}
+            onVoiceCaptureMode={(obj, templateId) => {
+              setSelectedTemplateId(templateId ?? null);
+              setDocument({ id: generateId("doc"), rawText: `# ${obj}\n\n*Voice capture started ${new Date().toLocaleString()}*` });
+              setObjective(obj);
+              const initialVersion: DocumentVersion = {
+                id: generateId("v"),
+                text: `# ${obj}\n\n*Voice capture started ${new Date().toLocaleString()}*`,
+                timestamp: Date.now(),
+                description: "Voice capture initialized",
+              };
+              setVersions([initialVersion]);
+            }}
             capturedContext={capturedContext}
             onCapturedContextChange={setCapturedContext}
             onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
@@ -1499,6 +1512,81 @@ RULES:
           selectedTemplate={selectedTemplateName}
           appFlowSteps={appFlowConfig.flowSteps}
           appLeftPanelTabs={appFlowConfig.leftPanelTabs}
+        />
+      </div>
+    );
+  }
+
+  // ── Voice capture layout — single-page workspace variant ──
+
+  if (appFlowConfig.workspaceLayout === "voice-capture") {
+    return (
+      <div className="h-screen flex flex-col">
+        <header className="border-b bg-card">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-primary" />
+              <h1 className="font-semibold text-lg">Voice Capture</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowStoragePanel(true)}
+                className="gap-1.5"
+              >
+                <HardDrive className="w-4 h-4" />
+                <span className="hidden sm:inline">Storage</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReset}
+                className="gap-1.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span className="hidden sm:inline">New</span>
+              </Button>
+              <ThemeToggle />
+              <UserButton />
+            </div>
+          </div>
+
+          {/* Objective bar (collapsed) */}
+          {objective && (
+            <div className="border-t px-4 py-2 flex items-center gap-2">
+              <Target className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-sm text-muted-foreground truncate">
+                {objective}
+              </span>
+            </div>
+          )}
+        </header>
+
+        <VoiceCaptureWorkspace
+          objective={objective}
+          onDocumentUpdate={(text) => setDocument({ ...document, rawText: text })}
+          documentText={document.rawText}
+          savedDocId={savedDocId}
+          onSave={handleStorageSave}
+          onSavedDocIdChange={setSavedDocId}
+        />
+
+        <StepTracker
+          currentPhase="edit"
+          selectedTemplate={selectedTemplateName}
+          appFlowSteps={appFlowConfig.flowSteps}
+          appLeftPanelTabs={appFlowConfig.leftPanelTabs}
+        />
+
+        <StoragePanel
+          isOpen={showStoragePanel}
+          onClose={() => setShowStoragePanel(false)}
+          onLoadDocument={handleStorageLoad}
+          onSave={handleStorageSave}
+          hasContent={!!document.rawText.trim()}
+          currentDocId={savedDocId}
+          currentTitle={savedDocTitle || objective}
         />
       </div>
     );

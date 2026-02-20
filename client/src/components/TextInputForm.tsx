@@ -13,6 +13,7 @@ import {
   Layers,
   Globe,
   Wand2,
+  Mic,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -29,6 +30,7 @@ interface TextInputFormProps {
   onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[], templateId?: string) => void;
   onBlankDocument?: (objective: string) => void;
   onStreamingMode?: (objective: string, websiteUrl?: string, templateId?: string) => void;
+  onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -56,7 +58,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
   const [captureUrl, setCaptureUrl] = useState("");
@@ -286,11 +288,49 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             <h2 className="shrink-0 text-base font-semibold">
               {activePrebuilt?.id === "streaming"
                 ? "Describe what you're capturing requirements for"
-                : "Provide your starting material"}
+                : activePrebuilt?.id === "voice-capture"
+                  ? "Describe what you're recording"
+                  : "Provide your starting material"}
             </h2>
           )}
 
-          {activePrebuilt?.id === "streaming" && onStreamingMode ? (
+          {activePrebuilt?.id === "voice-capture" && onVoiceCaptureMode ? (
+            <div className="space-y-3">
+              <ProvokeText
+                chrome="container"
+                label="Session topic"
+                labelIcon={Target}
+                description="What is this recording session about? Meeting notes, brainstorm, interview, etc."
+                id="voice-capture-objective"
+                placeholder="Team standup meeting... Product brainstorm... User interview..."
+                className="text-sm leading-relaxed font-serif"
+                value={objective}
+                onChange={setObjective}
+                minRows={2}
+                maxRows={4}
+                autoFocus
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setObjective}
+                textProcessor={(text, mode) =>
+                  processText(text, mode, mode === "clean" ? "objective" : undefined)
+                }
+              />
+
+              <Button
+                onClick={() => onVoiceCaptureMode(
+                  objective.trim() || "Voice capture session",
+                  activePrebuilt?.id,
+                )}
+                disabled={isLoading}
+                size="lg"
+                className="w-full gap-2"
+              >
+                <Mic className="w-4 h-4" />
+                Start Voice Capture
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : activePrebuilt?.id === "streaming" && onStreamingMode ? (
             <div className="space-y-3">
               <ProvokeText
                 chrome="container"
