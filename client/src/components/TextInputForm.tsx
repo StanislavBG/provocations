@@ -14,6 +14,10 @@ import {
   Globe,
   Wand2,
   Mic,
+  Youtube,
+  FileAudio,
+  Upload,
+  Sparkles,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -31,6 +35,8 @@ interface TextInputFormProps {
   onBlankDocument?: (objective: string) => void;
   onStreamingMode?: (objective: string, websiteUrl?: string, templateId?: string) => void;
   onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
+  onYouTubeInfographicMode?: (objective: string, channelUrl: string, templateId: string) => void;
+  onVoiceInfographicMode?: (objective: string, transcript: string, templateId: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -58,10 +64,12 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
   const [captureUrl, setCaptureUrl] = useState("");
+  const [youtubeChannelUrl, setYoutubeChannelUrl] = useState("");
+  const [voiceTranscript, setVoiceTranscript] = useState("");
 
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
@@ -290,7 +298,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 ? "Describe what you're capturing requirements for"
                 : activePrebuilt?.id === "voice-capture"
                   ? "Describe what you're recording"
-                  : "Provide your starting material"}
+                  : activePrebuilt?.id === "youtube-to-infographic"
+                    ? "Enter a YouTube channel to extract insights"
+                    : activePrebuilt?.id === "voice-to-infographic"
+                      ? "Paste or upload your voice transcript"
+                      : "Provide your starting material"}
             </h2>
           )}
 
@@ -327,6 +339,136 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               >
                 <Mic className="w-4 h-4" />
                 Start Voice Capture
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : activePrebuilt?.id === "youtube-to-infographic" && onYouTubeInfographicMode ? (
+            <div className="space-y-3">
+              <ProvokeText
+                chrome="container"
+                label="What insights are you looking for?"
+                labelIcon={Target}
+                description="Describe the kind of content you want to extract — tips, tutorials, strategies, etc."
+                id="youtube-objective"
+                placeholder="Extract key productivity tips... Summarize tech tutorials... Capture marketing strategies..."
+                className="text-sm leading-relaxed font-serif"
+                value={objective}
+                onChange={setObjective}
+                minRows={2}
+                maxRows={4}
+                autoFocus
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setObjective}
+                textProcessor={(text, mode) =>
+                  processText(text, mode, mode === "clean" ? "objective" : undefined)
+                }
+              />
+
+              <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Youtube className="w-4 h-4 text-red-500" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    YouTube Channel URL
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Paste a channel URL to fetch the latest videos. The system will extract transcripts, summarize key points, and generate infographic specs automatically.
+                </p>
+                <input
+                  type="url"
+                  value={youtubeChannelUrl}
+                  onChange={(e) => setYoutubeChannelUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/@channel"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono"
+                />
+              </div>
+
+              <Button
+                onClick={() => onYouTubeInfographicMode(
+                  objective.trim() || "Transform YouTube video content into structured infographic specifications",
+                  youtubeChannelUrl.trim(),
+                  activePrebuilt.id,
+                )}
+                disabled={!youtubeChannelUrl.trim() || isLoading}
+                size="lg"
+                className="w-full gap-2"
+              >
+                <Youtube className="w-4 h-4" />
+                Fetch Channel & Enter Workspace
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : activePrebuilt?.id === "voice-to-infographic" && onVoiceInfographicMode ? (
+            <div className="space-y-3">
+              <ProvokeText
+                chrome="container"
+                label="What is this transcript about?"
+                labelIcon={Target}
+                description="Describe the session — meeting, lecture, interview — so the summary captures the right focus."
+                id="voice-infographic-objective"
+                placeholder="Team product review meeting... Guest lecture on AI... User research interview..."
+                className="text-sm leading-relaxed font-serif"
+                value={objective}
+                onChange={setObjective}
+                minRows={2}
+                maxRows={4}
+                autoFocus
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setObjective}
+                textProcessor={(text, mode) =>
+                  processText(text, mode, mode === "clean" ? "objective" : undefined)
+                }
+              />
+
+              <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <FileAudio className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Voice Transcript
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Paste the transcript from your voice capture session, or upload a .txt file. The system will summarize key points and generate an infographic specification.
+                </p>
+                <textarea
+                  value={voiceTranscript}
+                  onChange={(e) => setVoiceTranscript(e.target.value)}
+                  placeholder="Paste your transcript here..."
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono min-h-[120px] resize-y"
+                />
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload .txt file
+                  <input
+                    type="file"
+                    accept=".txt,.md,.text"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        const content = ev.target?.result;
+                        if (typeof content === "string") setVoiceTranscript(content);
+                      };
+                      reader.readAsText(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <Button
+                onClick={() => onVoiceInfographicMode(
+                  objective.trim() || "Transform voice transcript into a structured infographic specification",
+                  voiceTranscript.trim(),
+                  activePrebuilt.id,
+                )}
+                disabled={!voiceTranscript.trim() || isLoading}
+                size="lg"
+                className="w-full gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                Summarize & Generate Infographic
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -517,7 +659,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       </div>
 
       {/* Fixed bottom bar: step progress + action */}
-      {hasObjectiveType && activePrebuilt?.id !== "streaming" && (
+      {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "youtube-to-infographic" && activePrebuilt?.id !== "voice-to-infographic" && (
         <div className="shrink-0 border-t bg-card">
           <div className={`w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 px-3 md:px-6 py-2 ${
             isWritePrompt ? "" : "max-w-6xl"
