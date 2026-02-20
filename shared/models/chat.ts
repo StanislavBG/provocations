@@ -171,3 +171,21 @@ export const insertPipelineArtifactSchema = createInsertSchema(pipelineArtifacts
 export type StoredPipelineArtifact = typeof pipelineArtifacts.$inferSelect;
 export type InsertPipelineArtifact = z.infer<typeof insertPipelineArtifactSchema>;
 
+// Persona overrides — DB-backed layer that overrides code defaults from shared/personas.ts.
+// At runtime: code defaults + DB overrides = effective personas (DB wins).
+// Export pipeline syncs DB → code for next production deploy.
+export const personaOverrides = pgTable("persona_overrides", {
+  id: serial("id").primaryKey(),
+  personaId: varchar("persona_id", { length: 64 }).notNull().unique(),
+  definition: text("definition").notNull(), // full JSON-serialized Persona object
+  humanCurated: boolean("human_curated").default(false).notNull(),
+  curatedBy: varchar("curated_by", { length: 128 }), // Clerk userId who curated
+  curatedAt: timestamp("curated_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  uniqueIndex("idx_persona_overrides_persona_id").on(table.personaId),
+]);
+
+export type StoredPersonaOverride = typeof personaOverrides.$inferSelect;
+
