@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics } from "../shared/models/chat";
-import type { UserPreferences } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -74,6 +74,16 @@ export interface IStorage {
   // User preferences
   getUserPreferences(userId: string): Promise<{ autoDictate: boolean }>;
   setUserPreferences(userId: string, prefs: { autoDictate: boolean }): Promise<{ autoDictate: boolean }>;
+  // Persona overrides
+  getPersonaOverride(personaId: string): Promise<StoredPersonaOverride | null>;
+  getAllPersonaOverrides(): Promise<StoredPersonaOverride[]>;
+  upsertPersonaOverride(data: {
+    personaId: string;
+    definition: string;
+    humanCurated: boolean;
+    curatedBy?: string | null;
+  }): Promise<StoredPersonaOverride>;
+  deletePersonaOverride(personaId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -625,6 +635,56 @@ export class DatabaseStorage implements IStorage {
       metricValue: r.metricValue,
       updatedAt: r.updatedAt.toISOString(),
     }));
+  }
+
+  // ── Persona Overrides ──
+
+  async getPersonaOverride(personaId: string): Promise<StoredPersonaOverride | null> {
+    const [row] = await db
+      .select()
+      .from(personaOverrides)
+      .where(eq(personaOverrides.personaId, personaId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getAllPersonaOverrides(): Promise<StoredPersonaOverride[]> {
+    return db.select().from(personaOverrides).orderBy(personaOverrides.personaId);
+  }
+
+  async upsertPersonaOverride(data: {
+    personaId: string;
+    definition: string;
+    humanCurated: boolean;
+    curatedBy?: string | null;
+  }): Promise<StoredPersonaOverride> {
+    const now = new Date();
+    const [row] = await db
+      .insert(personaOverrides)
+      .values({
+        personaId: data.personaId,
+        definition: data.definition,
+        humanCurated: data.humanCurated,
+        curatedBy: data.curatedBy ?? null,
+        curatedAt: data.humanCurated ? now : null,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: personaOverrides.personaId,
+        set: {
+          definition: data.definition,
+          humanCurated: data.humanCurated,
+          curatedBy: data.curatedBy ?? null,
+          curatedAt: data.humanCurated ? now : null,
+          updatedAt: now,
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async deletePersonaOverride(personaId: string): Promise<void> {
+    await db.delete(personaOverrides).where(eq(personaOverrides.personaId, personaId));
   }
 }
 

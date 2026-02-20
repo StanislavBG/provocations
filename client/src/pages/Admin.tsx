@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useRole } from "@/hooks/use-role";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +23,9 @@ import {
   ChevronRight,
   ChevronDown,
   Circle,
+  Pencil,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useCallback } from "react";
@@ -32,6 +36,7 @@ import type {
   Persona,
 } from "@shared/schema";
 import { getAllPersonas, getPersonasByDomain } from "@shared/personas";
+import { buildAppLaunchUrl } from "@/lib/appLaunchParams";
 
 export default function Admin() {
   const { isAdmin, isLoading: roleLoading } = useRole();
@@ -358,6 +363,8 @@ interface StaleInfo {
 }
 
 function PersonaNodeDiagram({ stalePersonas }: { stalePersonas?: StaleInfo[] }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     root: true,
     business: true,
@@ -369,6 +376,30 @@ function PersonaNodeDiagram({ stalePersonas }: { stalePersonas?: StaleInfo[] }) 
   const toggleNode = useCallback((id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
+
+  // Fetch override/lock status from DB
+  const { data: overridesData } = useQuery<{ overrides: { personaId: string; humanCurated: boolean; curatedAt: string | null }[] }>({
+    queryKey: ["/api/admin/persona-overrides"],
+    queryFn: () => apiRequest("GET", "/api/admin/persona-overrides").then((r) => r.json()),
+  });
+  const overrideMap = new Map(
+    (overridesData?.overrides ?? []).map((o) => [o.personaId, o])
+  );
+
+  // Lock toggle mutation
+  const lockMutation = useMutation({
+    mutationFn: async ({ personaId, humanCurated }: { personaId: string; humanCurated: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/personas/${personaId}/lock`, { humanCurated });
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/persona-overrides"] });
+      toast({ title: vars.humanCurated ? "Persona locked" : "Persona unlocked", description: `${vars.personaId} is now ${vars.humanCurated ? "human-curated (locked)" : "unlocked for auto-refresh"}` });
+    },
+    onError: () => {
+      toast({ title: "Failed to toggle lock", variant: "destructive" });
+    },
+  });
 
   const staleSet = new Set(stalePersonas?.map((s) => s.id) ?? []);
 
@@ -462,8 +493,11 @@ function PersonaNodeDiagram({ stalePersonas }: { stalePersonas?: StaleInfo[] }) 
                           >
                             <Circle className={`w-2 h-2 shrink-0 ${meta.color}`} style={{ fill: "currentColor" }} />
                             <span className="font-medium">{persona.label}</span>
+                            {overrideMap.has(persona.id) && overrideMap.get(persona.id)!.humanCurated && (
+                              <span title="Human curated — locked"><Lock className="w-3 h-3 text-amber-600 shrink-0" /></span>
+                            )}
                             {isStale && (
-                              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" title="Stale — needs refresh" />
+                              <span title="Stale — needs refresh"><AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" /></span>
                             )}
                             <span className="text-[11px] text-muted-foreground truncate hidden sm:inline ml-auto max-w-[40%] text-right">
                               {staleInfo?.lastResearchedAt
@@ -473,32 +507,73 @@ function PersonaNodeDiagram({ stalePersonas }: { stalePersonas?: StaleInfo[] }) 
                           </button>
 
                           {/* Expanded persona detail */}
-                          {isSelected && (
-                            <div className={`ml-5 mt-1 mb-2 p-3 rounded-md border ${meta.borderColor} ${meta.bgColor} space-y-2`}>
-                              <p className="text-xs font-medium">{persona.role}</p>
-                              <p className="text-xs text-muted-foreground leading-relaxed">
-                                {persona.description}
-                              </p>
-                              <div className="grid grid-cols-2 gap-3 pt-1">
-                                <div>
-                                  <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">
-                                    Challenge
-                                  </div>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    {persona.summary.challenge}
-                                  </p>
+                          {isSelected && (() => {
+                            const override = overrideMap.get(persona.id);
+                            const isLocked = override?.humanCurated ?? false;
+                            const editUrl = buildAppLaunchUrl({
+                              app: "persona-definition",
+                              intent: "edit",
+                              entityType: "persona",
+                              entityId: persona.id,
+                              step: "draft",
+                              source: "admin",
+                            });
+
+                            return (
+                              <div className={`ml-5 mt-1 mb-2 p-3 rounded-md border ${meta.borderColor} ${meta.bgColor} space-y-2`}>
+                                {/* Action buttons */}
+                                <div className="flex items-center gap-2 mb-1">
+                                  <a href={editUrl}>
+                                    <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7">
+                                      <Pencil className="w-3 h-3" />
+                                      Edit in Workspace
+                                    </Button>
+                                  </a>
+                                  <Button
+                                    size="sm"
+                                    variant={isLocked ? "default" : "outline"}
+                                    className={`gap-1.5 text-xs h-7 ${isLocked ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
+                                    onClick={() => lockMutation.mutate({ personaId: persona.id, humanCurated: !isLocked })}
+                                    disabled={lockMutation.isPending}
+                                  >
+                                    {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                                    {isLocked ? "Locked" : "Lock"}
+                                  </Button>
+                                  {isLocked && override?.curatedAt && (
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                                      Curated {new Date(override.curatedAt).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {override && (
+                                    <Badge variant="secondary" className="text-[10px] ml-auto">DB Override</Badge>
+                                  )}
                                 </div>
-                                <div>
-                                  <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">
-                                    Advice
+
+                                <p className="text-xs font-medium">{persona.role}</p>
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                  {persona.description}
+                                </p>
+                                <div className="grid grid-cols-2 gap-3 pt-1">
+                                  <div>
+                                    <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">
+                                      Challenge
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      {persona.summary.challenge}
+                                    </p>
                                   </div>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    {persona.summary.advice}
-                                  </p>
+                                  <div>
+                                    <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">
+                                      Advice
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      {persona.summary.advice}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       );
                     })}
@@ -696,6 +771,14 @@ function PersonaDefinitionList() {
     marketing: personas.filter((p) => p.domain === "marketing"),
   };
 
+  // Fetch override status for indicators
+  const { data: overridesData } = useQuery<{ overrides: { personaId: string; humanCurated: boolean }[] }>({
+    queryKey: ["/api/admin/persona-overrides"],
+    queryFn: () => apiRequest("GET", "/api/admin/persona-overrides").then((r) => r.json()),
+  });
+  const overrideSet = new Set((overridesData?.overrides ?? []).map((o) => o.personaId));
+  const lockedSet = new Set((overridesData?.overrides ?? []).filter((o) => o.humanCurated).map((o) => o.personaId));
+
   return (
     <div className="space-y-6">
       {(Object.entries(grouped) as [string, Persona[]][]).map(([domain, list]) => (
@@ -709,6 +792,17 @@ function PersonaDefinitionList() {
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{p.label}</span>
                   <Badge variant="secondary" className="text-[10px]">{p.id}</Badge>
+                  {lockedSet.has(p.id) && (
+                    <Badge variant="outline" className="text-[10px] gap-1 text-amber-600 border-amber-300">
+                      <Lock className="w-2.5 h-2.5" />
+                      Locked
+                    </Badge>
+                  )}
+                  {overrideSet.has(p.id) && !lockedSet.has(p.id) && (
+                    <Badge variant="outline" className="text-[10px] text-blue-500 border-blue-300">
+                      DB Override
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">{p.role}</p>
                 <p className="text-xs">{p.description}</p>

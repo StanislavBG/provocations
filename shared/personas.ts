@@ -78,6 +78,9 @@ INSTRUCTIONS:
     domain: "root",
     parentId: null,
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   // ── Business Domain ──
@@ -107,6 +110,9 @@ INSTRUCTIONS:
     domain: "business",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   ceo: {
@@ -160,6 +166,9 @@ INSTRUCTIONS:
     domain: "business",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   // ── Technology Domain ──
@@ -214,6 +223,9 @@ INSTRUCTIONS:
     domain: "technology",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   quality_engineer: {
@@ -251,6 +263,9 @@ INSTRUCTIONS:
     domain: "technology",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   ux_designer: {
@@ -288,6 +303,9 @@ INSTRUCTIONS:
     domain: "technology",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   tech_writer: {
@@ -325,6 +343,9 @@ INSTRUCTIONS:
     domain: "technology",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   product_manager: {
@@ -362,6 +383,9 @@ INSTRUCTIONS:
     domain: "business",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   security_engineer: {
@@ -399,6 +423,9 @@ INSTRUCTIONS:
     domain: "technology",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   data_architect: {
@@ -458,6 +485,9 @@ INSTRUCTIONS:
     domain: "technology",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   cybersecurity_engineer: {
@@ -515,6 +545,9 @@ INSTRUCTIONS:
     domain: "technology",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   // ── Marketing Domain ──
@@ -573,6 +606,9 @@ INSTRUCTIONS:
     domain: "marketing",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   brand_strategist: {
@@ -630,6 +666,9 @@ INSTRUCTIONS:
     domain: "marketing",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 
   content_strategist: {
@@ -688,6 +727,9 @@ INSTRUCTIONS:
     domain: "marketing",
     parentId: "master_researcher",
     lastResearchedAt: "2026-02-20",
+    humanCurated: false,
+    curatedBy: null,
+    curatedAt: null,
   },
 };
 

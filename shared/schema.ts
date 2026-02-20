@@ -75,6 +75,10 @@ export const personaSchema = z.object({
   domain: z.enum(personaDomain).default("technology"), // industry/discipline grouping
   parentId: z.string().nullable().default(null),       // parent persona ID (null = root)
   lastResearchedAt: z.string().nullable().default(null), // ISO timestamp of last research refresh
+  // ── Human curation lock ──
+  humanCurated: z.boolean().default(false),            // true = human-refined, Master Researcher must not auto-modify
+  curatedBy: z.string().nullable().default(null),      // Clerk userId who curated this persona
+  curatedAt: z.string().nullable().default(null),      // ISO timestamp of last human curation
 });
 
 export type Persona = z.infer<typeof personaSchema>;
@@ -847,3 +851,18 @@ export interface PipelineStatus {
     infographicUuid?: string;
   };
 }
+
+// ── App Launch Params ──
+// URL-based protocol for cross-app navigation.
+// Any app can invoke another by constructing: /?app=...&intent=...&entityType=...&entityId=...
+
+export const appLaunchParamsSchema = z.object({
+  app: z.string(),                                        // template ID (e.g. "persona-definition")
+  intent: z.enum(["create", "edit", "view"]).optional(),   // action to take
+  entityType: z.string().optional(),                       // what we're operating on (e.g. "persona")
+  entityId: z.string().optional(),                         // specific entity ID (e.g. "architect")
+  step: z.string().optional(),                             // which flow step to start at
+  source: z.string().optional(),                           // caller app (e.g. "admin")
+});
+
+export type AppLaunchParams = z.infer<typeof appLaunchParamsSchema>;

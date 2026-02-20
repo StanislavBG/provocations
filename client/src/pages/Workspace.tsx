@@ -68,6 +68,8 @@ import {
   Shield,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
+import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
+import { serializePersonaToMarkdown, buildPersonaEditObjective } from "@/lib/personaSerializer";
 import type {
   Document,
   ProvocationType,
@@ -205,6 +207,36 @@ export default function Workspace() {
 
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
+
+  // ── App Launch Params — cross-app deep linking ──
+  const launchParamsConsumed = useRef(false);
+  useEffect(() => {
+    if (launchParamsConsumed.current) return;
+    const params = parseAppLaunchParams(window.location.search);
+    if (!params) return;
+    launchParamsConsumed.current = true;
+
+    // Set template
+    setSelectedTemplateId(params.app);
+
+    // Handle persona edit intent
+    if (params.intent === "edit" && params.entityType === "persona" && params.entityId) {
+      const persona = builtInPersonas[params.entityId as ProvocationType];
+      if (persona) {
+        const markdown = serializePersonaToMarkdown(persona);
+        const editObjective = buildPersonaEditObjective(persona);
+        setDocument({ id: generateId("doc"), rawText: markdown });
+        setObjective(editObjective);
+        setIsObjectiveCollapsed(false);
+        toast({
+          title: `Editing: ${persona.label}`,
+          description: `${persona.domain} domain persona loaded from admin`,
+        });
+      }
+    }
+
+    clearLaunchParams();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Query tab state ──
 
