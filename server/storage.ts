@@ -19,6 +19,9 @@ interface StoredDocument {
   id: number;
   userId: string;
   title: string;
+  titleCiphertext: string | null;
+  titleSalt: string | null;
+  titleIv: string | null;
   ciphertext: string;
   salt: string;
   iv: string;
@@ -32,6 +35,9 @@ export interface IStorage {
   saveDocument(data: {
     userId: string;
     title: string;
+    titleCiphertext: string;
+    titleSalt: string;
+    titleIv: string;
     ciphertext: string;
     salt: string;
     iv: string;
@@ -41,17 +47,29 @@ export interface IStorage {
   getDocument(id: number): Promise<StoredDocument | null>;
   updateDocument(
     id: number,
-    data: { title: string; ciphertext: string; salt: string; iv: string; folderId?: number | null }
+    data: {
+      title: string;
+      titleCiphertext: string;
+      titleSalt: string;
+      titleIv: string;
+      ciphertext: string;
+      salt: string;
+      iv: string;
+      folderId?: number | null;
+    }
   ): Promise<{ id: number; updatedAt: string } | null>;
-  renameDocument(id: number, title: string): Promise<{ id: number; title: string; updatedAt: string } | null>;
+  renameDocument(
+    id: number,
+    data: { title: string; titleCiphertext: string; titleSalt: string; titleIv: string }
+  ): Promise<{ id: number; updatedAt: string } | null>;
   moveDocument(id: number, folderId: number | null): Promise<{ id: number; updatedAt: string } | null>;
   deleteDocument(id: number): Promise<void>;
   // Folder operations
-  createFolder(userId: string, name: string, parentFolderId?: number | null): Promise<FolderItem>;
-  listFolders(userId: string, parentFolderId?: number | null): Promise<FolderItem[]>;
-  renameFolder(id: number, name: string): Promise<FolderItem | null>;
+  createFolder(userId: string, name: string, parentFolderId?: number | null, encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string }): Promise<FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }>;
+  listFolders(userId: string, parentFolderId?: number | null): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null })[]>;
+  renameFolder(id: number, name: string, encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string }): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }) | null>;
   deleteFolder(id: number): Promise<void>;
-  getFolder(id: number): Promise<{ id: number; userId: string; name: string; parentFolderId: number | null } | null>;
+  getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null } | null>;
   // User preferences
   getUserPreferences(userId: string): Promise<{ autoDictate: boolean }>;
   setUserPreferences(userId: string, prefs: { autoDictate: boolean }): Promise<{ autoDictate: boolean }>;
@@ -75,6 +93,9 @@ export class DatabaseStorage implements IStorage {
   async saveDocument(data: {
     userId: string;
     title: string;
+    titleCiphertext: string;
+    titleSalt: string;
+    titleIv: string;
     ciphertext: string;
     salt: string;
     iv: string;
@@ -85,6 +106,9 @@ export class DatabaseStorage implements IStorage {
       .values({
         userId: data.userId,
         title: data.title,
+        titleCiphertext: data.titleCiphertext,
+        titleSalt: data.titleSalt,
+        titleIv: data.titleIv,
         ciphertext: data.ciphertext,
         salt: data.salt,
         iv: data.iv,
@@ -95,7 +119,7 @@ export class DatabaseStorage implements IStorage {
     return { id: row.id, createdAt: row.createdAt.toISOString() };
   }
 
-  async listDocuments(userId: string, folderId?: number | null): Promise<DocumentListItem[]> {
+  async listDocuments(userId: string, folderId?: number | null): Promise<(DocumentListItem & { titleCiphertext: string | null; titleSalt: string | null; titleIv: string | null })[]> {
     const condition = folderId != null
       ? and(eq(documents.userId, userId), eq(documents.folderId, folderId))
       : folderId === null
@@ -106,6 +130,9 @@ export class DatabaseStorage implements IStorage {
       .select({
         id: documents.id,
         title: documents.title,
+        titleCiphertext: documents.titleCiphertext,
+        titleSalt: documents.titleSalt,
+        titleIv: documents.titleIv,
         folderId: documents.folderId,
         createdAt: documents.createdAt,
         updatedAt: documents.updatedAt,
@@ -117,6 +144,9 @@ export class DatabaseStorage implements IStorage {
     return rows.map((r) => ({
       id: r.id,
       title: r.title,
+      titleCiphertext: r.titleCiphertext,
+      titleSalt: r.titleSalt,
+      titleIv: r.titleIv,
       folderId: r.folderId,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -136,6 +166,9 @@ export class DatabaseStorage implements IStorage {
       id: row.id,
       userId: row.userId,
       title: row.title,
+      titleCiphertext: row.titleCiphertext,
+      titleSalt: row.titleSalt,
+      titleIv: row.titleIv,
       ciphertext: row.ciphertext,
       salt: row.salt,
       iv: row.iv,
@@ -147,11 +180,23 @@ export class DatabaseStorage implements IStorage {
 
   async updateDocument(
     id: number,
-    data: { title: string; ciphertext: string; salt: string; iv: string; folderId?: number | null }
+    data: {
+      title: string;
+      titleCiphertext: string;
+      titleSalt: string;
+      titleIv: string;
+      ciphertext: string;
+      salt: string;
+      iv: string;
+      folderId?: number | null;
+    }
   ): Promise<{ id: number; updatedAt: string } | null> {
     const now = new Date();
     const setData: Record<string, unknown> = {
       title: data.title,
+      titleCiphertext: data.titleCiphertext,
+      titleSalt: data.titleSalt,
+      titleIv: data.titleIv,
       ciphertext: data.ciphertext,
       salt: data.salt,
       iv: data.iv,
@@ -170,16 +215,25 @@ export class DatabaseStorage implements IStorage {
     return { id: rows[0].id, updatedAt: rows[0].updatedAt.toISOString() };
   }
 
-  async renameDocument(id: number, title: string): Promise<{ id: number; title: string; updatedAt: string } | null> {
+  async renameDocument(
+    id: number,
+    data: { title: string; titleCiphertext: string; titleSalt: string; titleIv: string }
+  ): Promise<{ id: number; updatedAt: string } | null> {
     const now = new Date();
     const rows = await db
       .update(documents)
-      .set({ title, updatedAt: now })
+      .set({
+        title: data.title,
+        titleCiphertext: data.titleCiphertext,
+        titleSalt: data.titleSalt,
+        titleIv: data.titleIv,
+        updatedAt: now,
+      })
       .where(eq(documents.id, id))
-      .returning({ id: documents.id, title: documents.title, updatedAt: documents.updatedAt });
+      .returning({ id: documents.id, updatedAt: documents.updatedAt });
 
     if (rows.length === 0) return null;
-    return { id: rows[0].id, title: rows[0].title, updatedAt: rows[0].updatedAt.toISOString() };
+    return { id: rows[0].id, updatedAt: rows[0].updatedAt.toISOString() };
   }
 
   async moveDocument(id: number, folderId: number | null): Promise<{ id: number; updatedAt: string } | null> {
@@ -200,22 +254,37 @@ export class DatabaseStorage implements IStorage {
 
   // ── Folder CRUD ──
 
-  async createFolder(userId: string, name: string, parentFolderId?: number | null): Promise<FolderItem> {
+  async createFolder(
+    userId: string,
+    name: string,
+    parentFolderId?: number | null,
+    encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string },
+  ): Promise<FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }> {
     const [row] = await db
       .insert(folders)
-      .values({ userId, name, parentFolderId: parentFolderId ?? null })
+      .values({
+        userId,
+        name,
+        nameCiphertext: encrypted?.nameCiphertext ?? null,
+        nameSalt: encrypted?.nameSalt ?? null,
+        nameIv: encrypted?.nameIv ?? null,
+        parentFolderId: parentFolderId ?? null,
+      })
       .returning();
 
     return {
       id: row.id,
       name: row.name,
+      nameCiphertext: row.nameCiphertext,
+      nameSalt: row.nameSalt,
+      nameIv: row.nameIv,
       parentFolderId: row.parentFolderId,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
   }
 
-  async listFolders(userId: string, parentFolderId?: number | null): Promise<FolderItem[]> {
+  async listFolders(userId: string, parentFolderId?: number | null): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null })[]> {
     const condition = parentFolderId != null
       ? and(eq(folders.userId, userId), eq(folders.parentFolderId, parentFolderId))
       : parentFolderId === null
@@ -231,13 +300,16 @@ export class DatabaseStorage implements IStorage {
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
+      nameCiphertext: r.nameCiphertext,
+      nameSalt: r.nameSalt,
+      nameIv: r.nameIv,
       parentFolderId: r.parentFolderId,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
   }
 
-  async getFolder(id: number): Promise<{ id: number; userId: string; name: string; parentFolderId: number | null } | null> {
+  async getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null } | null> {
     const [row] = await db
       .select()
       .from(folders)
@@ -245,14 +317,32 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
 
     if (!row) return null;
-    return { id: row.id, userId: row.userId, name: row.name, parentFolderId: row.parentFolderId };
+    return {
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      nameCiphertext: row.nameCiphertext,
+      nameSalt: row.nameSalt,
+      nameIv: row.nameIv,
+      parentFolderId: row.parentFolderId,
+    };
   }
 
-  async renameFolder(id: number, name: string): Promise<FolderItem | null> {
+  async renameFolder(
+    id: number,
+    name: string,
+    encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string },
+  ): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }) | null> {
     const now = new Date();
     const rows = await db
       .update(folders)
-      .set({ name, updatedAt: now })
+      .set({
+        name,
+        nameCiphertext: encrypted?.nameCiphertext ?? null,
+        nameSalt: encrypted?.nameSalt ?? null,
+        nameIv: encrypted?.nameIv ?? null,
+        updatedAt: now,
+      })
       .where(eq(folders.id, id))
       .returning();
 
@@ -261,6 +351,9 @@ export class DatabaseStorage implements IStorage {
     return {
       id: r.id,
       name: r.name,
+      nameCiphertext: r.nameCiphertext,
+      nameSalt: r.nameSalt,
+      nameIv: r.nameIv,
       parentFolderId: r.parentFolderId,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
