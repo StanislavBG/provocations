@@ -9,6 +9,7 @@ import {
   DatabaseZap,
   BookOpenCheck,
   Mic,
+  MessageSquare,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -694,6 +695,115 @@ What needs to happen next based on this capture?`,
       "You sound very confident about this approach. What's the biggest risk you're not mentioning? — Devil's Advocate",
     ],
     steps: [{ id: "capture", label: "Record your thoughts" }],
+  },
+  {
+    id: "conversational-ai",
+    category: "build",
+    title: "Conversational AI",
+    shortLabel: "Chat App",
+    subtitle: "Interactive AI conversation application",
+    description:
+      "For designing an interactive conversational AI application. Covers the full product surface: conversation flow, three-pane layout, configurable controls (tone, topics, humor), dynamic summaries, accessibility, and ethical safeguards. Provocations challenge your UX decisions, privacy design, and whether the conversation experience actually feels natural.",
+    icon: MessageSquare,
+    objective:
+      "Design a complete conversational AI application with engaging interactions, configurable controls, dynamic summaries, and a thoughtful three-pane layout",
+    starterText: "",
+    draftQuestions: [
+      "What kind of conversations should the AI support — open-ended exploration, goal-directed tasks, or both?",
+      "Who is the primary user — casual consumers, professionals, students?",
+      "How should the AI handle sensitive or off-limits topics?",
+      "What makes this different from existing chat interfaces (ChatGPT, Gemini, etc.)?",
+    ],
+    templateContent: `# Conversational AI Application
+
+## Key Features
+### Interactive Conversations
+Talk to the AI as though chatting with a friend. Choose your topics or let the AI's suggestions guide your exploration of interesting ideas.
+
+### Dynamic Summaries
+A real-time summary brings clarity to the conversation, capturing its progression and key moments.
+
+### Ethical Joke Handling
+Humor plays a central role in keeping conversations lighthearted and engaging. Tagged as "funny and ridiculous," jokes and humorous elements remain thoughtful and non-offensive. Oversight mechanisms ensure conversational boundaries are adhered to, reinforcing user safety and respectful humor.
+
+### Dynamic Suggestions
+Dynamic conversation suggestions keep the experience fresh and evolving. These advisory cues help refine or shift dialogue direction, allowing users to enhance conversations without pressure or disruption. Suggestions are optional and require no user action, supporting a free-flowing conversational style.
+
+### Customizable Control Options
+Configure real-time conversational parameters to adjust tone or trajectory according to your preferences.
+
+### Three-Pane Layout
+Clarity and structure drive enhanced engagement with this user-friendly interface.
+
+### Managing Sensitive Inputs in Summaries
+Privacy is paramount. To protect user trust, conversation summaries are designed to filter out sensitive input and apply tone-sensitivity checks. Users retain the ability to edit summaries in real time, giving them control over the content displayed.
+
+---
+
+## User Interface Layout
+
+The three-pane layout enriches user experience and organization:
+
+### Left Pane – Conversation Controls
+Configure settings with ease. Personalize conversational flow, tweak tone, or add playful prompts. This pane keeps everything at your fingertips.
+
+### Middle Pane – Active Conversation
+The heart of the experience. This center pane showcases your real-time dialogue with AI, immersing you in each interaction.
+
+### Right Pane – Conversation Summary
+As you converse, this pane continuously refines and presents key takeaways, giving you an overview of your dialogue.
+
+### Accessibility Features
+- Semantic HTML and ARIA labels for all functional elements
+- WCAG-compliant color schemes with optimal contrast ratios
+- Color-independent designs for users with visual impairments
+- Screen reader and high-contrast mode compatibility
+
+---
+
+## Configurable Control Options
+
+1. **Topic Suggestions**: AI-recommended topics based on prior interactions
+2. **Tone Adjustments**: Formal, casual, or playful tone selection
+3. **Future Direction**: Steer the dialogue focus for the next 2–3 turns
+4. **Question Picker**: Queue specific questions for targeted AI responses
+5. **Fun Twist**: Activate playful humor mode for creative narratives and jokes
+6. **Dynamic Suggestions**: Optional pop-up cues for refining or expanding discussion
+7. **Voice Selection**: Switch AI personality mid-session (analytical, uplifting, quirky, reflective)
+
+---
+
+## Privacy & Safety
+
+### Sensitive Input Handling
+- Conversation summaries filter out sensitive input
+- Tone-sensitivity checks applied to all generated content
+- Users can edit summaries in real time
+
+### Trust & Oversight
+- Product and security teams review content concerns biweekly
+- Target: above 90% trust ratings
+- Rapid resolution of flagged content issues
+
+---
+
+## Conclusion
+The application redefines interactive conversations by merging advanced natural language processing with user-centric controls. The thoughtfully designed layout ensures clarity, while accessible features and diverse settings empower users to curate engaging, creative dialogues.`,
+    provocationSources: [
+      "UX Researcher",
+      "Conversation Designer",
+      "Privacy Engineer",
+      "Impatient User",
+      "Accessibility Auditor",
+    ],
+    provocationExamples: [
+      "Three panes is a lot of visual noise. What happens on mobile — do all three panes survive? — UX Researcher",
+      "You say 'dynamic suggestions' are optional, but how do you prevent them from becoming annoying interruptions? — Conversation Designer",
+      "The summary pane captures 'key moments.' Who decides what's key? What if the user considers something private? — Privacy Engineer",
+      "I opened the app and there are 7 control options. I just want to chat. Why is this so complicated? — Impatient User",
+      "Your three-pane layout uses color to distinguish panes. How does a colorblind user tell them apart? — Accessibility Auditor",
+    ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
 ];
 
