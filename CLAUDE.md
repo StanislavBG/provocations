@@ -271,9 +271,10 @@ Requirement discovery through:
 
 | Variable | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` | OpenAI API key (preferred provider) |
-| `GEMINI_API_KEY` | Google Gemini API key (via OpenAI-compatible endpoint) |
+| `AI_INTEGRATIONS_OPENAI_API_KEY` | OpenAI API key (auto-injected by Replit AI Integrations) |
+| `AI_INTEGRATIONS_OPENAI_BASE_URL` | Replit proxy base URL for OpenAI requests (auto-injected) |
 | `ANTHROPIC_API_KEY` | Anthropic API key (or `ANTHROPIC_KEY`) |
+| `GEMINI_API_KEY` | Google Gemini API key (via OpenAI-compatible endpoint) |
 | `LLM_PROVIDER` | Force provider: `openai`, `gemini`, or `anthropic` (auto-detects by default) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
@@ -281,16 +282,11 @@ Requirement discovery through:
 | `CLERK_SECRET_KEY` | Clerk backend secret key |
 | `PLAYWRIGHT_CHROMIUM_PATH` | Path to Chromium for screenshots |
 
-### Replit-Specific Environment Variables
+### Replit AI Integrations
 
-On Replit, AI integration keys are injected automatically via the **Tools > AI Integrations** panel. These are mapped to standard keys in `server/llm.ts`:
+OpenAI credentials are managed automatically via **Tools > AI Integrations** in Replit. When you enable OpenAI in that panel, Replit injects `AI_INTEGRATIONS_OPENAI_API_KEY` and `AI_INTEGRATIONS_OPENAI_BASE_URL` into the server process environment. Requests are proxied through Replit and billed to your Replit credits.
 
-| Replit Variable | Maps To | Description |
-|----------------|---------|-------------|
-| `AI_INTEGRATIONS_OPENAI_API_KEY` | `OPENAI_API_KEY` | OpenAI API key (set via Replit AI Integrations) |
-| `AI_INTEGRATIONS_OPENAI_BASE_URL` | OpenAI `baseURL` | Replit proxy base URL for OpenAI requests |
-
-The LLM adapter in `server/llm.ts` checks both standard and Replit-specific env vars. Priority: standard key first, then Replit integration key.
+The LLM adapter in `server/llm.ts` auto-detects these variables. You can verify the active provider at runtime via `GET /api/llm-status`.
 
 ## Development Notes
 

@@ -96,7 +96,7 @@ function decryptField(
 }
 
 // LLM provider is configured in server/llm.ts
-// Set OPENAI_API_KEY (or AI_INTEGRATIONS_OPENAI_API_KEY on Replit) for OpenAI (default).
+// Set AI_INTEGRATIONS_OPENAI_API_KEY (Replit AI Integrations) for OpenAI (default).
 // Also supports ANTHROPIC_API_KEY and GEMINI_API_KEY as fallbacks.
 // Override auto-detection with LLM_PROVIDER=openai|anthropic|gemini.
 
@@ -461,6 +461,23 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LLM STATUS — diagnostic endpoint to verify active provider
+  // ═══════════════════════════════════════════════════════════════════════
+  app.get("/api/llm-status", (_req, res) => {
+    res.json({
+      provider: llm.provider,
+      keys: {
+        AI_INTEGRATIONS_OPENAI_API_KEY: !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        AI_INTEGRATIONS_OPENAI_BASE_URL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || null,
+        ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_KEY: !!process.env.ANTHROPIC_KEY,
+        GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+        LLM_PROVIDER: process.env.LLM_PROVIDER || null,
+      },
+    });
+  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // UNIFIED INVOKE ENDPOINT — single entry point for all LLM interactions
