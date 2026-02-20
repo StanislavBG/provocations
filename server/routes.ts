@@ -96,8 +96,9 @@ function decryptField(
 }
 
 // LLM provider is configured in server/llm.ts
-// Set GEMINI_API_KEY for Google Gemini (default) or ANTHROPIC_API_KEY for Anthropic Claude.
-// Override auto-detection with LLM_PROVIDER=gemini|anthropic.
+// Set OPENAI_API_KEY (or AI_INTEGRATIONS_OPENAI_API_KEY on Replit) for OpenAI (default).
+// Also supports ANTHROPIC_API_KEY and GEMINI_API_KEY as fallbacks.
+// Override auto-detection with LLM_PROVIDER=openai|anthropic|gemini.
 
 // Derive provocation prompts from centralized persona definitions (challenge prompt is the default)
 const provocationPrompts: Record<ProvocationType, string> = Object.fromEntries(
