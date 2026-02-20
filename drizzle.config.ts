@@ -11,4 +11,16 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // Only manage tables that are declared in the schema.
+  // Prevents drizzle-kit push from dropping legacy tables that still hold data.
+  tablesFilter: [
+    "folders",
+    "key_versions",
+    "documents",
+    "user_preferences",
+    "persona_versions",
+    "tracking_events",
+    "usage_metrics",
+    "pipeline_artifacts",
+  ],
 });
