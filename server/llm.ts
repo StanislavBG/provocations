@@ -4,7 +4,7 @@
  * Provider selection (in order of priority):
  *   1. LLM_PROVIDER env var ("openai" | "anthropic" | "gemini")
  *   2. Auto-detect based on available API keys:
- *      - OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY (Replit) → OpenAI
+ *      - AI_INTEGRATIONS_OPENAI_API_KEY (Replit) → OpenAI
  *      - ANTHROPIC_API_KEY / ANTHROPIC_KEY → Anthropic
  *      - GEMINI_API_KEY → Gemini
  *
@@ -45,17 +45,27 @@ export interface LLMResponse {
 type Provider = "openai" | "anthropic" | "gemini";
 
 function detectProvider(): Provider {
+  // Log all key detection for debugging
+  console.log("[llm] Key detection:");
+  console.log(`  AI_INTEGRATIONS_OPENAI_API_KEY: ${process.env.AI_INTEGRATIONS_OPENAI_API_KEY ? "SET" : "NOT SET"}`);
+  console.log(`  AI_INTEGRATIONS_OPENAI_BASE_URL: ${process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ? "SET" : "NOT SET"}`);
+  console.log(`  ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "SET" : "NOT SET"}`);
+  console.log(`  ANTHROPIC_KEY: ${process.env.ANTHROPIC_KEY ? "SET" : "NOT SET"}`);
+  console.log(`  GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? "SET" : "NOT SET"}`);
+  console.log(`  LLM_PROVIDER: ${process.env.LLM_PROVIDER || "NOT SET"}`);
+
   const forced = process.env.LLM_PROVIDER?.toLowerCase();
   if (forced === "openai" || forced === "anthropic" || forced === "gemini") {
+    console.log(`[llm] Provider forced via LLM_PROVIDER: ${forced}`);
     return forced;
   }
 
-  if (process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY) return "openai";
+  if (process.env.AI_INTEGRATIONS_OPENAI_API_KEY) return "openai";
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_KEY) return "anthropic";
   if (process.env.GEMINI_API_KEY) return "gemini";
 
   throw new Error(
-    "No LLM API key configured. Set one of: OPENAI_API_KEY (or AI_INTEGRATIONS_OPENAI_API_KEY), ANTHROPIC_API_KEY, or GEMINI_API_KEY."
+    "No LLM API key configured. Set one of: AI_INTEGRATIONS_OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY."
   );
 }
 
@@ -68,11 +78,10 @@ let _openaiClient: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (_openaiClient) return _openaiClient;
 
-  // Support both standard OPENAI_API_KEY and Replit's AI_INTEGRATIONS_OPENAI_API_KEY
-  const apiKey = process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "OpenAI API key not configured. Set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY."
+      "OpenAI API key not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY via Replit AI Integrations."
     );
   }
 
