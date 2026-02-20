@@ -12,12 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { LogIn } from "lucide-react";
 import Workspace from "@/pages/Workspace";
+import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Workspace} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

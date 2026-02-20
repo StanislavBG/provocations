@@ -3,6 +3,7 @@ import { z } from "zod";
 // ── Persona types (each persona provides Advice and Challenge feedback) ──
 
 export const provocationType = [
+  "master_researcher",
   "thinking_bigger",
   "architect",
   "quality_engineer",
@@ -43,6 +44,18 @@ export const personaSummarySchema = z.object({
 
 export type PersonaSummary = z.infer<typeof personaSummarySchema>;
 
+// ── Persona domain & hierarchy ──
+// Personas are organized in a strict hierarchy under the Master Researcher root.
+// Each persona belongs to a domain (industry/discipline) and can have a parent.
+
+export const personaDomain = [
+  "root",        // Master Researcher only
+  "technology",  // Architect, QA, Security, Data Architect, UX, Tech Writer
+  "business",    // CEO, Product Manager, Think Bigger
+] as const;
+
+export type PersonaDomain = typeof personaDomain[number];
+
 export const personaSchema = z.object({
   id: z.string(),                           // unique key e.g. "architect" (matches ProvocationType)
   label: z.string(),                        // display name e.g. "Architect", "CEO"
@@ -52,7 +65,11 @@ export const personaSchema = z.object({
   color: personaColorSchema,                // color scheme for rendering
   prompts: personaPromptsSchema,            // system prompts for challenge and advice generation
   summary: personaSummarySchema,            // short UI tooltip descriptions
-  isBuiltIn: z.boolean().default(true),     // true for the 7 built-in personas; false for user-created
+  isBuiltIn: z.boolean().default(true),     // true for built-in personas; false for user-created
+  // ── Hierarchy fields ──
+  domain: z.enum(personaDomain).default("technology"), // industry/discipline grouping
+  parentId: z.string().nullable().default(null),       // parent persona ID (null = root)
+  lastResearchedAt: z.string().nullable().default(null), // ISO timestamp of last research refresh
 });
 
 export type Persona = z.infer<typeof personaSchema>;
@@ -600,4 +617,83 @@ export interface StreamingRefineResponse {
   requirements: StreamingRequirement[];
   updatedDocument: string;
   summary: string;
+}
+
+// ── Tracking event types (no user-inputted text is stored) ──
+
+export const trackingEventType = [
+  "page_view",         // User viewed a page/phase
+  "persona_selected",  // User selected a persona
+  "persona_deselected",// User deselected a persona
+  "template_selected", // User selected a prebuilt template
+  "challenge_generated",// Challenges were generated
+  "challenge_addressed",// User addressed a challenge
+  "challenge_rejected", // User rejected a challenge
+  "advice_requested",  // User requested advice
+  "document_saved",    // Document saved to DB
+  "document_created",  // New document started
+  "interview_started", // Interview flow started
+  "interview_merged",  // Interview entries merged into document
+  "voice_recorded",    // User recorded voice input
+  "app_switched",      // Toolbox app switched (provoke/website/context/analyzer)
+  "write_executed",    // Write/edit instruction executed
+  "discussion_asked",  // User asked a question in discussion
+  "phase_changed",     // Workspace phase changed (input → workspace)
+] as const;
+
+export type TrackingEventType = typeof trackingEventType[number];
+
+export const trackingEventSchema = z.object({
+  eventType: z.enum(trackingEventType),
+  personaId: z.string().optional(),        // which persona, if applicable
+  templateId: z.string().optional(),       // which template, if applicable
+  appSection: z.string().optional(),       // which toolbox app (provoke/website/context/analyzer)
+  metadata: z.record(z.string()).optional(), // additional non-PII metadata (counts, durations, etc.)
+});
+
+export type TrackingEvent = z.infer<typeof trackingEventSchema>;
+
+// ── Persona hierarchy helpers ──
+
+export interface PersonaHierarchyNode {
+  persona: Persona;
+  children: PersonaHierarchyNode[];
+}
+
+// ── Admin dashboard response types ──
+
+export interface PersonaUsageStat {
+  personaId: string;
+  personaLabel: string;
+  domain: string;
+  usageCount: number;
+  lastUsedAt: string | null;
+}
+
+export interface TrackingEventStat {
+  eventType: string;
+  count: number;
+}
+
+export interface AdminDashboardData {
+  personaUsage: PersonaUsageStat[];
+  eventBreakdown: TrackingEventStat[];
+  totalEvents: number;
+  totalSessions: number;
+  avgDocumentGenerationMs: number;
+  storageMetadata: {
+    folderCount: number;
+    maxFolderDepth: number;
+    documentCount: number;
+  };
+}
+
+// ── Persona version (archival) ──
+
+export interface PersonaVersion {
+  id: number;
+  personaId: string;
+  version: number;
+  definition: string; // JSON-serialized Persona
+  createdAt: string;
 }

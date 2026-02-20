@@ -40,7 +40,8 @@ import {
   type StreamingRefineResponse,
   type StreamingRequirement,
 } from "@shared/schema";
-import { builtInPersonas, getPersonaById } from "@shared/personas";
+import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
+import { trackingEventSchema } from "@shared/schema";
 import { invoke, TASK_TYPES, type TaskType } from "./invoke";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 
@@ -295,6 +296,12 @@ function formatStyleGuidance(docs: ReferenceDocument[]): string {
 
 // Persona response examples for better guidance
 const provocationResponseExamples: Record<ProvocationType, string> = {
+  master_researcher: `Example good responses to Master Researcher feedback:
+- "Good catch — we're missing coverage for the healthcare domain's knowledge worker roles"
+- "I should refresh the Architect persona — the skills profile hasn't been updated in over a month"
+- "Let me define the evaluation criteria for measuring persona relevance and freshness"
+The goal is to ensure the persona hierarchy is complete, current, and covers all relevant knowledge worker domains.`,
+
   thinking_bigger: `Example good responses to Think Big feedback:
 - "You're right — I haven't thought about what happens at 100,000 users. Let me address the scaling bottleneck"
 - "Good catch — the onboarding flow has too many steps for a self-service product at scale"
@@ -664,10 +671,150 @@ Output only valid JSON, no markdown.`;
   });
 
   // ── Persona listing endpoint ──
-  // Returns all available personas for exploration and editing in the UI.
+  // Returns all user-facing personas (excludes master_researcher).
   app.get("/api/personas", (_req, res) => {
-    const personas = Object.values(builtInPersonas);
+    const personas = getAllPersonas();
     res.json({ personas });
+  });
+
+  // ── Persona hierarchy endpoint ──
+  // Returns the full hierarchy tree rooted at master_researcher.
+  app.get("/api/personas/hierarchy", (_req, res) => {
+    const hierarchy = getPersonaHierarchy();
+    res.json(hierarchy);
+  });
+
+  // ── All personas including root (for admin) ──
+  app.get("/api/personas/all", (_req, res) => {
+    const personas = getAllPersonasWithRoot();
+    res.json({ personas });
+  });
+
+  // ── Personas by domain ──
+  app.get("/api/personas/domain/:domain", (req, res) => {
+    const domain = req.params.domain;
+    if (!["root", "technology", "business"].includes(domain)) {
+      return res.status(400).json({ error: "Invalid domain. Must be: root, technology, or business" });
+    }
+    const personas = getPersonasByDomain(domain as any);
+    res.json({ personas });
+  });
+
+  // ── Stale personas (need research refresh) ──
+  app.get("/api/personas/stale", (_req, res) => {
+    const stale = getStalePersonas();
+    res.json({ stalePersonas: stale.map((p) => ({ id: p.id, label: p.label, domain: p.domain, lastResearchedAt: p.lastResearchedAt })) });
+  });
+
+  // ── Persona version history (archival) ──
+  app.get("/api/personas/:personaId/versions", async (req, res) => {
+    try {
+      const versions = await storage.getPersonaVersions(req.params.personaId);
+      res.json({ versions });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch persona versions" });
+    }
+  });
+
+  // ── Tracking event ingestion ──
+  // Records a single tracking event. No user-inputted text is stored.
+  app.post("/api/tracking/event", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      const userId = auth?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = trackingEventSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid tracking event", details: parsed.error.errors });
+      }
+
+      const sessionId = (req.headers["x-session-id"] as string) || "unknown";
+
+      await storage.recordTrackingEvent({
+        userId,
+        sessionId,
+        eventType: parsed.data.eventType,
+        personaId: parsed.data.personaId,
+        templateId: parsed.data.templateId,
+        appSection: parsed.data.appSection,
+        metadata: parsed.data.metadata,
+      });
+
+      res.json({ ok: true });
+    } catch (error) {
+      // Non-fatal — tracking should never break the user experience
+      console.error("Tracking event error:", error);
+      res.json({ ok: false });
+    }
+  });
+
+  // ── Batch tracking events ──
+  app.post("/api/tracking/events", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      const userId = auth?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const events = req.body.events;
+      if (!Array.isArray(events)) {
+        return res.status(400).json({ error: "Expected events array" });
+      }
+
+      const sessionId = (req.headers["x-session-id"] as string) || "unknown";
+
+      await Promise.all(
+        events.map((evt: any) => {
+          const parsed = trackingEventSchema.safeParse(evt);
+          if (!parsed.success) return Promise.resolve();
+          return storage.recordTrackingEvent({
+            userId,
+            sessionId,
+            eventType: parsed.data.eventType,
+            personaId: parsed.data.personaId,
+            templateId: parsed.data.templateId,
+            appSection: parsed.data.appSection,
+            metadata: parsed.data.metadata,
+          });
+        })
+      );
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Batch tracking error:", error);
+      res.json({ ok: false });
+    }
+  });
+
+  // ── Admin dashboard data ──
+  app.get("/api/admin/dashboard", async (_req, res) => {
+    try {
+      const data = await storage.getAdminDashboardData();
+      res.json(data);
+    } catch (error) {
+      console.error("Admin dashboard error:", error);
+      res.status(500).json({ error: "Failed to load admin dashboard data" });
+    }
+  });
+
+  // ── Admin: persona usage stats ──
+  app.get("/api/admin/persona-usage", async (_req, res) => {
+    try {
+      const stats = await storage.getPersonaUsageStats();
+      res.json({ stats });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to load persona usage stats" });
+    }
+  });
+
+  // ── Admin: event breakdown ──
+  app.get("/api/admin/event-breakdown", async (_req, res) => {
+    try {
+      const stats = await storage.getEventBreakdown();
+      res.json({ stats });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to load event breakdown" });
+    }
   });
 
   // Unified write endpoint - single interface to the AI writer
