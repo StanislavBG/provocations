@@ -724,3 +724,126 @@ export interface PersonaVersion {
   definition: string; // JSON-serialized Persona
   createdAt: string;
 }
+
+// ── Pipeline artifact types (YouTube / Voice → Infographic) ──
+
+export const artifactTypes = ["transcript", "summary", "infographic"] as const;
+export type ArtifactType = typeof artifactTypes[number];
+
+export const artifactSourceTypes = ["youtube", "voice-capture"] as const;
+export type ArtifactSourceType = typeof artifactSourceTypes[number];
+
+export const artifactStatuses = ["pending", "processing", "complete", "error"] as const;
+export type ArtifactStatus = typeof artifactStatuses[number];
+
+// Schema for a video item returned when fetching a YouTube channel
+export const youtubeVideoSchema = z.object({
+  videoId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  publishedAt: z.string(),
+  thumbnailUrl: z.string(),
+  channelTitle: z.string(),
+});
+
+export type YouTubeVideo = z.infer<typeof youtubeVideoSchema>;
+
+// Request to fetch videos from a YouTube channel
+export const youtubeChannelRequestSchema = z.object({
+  channelUrl: z.string().min(1, "YouTube channel URL is required"),
+  maxResults: z.number().min(1).max(50).default(10),
+});
+
+export type YouTubeChannelRequest = z.infer<typeof youtubeChannelRequestSchema>;
+
+// Response from channel fetch
+export interface YouTubeChannelResponse {
+  channelTitle: string;
+  channelId: string;
+  videos: YouTubeVideo[];
+}
+
+// Request to process a YouTube video transcript
+export const processVideoRequestSchema = z.object({
+  videoId: z.string().min(1, "Video ID is required"),
+  videoUrl: z.string().min(1, "Video URL is required"),
+  videoTitle: z.string().optional(),
+  thumbnailUrl: z.string().optional(),
+});
+
+export type ProcessVideoRequest = z.infer<typeof processVideoRequestSchema>;
+
+// Request to process an uploaded voice transcript
+export const processTranscriptUploadRequestSchema = z.object({
+  transcript: z.string().min(1, "Transcript content is required"),
+  title: z.string().optional(),
+  objective: z.string().optional(),
+});
+
+export type ProcessTranscriptUploadRequest = z.infer<typeof processTranscriptUploadRequestSchema>;
+
+// Request to generate a summary from a transcript
+export const generateSummaryRequestSchema = z.object({
+  transcript: z.string().min(1, "Transcript is required"),
+  title: z.string().optional(),
+  objective: z.string().optional(),
+  sourceType: z.enum(artifactSourceTypes),
+});
+
+export type GenerateSummaryRequest = z.infer<typeof generateSummaryRequestSchema>;
+
+// Summary response
+export interface GenerateSummaryResponse {
+  summary: string;
+  keyPoints: string[];
+  tips: string[];
+}
+
+// Request to generate an infographic spec from a summary
+export const generateInfographicRequestSchema = z.object({
+  summary: z.string().min(1, "Summary is required"),
+  keyPoints: z.array(z.string()),
+  tips: z.array(z.string()),
+  title: z.string().optional(),
+  sourceType: z.enum(artifactSourceTypes),
+});
+
+export type GenerateInfographicRequest = z.infer<typeof generateInfographicRequestSchema>;
+
+// Infographic section (one visual block in the infographic)
+export const infographicSectionSchema = z.object({
+  id: z.string(),
+  heading: z.string(),
+  content: z.string(),
+  icon: z.string(), // suggested lucide icon name
+  color: z.string(), // suggested accent color hex
+  dataPoints: z.array(z.string()).optional(),
+});
+
+export type InfographicSection = z.infer<typeof infographicSectionSchema>;
+
+// Full infographic spec returned by the generation endpoint
+export interface InfographicSpec {
+  title: string;
+  subtitle: string;
+  sections: InfographicSection[];
+  colorPalette: string[];
+  sourceLabel: string; // e.g. "YouTube: Channel Name" or "Voice Capture Session"
+}
+
+// Pipeline status — tracks overall processing progress
+export interface PipelineStatus {
+  pipelineId: string;
+  sourceType: ArtifactSourceType;
+  sourceTitle: string;
+  stages: {
+    transcript: ArtifactStatus;
+    summary: ArtifactStatus;
+    infographic: ArtifactStatus;
+  };
+  artifacts: {
+    transcriptUuid?: string;
+    summaryUuid?: string;
+    infographicUuid?: string;
+  };
+}

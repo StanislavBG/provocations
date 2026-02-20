@@ -1533,6 +1533,47 @@ RULES:
               };
               setVersions([initialVersion]);
             }}
+            onYouTubeInfographicMode={(obj, channelUrl, templateId) => {
+              setSelectedTemplateId(templateId);
+              setDocument({ id: generateId("doc"), rawText: `# YouTube to Infographic\n\n*Loading channel: ${channelUrl}...*` });
+              setObjective(obj);
+              setWebsiteUrl(channelUrl);
+              const ytConfig = getAppFlowConfig(templateId);
+              setActiveToolboxApp(ytConfig.defaultToolboxTab as ToolboxApp);
+              const initialVersion: DocumentVersion = {
+                id: generateId("v"),
+                text: `# YouTube to Infographic\n\n*Loading channel...*`,
+                timestamp: Date.now(),
+                description: "YouTube infographic workspace initialized",
+              };
+              setVersions([initialVersion]);
+            }}
+            onVoiceInfographicMode={(obj, transcript, templateId) => {
+              setSelectedTemplateId(templateId);
+              const initialDoc = `# Voice to Infographic\n\n*Processing transcript (${transcript.split(/\s+/).length} words)...*`;
+              setDocument({ id: generateId("doc"), rawText: initialDoc });
+              setObjective(obj);
+              const viConfig = getAppFlowConfig(templateId);
+              setActiveToolboxApp(viConfig.defaultToolboxTab as ToolboxApp);
+              const initialVersion: DocumentVersion = {
+                id: generateId("v"),
+                text: initialDoc,
+                timestamp: Date.now(),
+                description: "Voice infographic workspace initialized",
+              };
+              setVersions([initialVersion]);
+              // Store transcript in context for processing
+              setCapturedContext(prev => [
+                ...prev,
+                {
+                  id: generateId("ctx"),
+                  type: "text" as const,
+                  content: transcript,
+                  annotation: "Voice transcript for infographic processing",
+                  createdAt: Date.now(),
+                },
+              ]);
+            }}
             capturedContext={capturedContext}
             onCapturedContextChange={setCapturedContext}
             onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
