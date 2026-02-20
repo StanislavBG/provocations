@@ -53,6 +53,27 @@ function getEncryptionKey(): string {
   return secret || "provocations-dev-key-change-in-production";
 }
 
+// ── Zero-knowledge helpers ──
+// Decrypt a title/name that may be encrypted (new rows) or plaintext (legacy rows).
+function decryptField(
+  legacyPlaintext: string,
+  ciphertext: string | null,
+  salt: string | null,
+  iv: string | null,
+  key: string,
+): string {
+  if (ciphertext && salt && iv) {
+    try {
+      return decrypt({ ciphertext, salt, iv }, key);
+    } catch {
+      // Fallback to legacy plaintext if decryption fails
+      return legacyPlaintext;
+    }
+  }
+  // Legacy row — title/name was stored in plaintext
+  return legacyPlaintext;
+}
+
 // LLM provider is configured in server/llm.ts
 // Set GEMINI_API_KEY for Google Gemini (default) or ANTHROPIC_API_KEY for Anthropic Claude.
 // Override auto-detection with LLM_PROVIDER=gemini|anthropic.
@@ -2095,14 +2116,19 @@ Output only valid JSON, no markdown.`,
       }
 
       const { title, content, folderId } = parsed.data;
-      const encrypted = encrypt(content, getEncryptionKey());
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(content, key);
+      const encryptedTitle = encrypt(title, key);
 
       const doc = await storage.saveDocument({
         userId,
-        title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
         folderId: folderId ?? null,
       });
 
@@ -2140,13 +2166,18 @@ Output only valid JSON, no markdown.`,
       }
 
       const { title, content } = parsed.data;
-      const encrypted = encrypt(content, getEncryptionKey());
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(content, key);
+      const encryptedTitle = encrypt(title, key);
 
       const result = await storage.updateDocument(id, {
-        title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
       });
 
       if (!result) {
@@ -2161,14 +2192,22 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // List documents for the authenticated user
+  // List documents for the authenticated user (titles decrypted server-side)
   app.get("/api/documents", async (req, res) => {
     try {
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
+      const key = getEncryptionKey();
       const items = await storage.listDocuments(userId);
-      res.json({ documents: items });
+      const decrypted = items.map((item) => ({
+        id: item.id,
+        title: decryptField(item.title, item.titleCiphertext, item.titleSalt, item.titleIv, key),
+        folderId: item.folderId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+      res.json({ documents: decrypted });
     } catch (error) {
       console.error("List documents error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -2195,11 +2234,13 @@ Output only valid JSON, no markdown.`,
         return res.status(403).json({ error: "Not authorized to access this document" });
       }
 
+      const key = getEncryptionKey();
+
       let content: string;
       try {
         content = decrypt(
           { ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv },
-          getEncryptionKey(),
+          key,
         );
       } catch {
         // Document may have been encrypted with old client-side encryption
@@ -2210,9 +2251,11 @@ Output only valid JSON, no markdown.`,
         });
       }
 
+      const title = decryptField(doc.title, doc.titleCiphertext, doc.titleSalt, doc.titleIv, key);
+
       res.json({
         id: doc.id,
-        title: doc.title,
+        title,
         content,
         folderId: doc.folderId,
         createdAt: doc.createdAt,
@@ -2225,7 +2268,7 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // Rename a document (title only, no re-encryption needed)
+  // Rename a document (title encrypted before storing)
   app.patch("/api/documents/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2249,7 +2292,14 @@ Output only valid JSON, no markdown.`,
         return res.status(403).json({ error: "Not authorized to rename this document" });
       }
 
-      const result = await storage.renameDocument(id, parsed.data.title);
+      const key = getEncryptionKey();
+      const encryptedTitle = encrypt(parsed.data.title, key);
+      const result = await storage.renameDocument(id, {
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+      });
       if (!result) {
         return res.status(404).json({ error: "Document not found" });
       }
@@ -2294,7 +2344,7 @@ Output only valid JSON, no markdown.`,
   // Folder Management (hierarchical document organization)
   // ==========================================
 
-  // List folders for a user (optionally scoped to a parent folder)
+  // List folders for a user (folder names decrypted server-side)
   app.get("/api/folders", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2304,8 +2354,16 @@ Output only valid JSON, no markdown.`,
         ? parseInt(req.query.parentFolderId as string, 10)
         : undefined;
 
+      const key = getEncryptionKey();
       const items = await storage.listFolders(userId, parentFolderId === undefined ? undefined : (isNaN(parentFolderId!) ? undefined : parentFolderId));
-      res.json({ folders: items });
+      const decrypted = items.map((item) => ({
+        id: item.id,
+        name: decryptField(item.name, item.nameCiphertext, item.nameSalt, item.nameIv, key),
+        parentFolderId: item.parentFolderId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+      res.json({ folders: decrypted });
     } catch (error) {
       console.error("List folders error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -2313,7 +2371,7 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // Create a new folder
+  // Create a new folder (name encrypted before storing)
   app.post("/api/folders", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2325,8 +2383,23 @@ Output only valid JSON, no markdown.`,
       }
 
       const { name, parentFolderId } = parsed.data;
-      const folder = await storage.createFolder(userId, name, parentFolderId ?? null);
-      res.json(folder);
+      const key = getEncryptionKey();
+      const encryptedName = encrypt(name, key);
+      const folder = await storage.createFolder(
+        userId,
+        "[encrypted]",
+        parentFolderId ?? null,
+        { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
+      );
+
+      // Return decrypted name to the client
+      res.json({
+        id: folder.id,
+        name,
+        parentFolderId: folder.parentFolderId,
+        createdAt: folder.createdAt,
+        updatedAt: folder.updatedAt,
+      });
     } catch (error) {
       console.error("Create folder error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -2334,7 +2407,7 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // Rename a folder
+  // Rename a folder (name encrypted before storing)
   app.patch("/api/folders/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2352,8 +2425,24 @@ Output only valid JSON, no markdown.`,
       if (!existing) return res.status(404).json({ error: "Folder not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
 
-      const result = await storage.renameFolder(id, parsed.data.name);
-      res.json(result);
+      const key = getEncryptionKey();
+      const encryptedName = encrypt(parsed.data.name, key);
+      const result = await storage.renameFolder(
+        id,
+        "[encrypted]",
+        { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
+      );
+
+      if (!result) return res.status(404).json({ error: "Folder not found" });
+
+      // Return decrypted name to the client
+      res.json({
+        id: result.id,
+        name: parsed.data.name,
+        parentFolderId: result.parentFolderId,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+      });
     } catch (error) {
       console.error("Rename folder error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";

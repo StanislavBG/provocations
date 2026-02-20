@@ -31,7 +31,7 @@ npm run db:push  # Push Drizzle schema to database
 |-------|-------------|
 | **Frontend** | React 18, TypeScript 5.6, Vite 7, Tailwind CSS 3.4, shadcn/ui (47 components) |
 | **Backend** | Express 5.0, Google Gemini 2.0 Flash (default) / Anthropic Claude (configurable) |
-| **Database** | PostgreSQL via Drizzle ORM, server-side AES-GCM encryption |
+| **Database** | PostgreSQL via Drizzle ORM, zero-knowledge AES-256-GCM encryption (all user text encrypted at rest) |
 | **Auth** | Clerk (authentication & user ownership) |
 | **Validation** | Zod schemas shared between frontend/backend |
 | **State** | React Query (TanStack), React hooks |
@@ -84,7 +84,7 @@ provocations/
 │   ├── routes.ts                   # All API endpoints (21 routes)
 │   ├── llm.ts                      # Configurable LLM provider (Gemini/Anthropic)
 │   ├── storage.ts                  # Database operations (Drizzle ORM)
-│   ├── crypto.ts                   # AES-GCM encryption/decryption
+│   ├── crypto.ts                   # AES-256-GCM encryption/decryption (zero-knowledge)
 │   └── db.ts                       # Database connection
 ├── shared/
 │   ├── schema.ts                   # Zod schemas & TypeScript types
@@ -256,10 +256,16 @@ Requirement discovery through:
 - Defensive null-checks in components
 - Toast notifications for user feedback
 
-### Document Storage
-- Documents encrypted at rest with AES-GCM (server-side)
+### Document Storage — Zero-Knowledge Encryption
+- **All user-provided text is encrypted at rest** with AES-256-GCM (server-side)
+  - Document content: encrypted (ciphertext + salt + iv)
+  - Document titles: encrypted (titleCiphertext + titleSalt + titleIv)
+  - Folder names: encrypted (nameCiphertext + nameSalt + nameIv)
+- Legacy plaintext titles/names are supported for backward compatibility: if encrypted columns are null, the legacy plaintext column is used as fallback
+- New documents/folders store `"[encrypted]"` in the legacy title/name column
+- The server has **no right to read user content** — encryption/decryption happens at the route boundary, storage layer only handles opaque ciphertext
 - Ownership verified via Clerk userId
-- Salt and IV stored alongside ciphertext
+- Each encrypted field gets its own random salt + IV (independent key derivation per field)
 
 ## Not Yet Implemented
 
