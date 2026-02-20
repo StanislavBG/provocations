@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useRef, useState, useEffect } from "react";
-import { Star, Heart, ChevronLeft, ChevronRight } from "lucide-react";
+import { Star, Heart, ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ function shuffle<T>(arr: T[]): T[] {
  * Order templates so favorites fill ~50 % of early positions,
  * the rest are shuffled randomly so every app gets exposure.
  */
-function orderTemplates(
+export function orderTemplates(
   templates: PrebuiltTemplate[],
   favorites: Set<string>,
 ): PrebuiltTemplate[] {
@@ -81,7 +81,7 @@ function StarRating({
 }
 
 // ---------------------------------------------------------------------------
-// Single tile card
+// Single tile card — full-width variant
 // ---------------------------------------------------------------------------
 
 function AppTile({
@@ -108,7 +108,7 @@ function AppTile({
       className={cn(
         "relative flex flex-col text-left w-full h-full",
         "rounded-xl border bg-card/80 backdrop-blur-sm",
-        "p-4 gap-3 transition-all duration-200",
+        "p-5 sm:p-6 gap-3 transition-all duration-200",
         "hover:border-primary/40 hover:shadow-md hover:bg-card",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         "group cursor-pointer",
@@ -116,14 +116,14 @@ function AppTile({
     >
       {/* Header row: icon + title + favorite */}
       <div className="flex items-start gap-3">
-        <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
-          <Icon className="w-5 h-5" />
+        <div className="shrink-0 flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
+          <Icon className="w-6 h-6" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold leading-tight truncate">
+          <h3 className="text-base font-semibold leading-tight">
             {template.title}
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {template.subtitle}
           </p>
         </div>
@@ -133,12 +133,12 @@ function AppTile({
             e.stopPropagation();
             onToggleFavorite(template.id);
           }}
-          className="shrink-0 p-1 rounded-md transition-colors hover:bg-primary/10"
+          className="shrink-0 p-1.5 rounded-md transition-colors hover:bg-primary/10"
           aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
         >
           <Heart
             className={cn(
-              "w-4 h-4 transition-colors",
+              "w-5 h-5 transition-colors",
               isFavorite
                 ? "fill-red-400 text-red-400"
                 : "text-muted-foreground/40 group-hover:text-muted-foreground",
@@ -148,30 +148,30 @@ function AppTile({
       </div>
 
       {/* How to use — beginner instructions */}
-      <p className="text-xs leading-relaxed text-foreground/80">
+      <p className="text-sm leading-relaxed text-foreground/80">
         {template.howTo}
       </p>
 
       {/* Use cases */}
-      <ul className="flex flex-col gap-1 mt-auto">
+      <ul className="flex flex-col gap-1.5 mt-auto">
         {template.useCases.map((uc, i) => (
           <li
             key={i}
-            className="text-[11px] leading-snug text-muted-foreground flex items-start gap-1.5"
+            className="text-xs leading-snug text-muted-foreground flex items-start gap-1.5"
           >
-            <span className="shrink-0 mt-[3px] w-1 h-1 rounded-full bg-primary/50" />
+            <span className="shrink-0 mt-[3px] w-1.5 h-1.5 rounded-full bg-primary/50" />
             {uc}
           </li>
         ))}
       </ul>
 
       {/* Rating row */}
-      <div className="flex items-center justify-between pt-1 border-t border-border/50">
+      <div className="flex items-center justify-between pt-2 border-t border-border/50">
         <StarRating
           value={rating}
           onChange={(v) => onRate(template.id, v)}
         />
-        <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+        <span className="text-[11px] text-muted-foreground/60 uppercase tracking-wider">
           {template.category}
         </span>
       </div>
@@ -180,7 +180,7 @@ function AppTile({
 }
 
 // ---------------------------------------------------------------------------
-// Scroll-based carousel (no external library)
+// Full-width vertical snap-scroll carousel
 // ---------------------------------------------------------------------------
 
 interface AppTileCarouselProps {
@@ -201,8 +201,8 @@ export function AppTileCarousel({
   onRate,
 }: AppTileCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(true);
 
   const ordered = useMemo(
     () => orderTemplates(templates, favorites),
@@ -219,8 +219,8 @@ export function AppTileCarousel({
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 2);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+    setCanScrollUp(el.scrollTop > 2);
+    setCanScrollDown(el.scrollTop < el.scrollHeight - el.clientHeight - 2);
   }, []);
 
   useEffect(() => {
@@ -235,18 +235,17 @@ export function AppTileCarousel({
     };
   }, [updateScrollState]);
 
-  const scroll = useCallback((direction: "left" | "right") => {
+  const scroll = useCallback((direction: "up" | "down") => {
     const el = scrollRef.current;
     if (!el) return;
-    // Scroll by roughly one card width + gap
-    const cardWidth = el.querySelector<HTMLElement>("[data-tile]")?.offsetWidth ?? 300;
-    el.scrollBy({ left: direction === "left" ? -cardWidth : cardWidth, behavior: "smooth" });
+    const cardHeight = el.querySelector<HTMLElement>("[data-tile]")?.offsetHeight ?? el.clientHeight;
+    el.scrollBy({ top: direction === "up" ? -cardHeight : cardHeight, behavior: "smooth" });
   }, []);
 
   return (
-    <div className="w-full space-y-3">
+    <div className="w-full flex flex-col flex-1 min-h-0">
       {/* Header with nav buttons */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-1 pb-3 shrink-0">
         <div>
           <h2 className="text-base font-semibold">Explore applications</h2>
           <p className="text-xs text-muted-foreground">
@@ -258,36 +257,37 @@ export function AppTileCarousel({
             variant="outline"
             size="icon"
             className="h-8 w-8 rounded-full"
-            disabled={!canScrollLeft}
-            onClick={() => scroll("left")}
-            aria-label="Previous applications"
+            disabled={!canScrollUp}
+            onClick={() => scroll("up")}
+            aria-label="Previous application"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronUp className="h-4 w-4" />
           </Button>
           <Button
             variant="outline"
             size="icon"
             className="h-8 w-8 rounded-full"
-            disabled={!canScrollRight}
-            onClick={() => scroll("right")}
-            aria-label="Next applications"
+            disabled={!canScrollDown}
+            onClick={() => scroll("down")}
+            aria-label="Next application"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronDown className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Scrollable tile row */}
+      {/* Vertical snap-scroll container — each card fills the viewport */}
       <div
         ref={scrollRef}
-        className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-2"
+        className="flex-1 min-h-0 overflow-y-auto snap-y snap-mandatory scroll-smooth"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {ordered.map((template) => (
           <div
             key={template.id}
             data-tile
-            className="snap-start shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]"
+            className="snap-start w-full px-1 pb-3"
+            style={{ minHeight: "calc(100%)" }}
           >
             <AppTile
               template={template}
