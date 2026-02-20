@@ -358,7 +358,53 @@ export default function Workspace() {
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory" | "capturedContext"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
 
-      // Route based on app config outputFormat (with SQL auto-detection fallback)
+      const writerMode = appFlowConfig.writer.mode;
+
+      // ── ANALYZE mode: document stays immutable, return analysis results ──
+      if (writerMode === "analyze") {
+        const response = await apiRequest("POST", "/api/analyze-query", {
+          query: document.rawText,
+        });
+        const analysis = await response.json() as QueryAnalysisResult;
+        // Store analysis in state (handled in onSuccess via a flag)
+        // Return a synthetic WriteResponse so the mutation type stays consistent
+        return {
+          document: document.rawText, // unchanged
+          summary: analysis.overallEvaluation || "Query analysis complete",
+          _analysisResult: analysis,  // piggyback the analysis data
+        } as WriteResponse & { _analysisResult?: QueryAnalysisResult };
+      }
+
+      // ── AGGREGATE mode: append + reorganize, don't rewrite from scratch ──
+      if (writerMode === "aggregate") {
+        const aggregateInstruction = `AGGREGATE MODE — You are a note-taker and context organizer. Do NOT rewrite or replace existing content.
+
+TASK: Incorporate the following new material into this document:
+${request.instruction}
+
+RULES:
+1. PRESERVE all existing content — never delete or substantially rewrite what's already there
+2. APPEND new information under the most relevant existing section, or create a new section if needed
+3. After appending, REORGANIZE the document: group related items, improve section headings, merge duplicates
+4. Add source attribution where possible
+5. Maintain a "Gaps & Questions" section at the bottom for unresolved items
+6. Output the full updated document`;
+
+        const response = await apiRequest("POST", "/api/write", {
+          document: document.rawText,
+          objective,
+          secondaryObjective: secondaryObjective.trim() || undefined,
+          appType: selectedTemplateId || undefined,
+          referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+          capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+          editHistory: editHistory.length > 0 ? editHistory : undefined,
+          ...request,
+          instruction: aggregateInstruction,
+        });
+        return await response.json() as WriteResponse;
+      }
+
+      // ── EDIT mode (default): rewrite/evolve document ──
       const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
       if (useSqlEndpoint) {
         const response = await apiRequest("POST", "/api/query-write", {
@@ -382,38 +428,55 @@ export default function Workspace() {
       });
       return await response.json() as WriteResponse;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data: WriteResponse & { _analysisResult?: QueryAnalysisResult }, variables) => {
+      const writerMode = appFlowConfig.writer.mode;
+
+      // ── ANALYZE mode: populate right panel with analysis, don't update document ──
+      if (writerMode === "analyze" && data._analysisResult) {
+        setQueryAnalysis(data._analysisResult);
+        setSelectedSubqueryId(null);
+        setHoveredSubqueryId(null);
+        // Switch to discoveries panel
+        const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
+        if (hasDiscoveries) {
+          setRightPanelMode("discoveries");
+        }
+        setTranscriptSummary(data._analysisResult.overallEvaluation || "Analysis complete.");
+        trackEvent("write_executed", { metadata: { instructionType: "analyze" } });
+        toast({
+          title: "Query Analyzed",
+          description: "Evaluation results are in the Discoveries panel.",
+        });
+        return;
+      }
+
+      // ── EDIT & AGGREGATE modes: update document ──
       if (document) {
-        // Save current version before updating
         const newVersion: DocumentVersion = {
           id: generateId("v"),
           text: data.document,
           timestamp: Date.now(),
-          description: variables.description || data.summary || "Document updated"
+          description: variables.description || data.summary || (writerMode === "aggregate" ? "Content aggregated" : "Document updated")
         };
         setVersions(prev => [...prev, newVersion]);
         setDocument({ ...document, rawText: data.document });
 
-        // Track this edit in history for coherent iteration
         const historyEntry: EditHistoryEntry = {
           instruction: variables.instruction,
           instructionType: data.instructionType || "general",
           summary: data.summary || "Document updated",
           timestamp: Date.now(),
         };
-        setEditHistory(prev => [...prev.slice(-9), historyEntry]); // Keep last 10
+        setEditHistory(prev => [...prev.slice(-9), historyEntry]);
 
-        // Track write execution
         trackEvent("write_executed", { metadata: { instructionType: data.instructionType || "general" } });
 
-        // Store suggestions for potential display
         if (data.suggestions && data.suggestions.length > 0) {
           setLastSuggestions(data.suggestions);
         } else {
           setLastSuggestions([]);
         }
 
-        // Build detailed transcript summary with changes
         let summaryText = data.summary || "Document updated successfully.";
         if (data.changes && data.changes.length > 0) {
           const changesList = data.changes.map(c => {
@@ -428,7 +491,7 @@ export default function Workspace() {
         setTranscriptSummary(summaryText);
 
         toast({
-          title: "Document Updated",
+          title: writerMode === "aggregate" ? "Content Added" : "Document Updated",
           description: data.summary || "Your changes have been applied.",
         });
       }
@@ -573,6 +636,22 @@ export default function Workspace() {
   const interviewSummaryMutation = useMutation({
     mutationFn: async () => {
       if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
+
+      const writerMode = appFlowConfig.writer.mode;
+
+      // ── ANALYZE mode: run analysis instead of merging ──
+      if (writerMode === "analyze") {
+        const response = await apiRequest("POST", "/api/analyze-query", {
+          query: document.rawText,
+        });
+        const analysis = await response.json() as QueryAnalysisResult;
+        return {
+          document: document.rawText,
+          summary: analysis.overallEvaluation || "Query analysis complete",
+          _analysisResult: analysis,
+        } as WriteResponse & { _analysisResult?: QueryAnalysisResult };
+      }
+
       // Step 1: Get summarized instruction from interview entries
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
         objective,
@@ -583,12 +662,17 @@ export default function Workspace() {
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
+      // ── AGGREGATE mode: wrap instruction for append behavior ──
+      const effectiveInstruction = writerMode === "aggregate"
+        ? `AGGREGATE MODE — Incorporate the following interview insights into this document without rewriting existing content:\n\n${instruction}\n\nPreserve all existing entries. Append new insights. Reorganize sections if needed.`
+        : instruction;
+
       // Step 2: Use the writer to merge into document (route via config)
       const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
       const writeResponse = useSqlEndpoint
         ? await apiRequest("POST", "/api/query-write", {
             query: document.rawText,
-            instruction,
+            instruction: effectiveInstruction,
             appType: selectedTemplateId || undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
           })
@@ -597,20 +681,44 @@ export default function Workspace() {
             objective,
             secondaryObjective: secondaryObjective.trim() || undefined,
             appType: selectedTemplateId || undefined,
-            instruction,
+            instruction: effectiveInstruction,
             referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
             editHistory: editHistory.length > 0 ? editHistory : undefined,
           });
       return await writeResponse.json() as WriteResponse;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: WriteResponse & { _analysisResult?: QueryAnalysisResult }) => {
+      const writerMode = appFlowConfig.writer.mode;
+
+      // ── ANALYZE mode: populate discoveries panel ──
+      if (writerMode === "analyze" && data._analysisResult) {
+        setQueryAnalysis(data._analysisResult);
+        setSelectedSubqueryId(null);
+        setHoveredSubqueryId(null);
+        const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
+        if (hasDiscoveries) setRightPanelMode("discoveries");
+
+        setIsInterviewActive(false);
+        setCurrentInterviewQuestion(null);
+        setCurrentInterviewTopic(null);
+
+        toast({
+          title: "Interview Complete — Query Analyzed",
+          description: "Evaluation results are in the Discoveries panel.",
+        });
+        return;
+      }
+
+      // ── EDIT & AGGREGATE modes: update document ──
       if (document) {
         const newVersion: DocumentVersion = {
           id: generateId("v"),
           text: data.document,
           timestamp: Date.now(),
-          description: `Interview merge (${interviewEntries.length} answers)`,
+          description: writerMode === "aggregate"
+            ? `Interview insights added (${interviewEntries.length} answers)`
+            : `Interview merge (${interviewEntries.length} answers)`,
         };
         setVersions(prev => [...prev, newVersion]);
         setDocument({ ...document, rawText: data.document });
@@ -628,7 +736,7 @@ export default function Workspace() {
         setCurrentInterviewTopic(null);
 
         toast({
-          title: "Interview Merged",
+          title: writerMode === "aggregate" ? "Interview Insights Added" : "Interview Merged",
           description: `${interviewEntries.length} answers integrated into your document.`,
         });
       }
@@ -646,6 +754,22 @@ export default function Workspace() {
   const interviewMergeMutation = useMutation({
     mutationFn: async () => {
       if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
+
+      const writerMode = appFlowConfig.writer.mode;
+
+      // ── ANALYZE mode: run analysis instead of merging ──
+      if (writerMode === "analyze") {
+        const response = await apiRequest("POST", "/api/analyze-query", {
+          query: document.rawText,
+        });
+        const analysis = await response.json() as QueryAnalysisResult;
+        return {
+          document: document.rawText,
+          summary: analysis.overallEvaluation || "Query analysis complete",
+          _analysisResult: analysis,
+        } as WriteResponse & { _analysisResult?: QueryAnalysisResult };
+      }
+
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
@@ -655,11 +779,15 @@ export default function Workspace() {
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
+      const effectiveInstruction = writerMode === "aggregate"
+        ? `AGGREGATE MODE — Incorporate the following interview insights without rewriting existing content:\n\n${instruction}\n\nPreserve all existing entries. Append new insights. Reorganize sections if needed.`
+        : instruction;
+
       const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
       const writeResponse = useSqlEndpoint
         ? await apiRequest("POST", "/api/query-write", {
             query: document.rawText,
-            instruction,
+            instruction: effectiveInstruction,
             appType: selectedTemplateId || undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
           })
@@ -668,20 +796,40 @@ export default function Workspace() {
             objective,
             secondaryObjective: secondaryObjective.trim() || undefined,
             appType: selectedTemplateId || undefined,
-            instruction,
+            instruction: effectiveInstruction,
             referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
             capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
             editHistory: editHistory.length > 0 ? editHistory : undefined,
           });
       return await writeResponse.json() as WriteResponse;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: WriteResponse & { _analysisResult?: QueryAnalysisResult }) => {
+      const writerMode = appFlowConfig.writer.mode;
+
+      // ── ANALYZE mode: populate discoveries panel ──
+      if (writerMode === "analyze" && data._analysisResult) {
+        setQueryAnalysis(data._analysisResult);
+        setSelectedSubqueryId(null);
+        setHoveredSubqueryId(null);
+        const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
+        if (hasDiscoveries) setRightPanelMode("discoveries");
+        setInterviewEntries([]);
+        toast({
+          title: "Query Re-Analyzed",
+          description: "Updated evaluation in the Discoveries panel.",
+        });
+        return;
+      }
+
+      // ── EDIT & AGGREGATE modes: update document ──
       if (document) {
         const newVersion: DocumentVersion = {
           id: generateId("v"),
           text: data.document,
           timestamp: Date.now(),
-          description: `Incremental merge (${interviewEntries.length} answers)`,
+          description: writerMode === "aggregate"
+            ? `Interview insights added (${interviewEntries.length} answers)`
+            : `Incremental merge (${interviewEntries.length} answers)`,
         };
         setVersions(prev => [...prev, newVersion]);
         setDocument({ ...document, rawText: data.document });
@@ -698,7 +846,7 @@ export default function Workspace() {
         setInterviewEntries([]);
 
         toast({
-          title: "Merged to Draft",
+          title: writerMode === "aggregate" ? "Insights Added" : "Merged to Draft",
           description: `${interviewEntries.length} answers integrated. Interview continues.`,
         });
       }
