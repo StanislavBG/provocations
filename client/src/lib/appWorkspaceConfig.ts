@@ -376,6 +376,58 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       feedbackTone: "user-centric and conversation-design-aware",
     },
   },
+
+  "youtube-to-infographic": {
+    workspaceLayout: "standard",
+    defaultToolboxTab: "context",
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "channel", label: "Enter Channel", description: "Paste a YouTube channel URL to fetch videos" },
+      { id: "transcript-summary", label: "Transcript & Summary", description: "Extract video transcripts and produce a rich, infographic-ready summary with key points, data, and actionable tips" },
+      { id: "infographic", label: "Generate Infographic", description: "Transform the detailed summary into a structured visual specification" },
+      { id: "refine", label: "Refine", description: "Challenge and polish the infographic specification" },
+    ],
+
+    leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+
+    rightPanelTabs: [RIGHT_DISCUSSION],
+
+    writer: {
+      mode: "edit",
+      outputFormat: "markdown",
+      documentType: "infographic brief from YouTube content",
+      feedbackTone: "visual-design-focused and data-driven",
+    },
+  },
+
+  "voice-to-infographic": {
+    workspaceLayout: "standard",
+    defaultToolboxTab: "context",
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "upload", label: "Upload Transcript", description: "Paste or upload a voice capture transcript" },
+      { id: "transcript-summary", label: "Transcript & Summary", description: "Produce a detailed, infographic-ready summary with key points, statistics, and actionable tips" },
+      { id: "infographic", label: "Generate Infographic", description: "Transform the detailed summary into a structured visual specification" },
+      { id: "refine", label: "Refine", description: "Challenge and polish the infographic specification" },
+    ],
+
+    leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+
+    rightPanelTabs: [RIGHT_DISCUSSION],
+
+    writer: {
+      mode: "edit",
+      outputFormat: "markdown",
+      documentType: "infographic brief from voice transcript",
+      feedbackTone: "clarity-focused and visually structured",
+    },
+  },
 };
 
 // ---------------------------------------------------------------------------
