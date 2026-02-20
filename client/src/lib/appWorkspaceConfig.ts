@@ -77,7 +77,17 @@ export interface WriterBehaviorConfig {
 // Full application flow config
 // ---------------------------------------------------------------------------
 
+/**
+ * Workspace layout — controls the top-level UI structure.
+ *
+ * "standard"      — Default 3-panel layout (toolbox | document | discussion).
+ * "voice-capture" — Single-page voice recording workspace with auto-save.
+ */
+export type WorkspaceLayout = "standard" | "voice-capture";
+
 export interface AppFlowConfig {
+  /** Top-level workspace layout. Defaults to "standard" (3-panel). */
+  workspaceLayout: WorkspaceLayout;
   /** Which toolbox tab to activate when entering the workspace */
   defaultToolboxTab: LeftPanelTabId;
   /** Whether to auto-start the interview (Provoke) on workspace entry */
@@ -146,6 +156,7 @@ const RIGHT_DISCOVERIES: RightPanelTabConfig = {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONFIG: AppFlowConfig = {
+  workspaceLayout: "standard",
   defaultToolboxTab: "provoke",
   autoStartInterview: true,
   autoStartPersonas: ["thinking_bigger" as ProvocationType],
@@ -188,6 +199,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   "query-editor": {
+    workspaceLayout: "standard",
     defaultToolboxTab: "analyzer",
     autoStartInterview: true,
     autoStartPersonas: ["thinking_bigger" as ProvocationType],
@@ -245,6 +257,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   streaming: {
+    workspaceLayout: "standard",
     defaultToolboxTab: "website",
     autoStartInterview: false,
     autoStartPersonas: undefined,
@@ -333,6 +346,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   "research-context": {
+    workspaceLayout: "standard",
     defaultToolboxTab: "context",
     autoStartInterview: true,
     autoStartPersonas: ["thinking_bigger" as ProvocationType],
@@ -357,18 +371,24 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   "voice-capture": {
-    ...DEFAULT_CONFIG,
+    workspaceLayout: "voice-capture",
+    defaultToolboxTab: "provoke",
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "record", label: "Record", description: "Speak your ideas — ramble, brainstorm, think out loud" },
-      { id: "structure", label: "Structure", description: "AI organizes your spoken thoughts into clear content" },
-      { id: "refine", label: "Refine", description: "Polish and fill gaps in the structured output" },
+      { id: "record", label: "Recording", description: "Speak freely — transcript auto-saves every 30 seconds" },
     ],
+
     leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+
+    rightPanelTabs: [RIGHT_DISCUSSION],
+
     writer: {
-      mode: "edit",
+      mode: "aggregate",
       outputFormat: "markdown",
-      documentType: "voice capture document",
+      documentType: "voice capture transcript",
       feedbackTone: "clarifying and structure-focused",
     },
   },
