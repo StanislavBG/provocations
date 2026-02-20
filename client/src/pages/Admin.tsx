@@ -25,6 +25,7 @@ import { useState } from "react";
 import type {
   AdminDashboardData,
   PersonaUsageStat,
+  UserMetricsMatrix,
   Persona,
 } from "@shared/schema";
 import { getAllPersonas } from "@shared/personas";
@@ -61,6 +62,13 @@ export default function Admin() {
   const { data: staleData } = useQuery<{ stalePersonas: { id: string; label: string; domain: string; lastResearchedAt: string | null }[] }>({
     queryKey: ["/api/personas/stale"],
     queryFn: () => apiRequest("GET", "/api/personas/stale").then((r) => r.json()),
+    enabled: isAdmin,
+  });
+
+  const { data: userMetrics, isLoading: metricsLoading } = useQuery<UserMetricsMatrix>({
+    queryKey: ["/api/admin/user-metrics"],
+    queryFn: () => apiRequest("GET", "/api/admin/user-metrics").then((r) => r.json()),
+    refetchInterval: 30_000,
     enabled: isAdmin,
   });
 
@@ -113,14 +121,18 @@ export default function Admin() {
 
         {/* Tabs */}
         <Tabs defaultValue="dashboard">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-3 max-w-xl">
             <TabsTrigger value="dashboard" className="gap-2">
               <BarChart3 className="w-4 h-4" />
-              Usability Dashboard
+              Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="user-metrics" className="gap-2">
+              <Users className="w-4 h-4" />
+              User Metrics
             </TabsTrigger>
             <TabsTrigger value="personas" className="gap-2">
               <FolderTree className="w-4 h-4" />
-              Persona Hierarchy
+              Personas
             </TabsTrigger>
           </TabsList>
 
@@ -231,7 +243,34 @@ export default function Admin() {
           </TabsContent>
 
           {/* ════════════════════════════════════════ */}
-          {/* Tab 2: Persona Hierarchy                 */}
+          {/* Tab 2: User Metrics Matrix               */}
+          {/* ════════════════════════════════════════ */}
+          <TabsContent value="user-metrics" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="w-4 h-4" />
+                  User Metrics Matrix
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : userMetrics?.users?.length ? (
+                  <UserMetricsTable data={userMetrics} />
+                ) : (
+                  <p className="text-sm text-muted-foreground py-8 text-center">
+                    No usage metrics recorded yet. Metrics are captured when users save or copy documents.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ════════════════════════════════════════ */}
+          {/* Tab 3: Persona Hierarchy                 */}
           {/* ════════════════════════════════════════ */}
           <TabsContent value="personas" className="space-y-6 mt-6">
             <div className="grid md:grid-cols-3 gap-6">
@@ -436,6 +475,95 @@ function ResearchTriggerCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Human-readable labels and descriptions for metric keys */
+const METRIC_META: Record<string, { label: string; description: string; unit?: string }> = {
+  time_saved_minutes: {
+    label: "Time Saved",
+    description: "Estimated minutes saved through AI collaboration vs. writing from scratch (19 WPM composition speed + reading time)",
+    unit: "min",
+  },
+  author_words: {
+    label: "Author Words",
+    description: "Words shaped by the user through iterative AI collaboration (total words − first draft words)",
+  },
+  documents_saved: {
+    label: "Docs Saved",
+    description: "Number of times the user saved a document to storage",
+  },
+  documents_copied: {
+    label: "Docs Copied",
+    description: "Number of times the user copied a document to clipboard",
+  },
+  total_words_produced: {
+    label: "Total Words",
+    description: "Cumulative word count across all saved/copied documents",
+  },
+};
+
+function UserMetricsTable({ data }: { data: UserMetricsMatrix }) {
+  return (
+    <div className="overflow-x-auto -mx-6">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left px-4 py-2.5 font-semibold sticky left-0 bg-card z-10 min-w-[180px]">
+              User
+            </th>
+            {data.metricKeys.map((key) => {
+              const meta = METRIC_META[key];
+              return (
+                <th
+                  key={key}
+                  className="text-right px-3 py-2.5 font-medium whitespace-nowrap"
+                  title={meta?.description || key}
+                >
+                  <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+                    {meta?.label || key}
+                  </span>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {data.users.map((user) => (
+            <tr key={user.userId} className="border-b last:border-0 hover:bg-muted/30">
+              <td className="px-4 py-2 sticky left-0 bg-card z-10">
+                <div className="font-medium truncate max-w-[180px]" title={user.email}>
+                  {user.displayName}
+                </div>
+                <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
+                  {user.email}
+                </div>
+              </td>
+              {data.metricKeys.map((key) => {
+                const val = user.metrics[key] ?? 0;
+                const meta = METRIC_META[key];
+                return (
+                  <td key={key} className="text-right px-3 py-2 tabular-nums whitespace-nowrap">
+                    {val > 0 ? (
+                      <span>
+                        {val.toLocaleString()}
+                        {meta?.unit && (
+                          <span className="text-[10px] text-muted-foreground ml-0.5">
+                            {meta.unit}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

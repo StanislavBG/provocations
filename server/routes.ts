@@ -906,6 +906,94 @@ Output only valid JSON, no markdown.`;
     }
   });
 
+  // ── Usage metrics: record (authenticated, fire-and-forget) ──
+  app.post("/api/metrics", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { metrics } = req.body as { metrics?: { key: string; delta: number }[] };
+      if (!Array.isArray(metrics) || metrics.length === 0) {
+        return res.status(400).json({ error: "metrics array required" });
+      }
+
+      await Promise.all(
+        metrics
+          .filter((m) => m.key && typeof m.delta === "number" && m.delta > 0)
+          .map((m) => storage.incrementMetric(userId, m.key, m.delta))
+      );
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Metric recording error:", error);
+      res.status(500).json({ error: "Failed to record metrics" });
+    }
+  });
+
+  // ── Admin: user metrics matrix (protected) ──
+  app.get("/api/admin/user-metrics", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const allMetrics = await storage.getAllUsageMetrics();
+
+      // Collect unique user IDs
+      const userIds = [...new Set(allMetrics.map((m) => m.userId))];
+
+      // Resolve user info from Clerk
+      const userInfoMap: Record<string, { email: string; displayName: string }> = {};
+      for (const uid of userIds) {
+        try {
+          const user = await clerkClient.users.getUser(uid);
+          const email =
+            user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)
+              ?.emailAddress || "unknown";
+          const displayName =
+            [user.firstName, user.lastName].filter(Boolean).join(" ") || email;
+          userInfoMap[uid] = { email, displayName };
+        } catch {
+          userInfoMap[uid] = { email: "unknown", displayName: uid.slice(0, 12) };
+        }
+      }
+
+      // Collect all metric keys — sorted by importance
+      const METRIC_ORDER = [
+        "time_saved_minutes",
+        "author_words",
+        "documents_saved",
+        "documents_copied",
+        "total_words_produced",
+      ];
+      const allKeys = [...new Set(allMetrics.map((m) => m.metricKey))];
+      const sortedKeys = [
+        ...METRIC_ORDER.filter((k) => allKeys.includes(k)),
+        ...allKeys.filter((k) => !METRIC_ORDER.includes(k)).sort(),
+      ];
+
+      // Build per-user rows
+      const users = userIds.map((uid) => {
+        const userMetrics = allMetrics.filter((m) => m.userId === uid);
+        const metrics: Record<string, number> = {};
+        for (const m of userMetrics) {
+          metrics[m.metricKey] = m.metricValue;
+        }
+        return {
+          userId: uid,
+          email: userInfoMap[uid]?.email || "unknown",
+          displayName: userInfoMap[uid]?.displayName || uid,
+          metrics,
+        };
+      });
+
+      res.json({ metricKeys: sortedKeys, users });
+    } catch (error) {
+      console.error("Admin user metrics error:", error);
+      res.status(500).json({ error: "Failed to load user metrics" });
+    }
+  });
+
   // Unified write endpoint - single interface to the AI writer
   app.post("/api/write", async (req, res) => {
     try {

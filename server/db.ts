@@ -89,11 +89,20 @@ export async function ensureTables(): Promise<void> {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS usage_metrics (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        metric_key VARCHAR(64) NOT NULL,
+        metric_value INTEGER DEFAULT 0 NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_tracking_events_user ON tracking_events(user_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_type ON tracking_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_session ON tracking_events(session_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_created ON tracking_events(created_at);
       CREATE INDEX IF NOT EXISTS idx_persona_versions_persona ON persona_versions(persona_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_metrics_user_key ON usage_metrics(user_id, metric_key);
     `);
     console.log("Database tables verified.");
   } catch (err) {

@@ -114,3 +114,15 @@ export const trackingEvents = pgTable("tracking_events", {
 
 export type StoredTrackingEvent = typeof trackingEvents.$inferSelect;
 
+// Usage metrics — cumulative per-user productivity metrics (non-PII, numeric only)
+// Each row is a single metric for a single user, upserted (incremented) on each event.
+export const usageMetrics = pgTable("usage_metrics", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  metricKey: varchar("metric_key", { length: 64 }).notNull(),
+  metricValue: integer("metric_value").default(0).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type StoredUsageMetric = typeof usageMetrics.$inferSelect;
+

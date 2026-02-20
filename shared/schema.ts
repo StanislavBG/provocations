@@ -693,6 +693,28 @@ export interface AdminDashboardData {
   };
 }
 
+// ── Usage metrics (per-user cumulative) ──
+
+export interface UserMetricRow {
+  userId: string;
+  metricKey: string;
+  metricValue: number;
+  updatedAt: string;
+}
+
+/** Shape returned by the admin metrics matrix endpoint */
+export interface UserMetricsMatrix {
+  /** All metric keys across all users, sorted by importance */
+  metricKeys: string[];
+  /** One entry per user with their email/name and metric values */
+  users: {
+    userId: string;
+    email: string;
+    displayName: string;
+    metrics: Record<string, number>;
+  }[];
+}
+
 // ── Persona version (archival) ──
 
 export interface PersonaVersion {
