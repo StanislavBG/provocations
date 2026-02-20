@@ -906,6 +906,94 @@ Output only valid JSON, no markdown.`;
     }
   });
 
+  // ── Usage metrics: record (authenticated, fire-and-forget) ──
+  app.post("/api/metrics", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { metrics } = req.body as { metrics?: { key: string; delta: number }[] };
+      if (!Array.isArray(metrics) || metrics.length === 0) {
+        return res.status(400).json({ error: "metrics array required" });
+      }
+
+      await Promise.all(
+        metrics
+          .filter((m) => m.key && typeof m.delta === "number" && m.delta > 0)
+          .map((m) => storage.incrementMetric(userId, m.key, m.delta))
+      );
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Metric recording error:", error);
+      res.status(500).json({ error: "Failed to record metrics" });
+    }
+  });
+
+  // ── Admin: user metrics matrix (protected) ──
+  app.get("/api/admin/user-metrics", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const allMetrics = await storage.getAllUsageMetrics();
+
+      // Collect unique user IDs
+      const userIds = [...new Set(allMetrics.map((m) => m.userId))];
+
+      // Resolve user info from Clerk
+      const userInfoMap: Record<string, { email: string; displayName: string }> = {};
+      for (const uid of userIds) {
+        try {
+          const user = await clerkClient.users.getUser(uid);
+          const email =
+            user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)
+              ?.emailAddress || "unknown";
+          const displayName =
+            [user.firstName, user.lastName].filter(Boolean).join(" ") || email;
+          userInfoMap[uid] = { email, displayName };
+        } catch {
+          userInfoMap[uid] = { email: "unknown", displayName: uid.slice(0, 12) };
+        }
+      }
+
+      // Collect all metric keys — sorted by importance
+      const METRIC_ORDER = [
+        "time_saved_minutes",
+        "author_words",
+        "documents_saved",
+        "documents_copied",
+        "total_words_produced",
+      ];
+      const allKeys = [...new Set(allMetrics.map((m) => m.metricKey))];
+      const sortedKeys = [
+        ...METRIC_ORDER.filter((k) => allKeys.includes(k)),
+        ...allKeys.filter((k) => !METRIC_ORDER.includes(k)).sort(),
+      ];
+
+      // Build per-user rows
+      const users = userIds.map((uid) => {
+        const userMetrics = allMetrics.filter((m) => m.userId === uid);
+        const metrics: Record<string, number> = {};
+        for (const m of userMetrics) {
+          metrics[m.metricKey] = m.metricValue;
+        }
+        return {
+          userId: uid,
+          email: userInfoMap[uid]?.email || "unknown",
+          displayName: userInfoMap[uid]?.displayName || uid,
+          metrics,
+        };
+      });
+
+      res.json({ metricKeys: sortedKeys, users });
+    } catch (error) {
+      console.error("Admin user metrics error:", error);
+      res.status(500).json({ error: "Failed to load user metrics" });
+    }
+  });
+
   // Unified write endpoint - single interface to the AI writer
   app.post("/api/write", async (req, res) => {
     try {
@@ -1508,6 +1596,50 @@ Be faithful to their intent — don't add information they didn't mention. Keep 
       console.error("Summarize intent error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize", details: errorMessage });
+    }
+  });
+
+  // ── Generate probing questions from a transcript summary ──
+  app.post("/api/generate-questions", async (req, res) => {
+    try {
+      const { summary, objective } = req.body;
+
+      if (!summary || typeof summary !== "string") {
+        return res.status(400).json({ error: "Summary is required" });
+      }
+
+      const response = await llm.generate({
+        maxTokens: 1500,
+        temperature: 0.5,
+        system: `You are an expert facilitator and critical thinker. Given a summary of a voice discussion, generate 3-5 probing questions that would help the speaker:
+1. Clarify vague or ambiguous points
+2. Explore unstated assumptions
+3. Deepen their thinking on key topics
+4. Identify gaps or missing perspectives
+5. Connect ideas to practical next steps
+
+Return ONLY a JSON array of objects with "question" (string) and "category" (one of: "clarify", "deepen", "gaps", "action"). No markdown, no explanation — just the JSON array.`,
+        messages: [
+          {
+            role: "user",
+            content: `${objective ? `Topic: ${objective}\n\n` : ""}Summary of discussion so far:\n\n${summary}`
+          }
+        ],
+      });
+
+      const text = response.text.trim();
+      // Parse JSON array from response — handle potential markdown wrapping
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const questions = JSON.parse(jsonMatch[0]);
+        return res.json({ questions });
+      }
+
+      res.json({ questions: [] });
+    } catch (error) {
+      console.error("Generate questions error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate questions", details: errorMessage });
     }
   });
 

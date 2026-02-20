@@ -399,22 +399,6 @@ RULES:
     outputFormat: "markdown",
   },
 
-  "infographic-description": {
-    documentType: "infographic description",
-    systemGuidance: `APPLICATION CONTEXT: Infographic Description
-The document is a designer-ready brief for an infographic with narrative, data points, and visual structure.
-
-YOUR ROLE: Help the user create a clear, actionable infographic brief that a designer can execute without ambiguity.
-Be visually critical and data-aware — challenge data accuracy, visual hierarchy, and narrative clarity.
-
-RULES:
-- Focus on: narrative flow (does the story arc work at a glance?), data integrity (sourced, accurate, not misleading), visual hierarchy (3-5 key points max), audience fit (vocabulary and complexity match the viewer)
-- Push for specific visual treatments for each data point
-- Challenge overly dense or text-heavy descriptions`,
-    feedbackTone: "visually critical and data-aware",
-    outputFormat: "markdown",
-  },
-
   "persona-definition": {
     documentType: "persona definition",
     systemGuidance: `APPLICATION CONTEXT: Persona / Agent Definition
@@ -428,22 +412,6 @@ RULES:
 - Push for concrete example exchanges that demonstrate the persona under pressure
 - Challenge missing failure modes and boundary conditions`,
     feedbackTone: "character-focused and consistency-driven",
-    outputFormat: "markdown",
-  },
-
-  "ai-video-host": {
-    documentType: "video host script",
-    systemGuidance: `APPLICATION CONTEXT: AI Video Host Script
-The document is a slide-show video script with a defined presenter persona, audience, and narrative arc.
-
-YOUR ROLE: Help the user create a compelling video script with consistent host voice and clear audience targeting.
-Be storytelling-focused and audience-aware — challenge pacing, voice consistency, and content density.
-
-RULES:
-- Focus on: host persona consistency (does the voice stay in character throughout?), audience fit (vocabulary and depth match the target viewer), pacing (slide duration and content density), narrative arc (hook → context → takeaways → closing)
-- Push for specific on-screen visual descriptions alongside narration
-- Challenge slides with too much text or missing transitions`,
-    feedbackTone: "storytelling-focused and audience-aware",
     outputFormat: "markdown",
   },
 
@@ -489,6 +457,23 @@ RULES:
 - Preserve the speaker's voice and intent while adding structure
 - Challenge unclear commitments and unresolved questions`,
     feedbackTone: "clarifying and structure-focused",
+    outputFormat: "markdown",
+  },
+
+  "conversational-ai": {
+    documentType: "conversational AI application spec",
+    systemGuidance: `APPLICATION CONTEXT: Conversational AI Application
+The document is a product specification for an interactive conversational AI application with a three-pane layout, configurable controls, dynamic summaries, and ethical safeguards.
+
+YOUR ROLE: Help the user design a compelling, usable conversational experience.
+Be user-centric and conversation-design-aware — challenge UX decisions, privacy assumptions, and whether the interaction actually feels natural and engaging.
+
+RULES:
+- Focus on: conversation flow (does the dialogue feel natural or scripted?), control complexity (are 7 options too many? what's the minimum viable control surface?), privacy (what does the summary expose? who controls what's retained?), accessibility (three-pane layout on mobile? screen reader support?), differentiation (why would someone use this over existing chat UIs?)
+- Push for concrete user scenarios — not just feature lists
+- Challenge any feature that adds complexity without clear user value
+- Ensure ethical guardrails are specific and testable, not aspirational`,
+    feedbackTone: "user-centric and conversation-design-aware",
     outputFormat: "markdown",
   },
 };

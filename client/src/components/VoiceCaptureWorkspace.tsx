@@ -2,7 +2,6 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { generateId } from "@/lib/utils";
 import {
   Mic,
   MicOff,
@@ -13,6 +12,9 @@ import {
   Loader2,
   Pause,
   Play,
+  Sparkles,
+  HelpCircle,
+  RefreshCw,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -53,6 +55,11 @@ interface VoiceCaptureWorkspaceProps {
   onSavedDocIdChange: (id: number) => void;
 }
 
+interface GeneratedQuestion {
+  question: string;
+  category: "clarify" | "deepen" | "gaps" | "action";
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -66,6 +73,13 @@ function formatElapsed(seconds: number): string {
   }
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+
+const CATEGORY_STYLES: Record<string, { label: string; color: string }> = {
+  clarify: { label: "Clarify", color: "text-blue-600 dark:text-blue-400" },
+  deepen: { label: "Deepen", color: "text-purple-600 dark:text-purple-400" },
+  gaps: { label: "Gaps", color: "text-amber-600 dark:text-amber-400" },
+  action: { label: "Action", color: "text-green-600 dark:text-green-400" },
+};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -107,8 +121,18 @@ export function VoiceCaptureWorkspace({
   const intentionalStopRef = useRef(false);
   const isRecordingRef = useRef(false);
 
+  // ── AI Summary + Questions ──
+  const [summary, setSummary] = useState("");
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const lastSummarizedLengthRef = useRef(0);
+
   // Word count
   const wordCount = totalTranscript.trim() ? totalTranscript.trim().split(/\s+/).length : 0;
+
+  // Ref for transcript auto-scroll
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   // ── Initialize speech recognition ──
   useEffect(() => {
@@ -207,7 +231,55 @@ export function VoiceCaptureWorkspace({
     transcriptBufferRef.current = "";
   }, [documentText, onDocumentUpdate]);
 
-  // ── Auto-save: flush buffer + persist every ~30s ──
+  // ── Generate AI summary from transcript ──
+  const generateSummary = useCallback(async (text: string) => {
+    if (!text.trim() || text.trim().split(/\s+/).length < 30) return;
+    // Only re-summarize if transcript grew significantly (>50 new words)
+    if (text.length - lastSummarizedLengthRef.current < 200) return;
+
+    setIsSummarizing(true);
+    try {
+      const res = await apiRequest("POST", "/api/summarize-intent", {
+        transcript: text,
+        context: "source",
+        mode: "summarize",
+      });
+      const data = await res.json();
+      if (data.summary) {
+        setSummary(data.summary);
+        lastSummarizedLengthRef.current = text.length;
+        return data.summary;
+      }
+    } catch {
+      // Silent — summary is optional
+    } finally {
+      setIsSummarizing(false);
+    }
+    return null;
+  }, []);
+
+  // ── Generate AI questions from summary ──
+  const generateQuestions = useCallback(async (summaryText: string) => {
+    if (!summaryText.trim()) return;
+
+    setIsGeneratingQuestions(true);
+    try {
+      const res = await apiRequest("POST", "/api/generate-questions", {
+        summary: summaryText,
+        objective,
+      });
+      const data = await res.json();
+      if (data.questions?.length) {
+        setQuestions(data.questions);
+      }
+    } catch {
+      // Silent — questions are optional
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
+  }, [objective]);
+
+  // ── Auto-save: flush buffer + persist + summarize every ~30s ──
   useEffect(() => {
     if (isRecording && !isPaused) {
       autoSaveTimerRef.current = setInterval(async () => {
@@ -225,6 +297,13 @@ export function VoiceCaptureWorkspace({
         } finally {
           setIsSaving(false);
         }
+
+        // Generate summary + questions (fire-and-forget, non-blocking)
+        generateSummary(totalTranscript).then((newSummary) => {
+          if (newSummary) {
+            generateQuestions(newSummary);
+          }
+        });
       }, 30000);
     }
 
@@ -234,7 +313,7 @@ export function VoiceCaptureWorkspace({
         autoSaveTimerRef.current = null;
       }
     };
-  }, [isRecording, isPaused, flushBuffer, onSave, objective]);
+  }, [isRecording, isPaused, flushBuffer, onSave, objective, totalTranscript, generateSummary, generateQuestions]);
 
   // ── Timer tick ──
   useEffect(() => {
@@ -251,6 +330,11 @@ export function VoiceCaptureWorkspace({
       }
     };
   }, [isRecording, isPaused]);
+
+  // ── Auto-scroll transcript ──
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [totalTranscript, interimText]);
 
   // ── Start recording ──
   const startRecording = useCallback(() => {
@@ -327,6 +411,14 @@ export function VoiceCaptureWorkspace({
     }
   }, [flushBuffer, onSave, objective, toast]);
 
+  // ── Manual refresh summary + questions ──
+  const handleRefreshInsights = useCallback(async () => {
+    const newSummary = await generateSummary(totalTranscript);
+    if (newSummary) {
+      await generateQuestions(newSummary);
+    }
+  }, [totalTranscript, generateSummary, generateQuestions]);
+
   // ── Unsupported browser ──
   if (!isSupported) {
     return (
@@ -384,99 +476,202 @@ export function VoiceCaptureWorkspace({
         </div>
       </div>
 
-      {/* ── Main content area ── */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-8 p-8 overflow-y-auto">
-        {/* Recording status */}
-        {isRecording && (
-          <div className="flex items-center gap-2">
-            {isPaused ? (
-              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                Paused
-              </span>
-            ) : (
-              <>
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                  Recording
-                </span>
-              </>
-            )}
-          </div>
-        )}
+      {/* ── 3-pane layout ── */}
+      <div className="flex-1 flex overflow-hidden">
 
-        {/* Large mic button */}
-        <button
-          onClick={isRecording ? stopRecording : startRecording}
-          className={`w-36 h-36 rounded-full flex items-center justify-center transition-all duration-300 ${
-            isRecording
-              ? "bg-destructive shadow-lg shadow-destructive/50 animate-pulse"
-              : "bg-primary hover:scale-105 hover:shadow-lg"
-          }`}
-        >
-          {isRecording ? (
-            <Square className="w-14 h-14 text-destructive-foreground" />
-          ) : (
-            <Mic className="w-14 h-14 text-primary-foreground" />
-          )}
-        </button>
-
-        {/* Action text */}
-        <p className="text-muted-foreground text-center text-lg max-w-lg">
-          {isRecording
-            ? isPaused
-              ? "Recording paused. Click resume or stop."
-              : "Listening... Speak freely. Transcript auto-saves every 30 seconds."
-            : "Click the microphone to start recording. Your transcript will be saved automatically."}
-        </p>
-
-        {/* Pause/Resume button (only when recording) */}
-        {isRecording && (
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={togglePause}
-            className="gap-2"
-          >
-            {isPaused ? (
-              <>
-                <Play className="w-5 h-5" />
-                Resume
-              </>
-            ) : (
-              <>
-                <Pause className="w-5 h-5" />
-                Pause
-              </>
-            )}
-          </Button>
-        )}
-
-        {/* Live interim transcript */}
-        {interimText && (
-          <div className="w-full max-w-2xl rounded-lg border bg-muted/30 p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-1">
-              Hearing...
-            </p>
-            <p className="text-sm font-serif leading-relaxed text-foreground/70 italic">
-              {interimText}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* ── Transcript preview (scrollable bottom section) ── */}
-      {totalTranscript.trim() && (
-        <div className="border-t bg-card/40 max-h-[35vh] overflow-y-auto">
-          <div className="px-6 py-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        {/* ── LEFT PANE: Streaming transcript ── */}
+        <div className="w-1/3 min-w-[250px] border-r flex flex-col overflow-hidden">
+          <div className="px-4 py-2.5 border-b bg-card/40">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Transcript
             </h3>
-            <div className="prose prose-sm dark:prose-invert max-w-none font-serif leading-relaxed text-foreground/80 whitespace-pre-wrap">
-              {totalTranscript}
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {totalTranscript.trim() ? (
+              <div className="prose prose-sm dark:prose-invert max-w-none font-serif leading-relaxed text-foreground/80 whitespace-pre-wrap text-sm">
+                {totalTranscript}
+                {interimText && (
+                  <span className="text-foreground/40 italic"> {interimText}</span>
+                )}
+                <div ref={transcriptEndRef} />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
+                <FileText className="w-8 h-8" />
+                <p className="text-sm">
+                  {isRecording
+                    ? "Listening... transcript will appear here"
+                    : "Start recording to see transcript"}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── CENTER PANE: Recording controls ── */}
+        <div className="flex-1 min-w-[200px] flex flex-col items-center justify-center gap-6 p-6">
+          {/* Recording status */}
+          {isRecording && (
+            <div className="flex items-center gap-2">
+              {isPaused ? (
+                <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                  Paused
+                </span>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Recording
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Large mic button */}
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            className={`w-28 h-28 rounded-full flex items-center justify-center transition-all duration-300 ${
+              isRecording
+                ? "bg-destructive shadow-md shadow-destructive/30"
+                : "bg-primary hover:scale-105 hover:shadow-lg"
+            }`}
+          >
+            {isRecording ? (
+              <Square className="w-10 h-10 text-destructive-foreground" />
+            ) : (
+              <Mic className="w-10 h-10 text-primary-foreground" />
+            )}
+          </button>
+
+          {/* Action text */}
+          <p className="text-muted-foreground text-center text-sm max-w-xs">
+            {isRecording
+              ? isPaused
+                ? "Paused. Resume or stop recording."
+                : "Listening... Auto-saves every 30s."
+              : "Click to start recording."}
+          </p>
+
+          {/* Pause/Resume button */}
+          {isRecording && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={togglePause}
+              className="gap-1.5"
+            >
+              {isPaused ? (
+                <>
+                  <Play className="w-4 h-4" />
+                  Resume
+                </>
+              ) : (
+                <>
+                  <Pause className="w-4 h-4" />
+                  Pause
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Live interim (shown only when no transcript yet in left pane) */}
+          {interimText && !totalTranscript.trim() && (
+            <div className="w-full max-w-xs rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Hearing...
+              </p>
+              <p className="text-xs font-serif leading-relaxed text-foreground/70 italic">
+                {interimText}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT PANE: Summary + Questions ── */}
+        <div className="w-1/3 min-w-[250px] border-l flex flex-col overflow-hidden">
+          {/* Summary sub-panel */}
+          <div className="flex-1 flex flex-col overflow-hidden border-b">
+            <div className="px-4 py-2.5 border-b bg-card/40 flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Summary
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={handleRefreshInsights}
+                disabled={isSummarizing || !totalTranscript.trim() || totalTranscript.trim().split(/\s+/).length < 30}
+                title="Refresh summary & questions"
+              >
+                {isSummarizing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              {summary ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
+                  {summary}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
+                  <Sparkles className="w-6 h-6" />
+                  <p className="text-xs">
+                    {wordCount >= 30
+                      ? "Click refresh to generate a summary"
+                      : "Summary generates after ~30 words"}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Questions sub-panel */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-4 py-2.5 border-b bg-card/40 flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <HelpCircle className="w-3.5 h-3.5" />
+                Questions
+              </h3>
+              {isGeneratingQuestions && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              {questions.length > 0 ? (
+                <div className="space-y-2.5">
+                  {questions.map((q, i) => {
+                    const style = CATEGORY_STYLES[q.category] || CATEGORY_STYLES.clarify;
+                    return (
+                      <div key={i} className="rounded-md border bg-card/60 p-2.5 space-y-1">
+                        <span className={`text-[10px] font-semibold uppercase ${style.color}`}>
+                          {style.label}
+                        </span>
+                        <p className="text-sm leading-snug">
+                          {q.question}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground/60 gap-2">
+                  <HelpCircle className="w-6 h-6" />
+                  <p className="text-xs">
+                    {summary
+                      ? "Questions generate with each summary refresh"
+                      : "Questions appear after the first summary"}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

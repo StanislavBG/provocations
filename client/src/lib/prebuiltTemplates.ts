@@ -5,12 +5,11 @@ import {
   Rocket,
   Radio,
   GraduationCap,
-  BarChart3,
-  MonitorPlay,
   UserRoundCog,
   DatabaseZap,
   BookOpenCheck,
   Mic,
+  MessageSquare,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -446,86 +445,6 @@ What questions remain open? What should be explored next?
     steps: [{ id: "context", label: "Share your context" }],
   },
   {
-    id: "infographic-description",
-    category: "write",
-    title: "Infographic Description",
-    shortLabel: "Infographic",
-    subtitle: "Visual content brief, ready for design",
-    description:
-      "For creating a detailed description of an infographic — the narrative, data points, visual hierarchy, and messaging. This document becomes the brief a designer or tool uses to produce the final visual. Provocations challenge you on clarity, data integrity, and whether the story actually works at a glance.",
-    icon: BarChart3,
-    objective:
-      "Write a clear infographic description covering the narrative, key data points, visual structure, and messaging so a designer can produce it without ambiguity",
-    starterText: "",
-    draftQuestions: [
-      "What is the main message or story this infographic tells?",
-      "Who is the target audience?",
-      "What are the key data points or facts to highlight?",
-      "What visual style or tone are you going for?",
-    ],
-    templateContent: `# Infographic Description
-
-## Purpose & Goal
-What is this infographic for? What action should the viewer take after seeing it?
-
-## Target Audience
-Who will see this? What do they already know, and what do they need to learn?
-
-## Core Narrative
-### Headline
-The single attention-grabbing statement or question at the top.
-
-### Story Arc
-Walk through the infographic top-to-bottom: what does the viewer see first, second, third? What's the logical flow?
-
-### Key Takeaway
-The one thing the viewer should remember.
-
-## Data & Content
-### Key Data Points
-| Stat / Fact | Source | Visual Treatment |
-|-------------|--------|-----------------|
-| data point | where it comes from | how to show it (chart, icon, number, etc.) |
-
-### Supporting Text
-Short captions or labels that accompany each visual section.
-
-### Call to Action
-What should the viewer do next? (visit a URL, share, download, etc.)
-
-## Visual Structure
-### Layout
-Describe the overall layout: single column, sections, timeline, comparison, flowchart, etc.
-
-### Sections (top to bottom)
-1. **Section Name** — What it shows, what data it uses
-2. **Section Name** — What it shows, what data it uses
-3. **Section Name** — What it shows, what data it uses
-
-### Color & Style
-Color palette, fonts, brand guidelines, or mood references.
-
-## Constraints
-- Dimensions (e.g., 1080x1920 for social, A4 for print)
-- File format requirements
-- Accessibility considerations (color contrast, alt text)`,
-    provocationSources: [
-      "Graphic Designer",
-      "Data Analyst",
-      "Marketing Lead",
-      "Distracted Scroller",
-      "Accessibility Reviewer",
-    ],
-    provocationExamples: [
-      "There are 12 data points here. An infographic should highlight 3–5 max. What do you cut? — Graphic Designer",
-      "Where is this data from? Two of these stats don't have sources. — Data Analyst",
-      "If I see this in a social feed, what makes me stop scrolling? The headline isn't doing it. — Marketing Lead",
-      "I glanced at this for two seconds. I have no idea what it's about. — Distracted Scroller",
-      "Your color-coded chart relies entirely on red vs. green. How does a colorblind viewer read this? — Accessibility Reviewer",
-    ],
-    steps: [{ id: "context", label: "Share your context" }],
-  },
-  {
     id: "persona-definition",
     category: "write",
     title: "Persona / Agent",
@@ -632,134 +551,6 @@ Typical way they end an interaction.
       "I just interacted with this persona and it felt generic. What makes them different from a default chatbot? — End User",
       "What happens if someone asks this persona to do something outside its boundaries? You haven't defined the failure mode. — Red Teamer",
       "The communication style says 'casual' but the example exchange is formal. Which is it? — Consistency Checker",
-    ],
-    steps: [{ id: "context", label: "Share your context" }],
-  },
-  {
-    id: "ai-video-host",
-    category: "write",
-    title: "AI Video Host",
-    shortLabel: "Video Host",
-    subtitle: "Slide-show video with a presenter voice",
-    description:
-      "For creating a slide-show video script driven by a presenter persona or key story. You define who the host is (a cynical veteran, an excited educator, a cautionary narrator) and what they should focus on — the AI shapes the narration around that voice. Works best when you set a clear persona or analogy, define the target audience, constrain what to highlight, and command the structure.",
-    icon: MonitorPlay,
-    objective:
-      "Write a presenter-driven slide-show video script with a clear host voice, targeted audience, focused content, and commanded structure",
-    starterText: "",
-    draftQuestions: [
-      "What is the source material? (news article, blog post, report, or raw notes)",
-      "What persona or analogy should the AI host use? (e.g., 'a cynical industry veteran', 'an excited teacher', 'a cautionary tale narrator')",
-      "Who is the target audience? (e.g., 'non-technical stakeholders who care about ROI', 'developers new to the framework')",
-      "What should the AI focus on or ignore? (e.g., 'Focus on security risks in Source 3, ignore marketing sections')",
-    ],
-    templateContent: `# AI Video Host Script
-
-## Source Material
-### What is this video based on?
-Paste or describe the source content (news article, blog post, report, raw notes).
-
-### Video Purpose
-What should the viewer understand, feel, or do after watching?
-
-## Host Persona
-### Who is the presenter?
-Define the host's character, tone, and perspective. A persona or analogy makes the narration compelling rather than robotic.
-
-Examples:
-- "A cautionary tale narrator warning about what happens when you ignore technical debt"
-- "A cynical industry veteran explaining why this project will fail without proper planning"
-- "An excited teacher breaking down a complex topic for beginners"
-
-### Voice & Tone
-What's the emotional register? (urgent, witty, warm, authoritative, conspiratorial)
-
-## Audience
-### Who is watching?
-Define the target audience — the AI adjusts vocabulary and depth based on this.
-
-### What do they already know?
-Prior knowledge, context, and assumptions.
-
-### What do they care about?
-ROI? Technical depth? Quick wins? Risk avoidance?
-
-## Focus & Constraints
-### What should the AI focus on?
-Specific sections, data points, or themes to highlight from the source material.
-
-### What should the AI ignore?
-Sections, topics, or tangents to skip entirely.
-
-### Key sources or data
-If you have multiple sources, name which ones matter and what to extract from each.
-
-## Structure
-### Opening Hook (first 5–10 seconds)
-What grabs the viewer immediately? A provocative question, a shocking stat, a "what if" scenario?
-
-### Narrative Arc
-How should the video flow? Define the structure explicitly:
-1. Hook — grab attention
-2. Context — set the scene
-3. Key takeaways (3–5 max)
-4. Climax / key insight
-5. Call to action / closing
-
-### Slide Breakdown
-
-#### Slide 1 — Hook
-- **On Screen**: Text, image, or animation description
-- **Host says**: "Narration in the host's voice"
-- **Duration**: X seconds
-- **Transition**: Cut / fade / slide
-
-#### Slide 2 — Context
-- **On Screen**: Visual description
-- **Host says**: "Narration"
-- **Duration**: X seconds
-- **Transition**: Type
-
-#### Slide 3 — Takeaway
-- **On Screen**: Visual description
-- **Host says**: "Narration"
-- **Duration**: X seconds
-- **Transition**: Type
-
-#### Slide N — Closing
-- **On Screen**: Visual description
-- **Host says**: "Narration"
-- **Duration**: X seconds
-- **Transition**: Type
-
-## Production Notes
-### Duration
-Target length (60s social, 3–5 min YouTube, etc.)
-
-### Platform
-Where will this be published? (YouTube, LinkedIn, internal, TikTok)
-
-### Music & Sound
-Background music style, sound effects, or silence cues.
-
-### Branding
-Logo placement, brand colors, watermarks.
-
-### Format
-Aspect ratio (16:9, 9:16, 1:1), resolution, export format.`,
-    provocationSources: [
-      "The Audience",
-      "Storytelling Coach",
-      "Persona Critic",
-      "Video Editor",
-      "Fact Checker",
-    ],
-    provocationExamples: [
-      "Your host persona says 'cautionary tale' but the script sounds like a product demo. Where's the tension? — Storytelling Coach",
-      "You said the audience is non-technical, but Slide 3 uses three acronyms without explaining them. — The Audience",
-      "Slide 3 has 40 words of on-screen text. That's a paragraph, not a slide. What do you cut? — Video Editor",
-      "The host voice disappears after Slide 2 and becomes generic narration. Keep the persona consistent. — Persona Critic",
-      "The source article says 'reportedly' and 'according to sources.' Your script states it as fact. — Fact Checker",
     ],
     steps: [{ id: "context", label: "Share your context" }],
   },
@@ -904,6 +695,115 @@ What needs to happen next based on this capture?`,
       "You sound very confident about this approach. What's the biggest risk you're not mentioning? — Devil's Advocate",
     ],
     steps: [{ id: "capture", label: "Record your thoughts" }],
+  },
+  {
+    id: "conversational-ai",
+    category: "build",
+    title: "Conversational AI",
+    shortLabel: "Chat App",
+    subtitle: "Interactive AI conversation application",
+    description:
+      "For designing an interactive conversational AI application. Covers the full product surface: conversation flow, three-pane layout, configurable controls (tone, topics, humor), dynamic summaries, accessibility, and ethical safeguards. Provocations challenge your UX decisions, privacy design, and whether the conversation experience actually feels natural.",
+    icon: MessageSquare,
+    objective:
+      "Design a complete conversational AI application with engaging interactions, configurable controls, dynamic summaries, and a thoughtful three-pane layout",
+    starterText: "",
+    draftQuestions: [
+      "What kind of conversations should the AI support — open-ended exploration, goal-directed tasks, or both?",
+      "Who is the primary user — casual consumers, professionals, students?",
+      "How should the AI handle sensitive or off-limits topics?",
+      "What makes this different from existing chat interfaces (ChatGPT, Gemini, etc.)?",
+    ],
+    templateContent: `# Conversational AI Application
+
+## Key Features
+### Interactive Conversations
+Talk to the AI as though chatting with a friend. Choose your topics or let the AI's suggestions guide your exploration of interesting ideas.
+
+### Dynamic Summaries
+A real-time summary brings clarity to the conversation, capturing its progression and key moments.
+
+### Ethical Joke Handling
+Humor plays a central role in keeping conversations lighthearted and engaging. Tagged as "funny and ridiculous," jokes and humorous elements remain thoughtful and non-offensive. Oversight mechanisms ensure conversational boundaries are adhered to, reinforcing user safety and respectful humor.
+
+### Dynamic Suggestions
+Dynamic conversation suggestions keep the experience fresh and evolving. These advisory cues help refine or shift dialogue direction, allowing users to enhance conversations without pressure or disruption. Suggestions are optional and require no user action, supporting a free-flowing conversational style.
+
+### Customizable Control Options
+Configure real-time conversational parameters to adjust tone or trajectory according to your preferences.
+
+### Three-Pane Layout
+Clarity and structure drive enhanced engagement with this user-friendly interface.
+
+### Managing Sensitive Inputs in Summaries
+Privacy is paramount. To protect user trust, conversation summaries are designed to filter out sensitive input and apply tone-sensitivity checks. Users retain the ability to edit summaries in real time, giving them control over the content displayed.
+
+---
+
+## User Interface Layout
+
+The three-pane layout enriches user experience and organization:
+
+### Left Pane – Conversation Controls
+Configure settings with ease. Personalize conversational flow, tweak tone, or add playful prompts. This pane keeps everything at your fingertips.
+
+### Middle Pane – Active Conversation
+The heart of the experience. This center pane showcases your real-time dialogue with AI, immersing you in each interaction.
+
+### Right Pane – Conversation Summary
+As you converse, this pane continuously refines and presents key takeaways, giving you an overview of your dialogue.
+
+### Accessibility Features
+- Semantic HTML and ARIA labels for all functional elements
+- WCAG-compliant color schemes with optimal contrast ratios
+- Color-independent designs for users with visual impairments
+- Screen reader and high-contrast mode compatibility
+
+---
+
+## Configurable Control Options
+
+1. **Topic Suggestions**: AI-recommended topics based on prior interactions
+2. **Tone Adjustments**: Formal, casual, or playful tone selection
+3. **Future Direction**: Steer the dialogue focus for the next 2–3 turns
+4. **Question Picker**: Queue specific questions for targeted AI responses
+5. **Fun Twist**: Activate playful humor mode for creative narratives and jokes
+6. **Dynamic Suggestions**: Optional pop-up cues for refining or expanding discussion
+7. **Voice Selection**: Switch AI personality mid-session (analytical, uplifting, quirky, reflective)
+
+---
+
+## Privacy & Safety
+
+### Sensitive Input Handling
+- Conversation summaries filter out sensitive input
+- Tone-sensitivity checks applied to all generated content
+- Users can edit summaries in real time
+
+### Trust & Oversight
+- Product and security teams review content concerns biweekly
+- Target: above 90% trust ratings
+- Rapid resolution of flagged content issues
+
+---
+
+## Conclusion
+The application redefines interactive conversations by merging advanced natural language processing with user-centric controls. The thoughtfully designed layout ensures clarity, while accessible features and diverse settings empower users to curate engaging, creative dialogues.`,
+    provocationSources: [
+      "UX Researcher",
+      "Conversation Designer",
+      "Privacy Engineer",
+      "Impatient User",
+      "Accessibility Auditor",
+    ],
+    provocationExamples: [
+      "Three panes is a lot of visual noise. What happens on mobile — do all three panes survive? — UX Researcher",
+      "You say 'dynamic suggestions' are optional, but how do you prevent them from becoming annoying interruptions? — Conversation Designer",
+      "The summary pane captures 'key moments.' Who decides what's key? What if the user considers something private? — Privacy Engineer",
+      "I opened the app and there are 7 control options. I just want to chat. Why is this so complicated? — Impatient User",
+      "Your three-pane layout uses color to distinguish panes. How does a colorblind user tell them apart? — Accessibility Auditor",
+    ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
 ];
 

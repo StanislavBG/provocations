@@ -19,28 +19,19 @@ import {
   Shield,
   BarChart3,
   FileText,
+  ChevronRight,
+  ChevronDown,
+  Circle,
 } from "lucide-react";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type {
   AdminDashboardData,
   PersonaUsageStat,
+  UserMetricsMatrix,
   Persona,
 } from "@shared/schema";
-import { getAllPersonas } from "@shared/personas";
-
-interface PersonaHierarchyNode {
-  persona: {
-    id: string;
-    label: string;
-    domain: string;
-    icon: string;
-    role: string;
-    description: string;
-    lastResearchedAt: string | null;
-  };
-  children: PersonaHierarchyNode[];
-}
+import { getAllPersonas, getPersonasByDomain } from "@shared/personas";
 
 export default function Admin() {
   const { isAdmin, isLoading: roleLoading } = useRole();
@@ -52,15 +43,16 @@ export default function Admin() {
     enabled: isAdmin,
   });
 
-  const { data: hierarchy } = useQuery<PersonaHierarchyNode>({
-    queryKey: ["/api/personas/hierarchy"],
-    queryFn: () => apiRequest("GET", "/api/personas/hierarchy").then((r) => r.json()),
-    enabled: isAdmin,
-  });
-
   const { data: staleData } = useQuery<{ stalePersonas: { id: string; label: string; domain: string; lastResearchedAt: string | null }[] }>({
     queryKey: ["/api/personas/stale"],
     queryFn: () => apiRequest("GET", "/api/personas/stale").then((r) => r.json()),
+    enabled: isAdmin,
+  });
+
+  const { data: userMetrics, isLoading: metricsLoading } = useQuery<UserMetricsMatrix>({
+    queryKey: ["/api/admin/user-metrics"],
+    queryFn: () => apiRequest("GET", "/api/admin/user-metrics").then((r) => r.json()),
+    refetchInterval: 30_000,
     enabled: isAdmin,
   });
 
@@ -113,14 +105,18 @@ export default function Admin() {
 
         {/* Tabs */}
         <Tabs defaultValue="dashboard">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-3 max-w-xl">
             <TabsTrigger value="dashboard" className="gap-2">
               <BarChart3 className="w-4 h-4" />
-              Usability Dashboard
+              Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="user-metrics" className="gap-2">
+              <Users className="w-4 h-4" />
+              User Metrics
             </TabsTrigger>
             <TabsTrigger value="personas" className="gap-2">
               <FolderTree className="w-4 h-4" />
-              Persona Hierarchy
+              Personas
             </TabsTrigger>
           </TabsList>
 
@@ -231,59 +227,51 @@ export default function Admin() {
           </TabsContent>
 
           {/* ════════════════════════════════════════ */}
-          {/* Tab 2: Persona Hierarchy                 */}
+          {/* Tab 2: User Metrics Matrix               */}
+          {/* ════════════════════════════════════════ */}
+          <TabsContent value="user-metrics" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="w-4 h-4" />
+                  User Metrics Matrix
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : userMetrics?.users?.length ? (
+                  <UserMetricsTable data={userMetrics} />
+                ) : (
+                  <p className="text-sm text-muted-foreground py-8 text-center">
+                    No usage metrics recorded yet. Metrics are captured when users save or copy documents.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ════════════════════════════════════════ */}
+          {/* Tab 3: Persona Hierarchy                 */}
           {/* ════════════════════════════════════════ */}
           <TabsContent value="personas" className="space-y-6 mt-6">
-            <div className="grid md:grid-cols-3 gap-6">
-              {/* Hierarchy Tree */}
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <FolderTree className="w-4 h-4" />
-                    Full Hierarchy
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {hierarchy ? (
-                    <HierarchyTree node={hierarchy} depth={0} />
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Loading hierarchy...</p>
-                  )}
-                </CardContent>
-              </Card>
+            {/* Interactive Node Diagram */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FolderTree className="w-4 h-4" />
+                  Persona Hierarchy
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PersonaNodeDiagram stalePersonas={staleData?.stalePersonas} />
+              </CardContent>
+            </Card>
 
-              {/* Stale Personas + Research Trigger */}
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <AlertTriangle className="w-4 h-4 text-amber-500" />
-                      Stale Personas ({staleData?.stalePersonas?.length ?? 0})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {staleData?.stalePersonas?.length ? (
-                      <div className="space-y-2">
-                        {staleData.stalePersonas.map((p) => (
-                          <div key={p.id} className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/50 text-sm">
-                            <span className="font-medium">{p.label}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {p.lastResearchedAt
-                                ? `Last: ${new Date(p.lastResearchedAt).toLocaleDateString()}`
-                                : "Never"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">All personas are up to date.</p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <ResearchTriggerCard />
-              </div>
-            </div>
+            {/* Research Trigger */}
+            <ResearchTriggerCard />
 
             {/* Full Persona Descriptions */}
             <Card>
@@ -336,19 +324,191 @@ const domainBgColors: Record<string, string> = {
   marketing: "bg-green-500",
 };
 
-function HierarchyTree({ node, depth }: { node: PersonaHierarchyNode; depth: number }) {
+// ── Node diagram domain config ──
+
+const DOMAIN_META: Record<string, { label: string; color: string; bgColor: string; borderColor: string; ringColor: string; count?: number }> = {
+  business: {
+    label: "Business",
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-50 dark:bg-orange-950/40",
+    borderColor: "border-orange-300 dark:border-orange-700",
+    ringColor: "ring-orange-400",
+  },
+  technology: {
+    label: "Technology",
+    color: "text-cyan-600 dark:text-cyan-400",
+    bgColor: "bg-cyan-50 dark:bg-cyan-950/40",
+    borderColor: "border-cyan-300 dark:border-cyan-700",
+    ringColor: "ring-cyan-400",
+  },
+  marketing: {
+    label: "Marketing",
+    color: "text-green-600 dark:text-green-400",
+    bgColor: "bg-green-50 dark:bg-green-950/40",
+    borderColor: "border-green-300 dark:border-green-700",
+    ringColor: "ring-green-400",
+  },
+};
+
+interface StaleInfo {
+  id: string;
+  label: string;
+  domain: string;
+  lastResearchedAt: string | null;
+}
+
+function PersonaNodeDiagram({ stalePersonas }: { stalePersonas?: StaleInfo[] }) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    root: true,
+    business: true,
+    technology: true,
+    marketing: true,
+  });
+  const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
+
+  const toggleNode = useCallback((id: string) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const staleSet = new Set(stalePersonas?.map((s) => s.id) ?? []);
+
+  const businessPersonas = getPersonasByDomain("business");
+  const techPersonas = getPersonasByDomain("technology");
+  const marketingPersonas = getPersonasByDomain("marketing");
+
+  const domains = [
+    { id: "business", personas: businessPersonas },
+    { id: "technology", personas: techPersonas },
+    { id: "marketing", personas: marketingPersonas },
+  ];
+
   return (
-    <div className={depth > 0 ? "ml-4 border-l border-border pl-3" : ""}>
-      <div className="flex items-center gap-2 py-1.5">
-        <Badge variant="outline" className={`text-[10px] uppercase ${domainColors[node.persona.domain] ?? "text-muted-foreground"}`}>
-          {node.persona.domain}
+    <div className="space-y-1">
+      {/* Root node */}
+      <button
+        onClick={() => toggleNode("root")}
+        className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-colors"
+      >
+        {expanded.root ? (
+          <ChevronDown className="w-4 h-4 text-indigo-500 shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-indigo-500 shrink-0" />
+        )}
+        <FlaskConical className="w-4 h-4 text-indigo-500 shrink-0" />
+        <span className="font-semibold text-sm text-indigo-700 dark:text-indigo-300">
+          Master Researcher
+        </span>
+        <span className="text-xs text-indigo-500/70 dark:text-indigo-400/60 hidden sm:inline ml-1">
+          Root orchestrator
+        </span>
+        <Badge variant="outline" className="ml-auto text-[10px] text-indigo-500 border-indigo-300 dark:border-indigo-600">
+          {businessPersonas.length + techPersonas.length + marketingPersonas.length} personas
         </Badge>
-        <span className="font-medium text-sm">{node.persona.label}</span>
-        <span className="text-xs text-muted-foreground truncate hidden sm:inline">{node.persona.role}</span>
-      </div>
-      {node.children.map((child) => (
-        <HierarchyTree key={child.persona.id} node={child} depth={depth + 1} />
-      ))}
+      </button>
+
+      {/* Domain branches */}
+      {expanded.root && (
+        <div className="ml-4 border-l-2 border-indigo-200 dark:border-indigo-800">
+          {domains.map(({ id: domainId, personas }) => {
+            const meta = DOMAIN_META[domainId];
+            if (!meta) return null;
+            const isExpanded = expanded[domainId];
+
+            return (
+              <div key={domainId} className="ml-4 mt-1">
+                {/* Connector stub */}
+                <div className="relative">
+                  <div className="absolute -left-4 top-1/2 w-4 h-px bg-indigo-200 dark:bg-indigo-800" />
+                </div>
+
+                {/* Domain node */}
+                <button
+                  onClick={() => toggleNode(domainId)}
+                  className={`flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg border ${meta.bgColor} ${meta.borderColor} hover:opacity-90 transition-all`}
+                >
+                  {isExpanded ? (
+                    <ChevronDown className={`w-4 h-4 ${meta.color} shrink-0`} />
+                  ) : (
+                    <ChevronRight className={`w-4 h-4 ${meta.color} shrink-0`} />
+                  )}
+                  <span className={`font-semibold text-sm ${meta.color}`}>
+                    {meta.label}
+                  </span>
+                  <Badge variant="outline" className={`ml-auto text-[10px] ${meta.color}`}>
+                    {personas.length}
+                  </Badge>
+                </button>
+
+                {/* Persona leaf nodes */}
+                {isExpanded && (
+                  <div className={`ml-4 border-l-2 ${meta.borderColor.replace("border-", "border-l-")}`}>
+                    {personas.map((persona) => {
+                      const isStale = staleSet.has(persona.id);
+                      const isSelected = selectedPersona?.id === persona.id;
+                      const staleInfo = stalePersonas?.find((s) => s.id === persona.id);
+
+                      return (
+                        <div key={persona.id} className="ml-4 mt-0.5 relative">
+                          {/* Connector */}
+                          <div className={`absolute -left-4 top-1/2 w-4 h-px ${meta.borderColor.replace("border-", "bg-").replace("dark:border-", "dark:bg-")}`} />
+
+                          <button
+                            onClick={() => setSelectedPersona(isSelected ? null : persona)}
+                            className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md transition-all text-sm ${
+                              isSelected
+                                ? `${meta.bgColor} ring-1 ${meta.ringColor}`
+                                : "hover:bg-muted/60"
+                            }`}
+                          >
+                            <Circle className={`w-2 h-2 shrink-0 ${meta.color}`} style={{ fill: "currentColor" }} />
+                            <span className="font-medium">{persona.label}</span>
+                            {isStale && (
+                              <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" title="Stale — needs refresh" />
+                            )}
+                            <span className="text-[11px] text-muted-foreground truncate hidden sm:inline ml-auto max-w-[40%] text-right">
+                              {staleInfo?.lastResearchedAt
+                                ? new Date(staleInfo.lastResearchedAt).toLocaleDateString()
+                                : "—"}
+                            </span>
+                          </button>
+
+                          {/* Expanded persona detail */}
+                          {isSelected && (
+                            <div className={`ml-5 mt-1 mb-2 p-3 rounded-md border ${meta.borderColor} ${meta.bgColor} space-y-2`}>
+                              <p className="text-xs font-medium">{persona.role}</p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                {persona.description}
+                              </p>
+                              <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div>
+                                  <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">
+                                    Challenge
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {persona.summary.challenge}
+                                  </p>
+                                </div>
+                                <div>
+                                  <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">
+                                    Advice
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {persona.summary.advice}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -436,6 +596,95 @@ function ResearchTriggerCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Human-readable labels and descriptions for metric keys */
+const METRIC_META: Record<string, { label: string; description: string; unit?: string }> = {
+  time_saved_minutes: {
+    label: "Time Saved",
+    description: "Estimated minutes saved through AI collaboration vs. writing from scratch (19 WPM composition speed + reading time)",
+    unit: "min",
+  },
+  author_words: {
+    label: "Author Words",
+    description: "Words shaped by the user through iterative AI collaboration (total words − first draft words)",
+  },
+  documents_saved: {
+    label: "Docs Saved",
+    description: "Number of times the user saved a document to storage",
+  },
+  documents_copied: {
+    label: "Docs Copied",
+    description: "Number of times the user copied a document to clipboard",
+  },
+  total_words_produced: {
+    label: "Total Words",
+    description: "Cumulative word count across all saved/copied documents",
+  },
+};
+
+function UserMetricsTable({ data }: { data: UserMetricsMatrix }) {
+  return (
+    <div className="overflow-x-auto -mx-6">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left px-4 py-2.5 font-semibold sticky left-0 bg-card z-10 min-w-[180px]">
+              User
+            </th>
+            {data.metricKeys.map((key) => {
+              const meta = METRIC_META[key];
+              return (
+                <th
+                  key={key}
+                  className="text-right px-3 py-2.5 font-medium whitespace-nowrap"
+                  title={meta?.description || key}
+                >
+                  <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+                    {meta?.label || key}
+                  </span>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {data.users.map((user) => (
+            <tr key={user.userId} className="border-b last:border-0 hover:bg-muted/30">
+              <td className="px-4 py-2 sticky left-0 bg-card z-10">
+                <div className="font-medium truncate max-w-[180px]" title={user.email}>
+                  {user.displayName}
+                </div>
+                <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
+                  {user.email}
+                </div>
+              </td>
+              {data.metricKeys.map((key) => {
+                const val = user.metrics[key] ?? 0;
+                const meta = METRIC_META[key];
+                return (
+                  <td key={key} className="text-right px-3 py-2 tabular-nums whitespace-nowrap">
+                    {val > 0 ? (
+                      <span>
+                        {val.toLocaleString()}
+                        {meta?.unit && (
+                          <span className="text-[10px] text-muted-foreground ml-0.5">
+                            {meta.unit}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
