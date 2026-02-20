@@ -1402,6 +1402,11 @@ RULES:
   const previousVersion = versions.length >= 2 ? versions[versions.length - 2] : null;
   const currentVersion = versions.length >= 1 ? versions[versions.length - 1] : null;
 
+  // Word count of the AI-generated first draft — used by ReadingPane for "time saved" metric
+  const draftWordCount = versions.length > 0
+    ? versions[0].text.split(/\s+/).filter(Boolean).length
+    : undefined;
+
   const discoveredCount = wireframeAnalysis
     ? (wireframeAnalysis.components?.length || 0) +
       (wireframeAnalysis.siteMap?.length || 0) +
@@ -1801,6 +1806,7 @@ RULES:
           onTranscriptUpdate={handleTranscriptUpdate}
           onTextEdit={handleTextEdit}
           onSendFeedback={handleSendDocumentFeedback}
+          draftWordCount={draftWordCount}
         />
       )}
 
