@@ -459,6 +459,23 @@ RULES:
     feedbackTone: "clarifying and structure-focused",
     outputFormat: "markdown",
   },
+
+  "conversational-ai": {
+    documentType: "conversational AI application spec",
+    systemGuidance: `APPLICATION CONTEXT: Conversational AI Application
+The document is a product specification for an interactive conversational AI application with a three-pane layout, configurable controls, dynamic summaries, and ethical safeguards.
+
+YOUR ROLE: Help the user design a compelling, usable conversational experience.
+Be user-centric and conversation-design-aware — challenge UX decisions, privacy assumptions, and whether the interaction actually feels natural and engaging.
+
+RULES:
+- Focus on: conversation flow (does the dialogue feel natural or scripted?), control complexity (are 7 options too many? what's the minimum viable control surface?), privacy (what does the summary expose? who controls what's retained?), accessibility (three-pane layout on mobile? screen reader support?), differentiation (why would someone use this over existing chat UIs?)
+- Push for concrete user scenarios — not just feature lists
+- Challenge any feature that adds complexity without clear user value
+- Ensure ethical guardrails are specific and testable, not aspirational`,
+    feedbackTone: "user-centric and conversation-design-aware",
+    outputFormat: "markdown",
+  },
 };
 
 /** Get app-specific config, or undefined for default behavior */
