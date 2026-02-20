@@ -1192,6 +1192,7 @@ RULES:
     setActiveToolboxApp("provoke");
     autoStartedRef.current = false;
     // Reset storage state
+    setShowStoragePanel(false);
     setSavedDocId(null);
     setSavedDocTitle("");
     // Reset tab state
@@ -1215,6 +1216,44 @@ RULES:
       handleReset();
     }
   }, [document.rawText, handleReset]);
+
+  // ── Defensive overlay cleanup ──
+  // Close all overlays on Escape key — prevents any overlay from getting stuck
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showTranscriptOverlay) {
+          setShowTranscriptOverlay(false);
+          setRawTranscript("");
+          setCleanedTranscript(undefined);
+          setTranscriptSummary("");
+          setIsRecordingFromMain(false);
+          setPendingVoiceContext(null);
+        }
+        if (showLogPanel) setShowLogPanel(false);
+        if (showStoragePanel) setShowStoragePanel(false);
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [showTranscriptOverlay, showLogPanel, showStoragePanel]);
+
+  // Reset all overlay states when returning to input phase (defensive against stuck overlays)
+  const prevInputPhase = useRef(isInputPhase);
+  useEffect(() => {
+    if (isInputPhase && !prevInputPhase.current) {
+      // Transitioning TO input phase — ensure no overlays are stuck
+      setShowTranscriptOverlay(false);
+      setShowLogPanel(false);
+      setShowStoragePanel(false);
+      setRawTranscript("");
+      setCleanedTranscript(undefined);
+      setTranscriptSummary("");
+      setIsRecordingFromMain(false);
+      setPendingVoiceContext(null);
+    }
+    prevInputPhase.current = isInputPhase;
+  }, [isInputPhase]);
 
   const handleCaptureMetrics = useCallback((items: ContextItem[]) => {
     setCapturedContext(prev => [...prev, ...items]);
@@ -1443,6 +1482,23 @@ RULES:
       return () => clearTimeout(timer);
     }
   }, [transcriptSummary, showTranscriptOverlay, writeMutation.isPending]);
+
+  // Safety timeout: if the transcript overlay stays open for > 30s without user interaction, close it
+  useEffect(() => {
+    if (!showTranscriptOverlay) return;
+    const safety = setTimeout(() => {
+      if (showTranscriptOverlay && !isRecordingFromMain) {
+        console.warn("[Workspace] Transcript overlay safety timeout — auto-closing");
+        setShowTranscriptOverlay(false);
+        setRawTranscript("");
+        setCleanedTranscript(undefined);
+        setTranscriptSummary("");
+        setIsRecordingFromMain(false);
+        setPendingVoiceContext(null);
+      }
+    }, 30_000);
+    return () => clearTimeout(safety);
+  }, [showTranscriptOverlay, isRecordingFromMain]);
 
   // ── Computed values ──
 
