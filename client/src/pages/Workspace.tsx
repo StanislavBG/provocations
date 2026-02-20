@@ -1198,6 +1198,33 @@ RULES:
     setCapturedContext(prev => [...prev, ...items]);
   }, []);
 
+  // ── Usage metrics recording (fire-and-forget) ──
+
+  const recordUsageMetrics = useCallback((trigger: "save" | "copy") => {
+    const totalWords = document.rawText.split(/\s+/).filter(Boolean).length;
+    const firstDraftWords = versions.length > 0
+      ? versions[0].text.split(/\s+/).filter(Boolean).length
+      : 0;
+    const authorWords = Math.max(0, totalWords - firstDraftWords);
+    const COMPOSITION_WPM = 19;
+    const readingTime = Math.ceil(totalWords / 200);
+    const compositionMinutes = authorWords > 0 ? Math.round(authorWords / COMPOSITION_WPM) : 0;
+    const timeSaved = compositionMinutes + readingTime;
+
+    const metrics: { key: string; delta: number }[] = [];
+    if (timeSaved > 0) metrics.push({ key: "time_saved_minutes", delta: timeSaved });
+    if (authorWords > 0) metrics.push({ key: "author_words", delta: authorWords });
+    if (totalWords > 0) metrics.push({ key: "total_words_produced", delta: totalWords });
+    if (trigger === "save") metrics.push({ key: "documents_saved", delta: 1 });
+    if (trigger === "copy") metrics.push({ key: "documents_copied", delta: 1 });
+
+    if (metrics.length > 0) {
+      apiRequest("POST", "/api/metrics", { metrics }).catch(() => {
+        // fire-and-forget — don't block user flow
+      });
+    }
+  }, [document.rawText, versions]);
+
   // ── Storage save/load handlers ──
 
   const handleStorageSave = useCallback(async (title: string, folderId: number | null) => {
@@ -1394,33 +1421,6 @@ RULES:
       return () => clearTimeout(timer);
     }
   }, [transcriptSummary, showTranscriptOverlay, writeMutation.isPending]);
-
-  // ── Usage metrics recording (fire-and-forget) ──
-
-  const recordUsageMetrics = useCallback((trigger: "save" | "copy") => {
-    const totalWords = document.rawText.split(/\s+/).filter(Boolean).length;
-    const firstDraftWords = versions.length > 0
-      ? versions[0].text.split(/\s+/).filter(Boolean).length
-      : 0;
-    const authorWords = Math.max(0, totalWords - firstDraftWords);
-    const COMPOSITION_WPM = 19;
-    const readingTime = Math.ceil(totalWords / 200);
-    const compositionMinutes = authorWords > 0 ? Math.round(authorWords / COMPOSITION_WPM) : 0;
-    const timeSaved = compositionMinutes + readingTime;
-
-    const metrics: { key: string; delta: number }[] = [];
-    if (timeSaved > 0) metrics.push({ key: "time_saved_minutes", delta: timeSaved });
-    if (authorWords > 0) metrics.push({ key: "author_words", delta: authorWords });
-    if (totalWords > 0) metrics.push({ key: "total_words_produced", delta: totalWords });
-    if (trigger === "save") metrics.push({ key: "documents_saved", delta: 1 });
-    if (trigger === "copy") metrics.push({ key: "documents_copied", delta: 1 });
-
-    if (metrics.length > 0) {
-      apiRequest("POST", "/api/metrics", { metrics }).catch(() => {
-        // fire-and-forget — don't block user flow
-      });
-    }
-  }, [document.rawText, versions]);
 
   // ── Computed values ──
 
