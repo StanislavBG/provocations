@@ -16,6 +16,7 @@ import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
+import { trackEvent } from "@/lib/tracking";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { StoragePanel } from "@/components/StoragePanel";
@@ -391,6 +392,9 @@ export default function Workspace() {
         };
         setEditHistory(prev => [...prev.slice(-9), historyEntry]); // Keep last 10
 
+        // Track write execution
+        trackEvent("write_executed", { metadata: { instructionType: data.instructionType || "general" } });
+
         // Store suggestions for potential display
         if (data.suggestions && data.suggestions.length > 0) {
           setLastSuggestions(data.suggestions);
@@ -469,6 +473,10 @@ export default function Workspace() {
         description: "First draft",
       };
       setVersions([initialVersion]);
+
+      // Track document creation and phase change
+      trackEvent("document_created", { templateId: variables.templateId });
+      trackEvent("phase_changed", { metadata: { from: "input", to: "workspace" } });
 
       // Auto-run query analysis and default to Analyzer tab for SQL documents
       if (isLikelySqlQuery(data.document)) {
@@ -853,6 +861,9 @@ export default function Workspace() {
     setInterviewDirection(direction);
     setIsInterviewActive(true);
     interviewQuestionMutation.mutate({ direction });
+    trackEvent("interview_started", {
+      metadata: { mode: direction.mode ?? "challenge", personaCount: String(direction.personas.length) },
+    });
   }, [interviewQuestionMutation]);
 
   const handleInterviewAnswer = useCallback((answer: string) => {
@@ -1320,7 +1331,7 @@ export default function Workspace() {
   const toolboxPanel = (
     <ProvocationToolbox
       activeApp={activeToolboxApp}
-      onAppChange={setActiveToolboxApp}
+      onAppChange={(app: ToolboxApp) => { setActiveToolboxApp(app); trackEvent("app_switched", { appSection: app }); }}
       isInterviewActive={isInterviewActive}
       isMerging={interviewSummaryMutation.isPending}
       interviewEntryCount={interviewEntries.length}

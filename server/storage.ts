@@ -1,13 +1,18 @@
 import { randomUUID } from "crypto";
-import { eq, desc, isNull, and } from "drizzle-orm";
+import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions } from "../shared/models/chat";
 import type { UserPreferences } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
   DocumentPayload,
   FolderItem,
+  TrackingEvent,
+  PersonaUsageStat,
+  TrackingEventStat,
+  AdminDashboardData,
+  PersonaVersion,
 } from "@shared/schema";
 
 interface StoredDocument {
@@ -295,6 +300,190 @@ export class DatabaseStorage implements IStorage {
       .returning({ autoDictate: userPreferences.autoDictate });
 
     return { autoDictate: row.autoDictate };
+  }
+
+  // ── Tracking Events ──
+
+  async recordTrackingEvent(data: {
+    userId: string;
+    sessionId: string;
+    eventType: string;
+    personaId?: string;
+    templateId?: string;
+    appSection?: string;
+    durationMs?: number;
+    metadata?: Record<string, string>;
+  }): Promise<void> {
+    try {
+      await db.insert(trackingEvents).values({
+        userId: data.userId,
+        sessionId: data.sessionId,
+        eventType: data.eventType,
+        personaId: data.personaId ?? null,
+        templateId: data.templateId ?? null,
+        appSection: data.appSection ?? null,
+        durationMs: data.durationMs ?? null,
+        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+      });
+    } catch (err) {
+      // Non-fatal: tracking should never break the app
+      console.error("Failed to record tracking event:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  async getPersonaUsageStats(): Promise<PersonaUsageStat[]> {
+    const rows = await db
+      .select({
+        personaId: trackingEvents.personaId,
+        usageCount: count(trackingEvents.id),
+      })
+      .from(trackingEvents)
+      .where(
+        and(
+          sql`${trackingEvents.personaId} IS NOT NULL`,
+          sql`${trackingEvents.eventType} IN ('persona_selected', 'challenge_generated', 'advice_requested')`
+        )
+      )
+      .groupBy(trackingEvents.personaId)
+      .orderBy(desc(count(trackingEvents.id)));
+
+    // Enrich with persona metadata
+    const { builtInPersonas } = await import("@shared/personas");
+    return rows.map((r) => {
+      const persona = builtInPersonas[r.personaId as keyof typeof builtInPersonas];
+      return {
+        personaId: r.personaId!,
+        personaLabel: persona?.label ?? r.personaId!,
+        domain: persona?.domain ?? "unknown",
+        usageCount: Number(r.usageCount),
+        lastUsedAt: null, // could be computed with a subquery if needed
+      };
+    });
+  }
+
+  async getEventBreakdown(): Promise<TrackingEventStat[]> {
+    const rows = await db
+      .select({
+        eventType: trackingEvents.eventType,
+        eventCount: count(trackingEvents.id),
+      })
+      .from(trackingEvents)
+      .groupBy(trackingEvents.eventType)
+      .orderBy(desc(count(trackingEvents.id)));
+
+    return rows.map((r) => ({
+      eventType: r.eventType,
+      count: Number(r.eventCount),
+    }));
+  }
+
+  async getAdminDashboardData(): Promise<AdminDashboardData> {
+    const [personaUsage, eventBreakdown] = await Promise.all([
+      this.getPersonaUsageStats(),
+      this.getEventBreakdown(),
+    ]);
+
+    // Total events
+    const totalEvents = eventBreakdown.reduce((sum, e) => sum + e.count, 0);
+
+    // Distinct sessions
+    const [sessionRow] = await db
+      .select({ sessionCount: sql<number>`COUNT(DISTINCT ${trackingEvents.sessionId})` })
+      .from(trackingEvents);
+    const totalSessions = Number(sessionRow?.sessionCount ?? 0);
+
+    // Avg document generation time
+    const [avgRow] = await db
+      .select({ avgMs: sql<number>`AVG(${trackingEvents.durationMs})` })
+      .from(trackingEvents)
+      .where(
+        and(
+          sql`${trackingEvents.eventType} = 'write_executed'`,
+          sql`${trackingEvents.durationMs} IS NOT NULL`
+        )
+      );
+    const avgDocumentGenerationMs = Math.round(Number(avgRow?.avgMs ?? 0));
+
+    // Storage metadata
+    const [docCountRow] = await db
+      .select({ docCount: count(documents.id) })
+      .from(documents);
+    const [folderCountRow] = await db
+      .select({ folderCount: count(folders.id) })
+      .from(folders);
+    // Max folder depth via recursive CTE
+    let maxFolderDepth = 0;
+    try {
+      const result = await db.execute(sql`
+        WITH RECURSIVE folder_tree AS (
+          SELECT id, parent_folder_id, 1 AS depth FROM folders WHERE parent_folder_id IS NULL
+          UNION ALL
+          SELECT f.id, f.parent_folder_id, ft.depth + 1
+          FROM folders f JOIN folder_tree ft ON f.parent_folder_id = ft.id
+        )
+        SELECT COALESCE(MAX(depth), 0) AS max_depth FROM folder_tree
+      `);
+      const depthRow = (result as any).rows?.[0];
+      maxFolderDepth = Number(depthRow?.max_depth ?? 0);
+    } catch {
+      // Non-fatal
+    }
+
+    return {
+      personaUsage,
+      eventBreakdown,
+      totalEvents,
+      totalSessions,
+      avgDocumentGenerationMs,
+      storageMetadata: {
+        folderCount: Number(folderCountRow?.folderCount ?? 0),
+        maxFolderDepth,
+        documentCount: Number(docCountRow?.docCount ?? 0),
+      },
+    };
+  }
+
+  // ── Persona Versions (Archival) ──
+
+  async savePersonaVersion(personaId: string, definition: string): Promise<PersonaVersion> {
+    // Determine next version number
+    const [latest] = await db
+      .select({ version: personaVersions.version })
+      .from(personaVersions)
+      .where(eq(personaVersions.personaId, personaId))
+      .orderBy(desc(personaVersions.version))
+      .limit(1);
+
+    const nextVersion = (latest?.version ?? 0) + 1;
+
+    const [row] = await db
+      .insert(personaVersions)
+      .values({ personaId, version: nextVersion, definition })
+      .returning();
+
+    return {
+      id: row.id,
+      personaId: row.personaId,
+      version: row.version,
+      definition: row.definition,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  async getPersonaVersions(personaId: string): Promise<PersonaVersion[]> {
+    const rows = await db
+      .select()
+      .from(personaVersions)
+      .where(eq(personaVersions.personaId, personaId))
+      .orderBy(desc(personaVersions.version));
+
+    return rows.map((r) => ({
+      id: r.id,
+      personaId: r.personaId,
+      version: r.version,
+      definition: r.definition,
+      createdAt: r.createdAt.toISOString(),
+    }));
   }
 }
 
