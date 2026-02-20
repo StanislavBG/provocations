@@ -97,6 +97,26 @@ export async function ensureTables(): Promise<void> {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS pipeline_artifacts (
+        id SERIAL PRIMARY KEY,
+        uuid VARCHAR(36) NOT NULL UNIQUE,
+        user_id VARCHAR(128) NOT NULL,
+        document_id INTEGER,
+        parent_artifact_id INTEGER,
+        artifact_type VARCHAR(32) NOT NULL,
+        source_type VARCHAR(32) NOT NULL,
+        source_url TEXT,
+        source_title VARCHAR(500),
+        thumbnail_url TEXT,
+        ciphertext TEXT NOT NULL,
+        salt VARCHAR(64) NOT NULL,
+        iv VARCHAR(32) NOT NULL,
+        status VARCHAR(16) DEFAULT 'pending' NOT NULL,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_tracking_events_user ON tracking_events(user_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_type ON tracking_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_session ON tracking_events(session_id);
