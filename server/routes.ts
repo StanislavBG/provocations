@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getAuth } from "@clerk/express";
+import { getAuth, clerkClient } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt } from "./crypto";
 import { llm } from "./llm";
@@ -51,6 +51,20 @@ function getEncryptionKey(): string {
     console.warn("ENCRYPTION_SECRET not set — using default dev key. Set this in production!");
   }
   return secret || "provocations-dev-key-change-in-production";
+}
+
+// ── RBAC ──
+// Admin users are identified by email. Everyone else is a regular user.
+const ADMIN_EMAILS = ["stanislavbg@gmail.com"];
+
+async function isAdminUser(userId: string): Promise<boolean> {
+  try {
+    const user = await clerkClient.users.getUser(userId);
+    const email = user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)?.emailAddress;
+    return !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 // ── Zero-knowledge helpers ──
@@ -835,9 +849,27 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // ── Admin dashboard data ──
-  app.get("/api/admin/dashboard", async (_req, res) => {
+  // ── Auth: role check ──
+  app.get("/api/auth/role", async (req, res) => {
     try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const admin = await isAdminUser(userId);
+      res.json({ role: admin ? "admin" : "user" });
+    } catch (error) {
+      console.error("Role check error:", error);
+      res.status(500).json({ error: "Failed to check role" });
+    }
+  });
+
+  // ── Admin dashboard data (protected) ──
+  app.get("/api/admin/dashboard", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
       const data = await storage.getAdminDashboardData();
       res.json(data);
     } catch (error) {
@@ -846,9 +878,13 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // ── Admin: persona usage stats ──
-  app.get("/api/admin/persona-usage", async (_req, res) => {
+  // ── Admin: persona usage stats (protected) ──
+  app.get("/api/admin/persona-usage", async (req, res) => {
     try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
       const stats = await storage.getPersonaUsageStats();
       res.json({ stats });
     } catch (error) {
@@ -856,9 +892,13 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // ── Admin: event breakdown ──
-  app.get("/api/admin/event-breakdown", async (_req, res) => {
+  // ── Admin: event breakdown (protected) ──
+  app.get("/api/admin/event-breakdown", async (req, res) => {
     try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
       const stats = await storage.getEventBreakdown();
       res.json({ stats });
     } catch (error) {

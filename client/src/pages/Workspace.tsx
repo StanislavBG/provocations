@@ -22,6 +22,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { StoragePanel } from "@/components/StoragePanel";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { UserButton } from "@clerk/clerk-react";
+import { useRole } from "@/hooks/use-role";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +54,7 @@ import {
   Zap,
   FileText,
   Wrench,
+  Shield,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import type {
@@ -94,6 +97,7 @@ function isLikelySqlQuery(text: string): boolean {
 export default function Workspace() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const { isAdmin } = useRole();
 
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
@@ -1274,6 +1278,14 @@ export default function Workspace() {
               </Button>
               <AutoDictateToggle />
               <ThemeToggle />
+              {isAdmin && (
+                <Link href="/admin">
+                  <Button variant="ghost" size="sm" className="gap-1.5">
+                    <Shield className="w-4 h-4" />
+                    <span className="hidden sm:inline">Admin</span>
+                  </Button>
+                </Link>
+              )}
               <UserButton data-testid="button-user-menu" />
             </div>
           </div>
@@ -1610,6 +1622,14 @@ export default function Workspace() {
             </Button>
             <AutoDictateToggle />
             <ThemeToggle />
+            {isAdmin && (
+              <Link href="/admin">
+                <Button variant="ghost" size="sm" className="gap-1.5">
+                  <Shield className="w-4 h-4" />
+                  <span className="hidden sm:inline">Admin</span>
+                </Button>
+              </Link>
+            )}
             <UserButton data-testid="button-user-menu-main" />
           </div>
         </div>
