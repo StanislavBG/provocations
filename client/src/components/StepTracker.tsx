@@ -3,14 +3,12 @@ import {
   CheckCircle2,
   Circle,
   Loader2,
-  Layout,
-  FileEdit,
   MessageCircleQuestion,
   Globe,
   Layers,
   Search,
-  Sparkles,
 } from "lucide-react";
+import type { FlowStepConfig, LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -32,35 +30,21 @@ interface StepTrackerProps {
   selectedTemplate?: string;
   /** Active toolbox app in the workspace */
   activeToolboxApp?: string;
+  /** Application-specific flow steps from AppFlowConfig.
+   *  When provided, these replace the default 3-step flow. */
+  appFlowSteps?: FlowStepConfig[];
+  /** Application-specific left panel tabs from AppFlowConfig.
+   *  When provided, these replace the hardcoded canvas tools. */
+  appLeftPanelTabs?: LeftPanelTabConfig[];
 }
 
-/** Tool descriptions shown during the edit phase */
-const CANVAS_TOOLS = [
-  {
-    id: "provoke",
-    label: "Provoke",
-    icon: MessageCircleQuestion,
-    description: "AI-driven interview with expert personas that challenge your thinking",
-  },
-  {
-    id: "website",
-    label: "Capture",
-    icon: Globe,
-    description: "Browse websites, take screenshots, and annotate for requirements",
-  },
-  {
-    id: "context",
-    label: "Context",
-    icon: Layers,
-    description: "View collected reference materials, templates, and supporting context",
-  },
-  {
-    id: "analyzer",
-    label: "Analyzer",
-    icon: Search,
-    description: "SQL query decomposition, optimization, and metrics extraction",
-  },
-];
+/** Icon lookup for canvas tool IDs */
+const TOOL_ICONS: Record<string, typeof Circle> = {
+  provoke: MessageCircleQuestion,
+  website: Globe,
+  context: Layers,
+  analyzer: Search,
+};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -70,8 +54,39 @@ export function StepTracker({
   currentPhase,
   selectedTemplate,
   activeToolboxApp,
+  appFlowSteps,
+  appLeftPanelTabs,
 }: StepTrackerProps) {
   const steps: WorkflowStep[] = useMemo(() => {
+    // Use app-specific steps when provided
+    if (appFlowSteps && appFlowSteps.length > 0) {
+      return appFlowSteps.map((step, i) => {
+        // First step completed once a template is selected (past "select" phase)
+        // Last step(s) active during edit phase
+        // Middle steps completed once in edit phase
+        let status: WorkflowStep["status"];
+        if (currentPhase === "select") {
+          status = i === 0 ? "active" : "upcoming";
+        } else if (currentPhase === "draft") {
+          status = i === 0 ? "completed" : i === 1 ? "active" : "upcoming";
+        } else {
+          // edit phase — all but last step completed, last step active
+          status = i < appFlowSteps.length - 1 ? "completed" : "active";
+        }
+
+        return {
+          id: step.id,
+          label: step.label,
+          description:
+            i === 0 && status === "completed" && selectedTemplate
+              ? `Template: ${selectedTemplate}`
+              : step.description,
+          status,
+        };
+      });
+    }
+
+    // Legacy fallback: 3-step default
     const phaseOrder: WorkflowPhase[] = ["select", "draft", "edit"];
     const currentIndex = phaseOrder.indexOf(currentPhase);
 
@@ -107,7 +122,46 @@ export function StepTracker({
         status: currentIndex === 2 ? "active" : "upcoming",
       },
     ];
-  }, [currentPhase, selectedTemplate]);
+  }, [currentPhase, selectedTemplate, appFlowSteps]);
+
+  // Canvas tools — use app-specific tabs when provided
+  const canvasTools = useMemo(() => {
+    if (appLeftPanelTabs) {
+      return appLeftPanelTabs.map((tab) => ({
+        id: tab.id,
+        label: tab.label,
+        icon: TOOL_ICONS[tab.id] || Circle,
+        description: tab.description,
+      }));
+    }
+    // Legacy fallback
+    return [
+      {
+        id: "provoke",
+        label: "Provoke",
+        icon: MessageCircleQuestion,
+        description: "AI-driven interview with expert personas that challenge your thinking",
+      },
+      {
+        id: "website",
+        label: "Capture",
+        icon: Globe,
+        description: "Browse websites, take screenshots, and annotate for requirements",
+      },
+      {
+        id: "context",
+        label: "Context",
+        icon: Layers,
+        description: "View collected reference materials, templates, and supporting context",
+      },
+      {
+        id: "analyzer",
+        label: "Analyzer",
+        icon: Search,
+        description: "SQL query decomposition, optimization, and metrics extraction",
+      },
+    ];
+  }, [appLeftPanelTabs]);
 
   const showTools = currentPhase === "edit";
 
@@ -166,7 +220,7 @@ export function StepTracker({
       {/* Canvas tool descriptions (edit phase only) */}
       {showTools && (
         <div className="flex items-center justify-center gap-3 mt-1.5 flex-wrap">
-          {CANVAS_TOOLS.map((tool) => {
+          {canvasTools.map((tool) => {
             const Icon = tool.icon;
             const isActive = activeToolboxApp === tool.id;
             return (
