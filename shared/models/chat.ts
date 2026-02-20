@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -94,7 +94,9 @@ export const personaVersions = pgTable("persona_versions", {
   version: integer("version").notNull(),
   definition: text("definition").notNull(), // JSON-serialized Persona object
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_persona_versions_persona").on(table.personaId),
+]);
 
 export type StoredPersonaVersion = typeof personaVersions.$inferSelect;
 
@@ -110,7 +112,12 @@ export const trackingEvents = pgTable("tracking_events", {
   durationMs: integer("duration_ms"),          // for timed events (e.g. document generation)
   metadata: text("metadata"),                   // JSON string of additional non-PII data
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_tracking_events_user").on(table.userId),
+  index("idx_tracking_events_type").on(table.eventType),
+  index("idx_tracking_events_session").on(table.sessionId),
+  index("idx_tracking_events_created").on(table.createdAt),
+]);
 
 export type StoredTrackingEvent = typeof trackingEvents.$inferSelect;
 
@@ -122,7 +129,9 @@ export const usageMetrics = pgTable("usage_metrics", {
   metricKey: varchar("metric_key", { length: 64 }).notNull(),
   metricValue: integer("metric_value").default(0).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  uniqueIndex("idx_usage_metrics_user_key").on(table.userId, table.metricKey),
+]);
 
 export type StoredUsageMetric = typeof usageMetrics.$inferSelect;
 
