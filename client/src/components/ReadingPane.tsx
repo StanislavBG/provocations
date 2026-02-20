@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, FileDown, FileArchive, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info } from "lucide-react";
+import { Download, FileDown, FileArchive, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -54,9 +54,11 @@ interface ReadingPaneProps {
   onTranscriptUpdate?: (transcript: string, isRecording: boolean) => void;
   onTextEdit?: (newText: string) => void;
   onSendFeedback?: (text: string) => void;
+  /** Word count of the AI-generated first draft (versions[0]). Used for time-saved calculation. */
+  draftWordCount?: number;
 }
 
-export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback }: ReadingPaneProps) {
+export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount }: ReadingPaneProps) {
   const { toast } = useToast();
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
@@ -321,6 +323,15 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const readingTime = Math.ceil(wordCount / 200);
 
+  // ── Time-saved metric ──
+  // Author words = total words − AI-generated draft words
+  // Composition speed: 19 WPM (Karat et al. 1999 — knowledge worker average)
+  // Time saved = author words / 19 WPM + reading time of entire document
+  const COMPOSITION_WPM = 19;
+  const authorWords = draftWordCount != null ? Math.max(0, wordCount - draftWordCount) : 0;
+  const compositionMinutes = authorWords > 0 ? Math.round(authorWords / COMPOSITION_WPM) : 0;
+  const timeSavedMinutes = compositionMinutes + readingTime;
+
   // Images in the document
   const docImages = useMemo(() => extractMarkdownImages(text), [text]);
   const [copyingImage, setCopyingImage] = useState(false);
@@ -484,6 +495,29 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
         <h3 className="font-semibold text-sm text-amber-900/80 dark:text-amber-200/80">Draft</h3>
         <Badge variant="outline" className="text-xs ml-1">{wordCount.toLocaleString()} words</Badge>
         <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
+        {timeSavedMinutes > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="secondary" className="text-xs gap-1 cursor-help bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60">
+                <Clock className="w-3 h-3" />
+                ~{timeSavedMinutes} min saved
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed">
+              <p className="font-semibold mb-1">Estimated time saved</p>
+              <p>
+                You shaped <strong>{authorWords.toLocaleString()} words</strong> through
+                iterative AI collaboration instead of writing from scratch.
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                At a knowledge-worker composition speed of {COMPOSITION_WPM} WPM
+                (Karat et al., 1999), writing those words would take
+                ~{compositionMinutes} min — plus {readingTime} min to read the
+                full {wordCount.toLocaleString()}-word document.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
         <div className="flex-1" />
         <div className="flex items-center gap-0.5">
           <Button
