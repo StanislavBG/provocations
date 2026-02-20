@@ -20,6 +20,7 @@ import {
   Lock,
   Rocket,
   Database,
+  FlaskConical,
   Crosshair,
   Globe,
   Wrench,
@@ -41,7 +42,7 @@ export type ToolboxApp = "provoke" | "website" | "context" | "analyzer";
 // ── Persona metadata (derived from centralized persona definitions) ──
 
 const iconMap: Record<string, typeof Blocks> = {
-  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket, Database,
+  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket, Database, FlaskConical,
 };
 
 const personaIcons: Record<ProvocationType, typeof Blocks> = Object.fromEntries(

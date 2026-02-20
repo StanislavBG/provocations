@@ -40,7 +40,8 @@ import {
   type StreamingRefineResponse,
   type StreamingRequirement,
 } from "@shared/schema";
-import { builtInPersonas, getPersonaById } from "@shared/personas";
+import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
+import { trackingEventSchema } from "@shared/schema";
 import { invoke, TASK_TYPES, type TaskType } from "./invoke";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 
@@ -50,6 +51,27 @@ function getEncryptionKey(): string {
     console.warn("ENCRYPTION_SECRET not set — using default dev key. Set this in production!");
   }
   return secret || "provocations-dev-key-change-in-production";
+}
+
+// ── Zero-knowledge helpers ──
+// Decrypt a title/name that may be encrypted (new rows) or plaintext (legacy rows).
+function decryptField(
+  legacyPlaintext: string,
+  ciphertext: string | null,
+  salt: string | null,
+  iv: string | null,
+  key: string,
+): string {
+  if (ciphertext && salt && iv) {
+    try {
+      return decrypt({ ciphertext, salt, iv }, key);
+    } catch {
+      // Fallback to legacy plaintext if decryption fails
+      return legacyPlaintext;
+    }
+  }
+  // Legacy row — title/name was stored in plaintext
+  return legacyPlaintext;
 }
 
 // LLM provider is configured in server/llm.ts
@@ -295,6 +317,12 @@ function formatStyleGuidance(docs: ReferenceDocument[]): string {
 
 // Persona response examples for better guidance
 const provocationResponseExamples: Record<ProvocationType, string> = {
+  master_researcher: `Example good responses to Master Researcher feedback:
+- "Good catch — we're missing coverage for the healthcare domain's knowledge worker roles"
+- "I should refresh the Architect persona — the skills profile hasn't been updated in over a month"
+- "Let me define the evaluation criteria for measuring persona relevance and freshness"
+The goal is to ensure the persona hierarchy is complete, current, and covers all relevant knowledge worker domains.`,
+
   thinking_bigger: `Example good responses to Think Big feedback:
 - "You're right — I haven't thought about what happens at 100,000 users. Let me address the scaling bottleneck"
 - "Good catch — the onboarding flow has too many steps for a self-service product at scale"
@@ -664,10 +692,150 @@ Output only valid JSON, no markdown.`;
   });
 
   // ── Persona listing endpoint ──
-  // Returns all available personas for exploration and editing in the UI.
+  // Returns all user-facing personas (excludes master_researcher).
   app.get("/api/personas", (_req, res) => {
-    const personas = Object.values(builtInPersonas);
+    const personas = getAllPersonas();
     res.json({ personas });
+  });
+
+  // ── Persona hierarchy endpoint ──
+  // Returns the full hierarchy tree rooted at master_researcher.
+  app.get("/api/personas/hierarchy", (_req, res) => {
+    const hierarchy = getPersonaHierarchy();
+    res.json(hierarchy);
+  });
+
+  // ── All personas including root (for admin) ──
+  app.get("/api/personas/all", (_req, res) => {
+    const personas = getAllPersonasWithRoot();
+    res.json({ personas });
+  });
+
+  // ── Personas by domain ──
+  app.get("/api/personas/domain/:domain", (req, res) => {
+    const domain = req.params.domain;
+    if (!["root", "technology", "business"].includes(domain)) {
+      return res.status(400).json({ error: "Invalid domain. Must be: root, technology, or business" });
+    }
+    const personas = getPersonasByDomain(domain as any);
+    res.json({ personas });
+  });
+
+  // ── Stale personas (need research refresh) ──
+  app.get("/api/personas/stale", (_req, res) => {
+    const stale = getStalePersonas();
+    res.json({ stalePersonas: stale.map((p) => ({ id: p.id, label: p.label, domain: p.domain, lastResearchedAt: p.lastResearchedAt })) });
+  });
+
+  // ── Persona version history (archival) ──
+  app.get("/api/personas/:personaId/versions", async (req, res) => {
+    try {
+      const versions = await storage.getPersonaVersions(req.params.personaId);
+      res.json({ versions });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch persona versions" });
+    }
+  });
+
+  // ── Tracking event ingestion ──
+  // Records a single tracking event. No user-inputted text is stored.
+  app.post("/api/tracking/event", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      const userId = auth?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = trackingEventSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid tracking event", details: parsed.error.errors });
+      }
+
+      const sessionId = (req.headers["x-session-id"] as string) || "unknown";
+
+      await storage.recordTrackingEvent({
+        userId,
+        sessionId,
+        eventType: parsed.data.eventType,
+        personaId: parsed.data.personaId,
+        templateId: parsed.data.templateId,
+        appSection: parsed.data.appSection,
+        metadata: parsed.data.metadata,
+      });
+
+      res.json({ ok: true });
+    } catch (error) {
+      // Non-fatal — tracking should never break the user experience
+      console.error("Tracking event error:", error);
+      res.json({ ok: false });
+    }
+  });
+
+  // ── Batch tracking events ──
+  app.post("/api/tracking/events", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      const userId = auth?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const events = req.body.events;
+      if (!Array.isArray(events)) {
+        return res.status(400).json({ error: "Expected events array" });
+      }
+
+      const sessionId = (req.headers["x-session-id"] as string) || "unknown";
+
+      await Promise.all(
+        events.map((evt: any) => {
+          const parsed = trackingEventSchema.safeParse(evt);
+          if (!parsed.success) return Promise.resolve();
+          return storage.recordTrackingEvent({
+            userId,
+            sessionId,
+            eventType: parsed.data.eventType,
+            personaId: parsed.data.personaId,
+            templateId: parsed.data.templateId,
+            appSection: parsed.data.appSection,
+            metadata: parsed.data.metadata,
+          });
+        })
+      );
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Batch tracking error:", error);
+      res.json({ ok: false });
+    }
+  });
+
+  // ── Admin dashboard data ──
+  app.get("/api/admin/dashboard", async (_req, res) => {
+    try {
+      const data = await storage.getAdminDashboardData();
+      res.json(data);
+    } catch (error) {
+      console.error("Admin dashboard error:", error);
+      res.status(500).json({ error: "Failed to load admin dashboard data" });
+    }
+  });
+
+  // ── Admin: persona usage stats ──
+  app.get("/api/admin/persona-usage", async (_req, res) => {
+    try {
+      const stats = await storage.getPersonaUsageStats();
+      res.json({ stats });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to load persona usage stats" });
+    }
+  });
+
+  // ── Admin: event breakdown ──
+  app.get("/api/admin/event-breakdown", async (_req, res) => {
+    try {
+      const stats = await storage.getEventBreakdown();
+      res.json({ stats });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to load event breakdown" });
+    }
   });
 
   // Unified write endpoint - single interface to the AI writer
@@ -1948,14 +2116,19 @@ Output only valid JSON, no markdown.`,
       }
 
       const { title, content, folderId } = parsed.data;
-      const encrypted = encrypt(content, getEncryptionKey());
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(content, key);
+      const encryptedTitle = encrypt(title, key);
 
       const doc = await storage.saveDocument({
         userId,
-        title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
         folderId: folderId ?? null,
       });
 
@@ -1993,13 +2166,18 @@ Output only valid JSON, no markdown.`,
       }
 
       const { title, content } = parsed.data;
-      const encrypted = encrypt(content, getEncryptionKey());
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(content, key);
+      const encryptedTitle = encrypt(title, key);
 
       const result = await storage.updateDocument(id, {
-        title,
-        ciphertext: encrypted.ciphertext,
-        salt: encrypted.salt,
-        iv: encrypted.iv,
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
       });
 
       if (!result) {
@@ -2014,14 +2192,22 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // List documents for the authenticated user
+  // List documents for the authenticated user (titles decrypted server-side)
   app.get("/api/documents", async (req, res) => {
     try {
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
+      const key = getEncryptionKey();
       const items = await storage.listDocuments(userId);
-      res.json({ documents: items });
+      const decrypted = items.map((item) => ({
+        id: item.id,
+        title: decryptField(item.title, item.titleCiphertext, item.titleSalt, item.titleIv, key),
+        folderId: item.folderId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+      res.json({ documents: decrypted });
     } catch (error) {
       console.error("List documents error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -2048,11 +2234,13 @@ Output only valid JSON, no markdown.`,
         return res.status(403).json({ error: "Not authorized to access this document" });
       }
 
+      const key = getEncryptionKey();
+
       let content: string;
       try {
         content = decrypt(
           { ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv },
-          getEncryptionKey(),
+          key,
         );
       } catch {
         // Document may have been encrypted with old client-side encryption
@@ -2063,9 +2251,11 @@ Output only valid JSON, no markdown.`,
         });
       }
 
+      const title = decryptField(doc.title, doc.titleCiphertext, doc.titleSalt, doc.titleIv, key);
+
       res.json({
         id: doc.id,
-        title: doc.title,
+        title,
         content,
         folderId: doc.folderId,
         createdAt: doc.createdAt,
@@ -2078,7 +2268,7 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // Rename a document (title only, no re-encryption needed)
+  // Rename a document (title encrypted before storing)
   app.patch("/api/documents/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2102,7 +2292,14 @@ Output only valid JSON, no markdown.`,
         return res.status(403).json({ error: "Not authorized to rename this document" });
       }
 
-      const result = await storage.renameDocument(id, parsed.data.title);
+      const key = getEncryptionKey();
+      const encryptedTitle = encrypt(parsed.data.title, key);
+      const result = await storage.renameDocument(id, {
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+      });
       if (!result) {
         return res.status(404).json({ error: "Document not found" });
       }
@@ -2147,7 +2344,7 @@ Output only valid JSON, no markdown.`,
   // Folder Management (hierarchical document organization)
   // ==========================================
 
-  // List folders for a user (optionally scoped to a parent folder)
+  // List folders for a user (folder names decrypted server-side)
   app.get("/api/folders", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2157,8 +2354,16 @@ Output only valid JSON, no markdown.`,
         ? parseInt(req.query.parentFolderId as string, 10)
         : undefined;
 
+      const key = getEncryptionKey();
       const items = await storage.listFolders(userId, parentFolderId === undefined ? undefined : (isNaN(parentFolderId!) ? undefined : parentFolderId));
-      res.json({ folders: items });
+      const decrypted = items.map((item) => ({
+        id: item.id,
+        name: decryptField(item.name, item.nameCiphertext, item.nameSalt, item.nameIv, key),
+        parentFolderId: item.parentFolderId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+      res.json({ folders: decrypted });
     } catch (error) {
       console.error("List folders error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -2166,7 +2371,7 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // Create a new folder
+  // Create a new folder (name encrypted before storing)
   app.post("/api/folders", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2178,8 +2383,23 @@ Output only valid JSON, no markdown.`,
       }
 
       const { name, parentFolderId } = parsed.data;
-      const folder = await storage.createFolder(userId, name, parentFolderId ?? null);
-      res.json(folder);
+      const key = getEncryptionKey();
+      const encryptedName = encrypt(name, key);
+      const folder = await storage.createFolder(
+        userId,
+        "[encrypted]",
+        parentFolderId ?? null,
+        { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
+      );
+
+      // Return decrypted name to the client
+      res.json({
+        id: folder.id,
+        name,
+        parentFolderId: folder.parentFolderId,
+        createdAt: folder.createdAt,
+        updatedAt: folder.updatedAt,
+      });
     } catch (error) {
       console.error("Create folder error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -2187,7 +2407,7 @@ Output only valid JSON, no markdown.`,
     }
   });
 
-  // Rename a folder
+  // Rename a folder (name encrypted before storing)
   app.patch("/api/folders/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -2205,8 +2425,24 @@ Output only valid JSON, no markdown.`,
       if (!existing) return res.status(404).json({ error: "Folder not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
 
-      const result = await storage.renameFolder(id, parsed.data.name);
-      res.json(result);
+      const key = getEncryptionKey();
+      const encryptedName = encrypt(parsed.data.name, key);
+      const result = await storage.renameFolder(
+        id,
+        "[encrypted]",
+        { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
+      );
+
+      if (!result) return res.status(404).json({ error: "Folder not found" });
+
+      // Return decrypted name to the client
+      res.json({
+        id: result.id,
+        name: parsed.data.name,
+        parentFolderId: result.parentFolderId,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+      });
     } catch (error) {
       console.error("Rename folder error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
