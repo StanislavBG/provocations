@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics } from "../shared/models/chat";
 import type { UserPreferences } from "../shared/models/chat";
 import type {
   Document,
@@ -13,6 +13,7 @@ import type {
   TrackingEventStat,
   AdminDashboardData,
   PersonaVersion,
+  UserMetricRow,
 } from "@shared/schema";
 
 interface StoredDocument {
@@ -576,6 +577,53 @@ export class DatabaseStorage implements IStorage {
       version: r.version,
       definition: r.definition,
       createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  // ── Usage Metrics ──
+
+  /**
+   * Increment a cumulative metric for a user.
+   * Uses INSERT ... ON CONFLICT ... DO UPDATE (upsert) to atomically add delta.
+   */
+  async incrementMetric(userId: string, metricKey: string, delta: number): Promise<void> {
+    await db.execute(sql`
+      INSERT INTO usage_metrics (user_id, metric_key, metric_value, updated_at)
+      VALUES (${userId}, ${metricKey}, ${delta}, CURRENT_TIMESTAMP)
+      ON CONFLICT (user_id, metric_key)
+      DO UPDATE SET
+        metric_value = usage_metrics.metric_value + ${delta},
+        updated_at = CURRENT_TIMESTAMP
+    `);
+  }
+
+  /** Get all metrics for a single user */
+  async getUserMetrics(userId: string): Promise<UserMetricRow[]> {
+    const rows = await db
+      .select()
+      .from(usageMetrics)
+      .where(eq(usageMetrics.userId, userId));
+
+    return rows.map((r) => ({
+      userId: r.userId,
+      metricKey: r.metricKey,
+      metricValue: r.metricValue,
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  }
+
+  /** Get all metrics for all users (admin) — returns flat rows grouped by userId */
+  async getAllUsageMetrics(): Promise<UserMetricRow[]> {
+    const rows = await db
+      .select()
+      .from(usageMetrics)
+      .orderBy(usageMetrics.userId, usageMetrics.metricKey);
+
+    return rows.map((r) => ({
+      userId: r.userId,
+      metricKey: r.metricKey,
+      metricValue: r.metricValue,
+      updatedAt: r.updatedAt.toISOString(),
     }));
   }
 }

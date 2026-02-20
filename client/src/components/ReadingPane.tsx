@@ -56,9 +56,15 @@ interface ReadingPaneProps {
   onSendFeedback?: (text: string) => void;
   /** Word count of the AI-generated first draft (versions[0]). Used for time-saved calculation. */
   draftWordCount?: number;
+  /** Fired when the user copies the document (for usage metric recording) */
+  onDocumentCopy?: () => void;
+  /** The user's stated objective for this document */
+  objective?: string;
+  /** The selected template/application name (e.g. "Product Requirement") */
+  templateName?: string;
 }
 
-export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount }: ReadingPaneProps) {
+export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount, onDocumentCopy, objective, templateName }: ReadingPaneProps) {
   const { toast } = useToast();
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
@@ -491,10 +497,24 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     >
       {/* Panel Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-amber-50/40 dark:bg-amber-950/10 shrink-0">
-        <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-        <h3 className="font-semibold text-sm text-amber-900/80 dark:text-amber-200/80">Draft</h3>
-        <Badge variant="outline" className="text-xs ml-1">{wordCount.toLocaleString()} words</Badge>
-        <Badge variant="secondary" className="text-xs">{readingTime} min read</Badge>
+        <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+        <h3 className="font-semibold text-sm text-amber-900/80 dark:text-amber-200/80 shrink-0">
+          {templateName || "Draft"}
+        </h3>
+        {objective && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-muted-foreground truncate max-w-[200px] cursor-help border-b border-dotted border-muted-foreground/30">
+                {objective}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-sm text-xs">
+              {objective}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <Badge variant="outline" className="text-xs shrink-0">{wordCount.toLocaleString()} words</Badge>
+        <Badge variant="secondary" className="text-xs shrink-0">{readingTime} min read</Badge>
         {timeSavedMinutes > 0 && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -554,6 +574,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             onClick={() => {
               const textOnly = text.replace(/!\[[^\]]*\]\([^)]+\)/g, "").replace(/\n{3,}/g, "\n\n").trim();
               navigator.clipboard.writeText(textOnly);
+              onDocumentCopy?.();
               toast({
                 title: "Copied",
                 description: "Document text copied to clipboard.",

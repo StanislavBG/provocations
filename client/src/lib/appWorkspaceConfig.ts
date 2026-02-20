@@ -297,22 +297,6 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
     },
   },
 
-  "infographic-description": {
-    ...DEFAULT_CONFIG,
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "story", label: "Define Story", description: "Set the narrative, audience, and key data" },
-      { id: "draft", label: "Build Brief", description: "Create the designer-ready infographic description" },
-      { id: "critique", label: "Visual Critique", description: "Challenge clarity, data integrity, and visual flow" },
-    ],
-    writer: {
-      mode: "edit",
-      outputFormat: "markdown",
-      documentType: "infographic description",
-      feedbackTone: "visually critical and data-aware",
-    },
-  },
-
   "persona-definition": {
     ...DEFAULT_CONFIG,
     flowSteps: [
@@ -326,22 +310,6 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "persona definition",
       feedbackTone: "character-focused and consistency-driven",
-    },
-  },
-
-  "ai-video-host": {
-    ...DEFAULT_CONFIG,
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "source", label: "Source Material", description: "Provide content and define the host persona" },
-      { id: "script", label: "Build Script", description: "Generate the slide-show narration" },
-      { id: "polish", label: "Polish & Review", description: "Refine voice consistency and slide pacing" },
-    ],
-    writer: {
-      mode: "edit",
-      outputFormat: "markdown",
-      documentType: "video host script",
-      feedbackTone: "storytelling-focused and audience-aware",
     },
   },
 
