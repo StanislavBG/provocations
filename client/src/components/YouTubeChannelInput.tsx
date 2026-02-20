@@ -1,41 +1,42 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  extractVideoTranscript,
+  runPipeline,
+  buildMultiVideoInfographicBrief,
+  type PipelineResult,
+} from "@/lib/infographicPipeline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Youtube, Search, Play, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Youtube, Search, Play, Loader2, CheckCircle2 } from "lucide-react";
 import type { YouTubeVideo, YouTubeChannelResponse } from "@shared/schema";
 
-interface VideoProcessingResult {
+/** Full result for a processed video (transcript + shared pipeline output) */
+export interface VideoInfographicResult extends PipelineResult {
   videoId: string;
   videoTitle: string;
   thumbnailUrl?: string;
-  transcript: string;
-  summary: { summary: string; keyPoints: string[]; tips: string[] };
-  infographic: {
-    title: string;
-    subtitle: string;
-    sections: Array<{ id: string; heading: string; content: string; icon: string; color: string; dataPoints?: string[] }>;
-    colorPalette: string[];
-    sourceLabel: string;
-  };
 }
 
 interface YouTubeChannelInputProps {
   onVideosLoaded: (videos: YouTubeVideo[], channelTitle: string) => void;
-  onVideoProcessed: (result: VideoProcessingResult) => void;
+  onVideoProcessed: (result: VideoInfographicResult) => void;
   onDocumentUpdate: (markdown: string) => void;
+  /** Current processing stage label for status display */
+  onStageChange?: (stage: string | null) => void;
 }
 
 export function YouTubeChannelInput({
   onVideosLoaded,
   onVideoProcessed,
   onDocumentUpdate,
+  onStageChange,
 }: YouTubeChannelInputProps) {
   const { toast } = useToast();
   const [channelUrl, setChannelUrl] = useState("");
@@ -44,7 +45,7 @@ export function YouTubeChannelInput({
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
   const [processingVideoId, setProcessingVideoId] = useState<string | null>(null);
   const [processedVideoIds, setProcessedVideoIds] = useState<Set<string>>(new Set());
-  const [processedResults, setProcessedResults] = useState<VideoProcessingResult[]>([]);
+  const [processedResults, setProcessedResults] = useState<VideoInfographicResult[]>([]);
 
   // Fetch videos from channel
   const fetchChannelMutation = useMutation({
@@ -76,27 +77,48 @@ export function YouTubeChannelInput({
     },
   });
 
-  // Process a single video through the pipeline
+  // Process a single video through the shared pipeline:
+  // 1. Extract transcript (YouTube-specific)
+  // 2. Summarize transcript (shared)
+  // 3. Generate infographic spec (shared)
   const processVideoMutation = useMutation({
-    mutationFn: async (video: YouTubeVideo) => {
+    mutationFn: async (video: YouTubeVideo): Promise<VideoInfographicResult> => {
       setProcessingVideoId(video.videoId);
-      const response = await apiRequest("POST", "/api/youtube/process-video", {
+
+      // Step 1: Extract transcript
+      onStageChange?.("Extracting transcript...");
+      const extracted = await extractVideoTranscript({
         videoId: video.videoId,
         videoUrl: `https://www.youtube.com/watch?v=${video.videoId}`,
         videoTitle: video.title,
         thumbnailUrl: video.thumbnailUrl,
       });
-      return (await response.json()) as VideoProcessingResult;
+
+      // Steps 2 + 3: Shared pipeline (summarize → infographic)
+      onStageChange?.("Summarizing & generating infographic...");
+      const pipelineResult = await runPipeline(
+        extracted.transcript,
+        "youtube",
+        video.title,
+      );
+
+      return {
+        ...pipelineResult,
+        videoId: video.videoId,
+        videoTitle: video.title,
+        thumbnailUrl: video.thumbnailUrl,
+      };
     },
     onSuccess: (result) => {
       setProcessingVideoId(null);
+      onStageChange?.(null);
       setProcessedVideoIds((prev) => new Set([...Array.from(prev), result.videoId]));
       setProcessedResults((prev) => [...prev, result]);
       onVideoProcessed(result);
 
-      // Build document markdown from all processed results so far
+      // Build document markdown from all processed results using shared builder
       const allResults = [...processedResults, result];
-      const markdown = buildInfographicDocument(allResults, channelTitle);
+      const markdown = buildMultiVideoInfographicBrief(allResults, channelTitle);
       onDocumentUpdate(markdown);
 
       toast({
@@ -106,6 +128,7 @@ export function YouTubeChannelInput({
     },
     onError: (error) => {
       setProcessingVideoId(null);
+      onStageChange?.(null);
       toast({
         title: "Processing Failed",
         description: error instanceof Error ? error.message : "Video processing failed",
@@ -286,61 +309,4 @@ export function YouTubeChannelInput({
       )}
     </div>
   );
-}
-
-/** Build a comprehensive infographic document from all processed results */
-function buildInfographicDocument(
-  results: VideoProcessingResult[],
-  channelTitle: string,
-): string {
-  const lines: string[] = [];
-
-  lines.push(`# Infographic Brief — ${channelTitle}`);
-  lines.push("");
-
-  for (const r of results) {
-    lines.push(`## ${r.infographic.title}`);
-    lines.push(`*${r.infographic.subtitle}*`);
-    lines.push("");
-    lines.push(`> Source: ${r.infographic.sourceLabel}`);
-    lines.push("");
-
-    // Key Points
-    lines.push("### Key Points");
-    for (const kp of r.summary.keyPoints) {
-      lines.push(`- ${kp}`);
-    }
-    lines.push("");
-
-    // Tips
-    if (r.summary.tips.length > 0) {
-      lines.push("### Tips & Advice");
-      for (const tip of r.summary.tips) {
-        lines.push(`- ${tip}`);
-      }
-      lines.push("");
-    }
-
-    // Infographic sections
-    lines.push("### Infographic Sections");
-    for (const section of r.infographic.sections) {
-      lines.push(`#### ${section.heading}`);
-      lines.push(section.content);
-      if (section.dataPoints && section.dataPoints.length > 0) {
-        for (const dp of section.dataPoints) {
-          lines.push(`- ${dp}`);
-        }
-      }
-      lines.push("");
-    }
-
-    // Color palette
-    lines.push(`### Color Palette`);
-    lines.push(r.infographic.colorPalette.map((c) => `\`${c}\``).join("  "));
-    lines.push("");
-    lines.push("---");
-    lines.push("");
-  }
-
-  return lines.join("\n");
 }
