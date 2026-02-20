@@ -107,6 +107,8 @@ export function VoiceCaptureWorkspace({
   const [interimText, setInterimText] = useState("");
   // Total accumulated text (everything flushed + buffer)
   const [totalTranscript, setTotalTranscript] = useState("");
+  // Ref mirror so interval callbacks always read the latest transcript
+  const totalTranscriptRef = useRef("");
 
   // ── Timer ──
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -163,9 +165,11 @@ export function VoiceCaptureWorkspace({
 
       if (finalTranscript) {
         transcriptBufferRef.current += finalTranscript + " ";
-        setTotalTranscript(
-          (prev) => prev + finalTranscript + " "
-        );
+        setTotalTranscript((prev) => {
+          const next = prev + finalTranscript + " ";
+          totalTranscriptRef.current = next;
+          return next;
+        });
       }
 
       setInterimText(interim);
@@ -233,9 +237,11 @@ export function VoiceCaptureWorkspace({
 
   // ── Generate AI summary from transcript ──
   const generateSummary = useCallback(async (text: string) => {
-    if (!text.trim() || text.trim().split(/\s+/).length < 30) return;
-    // Only re-summarize if transcript grew significantly (>50 new words)
-    if (text.length - lastSummarizedLengthRef.current < 200) return;
+    const words = text.trim().split(/\s+/).length;
+    if (!text.trim() || words < 30) return null;
+    // Only re-summarize if significant new content since last summary
+    const newChars = text.length - lastSummarizedLengthRef.current;
+    if (lastSummarizedLengthRef.current > 0 && newChars < 100) return null;
 
     setIsSummarizing(true);
     try {
@@ -279,18 +285,32 @@ export function VoiceCaptureWorkspace({
     }
   }, [objective]);
 
+  // Keep stable refs for callbacks used inside the interval
+  const flushBufferRef = useRef(flushBuffer);
+  flushBufferRef.current = flushBuffer;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const objectiveRef = useRef(objective);
+  objectiveRef.current = objective;
+  const generateSummaryRef = useRef(generateSummary);
+  generateSummaryRef.current = generateSummary;
+  const generateQuestionsRef = useRef(generateQuestions);
+  generateQuestionsRef.current = generateQuestions;
+
   // ── Auto-save: flush buffer + persist + summarize every ~30s ──
+  // Only depends on isRecording/isPaused so the interval is stable and
+  // doesn't restart on every transcript word.
   useEffect(() => {
     if (isRecording && !isPaused) {
       autoSaveTimerRef.current = setInterval(async () => {
         // Flush buffer to document state
-        flushBuffer();
+        flushBufferRef.current();
 
         // Persist to storage
         setIsSaving(true);
         try {
-          const title = objective || `Voice Capture ${new Date().toLocaleDateString()}`;
-          await onSave(title, null);
+          const title = objectiveRef.current || `Voice Capture ${new Date().toLocaleDateString()}`;
+          await onSaveRef.current(title, null);
           setLastSaveTime(Date.now());
         } catch {
           // Silent failure — will retry next interval
@@ -298,10 +318,11 @@ export function VoiceCaptureWorkspace({
           setIsSaving(false);
         }
 
-        // Generate summary + questions (fire-and-forget, non-blocking)
-        generateSummary(totalTranscript).then((newSummary) => {
+        // Generate summary + questions using the latest transcript via ref
+        const currentText = totalTranscriptRef.current;
+        generateSummaryRef.current(currentText).then((newSummary) => {
           if (newSummary) {
-            generateQuestions(newSummary);
+            generateQuestionsRef.current(newSummary);
           }
         });
       }, 30000);
@@ -313,7 +334,7 @@ export function VoiceCaptureWorkspace({
         autoSaveTimerRef.current = null;
       }
     };
-  }, [isRecording, isPaused, flushBuffer, onSave, objective, totalTranscript, generateSummary, generateQuestions]);
+  }, [isRecording, isPaused]);
 
   // ── Timer tick ──
   useEffect(() => {
@@ -330,6 +351,19 @@ export function VoiceCaptureWorkspace({
       }
     };
   }, [isRecording, isPaused]);
+
+  // ── First-summary trigger: fire once the transcript crosses 30 words ──
+  const initialSummaryFiredRef = useRef(false);
+  useEffect(() => {
+    if (initialSummaryFiredRef.current) return;
+    const words = totalTranscript.trim().split(/\s+/).length;
+    if (words >= 30) {
+      initialSummaryFiredRef.current = true;
+      generateSummary(totalTranscript).then((s) => {
+        if (s) generateQuestions(s);
+      });
+    }
+  }, [totalTranscript, generateSummary, generateQuestions]);
 
   // ── Auto-scroll transcript ──
   useEffect(() => {
