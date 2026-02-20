@@ -278,7 +278,19 @@ Requirement discovery through:
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
 | `CLERK_PUBLISHABLE_KEY` | Clerk frontend authentication |
+| `CLERK_SECRET_KEY` | Clerk backend secret key |
 | `PLAYWRIGHT_CHROMIUM_PATH` | Path to Chromium for screenshots |
+
+### Replit-Specific Environment Variables
+
+On Replit, AI integration keys are injected automatically via the **Tools > AI Integrations** panel. These are mapped to standard keys in `server/llm.ts`:
+
+| Replit Variable | Maps To | Description |
+|----------------|---------|-------------|
+| `AI_INTEGRATIONS_OPENAI_API_KEY` | `OPENAI_API_KEY` | OpenAI API key (set via Replit AI Integrations) |
+| `AI_INTEGRATIONS_OPENAI_BASE_URL` | OpenAI `baseURL` | Replit proxy base URL for OpenAI requests |
+
+The LLM adapter in `server/llm.ts` checks both standard and Replit-specific env vars. Priority: standard key first, then Replit integration key.
 
 ## Development Notes
 
