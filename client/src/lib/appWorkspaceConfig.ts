@@ -49,8 +49,22 @@ export interface FlowStepConfig {
 // Writer behavior types
 // ---------------------------------------------------------------------------
 
+/**
+ * Writer mode — controls what the write action fundamentally does.
+ *
+ * "edit"      — Default. Rewrites/evolves the document based on instructions.
+ * "analyze"   — Document stays immutable. Writer performs deep evaluation and
+ *               surfaces structured feedback in the right panel (Discoveries).
+ *               Reuses /api/analyze-query for SQL.
+ * "aggregate" — Document grows additively. Writer appends new material and
+ *               reorganizes under themes. Used for context-farming workflows.
+ */
+export type WriterMode = "edit" | "analyze" | "aggregate";
+
 /** Per-application writer configuration */
 export interface WriterBehaviorConfig {
+  /** How the writer fundamentally behaves — edit, analyze, or aggregate */
+  mode: WriterMode;
   /** Output format — "sql" routes to /api/query-write, "markdown" to /api/write */
   outputFormat: "markdown" | "sql";
   /** Document type label used in prompts (e.g. "SQL query", "product requirement") */
@@ -63,7 +77,17 @@ export interface WriterBehaviorConfig {
 // Full application flow config
 // ---------------------------------------------------------------------------
 
+/**
+ * Workspace layout — controls the top-level UI structure.
+ *
+ * "standard"      — Default 3-panel layout (toolbox | document | discussion).
+ * "voice-capture" — Single-page voice recording workspace with auto-save.
+ */
+export type WorkspaceLayout = "standard" | "voice-capture";
+
 export interface AppFlowConfig {
+  /** Top-level workspace layout. Defaults to "standard" (3-panel). */
+  workspaceLayout: WorkspaceLayout;
   /** Which toolbox tab to activate when entering the workspace */
   defaultToolboxTab: LeftPanelTabId;
   /** Whether to auto-start the interview (Provoke) on workspace entry */
@@ -132,6 +156,7 @@ const RIGHT_DISCOVERIES: RightPanelTabConfig = {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONFIG: AppFlowConfig = {
+  workspaceLayout: "standard",
   defaultToolboxTab: "provoke",
   autoStartInterview: true,
   autoStartPersonas: ["thinking_bigger" as ProvocationType],
@@ -147,6 +172,7 @@ const DEFAULT_CONFIG: AppFlowConfig = {
   rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
 
   writer: {
+    mode: "edit",
     outputFormat: "markdown",
     documentType: "document",
   },
@@ -165,6 +191,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       { id: "edit", label: "Refine", description: "Sharpen clarity, structure, and specificity" },
     ],
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "AI prompt",
       feedbackTone: "direct and clarity-focused",
@@ -172,6 +199,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   "query-editor": {
+    workspaceLayout: "standard",
     defaultToolboxTab: "analyzer",
     autoStartInterview: true,
     autoStartPersonas: ["thinking_bigger" as ProvocationType],
@@ -188,6 +216,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
     rightPanelTabs: [RIGHT_DISCOVERIES, RIGHT_DISCUSSION],
 
     writer: {
+      mode: "analyze",
       outputFormat: "sql",
       documentType: "SQL query",
       feedbackTone: "constructive and non-judgmental",
@@ -203,6 +232,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       { id: "challenge", label: "Challenge & Refine", description: "Let expert personas stress-test your spec" },
     ],
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "product requirement document",
       feedbackTone: "rigorous but constructive",
@@ -219,6 +249,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       { id: "challenge", label: "Challenge & Refine", description: "Stress-test architecture, UX, and business model" },
     ],
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "application specification",
       feedbackTone: "thorough and questioning",
@@ -226,6 +257,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   streaming: {
+    workspaceLayout: "standard",
     defaultToolboxTab: "website",
     autoStartInterview: false,
     autoStartPersonas: undefined,
@@ -242,6 +274,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
     rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
 
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "requirements document",
       feedbackTone: "precise and detail-oriented",
@@ -257,6 +290,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       { id: "review", label: "Peer Review", description: "Expert personas challenge rigor and originality" },
     ],
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "research paper",
       feedbackTone: "academic and rigorous",
@@ -272,6 +306,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       { id: "critique", label: "Visual Critique", description: "Challenge clarity, data integrity, and visual flow" },
     ],
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "infographic description",
       feedbackTone: "visually critical and data-aware",
@@ -287,6 +322,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       { id: "test", label: "Consistency Test", description: "Challenge coherence and edge-case behavior" },
     ],
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "persona definition",
       feedbackTone: "character-focused and consistency-driven",
@@ -302,6 +338,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
       { id: "polish", label: "Polish & Review", description: "Refine voice consistency and slide pacing" },
     ],
     writer: {
+      mode: "edit",
       outputFormat: "markdown",
       documentType: "video host script",
       feedbackTone: "storytelling-focused and audience-aware",
@@ -309,6 +346,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   "research-context": {
+    workspaceLayout: "standard",
     defaultToolboxTab: "context",
     autoStartInterview: true,
     autoStartPersonas: ["thinking_bigger" as ProvocationType],
@@ -325,6 +363,7 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
     rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_METRICS],
 
     writer: {
+      mode: "aggregate",
       outputFormat: "markdown",
       documentType: "research context library",
       feedbackTone: "analytical and gap-finding",
@@ -332,17 +371,24 @@ const APP_CONFIGS: Record<string, AppFlowConfig> = {
   },
 
   "voice-capture": {
-    ...DEFAULT_CONFIG,
+    workspaceLayout: "voice-capture",
+    defaultToolboxTab: "provoke",
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "record", label: "Record", description: "Speak your ideas — ramble, brainstorm, think out loud" },
-      { id: "structure", label: "Structure", description: "AI organizes your spoken thoughts into clear content" },
-      { id: "refine", label: "Refine", description: "Polish and fill gaps in the structured output" },
+      { id: "record", label: "Recording", description: "Speak freely — transcript auto-saves every 30 seconds" },
     ],
+
     leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+
+    rightPanelTabs: [RIGHT_DISCUSSION],
+
     writer: {
+      mode: "aggregate",
       outputFormat: "markdown",
-      documentType: "voice capture document",
+      documentType: "voice capture transcript",
       feedbackTone: "clarifying and structure-focused",
     },
   },

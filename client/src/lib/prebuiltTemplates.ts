@@ -18,6 +18,8 @@ export interface TemplateStep {
   label: string;
 }
 
+export type TemplateCategory = "build" | "write" | "analyze" | "capture";
+
 export interface PrebuiltTemplate {
   id: string;
   title: string;
@@ -32,11 +34,13 @@ export interface PrebuiltTemplate {
   provocationSources: string[]; // who/what generates the provocations
   provocationExamples: string[]; // example provocations for the card preview
   steps: TemplateStep[]; // workflow steps shown in the bottom progress bar
+  category: TemplateCategory; // groups templates into tabbed categories on the landing page
 }
 
 export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "write-a-prompt",
+    category: "write",
     title: "Write a Prompt",
     shortLabel: "Prompt",
     subtitle: "AIM framework, any format",
@@ -62,6 +66,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   },
   {
     id: "query-editor",
+    category: "analyze",
     title: "Query Editor",
     shortLabel: "Query Analyzer",
     subtitle: "SQL analysis, schema-aware optimization",
@@ -169,6 +174,7 @@ Track each modification with a brief description of what changed.`,
   },
   {
     id: "product-requirement",
+    category: "build",
     title: "Product Requirement",
     shortLabel: "Feature PRD",
     subtitle: "Incremental feature, enterprise-grade",
@@ -230,6 +236,7 @@ What specifically changes for the user? Walk through the new flow step by step.
   },
   {
     id: "new-application",
+    category: "build",
     title: "New Application",
     shortLabel: "App from Scratch",
     subtitle: "Full SaaS spec from scratch",
@@ -314,6 +321,7 @@ Key endpoints the backend needs:
   },
   {
     id: "streaming",
+    category: "analyze",
     title: "Screen Capture",
     shortLabel: "Capture",
     subtitle: "Screenshots & annotations to requirements",
@@ -341,6 +349,7 @@ Key endpoints the backend needs:
   },
   {
     id: "research-paper",
+    category: "write",
     title: "Research Paper",
     shortLabel: "Research Paper",
     subtitle: "Structured academic or exploratory writing",
@@ -438,6 +447,7 @@ What questions remain open? What should be explored next?
   },
   {
     id: "infographic-description",
+    category: "write",
     title: "Infographic Description",
     shortLabel: "Infographic",
     subtitle: "Visual content brief, ready for design",
@@ -517,6 +527,7 @@ Color palette, fonts, brand guidelines, or mood references.
   },
   {
     id: "persona-definition",
+    category: "write",
     title: "Persona / Agent",
     shortLabel: "Persona",
     subtitle: "Character, role, or AI agent profile",
@@ -626,6 +637,7 @@ Typical way they end an interaction.
   },
   {
     id: "ai-video-host",
+    category: "write",
     title: "AI Video Host",
     shortLabel: "Video Host",
     subtitle: "Slide-show video with a presenter voice",
@@ -753,6 +765,7 @@ Aspect ratio (16:9, 9:16, 1:1), resolution, export format.`,
   },
   {
     id: "research-context",
+    category: "capture",
     title: "Research / Context",
     shortLabel: "Research",
     subtitle: "Capture, organize, and build context",
@@ -834,6 +847,7 @@ Organized collection of reusable context items that can be shared with other pro
   },
   {
     id: "voice-capture",
+    category: "capture",
     title: "Voice Capture",
     shortLabel: "Voice",
     subtitle: "Speak your ideas, structure them later",
@@ -891,4 +905,21 @@ What needs to happen next based on this capture?`,
     ],
     steps: [{ id: "capture", label: "Record your thoughts" }],
   },
+];
+
+// ---------------------------------------------------------------------------
+// Template categories — ordered for the landing page tab bar
+// ---------------------------------------------------------------------------
+
+export interface TemplateCategoryMeta {
+  id: TemplateCategory;
+  label: string;
+  description: string;
+}
+
+export const TEMPLATE_CATEGORIES: TemplateCategoryMeta[] = [
+  { id: "build", label: "Build", description: "Product specs and technical documents" },
+  { id: "write", label: "Write", description: "Creative content and structured writing" },
+  { id: "analyze", label: "Analyze", description: "SQL queries and screen capture analysis" },
+  { id: "capture", label: "Capture", description: "Research, context collection, and voice input" },
 ];
