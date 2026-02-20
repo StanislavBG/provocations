@@ -30,7 +30,7 @@ npm run db:push  # Push Drizzle schema to database
 | Layer | Technologies |
 |-------|-------------|
 | **Frontend** | React 18, TypeScript 5.6, Vite 7, Tailwind CSS 3.4, shadcn/ui (47 components) |
-| **Backend** | Express 5.0, Google Gemini 2.0 Flash (default) / Anthropic Claude (configurable) |
+| **Backend** | Express 5.0, OpenAI GPT-4o (default) / Google Gemini 2.0 Flash / Anthropic Claude (configurable via `LLM_PROVIDER`) |
 | **Database** | PostgreSQL via Drizzle ORM, zero-knowledge AES-256-GCM encryption (all user text encrypted at rest) |
 | **Auth** | Clerk (authentication & user ownership) |
 | **Validation** | Zod schemas shared between frontend/backend |
@@ -271,9 +271,10 @@ Requirement discovery through:
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Google Gemini API key (default provider) |
-| `ANTHROPIC_API_KEY` | Anthropic API key (fallback, or `ANTHROPIC_KEY`) |
-| `LLM_PROVIDER` | Force provider: `gemini` or `anthropic` (auto-detects by default) |
+| `OPENAI_API_KEY` | OpenAI API key (preferred provider) |
+| `GEMINI_API_KEY` | Google Gemini API key (via OpenAI-compatible endpoint) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (or `ANTHROPIC_KEY`) |
+| `LLM_PROVIDER` | Force provider: `openai`, `gemini`, or `anthropic` (auto-detects by default) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
 | `CLERK_PUBLISHABLE_KEY` | Clerk frontend authentication |
