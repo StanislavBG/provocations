@@ -14,6 +14,7 @@ import {
   Loader2,
   Blocks,
   ShieldCheck,
+  ShieldAlert,
   Palette,
   BookText,
   Briefcase,
@@ -21,6 +22,9 @@ import {
   Rocket,
   Database,
   FlaskConical,
+  TrendingUp,
+  Megaphone,
+  PenTool,
   Crosshair,
   Globe,
   Wrench,
@@ -42,7 +46,7 @@ export type ToolboxApp = "provoke" | "website" | "context" | "analyzer";
 // ── Persona metadata (derived from centralized persona definitions) ──
 
 const iconMap: Record<string, typeof Blocks> = {
-  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket, Database, FlaskConical,
+  Blocks, ShieldCheck, ShieldAlert, Palette, BookText, Briefcase, Lock, Rocket, Database, FlaskConical, TrendingUp, Megaphone, PenTool,
 };
 
 const personaIcons: Record<ProvocationType, typeof Blocks> = Object.fromEntries(

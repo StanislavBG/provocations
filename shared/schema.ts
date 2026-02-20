@@ -13,6 +13,10 @@ export const provocationType = [
   "security_engineer",
   "ceo",
   "data_architect",
+  "cybersecurity_engineer",
+  "growth_strategist",
+  "brand_strategist",
+  "content_strategist",
 ] as const;
 
 export type ProvocationType = typeof provocationType[number];
@@ -50,8 +54,9 @@ export type PersonaSummary = z.infer<typeof personaSummarySchema>;
 
 export const personaDomain = [
   "root",        // Master Researcher only
-  "technology",  // Architect, QA, Security, Data Architect, UX, Tech Writer
+  "technology",  // Architect, QA, Security, Cybersecurity, Data Architect, UX, Tech Writer
   "business",    // CEO, Product Manager, Think Bigger
+  "marketing",   // Growth Strategist, Brand Strategist, Content Strategist
 ] as const;
 
 export type PersonaDomain = typeof personaDomain[number];

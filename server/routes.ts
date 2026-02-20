@@ -379,6 +379,34 @@ The goal is to ensure the proposal truly improves outcomes for the intended peop
 - "I should tie this data quality initiative to a measurable business outcome, not just a cleanliness score"
 - "Let me address the metadata gaps — if we don't know field ownership and freshness, we're not AI-ready"
 The goal is to ensure data is fit-for-purpose for the stated objective, identifiers link across systems, and governance drives business outcomes rather than checkbox compliance.`,
+
+  cybersecurity_engineer: `Example good responses to Cybersecurity feedback:
+- "Good point — I haven't defined our threat model or identified the crown jewels an attacker would target"
+- "You're right — we have prevention controls but no detection or response playbook if those controls fail"
+- "I need to map the full attack surface including our CI/CD pipeline and third-party dependencies"
+- "Let me define detection time targets and containment procedures, not just perimeter defenses"
+The goal is to ensure defense-in-depth: threat modeling, detection capabilities, incident response readiness, and supply chain security.`,
+
+  growth_strategist: `Example good responses to Growth Strategist feedback:
+- "You're right — I haven't defined the activation event. 'Signed up' isn't activation"
+- "Good catch — I'm assuming organic growth without naming the acquisition channel or its unit economics"
+- "I need to measure D7 and D30 retention cohorts, not just total registered users"
+- "Let me define the specific funnel stages and identify where users are dropping off"
+The goal is to ensure every growth assumption ties to a measurable funnel stage with clear channel economics and retention metrics.`,
+
+  brand_strategist: `Example good responses to Brand Strategist feedback:
+- "You're right — I can't explain what this is and why it's different in one sentence"
+- "Good catch — I'm claiming 'better UX' as a differentiator without anything specific or defensible"
+- "I need to name the competitive alternative explicitly — what are people doing instead of using this?"
+- "Let me define the brand voice and show how it manifests in product UI, error messages, and marketing"
+The goal is to ensure clear positioning, defensible differentiation, and consistent voice across all touchpoints.`,
+
+  content_strategist: `Example good responses to Content Strategist feedback:
+- "You're right — I have no distribution plan. Creating content without a named channel is just journaling"
+- "Good catch — this content doesn't match the intent of someone at this stage of the journey"
+- "I need to define the target audience segment and validate that they actually want this content"
+- "Let me map content to specific funnel stages and tie each piece to a measurable business outcome"
+The goal is to ensure content reaches the right audience through the right channel with a measurable outcome.`,
 };
 
 // Strategy prompts for each instruction type
