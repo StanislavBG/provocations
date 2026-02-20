@@ -4,10 +4,17 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 
 // Folders — hierarchical organization for documents, owned by Clerk userId
+// Zero-knowledge: folder names are encrypted at rest.
 export const folders = pgTable("folders", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id", { length: 128 }).notNull(),
+  // Legacy plaintext name — kept for backward compatibility with pre-encryption rows.
+  // New folders store "[encrypted]" here; real name is in nameCiphertext.
   name: varchar("name", { length: 200 }).notNull(),
+  // AES-GCM encrypted folder name (base64). Null for legacy rows.
+  nameCiphertext: text("name_ciphertext"),
+  nameSalt: varchar("name_salt", { length: 64 }),
+  nameIv: varchar("name_iv", { length: 32 }),
   parentFolderId: integer("parent_folder_id"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -34,12 +41,18 @@ export const keyVersions = pgTable("key_versions", {
 export type StoredKeyVersion = typeof keyVersions.$inferSelect;
 
 // Documents - server-side encrypted at rest, owned by Clerk userId
+// Zero-knowledge: ALL user-provided text (title + content) is encrypted.
 export const documents = pgTable("documents", {
   id: serial("id").primaryKey(),
   // Clerk user ID - identifies the document owner
   userId: varchar("user_id", { length: 128 }).notNull(),
-  // User-provided title (plaintext metadata)
+  // Legacy plaintext title — kept for backward compatibility with pre-encryption rows.
+  // New documents store "[encrypted]" here; real title is in titleCiphertext.
   title: text("title").notNull(),
+  // AES-GCM encrypted title (base64). Null for legacy rows.
+  titleCiphertext: text("title_ciphertext"),
+  titleSalt: varchar("title_salt", { length: 64 }),
+  titleIv: varchar("title_iv", { length: 32 }),
   // AES-GCM encrypted document content (base64)
   ciphertext: text("ciphertext").notNull(),
   // Random salt used for PBKDF2 key derivation (base64)
@@ -73,4 +86,31 @@ export const userPreferences = pgTable("user_preferences", {
 });
 
 export type UserPreferences = typeof userPreferences.$inferSelect;
+
+// Persona versions — archival system for tracking every version of persona definitions
+export const personaVersions = pgTable("persona_versions", {
+  id: serial("id").primaryKey(),
+  personaId: varchar("persona_id", { length: 64 }).notNull(),
+  version: integer("version").notNull(),
+  definition: text("definition").notNull(), // JSON-serialized Persona object
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type StoredPersonaVersion = typeof personaVersions.$inferSelect;
+
+// Tracking events — captures user interactions without storing user-inputted text
+export const trackingEvents = pgTable("tracking_events", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  sessionId: varchar("session_id", { length: 64 }).notNull(),
+  eventType: varchar("event_type", { length: 64 }).notNull(),
+  personaId: varchar("persona_id", { length: 64 }),
+  templateId: varchar("template_id", { length: 64 }),
+  appSection: varchar("app_section", { length: 64 }),
+  durationMs: integer("duration_ms"),          // for timed events (e.g. document generation)
+  metadata: text("metadata"),                   // JSON string of additional non-PII data
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type StoredTrackingEvent = typeof trackingEvents.$inferSelect;
 

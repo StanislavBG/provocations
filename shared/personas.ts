@@ -1,27 +1,81 @@
-import type { Persona, ProvocationType } from "./schema";
+import type { Persona, ProvocationType, PersonaDomain, PersonaHierarchyNode } from "./schema";
 
 /**
- * Built-in persona definitions.
+ * Built-in persona definitions — organized in a strict hierarchy.
+ *
+ * HIERARCHY:
+ *   Master Researcher (root)
+ *   ├── Business Domain
+ *   │   ├── Think Bigger
+ *   │   ├── CEO
+ *   │   └── Product Manager
+ *   └── Technology Domain
+ *       ├── Architect
+ *       ├── Quality Engineer
+ *       ├── UX Designer
+ *       ├── Tech Writer
+ *       ├── Security Engineer
+ *       └── Data Architect
  *
  * Each persona is a structured JSON object that defines:
  * - Identity: id, label, icon, role, description
  * - Visual: color scheme (text, bg, accent)
  * - Prompts: separate system prompts for challenge and advice generation
  * - Summary: short tooltip descriptions for challenge and advice modes
+ * - Hierarchy: domain, parentId, lastResearchedAt
  *
- * Each persona follows an expanded template:
- * 1. Characteristics (personality traits, non-negotiable behaviors, forbidden behaviors)
- *    — baked into the challenge and advice prompts
- * 2. Challenge (exactly one specific challenge, no advice; reflects the user's objective
- *    and curated document context)
- * 3. Advice (concrete, actionable guidance addressing the challenge; aligned to the
- *    persona's character and personality traits)
+ * The Master Researcher persona operates as a backend orchestrator:
+ * - Generates and refreshes all other personas asynchronously
+ * - Tracks file history to determine when persona definitions are stale (>7 days)
+ * - Synthesizes structured data for domains, professions, skills, and hierarchies
+ * - Validates clarity: ensures job titles/hierarchies are intuitive and accessible
  *
  * Challenge and advice are generated through separate invocations so that
  * advice is not merely a reiteration of the provocation.
  */
 
 export const builtInPersonas: Record<ProvocationType, Persona> = {
+  // ── Root: Master Researcher ──
+  master_researcher: {
+    id: "master_researcher",
+    label: "Master Researcher",
+    icon: "FlaskConical",
+    role: "Orchestrates persona generation, research refresh, and hierarchy management.",
+    description:
+      "The root persona that monitors all other persona definitions, triggers research refreshes when they become stale (>7 days), and synthesizes data across domains, professions, skills, and hierarchies. Operates as a backend role — not user-facing for challenges.",
+    color: {
+      text: "text-indigo-600 dark:text-indigo-400",
+      bg: "bg-indigo-50 dark:bg-indigo-950/30",
+      accent: "#4f46e5",
+    },
+    prompts: {
+      challenge:
+        `As the Master Researcher: Evaluate the completeness of the persona hierarchy for this domain. Are there missing knowledge worker roles that should be represented? Are existing persona definitions stale or misaligned with current industry practices? Challenge the coverage and freshness of the research framework.
+
+INSTRUCTIONS:
+- Identify gaps in domain coverage (missing professions, skills, or characteristics).
+- Question whether existing persona definitions accurately reflect current knowledge worker roles.
+- Push for measurable criteria to evaluate persona relevance and freshness.
+- Do NOT provide advice or solutions.`,
+      advice:
+        `As the Master Researcher: Provide concrete recommendations for improving the persona hierarchy and research coverage.
+
+- Suggest specific new personas that should be added, with domain classification and rationale.
+- Recommend refresh priorities based on staleness and usage frequency.
+- Propose skill schemas and job description structures for new personas.
+- Define clear criteria for when a persona definition needs refreshing.`,
+    },
+    summary: {
+      challenge: "Evaluates persona hierarchy completeness, domain coverage gaps, and definition freshness.",
+      advice: "Recommends new personas, refresh priorities, and structured research improvements.",
+    },
+    isBuiltIn: true,
+    domain: "root",
+    parentId: null,
+    lastResearchedAt: null,
+  },
+
+  // ── Business Domain ──
   thinking_bigger: {
     id: "thinking_bigger",
     label: "Think Big",
@@ -45,6 +99,9 @@ export const builtInPersonas: Record<ProvocationType, Persona> = {
       advice: "Expands vision and outcomes — reach, accessibility, resilience — without changing the core idea.",
     },
     isBuiltIn: true,
+    domain: "business",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
   ceo: {
@@ -95,8 +152,12 @@ INSTRUCTIONS:
       advice: "Recommends 'raise the bar' actions, defines what to fund and why, and requires clear metrics and ownership.",
     },
     isBuiltIn: true,
+    domain: "business",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
+  // ── Technology Domain ──
   architect: {
     id: "architect",
     label: "Architect",
@@ -145,6 +206,9 @@ INSTRUCTIONS:
       advice: "Suggests architectural improvements, cleaner abstractions, and better separation of concerns.",
     },
     isBuiltIn: true,
+    domain: "technology",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
   quality_engineer: {
@@ -179,6 +243,9 @@ INSTRUCTIONS:
       advice: "Suggests acceptance criteria, test strategies, and observable quality measures.",
     },
     isBuiltIn: true,
+    domain: "technology",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
   ux_designer: {
@@ -213,6 +280,9 @@ INSTRUCTIONS:
       advice: "Suggests UI improvements, better onboarding, and clearer navigation paths.",
     },
     isBuiltIn: true,
+    domain: "technology",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
   tech_writer: {
@@ -247,6 +317,9 @@ INSTRUCTIONS:
       advice: "Suggests clearer labels, better explanations, and self-explanatory interfaces.",
     },
     isBuiltIn: true,
+    domain: "technology",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
   product_manager: {
@@ -281,6 +354,9 @@ INSTRUCTIONS:
       advice: "Suggests success metrics, clearer acceptance criteria, and stronger user value propositions.",
     },
     isBuiltIn: true,
+    domain: "business",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
   security_engineer: {
@@ -315,6 +391,9 @@ INSTRUCTIONS:
       advice: "Suggests secure defaults, input validation, and audit trail improvements.",
     },
     isBuiltIn: true,
+    domain: "technology",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 
   data_architect: {
@@ -371,6 +450,9 @@ INSTRUCTIONS:
       advice: "Recommends Key Ring patterns, contextual truth resolution, metadata management, and outcome-driven data governance.",
     },
     isBuiltIn: true,
+    domain: "technology",
+    parentId: "master_researcher",
+    lastResearchedAt: null,
   },
 };
 
@@ -382,22 +464,55 @@ export function getPersonaById(id: string): Persona | undefined {
 }
 
 /**
- * Get all built-in personas as an ordered array.
- * Think Big is listed first as the default/promoted persona.
+ * Get all user-facing personas as an ordered array (excludes master_researcher).
+ * Grouped by domain: Business first, then Technology.
  */
 export function getAllPersonas(): Persona[] {
   const order: ProvocationType[] = [
+    // Business domain
     "thinking_bigger",
     "ceo",
+    "product_manager",
+    // Technology domain
     "architect",
     "data_architect",
     "quality_engineer",
     "ux_designer",
     "tech_writer",
-    "product_manager",
     "security_engineer",
   ];
   return order.map((id) => builtInPersonas[id]);
+}
+
+/**
+ * Get all personas including the master_researcher root.
+ */
+export function getAllPersonasWithRoot(): Persona[] {
+  return Object.values(builtInPersonas);
+}
+
+/**
+ * Get personas filtered by domain.
+ */
+export function getPersonasByDomain(domain: PersonaDomain): Persona[] {
+  return Object.values(builtInPersonas).filter((p) => p.domain === domain);
+}
+
+/**
+ * Build the full persona hierarchy tree rooted at master_researcher.
+ */
+export function getPersonaHierarchy(): PersonaHierarchyNode {
+  const root = builtInPersonas.master_researcher;
+  const children = Object.values(builtInPersonas)
+    .filter((p) => p.parentId === "master_researcher")
+    .map((p) => ({
+      persona: p,
+      children: Object.values(builtInPersonas)
+        .filter((child) => child.parentId === p.id)
+        .map((child) => ({ persona: child, children: [] })),
+    }));
+
+  return { persona: root, children };
 }
 
 /**
@@ -420,4 +535,17 @@ export function getPersonaColors(): Record<string, { text: string; bg: string; a
     colors[id] = persona.color;
   }
   return colors;
+}
+
+/**
+ * Check which personas are stale (not researched in >7 days).
+ * Returns persona IDs that need a research refresh.
+ */
+export function getStalePersonas(thresholdDays = 7): Persona[] {
+  const threshold = Date.now() - thresholdDays * 24 * 60 * 60 * 1000;
+  return Object.values(builtInPersonas).filter((p) => {
+    if (p.id === "master_researcher") return false;
+    if (!p.lastResearchedAt) return true; // never researched
+    return new Date(p.lastResearchedAt).getTime() < threshold;
+  });
 }

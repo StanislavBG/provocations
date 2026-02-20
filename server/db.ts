@@ -67,6 +67,33 @@ export async function ensureTables(): Promise<void> {
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS key_version_id INTEGER REFERENCES key_versions(id);
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
+
+      CREATE TABLE IF NOT EXISTS persona_versions (
+        id SERIAL PRIMARY KEY,
+        persona_id VARCHAR(64) NOT NULL,
+        version INTEGER NOT NULL,
+        definition TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS tracking_events (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        session_id VARCHAR(64) NOT NULL,
+        event_type VARCHAR(64) NOT NULL,
+        persona_id VARCHAR(64),
+        template_id VARCHAR(64),
+        app_section VARCHAR(64),
+        duration_ms INTEGER,
+        metadata TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_user ON tracking_events(user_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_type ON tracking_events(event_type);
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_session ON tracking_events(session_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_created ON tracking_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_persona_versions_persona ON persona_versions(persona_id);
     `);
     console.log("Database tables verified.");
   } catch (err) {
