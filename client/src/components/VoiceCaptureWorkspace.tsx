@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -62,6 +63,50 @@ interface GeneratedQuestion {
 }
 
 // ---------------------------------------------------------------------------
+// Progressive summary schedule
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the summary interval (in seconds) based on elapsed recording time.
+ *
+ * Default progressive scale:
+ *   0–30s   → every 5s  (rapid feedback while ideas form)
+ *   30–60s  → every 15s (settling in)
+ *   1–5min  → every 30s (steady flow)
+ *   5–20min → every 60s (deep work)
+ *   20min+  → every 300s (long sessions, less interruption)
+ *
+ * The schedule can be overridden via admin config.
+ */
+interface SummaryScheduleStep {
+  /** Elapsed seconds threshold (start of this band) */
+  after: number;
+  /** Summary interval in seconds for this band */
+  interval: number;
+}
+
+const DEFAULT_SUMMARY_SCHEDULE: SummaryScheduleStep[] = [
+  { after: 0,    interval: 5 },
+  { after: 30,   interval: 15 },
+  { after: 60,   interval: 30 },
+  { after: 300,  interval: 60 },
+  { after: 1200, interval: 300 },
+];
+
+/** DB persistence interval — always 15 seconds (separate from summary) */
+const DB_PERSIST_INTERVAL_MS = 15_000;
+
+function getSummaryInterval(elapsedSeconds: number, schedule: SummaryScheduleStep[]): number {
+  let interval = schedule[0]?.interval ?? 15;
+  for (const step of schedule) {
+    if (elapsedSeconds >= step.after) {
+      interval = step.interval;
+    }
+  }
+  return interval;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -113,12 +158,31 @@ export function VoiceCaptureWorkspace({
 
   // ── Timer ──
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const elapsedSecondsRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Auto-save ──
-  const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Auto-save (DB persistence — fixed 15s) ──
+  const persistTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [lastSaveTime, setLastSaveTime] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // ── Progressive summary timer ──
+  const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSummaryTimeRef = useRef(0);
+
+  // ── Admin-configurable schedule (loaded from server) ──
+  const { data: serverConfig } = useQuery<{
+    summarySchedule: SummaryScheduleStep[];
+    persistIntervalMs: number;
+  }>({
+    queryKey: ["/api/voice-capture-config"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/voice-capture-config");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+  const summarySchedule = serverConfig?.summarySchedule ?? DEFAULT_SUMMARY_SCHEDULE;
 
   // ── Intentional stop vs auto-restart ──
   const intentionalStopRef = useRef(false);
@@ -149,6 +213,9 @@ export function VoiceCaptureWorkspace({
 
   // Ref for transcript auto-scroll
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  // Current summary interval label for status display
+  const currentSummaryInterval = getSummaryInterval(elapsedSeconds, summarySchedule);
 
   // ── Initialize speech recognition ──
   useEffect(() => {
@@ -261,7 +328,7 @@ export function VoiceCaptureWorkspace({
     try {
       const res = await apiRequest("POST", "/api/summarize-intent", {
         transcript: text,
-        context: "source",
+        context: "voice-capture",
         mode: "summarize",
       });
       const data = await res.json();
@@ -299,7 +366,7 @@ export function VoiceCaptureWorkspace({
     }
   }, [objective]);
 
-  // Keep stable refs for callbacks used inside the interval
+  // Keep stable refs for callbacks used inside timers
   const flushBufferRef = useRef(flushBuffer);
   flushBufferRef.current = flushBuffer;
   const onSaveRef = useRef(onSave);
@@ -311,16 +378,13 @@ export function VoiceCaptureWorkspace({
   const generateQuestionsRef = useRef(generateQuestions);
   generateQuestionsRef.current = generateQuestions;
 
-  // ── Auto-save: flush buffer + persist + summarize every ~30s ──
-  // Only depends on isRecording/isPaused so the interval is stable and
-  // doesn't restart on every transcript word.
+  // ── DB persistence: flush buffer + save at configured interval (default 15s) ──
+  const persistInterval = serverConfig?.persistIntervalMs ?? DB_PERSIST_INTERVAL_MS;
   useEffect(() => {
     if (isRecording && !isPaused) {
-      autoSaveTimerRef.current = setInterval(async () => {
-        // Flush buffer to document state
+      persistTimerRef.current = setInterval(async () => {
         flushBufferRef.current();
 
-        // Persist to storage
         setIsSaving(true);
         try {
           const title = objectiveRef.current || `Voice Capture ${new Date().toLocaleDateString()}`;
@@ -331,21 +395,60 @@ export function VoiceCaptureWorkspace({
         } finally {
           setIsSaving(false);
         }
-
-        // Generate summary + questions using the latest transcript via ref
-        const currentText = totalTranscriptRef.current;
-        generateSummaryRef.current(currentText).then((newSummary) => {
-          if (newSummary) {
-            generateQuestionsRef.current(newSummary);
-          }
-        });
-      }, 30000);
+      }, persistInterval);
     }
 
     return () => {
-      if (autoSaveTimerRef.current) {
-        clearInterval(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
+      if (persistTimerRef.current) {
+        clearInterval(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, [isRecording, isPaused, persistInterval]);
+
+  // ── Progressive summary: schedule next summary based on elapsed time ──
+  const scheduleSummary = useCallback(() => {
+    if (summaryTimerRef.current) {
+      clearTimeout(summaryTimerRef.current);
+      summaryTimerRef.current = null;
+    }
+
+    const elapsed = elapsedSecondsRef.current;
+    const intervalSec = getSummaryInterval(elapsed, summarySchedule);
+    const timeSinceLastSummary = elapsed - lastSummaryTimeRef.current;
+
+    // How many seconds until next summary fires
+    const delayMs = Math.max(0, (intervalSec - timeSinceLastSummary)) * 1000;
+
+    summaryTimerRef.current = setTimeout(async () => {
+      lastSummaryTimeRef.current = elapsedSecondsRef.current;
+
+      const currentText = totalTranscriptRef.current;
+      const newSummary = await generateSummaryRef.current(currentText);
+      if (newSummary) {
+        generateQuestionsRef.current(newSummary);
+      }
+
+      // Schedule the next one (recursive)
+      if (isRecordingRef.current) {
+        scheduleSummary();
+      }
+    }, delayMs);
+  }, [summarySchedule]);
+
+  const scheduleSummaryRef = useRef(scheduleSummary);
+  scheduleSummaryRef.current = scheduleSummary;
+
+  // Start/stop the progressive summary schedule when recording state changes
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      scheduleSummaryRef.current();
+    }
+
+    return () => {
+      if (summaryTimerRef.current) {
+        clearTimeout(summaryTimerRef.current);
+        summaryTimerRef.current = null;
       }
     };
   }, [isRecording, isPaused]);
@@ -354,7 +457,11 @@ export function VoiceCaptureWorkspace({
   useEffect(() => {
     if (isRecording && !isPaused) {
       timerRef.current = setInterval(() => {
-        setElapsedSeconds((s) => s + 1);
+        setElapsedSeconds((s) => {
+          const next = s + 1;
+          elapsedSecondsRef.current = next;
+          return next;
+        });
       }, 1000);
     }
 
@@ -390,6 +497,7 @@ export function VoiceCaptureWorkspace({
     intentionalStopRef.current = false;
     isRecordingRef.current = true;
     transcriptBufferRef.current = "";
+    lastSummaryTimeRef.current = elapsedSecondsRef.current;
 
     try {
       recognitionRef.current.start();
@@ -424,6 +532,7 @@ export function VoiceCaptureWorkspace({
       setIsPaused(false);
       intentionalStopRef.current = false;
       isRecordingRef.current = true;
+      lastSummaryTimeRef.current = elapsedSecondsRef.current;
       try {
         recognitionRef.current?.start();
       } catch {
@@ -489,6 +598,7 @@ export function VoiceCaptureWorkspace({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* ── Top status bar ── */}
       <div className="border-b bg-card/60 px-4 py-2 flex items-center justify-between gap-4">
+        {/* Left: elapsed time + word count + summary schedule indicator */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <Clock className="w-4 h-4" />
@@ -499,8 +609,17 @@ export function VoiceCaptureWorkspace({
             <FileText className="w-4 h-4" />
             <span>{wordCount.toLocaleString()} words</span>
           </div>
+          {isRecording && !isPaused && (
+            <>
+              <div className="w-px h-4 bg-border" />
+              <span className="text-xs text-muted-foreground/70">
+                Summary every {currentSummaryInterval}s
+              </span>
+            </>
+          )}
         </div>
 
+        {/* Right: save button + stop button (red, beside save) */}
         <div className="flex items-center gap-2">
           {lastSaveTime && (
             <span className="text-xs text-muted-foreground">
@@ -521,14 +640,25 @@ export function VoiceCaptureWorkspace({
             )}
             Save
           </Button>
+          {isRecording && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={stopRecording}
+              className="gap-1.5"
+            >
+              <Square className="w-3.5 h-3.5" />
+              Stop
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* ── 3-pane layout ── */}
+      {/* ── 2-pane layout: Transcript (left) | Summary (center/right) ── */}
       <div className="flex-1 flex overflow-hidden">
 
         {/* ── LEFT PANE: Streaming transcript ── */}
-        <div className="w-1/3 min-w-[250px] border-r flex flex-col overflow-hidden">
+        <div className="w-2/5 min-w-[250px] border-r flex flex-col overflow-hidden">
           <ProvokeText
             chrome="container"
             variant="editor"
@@ -546,94 +676,50 @@ export function VoiceCaptureWorkspace({
             }
             className="text-sm leading-relaxed font-serif"
             containerClassName="flex-1 min-h-0"
+            headerActions={
+              !isRecording ? (
+                <Button
+                  size="sm"
+                  onClick={startRecording}
+                  className="gap-1.5"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  Start Recording
+                </Button>
+              ) : isPaused ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={togglePause}
+                  className="gap-1.5"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  Resume
+                </Button>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-xs text-muted-foreground">Recording</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={togglePause}
+                    className="gap-1.5 ml-1 h-6"
+                  >
+                    <Pause className="w-3 h-3" />
+                    Pause
+                  </Button>
+                </div>
+              )
+            }
           />
           <div ref={transcriptEndRef} />
         </div>
 
-        {/* ── CENTER PANE: Recording controls ── */}
-        <div className="flex-1 min-w-[200px] flex flex-col items-center justify-center gap-6 p-6">
-          {/* Recording status */}
-          {isRecording && (
-            <div className="flex items-center gap-2">
-              {isPaused ? (
-                <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                  Paused
-                </span>
-              ) : (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Recording
-                  </span>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Large mic button */}
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            className={`w-28 h-28 rounded-full flex items-center justify-center transition-all duration-300 ${
-              isRecording
-                ? "bg-destructive shadow-md shadow-destructive/30"
-                : "bg-primary hover:scale-105 hover:shadow-lg"
-            }`}
-          >
-            {isRecording ? (
-              <Square className="w-10 h-10 text-destructive-foreground" />
-            ) : (
-              <Mic className="w-10 h-10 text-primary-foreground" />
-            )}
-          </button>
-
-          {/* Action text */}
-          <p className="text-muted-foreground text-center text-sm max-w-xs">
-            {isRecording
-              ? isPaused
-                ? "Paused. Resume or stop recording."
-                : "Listening... Auto-saves every 30s."
-              : "Click to start recording."}
-          </p>
-
-          {/* Pause/Resume button */}
-          {isRecording && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={togglePause}
-              className="gap-1.5"
-            >
-              {isPaused ? (
-                <>
-                  <Play className="w-4 h-4" />
-                  Resume
-                </>
-              ) : (
-                <>
-                  <Pause className="w-4 h-4" />
-                  Pause
-                </>
-              )}
-            </Button>
-          )}
-
-          {/* Live interim (shown only when no transcript yet in left pane) */}
-          {interimText && !totalTranscript.trim() && (
-            <div className="w-full max-w-xs rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">
-                Hearing...
-              </p>
-              <p className="text-xs font-serif leading-relaxed text-foreground/70 italic">
-                {interimText}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* ── RIGHT PANE: Summary + Questions ── */}
-        <div className="w-1/3 min-w-[250px] border-l flex flex-col overflow-hidden">
-          {/* Summary sub-panel */}
-          <div className="flex-1 flex flex-col overflow-hidden border-b">
+        {/* ── RIGHT PANE: Summary (top) + Questions (bottom) — claims center space ── */}
+        <div className="flex-1 min-w-[300px] flex flex-col overflow-hidden">
+          {/* Summary sub-panel (takes ~60% of height) */}
+          <div className="flex-[3] flex flex-col overflow-hidden border-b">
             <ProvokeText
               chrome="container"
               variant="editor"
@@ -646,8 +732,8 @@ export function VoiceCaptureWorkspace({
               showClear={false}
               placeholder={
                 wordCount >= 30
-                  ? "Click refresh to generate a summary"
-                  : "Summary generates after ~30 words"
+                  ? "Summary will generate automatically..."
+                  : "Summary generates after ~30 words of recording"
               }
               className="text-sm leading-relaxed"
               containerClassName="flex-1 min-h-0"
@@ -670,8 +756,8 @@ export function VoiceCaptureWorkspace({
             />
           </div>
 
-          {/* Questions sub-panel */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Questions sub-panel (takes ~40% of height) */}
+          <div className="flex-[2] flex flex-col overflow-hidden">
             <ProvokeText
               chrome="container"
               variant="editor"
