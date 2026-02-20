@@ -156,20 +156,61 @@ All endpoints use Zod validation. Document endpoints require Clerk authenticatio
 
 ## Domain Concepts
 
-### Personas (8 Built-in Perspectives)
+### Persona Hierarchy (14 Built-in Perspectives)
+
+```
+Master Researcher (root) — orchestrates all domains, refreshes every 7 days
+│
+├── Business Domain
+│   ├── Think Bigger         ─  Scale impact: retention, reach, accessibility
+│   ├── CEO                  ─  Mission-first: clarity, accountability, trust
+│   └── Product Manager      ─  Business value: user stories, success metrics
+│
+├── Technology Domain
+│   ├── Architect            ─  System design: boundaries, APIs, data flow
+│   ├── Data Architect       ─  Fit-for-purpose data, Key Ring identifiers
+│   ├── QA Engineer          ─  Testing: edge cases, error handling, reliability
+│   ├── UX Designer          ─  User flows: discoverability, accessibility
+│   ├── Tech Writer          ─  Documentation: clarity, naming, context
+│   ├── Security Engineer    ─  Auth, data privacy, compliance
+│   └── Cybersecurity        ─  Threat modeling, attack surface, incident response
+│
+└── Marketing Domain
+    ├── Growth Strategist    ─  Acquisition, activation, retention, funnel economics
+    ├── Brand Strategist     ─  Positioning, differentiation, voice consistency
+    └── Content Strategist   ─  Audience-channel fit, distribution, SEO, measurement
+```
 
 Each persona has distinct challenge and advice prompts:
 
-| ID | Label | Focus |
-|----|-------|-------|
-| `thinking_bigger` | Think Bigger | Scale impact: retention, cost-to-serve, accessibility |
-| `ceo` | CEO | Mission-first: clarity, accountability, trust |
-| `architect` | Architect | System design: boundaries, APIs, data flow |
-| `quality_engineer` | Quality Engineer | Testing: edge cases, error handling, reliability |
-| `ux_designer` | UX Designer | User flows: discoverability, accessibility, error states |
-| `tech_writer` | Tech Writer | Documentation: clarity, naming, missing context |
-| `product_manager` | Product Manager | Business value: user stories, success metrics |
-| `security_engineer` | Security Engineer | Security: auth, data privacy, compliance |
+| ID | Domain | Label | Focus |
+|----|--------|-------|-------|
+| `thinking_bigger` | business | Think Bigger | Scale impact: retention, cost-to-serve, accessibility |
+| `ceo` | business | CEO | Mission-first: clarity, accountability, trust |
+| `product_manager` | business | Product Manager | Business value: user stories, success metrics |
+| `architect` | technology | Architect | System design: boundaries, APIs, data flow |
+| `data_architect` | technology | Data Architect | Fit-for-purpose data, Key Ring, governance |
+| `quality_engineer` | technology | QA Engineer | Testing: edge cases, error handling, reliability |
+| `ux_designer` | technology | UX Designer | User flows: discoverability, accessibility, error states |
+| `tech_writer` | technology | Tech Writer | Documentation: clarity, naming, missing context |
+| `security_engineer` | technology | Security Engineer | Auth, data privacy, compliance |
+| `cybersecurity_engineer` | technology | Cybersecurity | Threat modeling, attack surface, defense-in-depth |
+| `growth_strategist` | marketing | Growth Strategist | Acquisition, activation, retention, funnel economics |
+| `brand_strategist` | marketing | Brand Strategist | Positioning, differentiation, voice consistency |
+| `content_strategist` | marketing | Content Strategist | Audience-channel fit, distribution, measurement |
+
+### Hierarchy Governance Rules
+
+The Master Researcher is the root agent that governs the entire persona hierarchy:
+
+1. **Freshness**: The Master Researcher must refresh all persona definitions every **7 days**. Personas with `lastResearchedAt` older than 7 days (or `null`) are considered stale and flagged for re-research.
+2. **Domain completeness**: Every domain (business, technology, marketing) must have sufficient coverage for its core knowledge worker roles. The Master Researcher evaluates gaps and proposes new personas when a domain is under-represented.
+3. **No orphans**: Every persona (except the root) must have a valid `parentId` and `domain`. Personas without hierarchy placement are invalid.
+4. **Challenge ≠ Advice**: Each persona has separate `challenge` and `advice` prompts. Challenges identify gaps and weaknesses without offering solutions. Advice is a separate invocation that provides concrete, actionable recommendations. These are never combined.
+5. **Non-negotiable behaviors**: Each persona defines explicit non-negotiable behaviors (what it always does) and forbidden behaviors (what it never does). These constraints ensure consistency across research refreshes.
+6. **Computer-first filter**: Only knowledge worker roles where computer-based tasks are central qualify as personas. Roles with significant non-digital, in-person work are excluded.
+7. **No overlap**: Each persona must challenge a distinct dimension. If two personas overlap significantly, they should be merged or one should be removed.
+8. **Structured definition**: Every persona must include: id, label, icon, role, description, color, prompts (challenge + advice), summary, domain, parentId, and lastResearchedAt.
 
 ### Instruction Types (7 Classifications)
 

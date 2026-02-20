@@ -24,6 +24,7 @@ import {
   Send,
   Blocks,
   ShieldCheck,
+  ShieldAlert,
   Palette,
   BookText,
   Briefcase,
@@ -31,6 +32,9 @@ import {
   Rocket,
   Database,
   FlaskConical,
+  TrendingUp,
+  Megaphone,
+  PenTool,
   Zap,
 } from "lucide-react";
 import { useState, useCallback } from "react";
@@ -40,7 +44,7 @@ import { builtInPersonas } from "@shared/personas";
 // ── Persona metadata (derived from centralized persona definitions) ──
 
 const iconMap: Record<string, typeof Blocks> = {
-  Blocks, ShieldCheck, Palette, BookText, Briefcase, Lock, Rocket, Database, FlaskConical,
+  Blocks, ShieldCheck, ShieldAlert, Palette, BookText, Briefcase, Lock, Rocket, Database, FlaskConical, TrendingUp, Megaphone, PenTool,
 };
 
 const personaIcons: Record<ProvocationType, typeof Blocks> = Object.fromEntries(
