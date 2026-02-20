@@ -84,6 +84,8 @@ export interface IStorage {
     curatedBy?: string | null;
   }): Promise<StoredPersonaOverride>;
   deletePersonaOverride(personaId: string): Promise<void>;
+  // All known user IDs across the system
+  getAllKnownUserIds(): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -685,6 +687,20 @@ export class DatabaseStorage implements IStorage {
 
   async deletePersonaOverride(personaId: string): Promise<void> {
     await db.delete(personaOverrides).where(eq(personaOverrides.personaId, personaId));
+  }
+
+  /** Collect all distinct user IDs from documents, tracking events, and usage metrics */
+  async getAllKnownUserIds(): Promise<string[]> {
+    const [docUsers, trackingUsers, metricUsers] = await Promise.all([
+      db.selectDistinct({ userId: documents.userId }).from(documents),
+      db.selectDistinct({ userId: trackingEvents.userId }).from(trackingEvents),
+      db.selectDistinct({ userId: usageMetrics.userId }).from(usageMetrics),
+    ]);
+    const allIds = new Set<string>();
+    for (const row of docUsers) allIds.add(row.userId);
+    for (const row of trackingUsers) allIds.add(row.userId);
+    for (const row of metricUsers) allIds.add(row.userId);
+    return Array.from(allIds);
   }
 }
 
