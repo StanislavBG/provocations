@@ -3119,7 +3119,9 @@ Output ONLY the JSON — no markdown, no explanation.`,
     }
   });
 
-  // Process a video: extract transcript → summarize → generate infographic spec
+  // Extract transcript from a YouTube video (Step 1 only — transcript extraction)
+  // The client then calls /api/pipeline/summarize and /api/pipeline/infographic
+  // to complete the shared pipeline (same as voice-to-infographic).
   app.post("/api/youtube/process-video", async (req, res) => {
     try {
       const parsed = processVideoRequestSchema.safeParse(req.body);
@@ -3129,7 +3131,7 @@ Output ONLY the JSON — no markdown, no explanation.`,
 
       const { videoId, videoUrl, videoTitle, thumbnailUrl } = parsed.data;
 
-      // Step 1: Generate a realistic transcript for the video
+      // Extract transcript from the video
       const transcriptResponse = await llm.generate({
         maxTokens: 4096,
         temperature: 0.4,
@@ -3154,100 +3156,17 @@ Generate a detailed transcript of this video's content.`,
 
       const transcript = transcriptResponse.text.trim();
 
-      // Step 2: Summarize the transcript (infographic-ready — rich detail for visual sections)
-      const summaryResponse = await llm.generate({
-        maxTokens: 3072,
-        temperature: 0.3,
-        system: `You are an expert content summarizer who prepares material specifically for infographic designers. Your summary must contain enough detail, data, and concrete examples that a designer can create a rich, multi-section infographic without needing to re-read the original transcript.
-
-Analyze the transcript and output ONLY valid JSON with this schema:
-{
-  "summary": "A detailed 3-4 paragraph narrative summary covering the speaker's main thesis, supporting arguments, examples, and conclusions. Include specific numbers, percentages, timeframes, comparisons, and quotes wherever available — these become the visual data points in the infographic.",
-  "keyPoints": ["Point 1 — detailed enough to stand alone as an infographic section heading + body", ...],
-  "tips": ["Actionable tip with specific context on when/how to apply it", ...]
-}
-
-Requirements:
-- summary: 3-4 paragraphs. Include concrete data (numbers, percentages, comparisons, timeframes). Mention the speaker's examples and anecdotes — these become visual callouts. Preserve the logical flow so the infographic can follow the same narrative arc.
-- keyPoints: 5-8 insights. Each must be a complete, self-contained statement (not a fragment). Include quantitative details when available. These become individual sections in the infographic — they must be descriptive enough to stand alone.
-- tips: 4-6 actionable recommendations. Each should explain what to do, why it matters, and when to apply it. These become the "takeaway" blocks in the infographic.
-
-Output ONLY the JSON — no markdown, no explanation.`,
-        messages: [
-          {
-            role: "user",
-            content: `Video: "${videoTitle || "Untitled Video"}"
-Transcript:
-${transcript}`,
-          },
-        ],
-      });
-
-      const summaryJson = summaryResponse.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-      const summaryData = JSON.parse(summaryJson) as GenerateSummaryResponse;
-
-      // Step 3: Generate infographic specification
-      const infographicResponse = await llm.generate({
-        maxTokens: 3072,
-        temperature: 0.4,
-        system: `You are an expert infographic designer. Transform a content summary into a structured infographic specification.
-
-Output ONLY valid JSON with this exact schema:
-{
-  "title": "Infographic main title",
-  "subtitle": "Supporting tagline",
-  "sections": [
-    {
-      "id": "section_1",
-      "heading": "Section Heading",
-      "content": "1-2 sentence description of this section",
-      "icon": "lucide-icon-name",
-      "color": "#hex-color",
-      "dataPoints": ["Data point or statistic"]
-    }
-  ],
-  "colorPalette": ["#color1", "#color2", "#color3", "#color4", "#color5"],
-  "sourceLabel": "YouTube: Channel Name — Video Title"
-}
-
-Requirements:
-- 4-7 sections, each representing a visual block in the infographic
-- Hero section first (the single most impactful insight)
-- Each section has a distinct color from the palette
-- Icons should be valid Lucide React icon names (e.g., "Lightbulb", "Target", "TrendingUp", "Users", "Zap", "Star", "BarChart", "CheckCircle")
-- Color palette should be cohesive and accessible (WCAG AA contrast)
-- sourceLabel identifies the original content source
-
-Output ONLY the JSON — no markdown, no explanation.`,
-        messages: [
-          {
-            role: "user",
-            content: `Video: "${videoTitle || "Untitled Video"}"
-Summary: ${summaryData.summary}
-Key Points: ${summaryData.keyPoints.join("; ")}
-Tips: ${summaryData.tips.join("; ")}
-
-Generate infographic specification.`,
-          },
-        ],
-      });
-
-      const infographicJson = infographicResponse.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-      const infographicSpec = JSON.parse(infographicJson) as InfographicSpec;
-
-      // Return all three artifacts
+      // Return transcript only — client uses shared pipeline for summarize + infographic
       res.json({
         videoId,
         videoTitle: videoTitle || "Untitled Video",
         thumbnailUrl,
         transcript,
-        summary: summaryData,
-        infographic: infographicSpec,
       });
     } catch (error) {
-      console.error("Video processing error:", error);
+      console.error("Video transcript extraction error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to process video", details: errorMessage });
+      res.status(500).json({ error: "Failed to extract transcript", details: errorMessage });
     }
   });
 

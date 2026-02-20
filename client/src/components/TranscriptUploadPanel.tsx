@@ -1,72 +1,72 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import {
+  runPipeline,
+  buildInfographicBrief,
+  type PipelineResult,
+} from "@/lib/infographicPipeline";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { FileAudio, Upload, Loader2, CheckCircle2, FileText, Sparkles } from "lucide-react";
-import type { GenerateSummaryResponse, InfographicSpec } from "@shared/schema";
+import { Upload, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 
 interface TranscriptUploadPanelProps {
   onDocumentUpdate: (markdown: string) => void;
-  onProcessingComplete: (data: {
-    transcript: string;
-    summary: GenerateSummaryResponse;
-    infographic: InfographicSpec;
-  }) => void;
+  onProcessingComplete: (result: PipelineResult) => void;
+  /** Current processing stage label for status display */
+  onStageChange?: (stage: string | null) => void;
 }
 
 export function TranscriptUploadPanel({
   onDocumentUpdate,
   onProcessingComplete,
+  onStageChange,
 }: TranscriptUploadPanelProps) {
   const { toast } = useToast();
   const [transcript, setTranscript] = useState("");
   const [title, setTitle] = useState("");
   const [stage, setStage] = useState<"input" | "summarizing" | "generating" | "complete">("input");
 
-  // Process: summarize → generate infographic
+  // Run the shared pipeline: summarize → generate infographic
   const processMutation = useMutation({
-    mutationFn: async () => {
-      // Step 1: Summarize
+    mutationFn: async (): Promise<PipelineResult> => {
       setStage("summarizing");
-      const summaryRes = await apiRequest("POST", "/api/pipeline/summarize", {
+      onStageChange?.("Summarizing transcript...");
+
+      // Uses the shared pipeline (same code path as YouTube)
+      const result = await runPipeline(
         transcript,
-        title: title || undefined,
-        sourceType: "voice-capture",
-      });
-      const summary = (await summaryRes.json()) as GenerateSummaryResponse;
+        "voice-capture",
+        title || undefined,
+      );
 
-      // Step 2: Generate infographic
       setStage("generating");
-      const infographicRes = await apiRequest("POST", "/api/pipeline/infographic", {
-        summary: summary.summary,
-        keyPoints: summary.keyPoints,
-        tips: summary.tips,
-        title: title || undefined,
-        sourceType: "voice-capture",
-      });
-      const infographic = (await infographicRes.json()) as InfographicSpec;
+      onStageChange?.("Building infographic specification...");
 
-      return { transcript, summary, infographic };
+      return result;
     },
-    onSuccess: (data) => {
+    onSuccess: (result) => {
       setStage("complete");
+      onStageChange?.(null);
 
-      // Build document markdown
-      const markdown = buildTranscriptDocument(data.transcript, data.summary, data.infographic, title);
+      // Build document using shared builder (identical output format as YouTube)
+      const markdown = buildInfographicBrief(result, {
+        sourceType: "voice-capture",
+        title: title || undefined,
+      });
       onDocumentUpdate(markdown);
-      onProcessingComplete(data);
+      onProcessingComplete(result);
 
       toast({
         title: "Infographic Generated",
-        description: `${data.infographic.sections.length} sections created from your transcript`,
+        description: `${result.infographic.sections.length} sections created from your transcript`,
       });
     },
     onError: (error) => {
       setStage("input");
+      onStageChange?.(null);
       toast({
         title: "Processing Failed",
         description: error instanceof Error ? error.message : "Something went wrong",
@@ -210,62 +210,4 @@ export function TranscriptUploadPanel({
       )}
     </div>
   );
-}
-
-/** Build document markdown from transcript processing results */
-function buildTranscriptDocument(
-  transcript: string,
-  summary: GenerateSummaryResponse,
-  infographic: InfographicSpec,
-  title: string,
-): string {
-  const lines: string[] = [];
-
-  lines.push(`# ${infographic.title}`);
-  lines.push(`*${infographic.subtitle}*`);
-  lines.push("");
-  lines.push(`> Source: ${infographic.sourceLabel || `Voice Capture${title ? ` — ${title}` : ""}`}`);
-  lines.push("");
-
-  // Summary
-  lines.push("## Summary");
-  lines.push(summary.summary);
-  lines.push("");
-
-  // Key Points
-  lines.push("## Key Points");
-  for (const kp of summary.keyPoints) {
-    lines.push(`- ${kp}`);
-  }
-  lines.push("");
-
-  // Tips
-  if (summary.tips.length > 0) {
-    lines.push("## Tips & Advice");
-    for (const tip of summary.tips) {
-      lines.push(`- ${tip}`);
-    }
-    lines.push("");
-  }
-
-  // Infographic Specification
-  lines.push("## Infographic Specification");
-  lines.push("");
-  for (const section of infographic.sections) {
-    lines.push(`### ${section.heading}`);
-    lines.push(section.content);
-    if (section.dataPoints && section.dataPoints.length > 0) {
-      for (const dp of section.dataPoints) {
-        lines.push(`- ${dp}`);
-      }
-    }
-    lines.push("");
-  }
-
-  // Color Palette
-  lines.push("## Color Palette");
-  lines.push(infographic.colorPalette.map((c) => `\`${c}\``).join("  "));
-  lines.push("");
-
-  return lines.join("\n");
 }
