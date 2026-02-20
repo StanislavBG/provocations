@@ -13,6 +13,7 @@ import {
   Layers,
   Globe,
   Wand2,
+  Mic,
 } from "lucide-react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -20,7 +21,7 @@ import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { ContextCapturePanel } from "@/components/ContextCapturePanel";
 import { ContextStatusPanel } from "@/components/ContextStatusPanel";
 import { StepProgressBar } from "@/components/StepProgressBar";
-import { prebuiltTemplates, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
+import { prebuiltTemplates, TEMPLATE_CATEGORIES, type PrebuiltTemplate, type TemplateCategory } from "@/lib/prebuiltTemplates";
 import type { ReferenceDocument, ContextItem } from "@shared/schema";
 import { generateId } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ interface TextInputFormProps {
   onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[], templateId?: string) => void;
   onBlankDocument?: (objective: string) => void;
   onStreamingMode?: (objective: string, websiteUrl?: string, templateId?: string) => void;
+  onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -56,7 +58,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
   const [captureUrl, setCaptureUrl] = useState("");
@@ -65,6 +67,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
   const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
+
+  // Category tab state for grouping templates
+  const [activeCategory, setActiveCategory] = useState<TemplateCategory>("build");
 
   // Auto-record flag: set when user clicks mic in context area
   const [autoRecordDraft, setAutoRecordDraft] = useState(false);
@@ -100,6 +105,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
     }
     setActivePrebuilt(template);
     setIsCustomObjective(false);
+    setActiveCategory(template.category);
     onTemplateSelect?.(template.id);
 
     setCardsExpanded(false);
@@ -164,43 +170,66 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             </h2>
           )}
 
-          {/* Compact chip grid — always visible unless a selection collapses it */}
+          {/* Category tab bar + filtered template chips */}
           {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
-            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-              {prebuiltTemplates.map((template) => {
-                const Icon = template.icon;
-                const isActive = activePrebuilt?.id === template.id;
-
-                return (
+            <div className="space-y-2">
+              {/* Category tabs */}
+              <div className="flex items-center gap-1 border-b">
+                {TEMPLATE_CATEGORIES.map((cat) => (
                   <button
-                    key={template.id}
-                    onClick={() => handleSelectPrebuilt(template)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
-                      isActive
-                        ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                        : "border-border hover:border-primary/40 hover:bg-primary/5"
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeCategory === cat.id
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
+                    title={cat.description}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                    <span>{template.title}</span>
-                    {isActive && <Check className="w-3 h-3 text-primary" />}
+                    {cat.label}
                   </button>
-                );
-              })}
+                ))}
+              </div>
 
-              {/* "Custom" chip */}
-              <button
-                onClick={handleSelectCustom}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed text-sm transition-all duration-150 ${
-                  isCustomObjective
-                    ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                    : "border-border hover:border-primary/40 hover:bg-primary/5"
-                }`}
-              >
-                <PenLine className={`w-4 h-4 shrink-0 ${isCustomObjective ? "text-primary" : "text-muted-foreground"}`} />
-                <span>Custom</span>
-                {isCustomObjective && <Check className="w-3 h-3 text-primary" />}
-              </button>
+              {/* Filtered template chips */}
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                {prebuiltTemplates
+                  .filter((t) => t.category === activeCategory)
+                  .map((template) => {
+                    const Icon = template.icon;
+                    const isActive = activePrebuilt?.id === template.id;
+
+                    return (
+                      <button
+                        key={template.id}
+                        onClick={() => handleSelectPrebuilt(template)}
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
+                          isActive
+                            ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
+                            : "border-border hover:border-primary/40 hover:bg-primary/5"
+                        }`}
+                      >
+                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                        <span>{template.title}</span>
+                        {isActive && <Check className="w-3 h-3 text-primary" />}
+                      </button>
+                    );
+                  })}
+
+                {/* "Custom" chip — shown in every category */}
+                <button
+                  onClick={handleSelectCustom}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed text-sm transition-all duration-150 ${
+                    isCustomObjective
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
+                      : "border-border hover:border-primary/40 hover:bg-primary/5"
+                  }`}
+                >
+                  <PenLine className={`w-4 h-4 shrink-0 ${isCustomObjective ? "text-primary" : "text-muted-foreground"}`} />
+                  <span>Custom</span>
+                  {isCustomObjective && <Check className="w-3 h-3 text-primary" />}
+                </button>
+              </div>
             </div>
           )}
 
@@ -259,11 +288,49 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, isLo
             <h2 className="shrink-0 text-base font-semibold">
               {activePrebuilt?.id === "streaming"
                 ? "Describe what you're capturing requirements for"
-                : "Provide your starting material"}
+                : activePrebuilt?.id === "voice-capture"
+                  ? "Describe what you're recording"
+                  : "Provide your starting material"}
             </h2>
           )}
 
-          {activePrebuilt?.id === "streaming" && onStreamingMode ? (
+          {activePrebuilt?.id === "voice-capture" && onVoiceCaptureMode ? (
+            <div className="space-y-3">
+              <ProvokeText
+                chrome="container"
+                label="Session topic"
+                labelIcon={Target}
+                description="What is this recording session about? Meeting notes, brainstorm, interview, etc."
+                id="voice-capture-objective"
+                placeholder="Team standup meeting... Product brainstorm... User interview..."
+                className="text-sm leading-relaxed font-serif"
+                value={objective}
+                onChange={setObjective}
+                minRows={2}
+                maxRows={4}
+                autoFocus
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setObjective}
+                textProcessor={(text, mode) =>
+                  processText(text, mode, mode === "clean" ? "objective" : undefined)
+                }
+              />
+
+              <Button
+                onClick={() => onVoiceCaptureMode(
+                  objective.trim() || "Voice capture session",
+                  activePrebuilt?.id,
+                )}
+                disabled={isLoading}
+                size="lg"
+                className="w-full gap-2"
+              >
+                <Mic className="w-4 h-4" />
+                Start Voice Capture
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : activePrebuilt?.id === "streaming" && onStreamingMode ? (
             <div className="space-y-3">
               <ProvokeText
                 chrome="container"
