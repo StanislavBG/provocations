@@ -90,7 +90,7 @@ export function YouTubeChannelInput({
     },
     onSuccess: (result) => {
       setProcessingVideoId(null);
-      setProcessedVideoIds((prev) => new Set([...prev, result.videoId]));
+      setProcessedVideoIds((prev) => new Set([...Array.from(prev), result.videoId]));
       setProcessedResults((prev) => [...prev, result]);
       onVideoProcessed(result);
 

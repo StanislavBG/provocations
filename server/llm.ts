@@ -1,18 +1,18 @@
 /**
- * LLM provider abstraction — OpenAI via Replit AI Integrations.
+ * LLM provider — Anthropic Claude (exclusive).
  *
- * Uses Replit's built-in environment variables:
- *   - AI_INTEGRATIONS_OPENAI_API_KEY
- *   - AI_INTEGRATIONS_OPENAI_BASE_URL
+ * Uses environment variables (both set for redundancy):
+ *   - ANTHROPIC_API_KEY
+ *   - ANTHROPIC_KEY
  *
- * No API key needed on your end — usage is billed to your Replit credits.
+ * All LLM calls in the application go through this module.
  *
  * Usage:
  *   const result = await llm.generate({ system, messages, maxTokens, temperature });
  *   const stream = llm.stream({ system, messages, maxTokens });
  */
 
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -35,77 +35,78 @@ export interface LLMResponse {
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI client (Replit AI Integrations)
+// Anthropic client
 // ---------------------------------------------------------------------------
 
-let _openaiClient: OpenAI | null = null;
+let _anthropicClient: Anthropic | null = null;
 
-function getOpenAI(): OpenAI {
-  if (_openaiClient) return _openaiClient;
+function getAnthropic(): Anthropic {
+  if (_anthropicClient) return _anthropicClient;
 
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_KEY;
 
-  if (!apiKey || !baseURL) {
+  if (!apiKey) {
     throw new Error(
-      "OpenAI AI Integration not configured. " +
-      "Ensure AI_INTEGRATIONS_OPENAI_API_KEY and AI_INTEGRATIONS_OPENAI_BASE_URL are set " +
-      "(these are provided automatically by Replit AI Integrations)."
+      "Anthropic API key not configured. " +
+      "Set ANTHROPIC_API_KEY (or ANTHROPIC_KEY) in your Replit secrets."
     );
   }
 
-  _openaiClient = new OpenAI({ apiKey, baseURL });
-  return _openaiClient;
+  _anthropicClient = new Anthropic({ apiKey });
+  return _anthropicClient;
 }
 
-const MODEL = "gpt-4o";
+const MODEL = "claude-sonnet-4-5-20250929";
 
 // ---------------------------------------------------------------------------
-// OpenAI implementation
+// Anthropic implementation
 // ---------------------------------------------------------------------------
 
-async function openaiGenerate(req: LLMRequest): Promise<LLMResponse> {
-  const client = getOpenAI();
+async function anthropicGenerate(req: LLMRequest): Promise<LLMResponse> {
+  const client = getAnthropic();
 
-  const response = await client.chat.completions.create({
+  const response = await client.messages.create({
     model: MODEL,
     max_tokens: req.maxTokens,
     temperature: req.temperature,
-    messages: [
-      { role: "system", content: req.system },
-      ...req.messages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-    ],
+    system: req.system,
+    messages: req.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
   });
 
-  const text = response.choices[0]?.message?.content ?? "";
+  const text = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("");
+
   return { text };
 }
 
-async function* openaiStream(
+async function* anthropicStream(
   req: LLMRequest
 ): AsyncGenerator<string, void, unknown> {
-  const client = getOpenAI();
+  const client = getAnthropic();
 
-  const stream = await client.chat.completions.create({
+  const stream = client.messages.stream({
     model: MODEL,
     max_tokens: req.maxTokens,
     temperature: req.temperature,
-    stream: true,
-    messages: [
-      { role: "system", content: req.system },
-      ...req.messages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-    ],
+    system: req.system,
+    messages: req.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
   });
 
-  for await (const chunk of stream) {
-    const text = chunk.choices[0]?.delta?.content;
-    if (text) yield text;
+  for await (const event of stream) {
+    if (
+      event.type === "content_block_delta" &&
+      event.delta.type === "text_delta"
+    ) {
+      yield event.delta.text;
+    }
   }
 }
 
@@ -116,11 +117,11 @@ async function* openaiStream(
 export const llm = {
   /** Non-streaming generation */
   async generate(req: LLMRequest): Promise<LLMResponse> {
-    return openaiGenerate(req);
+    return anthropicGenerate(req);
   },
 
   /** Streaming generation — yields text chunks */
   stream(req: LLMRequest): AsyncGenerator<string, void, unknown> {
-    return openaiStream(req);
+    return anthropicStream(req);
   },
 };
