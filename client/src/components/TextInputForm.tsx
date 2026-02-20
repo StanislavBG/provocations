@@ -26,6 +26,8 @@ import { ContextCapturePanel } from "@/components/ContextCapturePanel";
 import { ContextStatusPanel } from "@/components/ContextStatusPanel";
 import { StepProgressBar } from "@/components/StepProgressBar";
 import { prebuiltTemplates, TEMPLATE_CATEGORIES, type PrebuiltTemplate, type TemplateCategory } from "@/lib/prebuiltTemplates";
+import { AppTileCarousel } from "@/components/AppTileCarousel";
+import { useAppFavorites } from "@/hooks/use-app-favorites";
 import type { ReferenceDocument, ContextItem } from "@shared/schema";
 import { generateId } from "@/lib/utils";
 
@@ -81,6 +83,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
   // Auto-record flag: set when user clicks mic in context area
   const [autoRecordDraft, setAutoRecordDraft] = useState(false);
+
+  // App favorites & ratings (localStorage)
+  const { favorites, ratings, toggleFavorite, setRating } = useAppFavorites();
 
   // Ref for scrolling back to top on selection
   const stepOneRef = useRef<HTMLDivElement>(null);
@@ -287,6 +292,20 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             />
           )}
         </div>
+
+        {/* ── APP TILE CAROUSEL — fills bottom 2/3 when no template selected ── */}
+        {!hasObjectiveType && (
+          <div className="flex-1 min-h-0 flex flex-col justify-start pt-2">
+            <AppTileCarousel
+              templates={prebuiltTemplates}
+              favorites={favorites}
+              ratings={ratings}
+              onSelect={handleSelectPrebuilt}
+              onToggleFavorite={toggleFavorite}
+              onRate={setRating}
+            />
+          </div>
+        )}
 
         {/* ── STEP TWO: Your context ── */}
         {hasObjectiveType && (

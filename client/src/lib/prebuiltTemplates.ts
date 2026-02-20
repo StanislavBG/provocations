@@ -27,6 +27,10 @@ export interface PrebuiltTemplate {
   shortLabel: string; // compact label for quick-select buttons
   subtitle: string;
   description: string;
+  /** Step-by-step instructions for a first-time user */
+  howTo: string;
+  /** Concrete examples of when to use this application */
+  useCases: string[];
   icon: ComponentType<{ className?: string }>; // lucide icon component — single source of truth
   objective: string;
   starterText: string;
@@ -47,6 +51,12 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     subtitle: "AIM framework, any format",
     description:
       "For when you need to write a clear, high-quality prompt for an AI tool. Uses the AIM framework (Actor, Input, Mission) to structure your thinking. Write in whatever format feels natural — the AI will push you on clarity and structure so the resulting prompt gets the best possible output.",
+    howTo: "Type or dictate what you need an AI to do. The system will organize your words into three sections: Actor (who the AI should be), Input (the context it needs), and Mission (what it should produce). Answer the guided questions on the left to fill in each section.",
+    useCases: [
+      "Writing a ChatGPT prompt that gives consistent results",
+      "Creating a reusable prompt template for your team",
+      "Turning a vague idea into a specific AI instruction",
+    ],
     icon: PencilLine,
     objective:
       "Write a clear, structured prompt using the AIM framework (Actor, Input, Mission) that an AI can execute with precision",
@@ -73,6 +83,12 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
     subtitle: "SQL analysis, schema-aware optimization",
     description:
       "For analyzing and optimizing complex SQL queries. Paste a query (and optionally your database schema) and the system breaks it into components — SELECT clauses, JOINs, subqueries — with explanations, optimization suggestions, and schema-aware insights. Provocations challenge your query's readability, performance, and correctness.",
+    howTo: "Paste your SQL query into the text area. Optionally add your database schema (CREATE TABLE statements) as context. The system breaks your query into pieces — SELECT, JOINs, WHERE — explains each one, and suggests improvements for speed and readability.",
+    useCases: [
+      "Optimizing a slow database query before it goes to production",
+      "Understanding a complex query someone else wrote",
+      "Checking if your query has bugs or missing indexes",
+    ],
     icon: DatabaseZap,
     objective:
       "Help the analyst groom their SQL query for performance, readability, and improved visibility. Provide constructive, non-judgmental feedback — frame suggestions as improvements, not criticisms. The document IS the SQL query itself.",
@@ -181,6 +197,12 @@ Track each modification with a brief description of what changed.`,
     subtitle: "Incremental feature, enterprise-grade",
     description:
       "For shipping an incremental feature in a software product. Uses a semi-structured format: who is the user, what's their workflow, what changes, and what does done look like. Provocations come from your toughest colleagues — the people who will poke holes in your spec before engineering starts.",
+    howTo: "Answer four questions: Who is the user? What do they do today? What's broken? What should the new experience look like? The system builds a structured requirements document from your answers, then expert personas challenge your assumptions before engineering starts.",
+    useCases: [
+      "Writing a feature spec before handing it to developers",
+      "Defining acceptance criteria for a sprint ticket",
+      "Documenting a bug fix with clear scope and edge cases",
+    ],
     icon: ClipboardList,
     objective:
       "Write a clear product requirements document for an incremental feature with defined user, workflow, scope, and acceptance criteria",
@@ -243,6 +265,12 @@ What specifically changes for the user? Walk through the new flow step by step.
     subtitle: "Full SaaS spec from scratch",
     description:
       "Starting from zero? This mode walks you through the questions needed to build a complete requirement document for a new SaaS application. It starts broad (what problem, who's the user) and progressively drills into specifics (data model, auth, deployment). By the end, you'll have a spec an AI or a team can build from.",
+    howTo: "Describe your app idea in one sentence, then answer guided questions about users, features, and technology. The system progressively builds a full specification — from vision down to API endpoints and database schema — that a developer or AI can build from directly.",
+    useCases: [
+      "Turning a startup idea into a buildable technical spec",
+      "Scoping a side project before writing any code",
+      "Creating a brief for a freelance developer or agency",
+    ],
     icon: Rocket,
     objective:
       "Write a comprehensive application specification for a new SaaS product that covers users, features, technical architecture, and deployment",
@@ -328,6 +356,12 @@ Key endpoints the backend needs:
     subtitle: "Screenshots & annotations to requirements",
     description:
       "Capture screenshots, annotate them, and transform your observations into structured requirements. An agent asks sequential questions — exploring what you've captured — until the spec is crystal clear. The output is a markdown requirements document.",
+    howTo: "Optionally paste a website URL to load it in the built-in browser. Take screenshots, draw annotations on them, and describe what you see. An AI agent asks follow-up questions about your captures until the requirements document is complete.",
+    useCases: [
+      "Documenting UI bugs with annotated screenshots",
+      "Capturing requirements from an existing website you want to improve",
+      "Creating a visual spec for a redesign by marking up the current design",
+    ],
     icon: Radio,
     objective:
       "Discover and refine requirements through captured screenshots, annotations, and iterative questioning",
@@ -356,6 +390,12 @@ Key endpoints the backend needs:
     subtitle: "Structured academic or exploratory writing",
     description:
       "For writing a research paper or structured analysis. Guides you through defining a thesis, reviewing existing work, presenting methodology and findings, and drawing conclusions. Provocations come from reviewers and peers who will challenge your rigor, originality, and clarity.",
+    howTo: "Start with your research question or thesis. Answer questions about existing literature, your methodology, and your findings. The system builds a structured paper with Abstract, Introduction, Literature Review, Methodology, Findings, Discussion, and Conclusion — then peer reviewers challenge your rigor.",
+    useCases: [
+      "Writing an academic paper with proper structure",
+      "Organizing research findings into a coherent argument",
+      "Preparing a structured analysis or white paper for work",
+    ],
     icon: GraduationCap,
     objective:
       "Write a well-structured research paper with a clear thesis, supporting evidence, methodology, findings, and conclusions",
@@ -454,6 +494,12 @@ What questions remain open? What should be explored next?
     subtitle: "Character, role, or AI agent profile",
     description:
       "For defining a persona, character, or AI agent in structured detail. Captures identity, motivations, behavioral traits, communication style, expertise, constraints, and interaction patterns. The output is a complete profile — usable as a character brief, user persona, or agent system prompt.",
+    howTo: "Name your persona and describe their role. Answer questions about their personality, expertise, communication style, and boundaries. The system builds a complete profile covering identity, motivations, behavior patterns, and example interactions — ready to use as an AI system prompt or character brief.",
+    useCases: [
+      "Creating a custom AI assistant with a specific personality",
+      "Defining a user persona for product design",
+      "Building a character profile for creative writing or games",
+    ],
     icon: UserRoundCog,
     objective:
       "Write a complete, structured persona definition covering identity, motivations, expertise, behavioral traits, communication style, and constraints",
@@ -564,6 +610,12 @@ Typical way they end an interaction.
     subtitle: "Capture, organize, and build context",
     description:
       "For building a rich context library around a topic. Capture links, excerpts, notes, and references — then let the AI help you organize, cross-reference, and identify gaps. The output is a structured research brief you can feed into any other app or project. Perfect for pre-work before writing a PRD, paper, or strategy doc.",
+    howTo: "Add links, paste text excerpts, or upload files as context items. Describe what you're researching and what gaps you're trying to fill. The system organizes your sources, cross-references them, identifies contradictions and gaps, and produces a structured research brief.",
+    useCases: [
+      "Gathering background material before writing a PRD or proposal",
+      "Organizing notes from multiple sources into one place",
+      "Building a knowledge base for a project or decision",
+    ],
     icon: BookOpenCheck,
     objective:
       "Build a structured research context by capturing, organizing, and cross-referencing sources, notes, and references into a coherent knowledge base",
@@ -646,6 +698,12 @@ Organized collection of reusable context items that can be shared with other pro
     subtitle: "Speak your ideas, structure them later",
     description:
       "For when your ideas flow better out loud than on a keyboard. Start by talking — ramble, brainstorm, think out loud — and the AI captures, cleans, and structures your spoken thoughts into organized content. No typing required to get started. Perfect for early ideation, meeting summaries, brain dumps, or when you're on the go.",
+    howTo: "Describe the session topic (e.g. 'team standup' or 'product brainstorm'), then click Start. Speak naturally — ramble, pause, think out loud. The system records, transcribes, and organizes your words into key points, action items, decisions, and a structured summary.",
+    useCases: [
+      "Turning a meeting into organized notes with action items",
+      "Brain-dumping ideas on a walk and structuring them later",
+      "Recording a user interview and extracting insights",
+    ],
     icon: Mic,
     objective:
       "Capture spoken ideas and transform them into a structured, well-organized document that preserves the speaker's intent and key points",
@@ -706,6 +764,12 @@ What needs to happen next based on this capture?`,
     subtitle: "Interactive AI conversation application",
     description:
       "For designing an interactive conversational AI application. Covers the full product surface: conversation flow, three-pane layout, configurable controls (tone, topics, humor), dynamic summaries, accessibility, and ethical safeguards. Provocations challenge your UX decisions, privacy design, and whether the conversation experience actually feels natural.",
+    howTo: "Describe the kind of conversations your AI should support and who will use it. Answer questions about tone, topic boundaries, and layout preferences. The system builds a full product spec covering conversation flow, controls, privacy, accessibility, and a three-pane layout design.",
+    useCases: [
+      "Designing a customer support chatbot with guardrails",
+      "Specifying a conversational AI product for investors or developers",
+      "Planning the UX and safety features for an AI chat interface",
+    ],
     icon: MessageSquare,
     objective:
       "Design a complete conversational AI application with engaging interactions, configurable controls, dynamic summaries, and a thoughtful three-pane layout",
@@ -815,6 +879,12 @@ The application redefines interactive conversations by merging advanced natural 
     subtitle: "Channel videos to visual summaries",
     description:
       "Input a YouTube channel URL and the system fetches the latest videos, extracts transcripts automatically, summarizes key points, tips, and advice, then generates a detailed infographic specification — all without manual intervention. Perfect for turning video knowledge into structured, shareable visual content.",
+    howTo: "Paste a YouTube channel URL and describe what insights you're looking for. The system fetches the latest videos, extracts transcripts automatically, summarizes key points and tips, then generates a detailed infographic specification with sections, colors, and icons.",
+    useCases: [
+      "Turning a tutorial series into a shareable visual summary",
+      "Extracting key tips from a thought leader's channel",
+      "Creating infographic content from video research",
+    ],
     icon: Youtube,
     objective:
       "Transform YouTube video content into structured infographic specifications by extracting transcripts, summarizing key insights, and generating visual layouts",
@@ -891,6 +961,12 @@ How sections are ordered — most impactful insight first, supporting details be
     subtitle: "Voice transcripts to visual summaries",
     description:
       "Upload a transcript from your voice capture sessions — meetings, lectures, brainstorms — and the system summarizes the content into key points, tips, and advice, then generates a detailed infographic specification automatically. No design skills needed. The same processing pipeline as YouTube content, optimized for spoken-word transcripts.",
+    howTo: "Paste a transcript or upload a .txt file from any voice recording — meeting, lecture, interview. Describe what the session was about. The system summarizes the content into key points and tips, then generates a full infographic specification with layout, colors, and icons.",
+    useCases: [
+      "Turning meeting notes into a visual one-pager for the team",
+      "Creating an infographic from a lecture or conference talk",
+      "Producing shareable visual content from interview transcripts",
+    ],
     icon: FileAudio,
     objective:
       "Transform voice-generated transcripts into structured infographic specifications by summarizing key insights, tips, and advice into a visual layout",
