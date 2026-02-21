@@ -17,6 +17,7 @@ import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToo
 import { ImagePreviewPanel } from "@/components/ImagePreviewPanel";
 import { DEFAULT_MODEL_CONFIG, type ModelConfig } from "@/components/ModelConfigPanel";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
+import { AppSidebar } from "@/components/AppSidebar";
 import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
@@ -47,7 +48,6 @@ import {
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
 import { ScreenCaptureButton, type CaptureAnnotation } from "@/components/ScreenCaptureButton";
 import {
-  Sparkles,
   RotateCcw,
   MessageCircleQuestion,
   GitCompare,
@@ -139,6 +139,9 @@ export default function Workspace() {
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
+
+  // Sidebar collapsed state — persistent left nav
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Model configuration state — used by text-to-infographic
   const [modelConfig, setModelConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
@@ -1906,9 +1909,23 @@ RULES:
     </div>
   );
 
-  // ── Unified Layout — persistent global bar across all phases ──
+  // ── Unified Layout — persistent sidebar + global bar ──
 
   const isStandardWorkspace = !isInputPhase && !isVoiceCapture;
+
+  // Handle app selection from sidebar
+  const handleSidebarSelect = useCallback((template: { id: string; objective: string; category: string }) => {
+    if (document.rawText.trim() && selectedTemplateId && template.id !== selectedTemplateId) {
+      setSelectedTemplateId(template.id);
+      const config = getAppFlowConfig(template.id);
+      setActiveToolboxApp(config.defaultToolboxTab as ToolboxApp);
+      return;
+    }
+    setSelectedTemplateId(template.id);
+    if (!objective) setObjective(template.objective);
+    const config = getAppFlowConfig(template.id);
+    setActiveToolboxApp(config.defaultToolboxTab as ToolboxApp);
+  }, [document.rawText, selectedTemplateId, objective]);
 
   return (
     <div className="h-screen flex flex-col">
@@ -1916,10 +1933,11 @@ RULES:
       <header className="border-b bg-card shrink-0">
         <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
           <div className="flex items-center gap-3">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <h1 className="font-semibold text-lg">
-              {isVoiceCapture ? "Voice Capture" : "Provocations"}
-            </h1>
+            {selectedTemplateName && (
+              <Badge variant="outline" className="text-xs">
+                {selectedTemplateName}
+              </Badge>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1981,7 +1999,7 @@ RULES:
             </span>
             <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
-        ) : (
+        ) : isStandardWorkspace ? (
           <div className="border-t px-4 py-3 space-y-3">
             <ProvokeText
               chrome="container"
@@ -2034,7 +2052,7 @@ RULES:
               onVoiceTranscript={(text) => setSecondaryObjective(text)}
             />
           </div>
-        ))}
+        ) : null)}
 
         {/* Voice capture objective bar */}
         {isVoiceCapture && objective && (
@@ -2064,6 +2082,21 @@ RULES:
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Main layout: Sidebar + Content ── */}
+      <div className="flex-1 flex flex-row overflow-hidden">
+        {/* Persistent left sidebar — app navigation */}
+        {!isMobile && (
+          <AppSidebar
+            selectedAppId={selectedTemplateId}
+            onSelectApp={handleSidebarSelect}
+            collapsed={sidebarCollapsed}
+            onCollapsedChange={setSidebarCollapsed}
+          />
+        )}
+
+        {/* Main content area — renders current app experience */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
       {/* ── Phase-specific content ── */}
       {inputPhaseContent}
@@ -2239,6 +2272,9 @@ RULES:
 
       </>
       )}
+
+        </div>{/* end main content area */}
+      </div>{/* end sidebar + content row */}
 
       <StoragePanel
         isOpen={showStoragePanel}
