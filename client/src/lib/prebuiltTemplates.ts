@@ -838,65 +838,63 @@ How sections are ordered — most impactful insight first, supporting details be
     ],
   },
   {
-    id: "voice-to-infographic",
+    id: "text-to-infographic",
     category: "capture",
-    title: "Voice to Infographic",
-    shortLabel: "Voice → Visual",
-    subtitle: "Voice transcripts to visual summaries",
+    title: "Text to Infographic",
+    shortLabel: "Text → Visual",
+    subtitle: "Text descriptions to visual infographics",
     description:
-      "Upload a transcript from your voice capture sessions — meetings, lectures, brainstorms — and the system summarizes the content into key points, tips, and advice, then generates a detailed infographic specification automatically. No design skills needed. The same processing pipeline as YouTube content, optimized for spoken-word transcripts.",
-    howTo: "Paste a transcript or upload a .txt file from any voice recording — meeting, lecture, interview. Describe what the session was about. The system summarizes the content into key points and tips, then generates a full infographic specification with layout, colors, and icons.",
+      "Write a textual description of the infographic you want — layout, sections, data points, color palette — and generate a visual from it. Expert personas suggest improvements to your description before you generate. No design skills needed.",
+    howTo: "Write or paste a textual description of your infographic — what it should contain, how it should look, who it's for. Expert personas will suggest refinements. When you're happy with the description, click Generate Image to create the visual.",
     useCases: [
-      "Turning meeting notes into a visual one-pager for the team",
-      "Creating an infographic from a lecture or conference talk",
-      "Producing shareable visual content from interview transcripts",
+      "Creating an infographic from a written brief or outline",
+      "Describing a data visualization for a report or presentation",
+      "Producing shareable visual content from text descriptions",
     ],
     icon: FileAudio,
     objective:
-      "Transform voice-generated transcripts into structured infographic specifications by summarizing key insights, tips, and advice into a visual layout",
+      "Create a detailed infographic from a textual description by refining the layout, data points, and visual design with expert persona suggestions",
     starterText: "",
     draftQuestions: [
-      "What kind of content does the transcript cover — a meeting, lecture, interview, or brainstorm?",
-      "What are the 2-3 most important takeaways you remember?",
-      "Who will see the infographic — your team, a client, social media?",
-      "Should the infographic focus on action items, key insights, or a narrative summary?",
+      "What is the main topic or message of your infographic?",
+      "What are the 2-3 key data points or sections it should contain?",
+      "Who is the target audience — your team, clients, social media followers?",
+      "What visual style are you going for — corporate, playful, minimalist, data-heavy?",
     ],
-    templateContent: `# Infographic Brief
+    templateContent: `# Infographic Description
 
-## Source
-### Session Type
-Meeting / Lecture / Interview / Brainstorm / Personal notes
+## Overview
+### Topic
+What is this infographic about?
 
-### Context
-What was the session about and who participated?
+### Audience
+Who will see this and what should they take away?
 
-## Transcript Summary
-### Key Points
-The most important ideas from the spoken content, ranked by impact.
+## Content Sections
+### Hero Insight
+The single most important point — the headline of the infographic.
 
-### Tips & Advice
-Actionable takeaways the audience can apply immediately.
+### Supporting Points
+2-5 key facts, tips, or data points that support the hero insight.
 
-### Decisions & Action Items
-Concrete decisions made or tasks assigned during the session.
+### Call to Action
+What should the viewer do after seeing this?
 
-## Infographic Layout
+## Visual Design
 ### Title & Subtitle
-The headline and supporting tagline for the infographic.
+The headline and supporting tagline.
 
-### Sections
-Each visual block in the infographic with heading, content, and suggested icon.
+### Layout
+Describe the visual flow — top to bottom, left to right, circular, etc.
 
 ### Color Palette
-Suggested colors that match the content tone.
+Suggested colors that match the tone and audience.
+
+### Icons & Graphics
+Key visual elements — charts, icons, illustrations, photos.
 
 ### Visual Hierarchy
-How sections are ordered — most impactful insight first, supporting details below.
-
-## Artifacts
-- Uploaded Transcript
-- Summary (auto-generated)
-- Infographic Spec (auto-generated)`,
+How sections are ordered — most impactful insight first, supporting details below.`,
     provocationSources: [
       "Content Strategist",
       "UX Designer",

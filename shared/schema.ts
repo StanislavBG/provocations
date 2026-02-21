@@ -101,7 +101,7 @@ export const templateIds = [
   "research-context",
   "voice-capture",
   "youtube-to-infographic",
-  "voice-to-infographic",
+  "text-to-infographic",
 ] as const;
 
 export type TemplateId = typeof templateIds[number];
