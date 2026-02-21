@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef, useState, useEffect } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { Star, Heart, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
@@ -217,7 +217,6 @@ function DotIndicator({
 // ---------------------------------------------------------------------------
 
 const VISIBLE_COUNT = 6;
-const ROTATION_INTERVAL_MS = 5000;
 
 interface AppTileCarouselProps {
   templates: PrebuiltTemplate[];
@@ -237,8 +236,6 @@ export function AppTileCarousel({
   onRate,
 }: AppTileCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const ordered = useMemo(
     () => orderTemplates(templates, favorites),
@@ -275,27 +272,11 @@ export function AppTileCarousel({
     setCurrentIndex(index % totalSlides);
   }, [totalSlides]);
 
-  // Auto-rotation timer
-  useEffect(() => {
-    if (isPaused || totalSlides <= VISIBLE_COUNT) return;
-
-    timerRef.current = setInterval(goNext, ROTATION_INTERVAL_MS);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPaused, goNext, totalSlides]);
-
-  // Pause on hover, resume on leave
-  const handleMouseEnter = useCallback(() => setIsPaused(true), []);
-  const handleMouseLeave = useCallback(() => setIsPaused(false), []);
-
   if (totalSlides === 0) return null;
 
   return (
     <div
       className="w-full flex flex-col flex-1 min-h-0"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
     >
       {/* Header with nav buttons */}
       <div className="flex items-center justify-between px-1 pb-3 shrink-0">
