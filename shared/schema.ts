@@ -100,7 +100,6 @@ export const templateIds = [
   "persona-definition",
   "research-context",
   "voice-capture",
-  "conversational-ai",
   "youtube-to-infographic",
   "voice-to-infographic",
 ] as const;
