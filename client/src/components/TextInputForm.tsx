@@ -210,11 +210,90 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className={`w-full mx-auto flex flex-col flex-1 min-h-0 px-3 md:px-6 py-4 gap-3 ${
-        hasObjectiveType ? "overflow-y-auto" : "overflow-hidden"
-      } ${isWritePrompt ? "" : "max-w-6xl"}`}>
+      {/* ── LANDING PAGE: horizontal layout when no template selected ── */}
+      {!hasObjectiveType ? (
+        <div className="w-full h-full flex flex-col md:flex-row overflow-x-auto overflow-y-hidden">
+          {/* Left panel: heading + category tabs + template chips */}
+          <div className="shrink-0 w-full md:w-80 lg:w-96 flex flex-col gap-3 px-4 md:px-6 py-4 md:border-r overflow-y-auto" ref={stepOneRef}>
+            <h2 className="text-base font-semibold">
+              What do <em>you</em> want to create?
+            </h2>
 
-        {/* ── STEP ONE: Your objective ── */}
+            {/* Category tabs */}
+            <div className="flex items-center gap-1 border-b">
+              {TEMPLATE_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeCategory === cat.id
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                  title={cat.description}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Filtered template chips */}
+            <div className="flex flex-col gap-2">
+              {prebuiltTemplates
+                .filter((t) => t.category === activeCategory)
+                .map((template) => {
+                  const Icon = template.icon;
+                  const isActive = activePrebuilt?.id === template.id;
+
+                  return (
+                    <button
+                      key={template.id}
+                      onClick={() => handleSelectPrebuilt(template)}
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
+                        isActive
+                          ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
+                          : "border-border hover:border-primary/40 hover:bg-primary/5"
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                      <span>{template.title}</span>
+                      {isActive && <Check className="w-3 h-3 text-primary" />}
+                    </button>
+                  );
+                })}
+
+              {/* "Custom" chip — shown in every category */}
+              <button
+                onClick={handleSelectCustom}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed text-sm transition-all duration-150 ${
+                  isCustomObjective
+                    ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
+                    : "border-border hover:border-primary/40 hover:bg-primary/5"
+                }`}
+              >
+                <PenLine className={`w-4 h-4 shrink-0 ${isCustomObjective ? "text-primary" : "text-muted-foreground"}`} />
+                <span>Custom</span>
+                {isCustomObjective && <Check className="w-3 h-3 text-primary" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Right panel: 3 rotating app panels */}
+          <div className="flex-1 min-w-0 flex flex-col px-4 md:px-6 py-4">
+            <AppTileCarousel
+              templates={prebuiltTemplates}
+              favorites={favorites}
+              ratings={ratings}
+              onSelect={handleSelectPrebuilt}
+              onToggleFavorite={toggleFavorite}
+              onRate={setRating}
+            />
+          </div>
+        </div>
+      ) : (
+      <div className={`w-full mx-auto flex flex-col flex-1 min-h-0 px-3 md:px-6 py-4 gap-3 overflow-y-auto ${isWritePrompt ? "" : "max-w-6xl"}`}>
+
+        {/* ── STEP ONE: Your objective (template already selected) ── */}
         <div className="shrink-0 space-y-2" ref={stepOneRef}>
           {/* Hide heading when write-a-prompt is selected (AIM description replaces it below) */}
           {!(isWritePrompt && !cardsExpanded) && (
@@ -223,8 +302,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </h2>
           )}
 
-          {/* Category tab bar + filtered template chips */}
-          {((!activePrebuilt && !isCustomObjective) || cardsExpanded) && (
+          {/* Category tab bar + filtered template chips (expanded change-type mode) */}
+          {cardsExpanded && (
             <div className="space-y-2">
               {/* Category tabs */}
               <div className="flex items-center gap-1 border-b">
@@ -287,7 +366,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
           )}
 
           {/* Collapsed selection indicator */}
-          {hasObjectiveType && !cardsExpanded && (
+          {!cardsExpanded && (
             <button
               onClick={handleChangeType}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 transition-colors"
@@ -332,20 +411,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             />
           )}
         </div>
-
-        {/* ── APP TILE CAROUSEL — fills bottom 2/3 when no template selected ── */}
-        {!hasObjectiveType && (
-          <div className="flex-1 min-h-0 flex flex-col justify-start pt-2">
-            <AppTileCarousel
-              templates={prebuiltTemplates}
-              favorites={favorites}
-              ratings={ratings}
-              onSelect={handleSelectPrebuilt}
-              onToggleFavorite={toggleFavorite}
-              onRate={setRating}
-            />
-          </div>
-        )}
 
         {/* ── STEP TWO: Your context ── */}
         {hasObjectiveType && (
@@ -808,6 +873,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
         </div>
         )}
       </div>
+      )}
 
       {/* Fixed bottom bar: step progress + action */}
       {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "youtube-to-infographic" && activePrebuilt?.id !== "voice-to-infographic" && (
