@@ -270,6 +270,8 @@ export default function Workspace() {
   const [queryAnalysis, setQueryAnalysis] = useState<QueryAnalysisResult | null>(null);
   const [selectedSubqueryId, setSelectedSubqueryId] = useState<string | null>(null);
   const [hoveredSubqueryId, setHoveredSubqueryId] = useState<string | null>(null);
+  const [databaseEngine, setDatabaseEngine] = useState<string>("generic");
+  const [findingFeedback, setFindingFeedback] = useState<Record<string, "accepted" | "rejected" | null>>({});
 
   // ── Tab operations ──
 
@@ -370,8 +372,25 @@ export default function Workspace() {
 
   const analyzeQueryMutation = useMutation({
     mutationFn: async () => {
+      // Build feedback context from accept/reject state
+      const accepted: string[] = [];
+      const rejected: string[] = [];
+      for (const [id, fb] of Object.entries(findingFeedback)) {
+        if (fb === "accepted") {
+          const sq = queryAnalysis?.subqueries.find(s => s.id === id);
+          if (sq) accepted.push(`${sq.name}: ${sq.summary}`);
+          else accepted.push(id);
+        } else if (fb === "rejected") {
+          const sq = queryAnalysis?.subqueries.find(s => s.id === id);
+          if (sq) rejected.push(`${sq.name}: ${sq.summary}`);
+          else rejected.push(id);
+        }
+      }
+
       const response = await apiRequest("POST", "/api/analyze-query", {
         query: document.rawText,
+        databaseEngine,
+        previousFeedback: (accepted.length > 0 || rejected.length > 0) ? { accepted, rejected } : undefined,
       });
       return await response.json() as QueryAnalysisResult;
     },
@@ -1719,6 +1738,8 @@ RULES:
       onAnalyzerSubqueryHover={setHoveredSubqueryId}
       onAnalyzerSubquerySelect={setSelectedSubqueryId}
       onAnalyze={handleAnalyzeQuery}
+      analyzerDatabaseEngine={databaseEngine}
+      onAnalyzerDatabaseEngineChange={setDatabaseEngine}
       modelConfig={modelConfig}
       onModelConfigChange={setModelConfig}
       provokeMode={selectedTemplateId === "text-to-infographic" ? "suggest" : "challenge"}
@@ -1829,6 +1850,8 @@ RULES:
           onSubqueryHover={setHoveredSubqueryId}
           onSubquerySelect={setSelectedSubqueryId}
           onCaptureMetrics={handleCaptureMetrics}
+          findingFeedback={findingFeedback}
+          onFindingFeedback={(id, fb) => setFindingFeedback(prev => ({ ...prev, [id]: fb }))}
           onAcceptChange={(beforeCode, afterCode) => {
             const currentText = document.rawText;
             const idx = currentText.indexOf(beforeCode);

@@ -123,6 +123,8 @@ interface ProvocationToolboxProps {
   onAnalyzerSubqueryHover?: (id: string | null) => void;
   onAnalyzerSubquerySelect?: (id: string | null) => void;
   onAnalyze?: () => void;
+  analyzerDatabaseEngine?: string;
+  onAnalyzerDatabaseEngineChange?: (engine: string) => void;
 
   // Model config props
   modelConfig?: ModelConfig;
@@ -170,6 +172,8 @@ export function ProvocationToolbox({
   onAnalyzerSubqueryHover,
   onAnalyzerSubquerySelect,
   onAnalyze,
+  analyzerDatabaseEngine,
+  onAnalyzerDatabaseEngineChange,
   modelConfig,
   onModelConfigChange,
   provokeMode = "challenge",
@@ -265,6 +269,8 @@ export function ProvocationToolbox({
             onSubqueryHover={onAnalyzerSubqueryHover ?? (() => {})}
             onSubquerySelect={onAnalyzerSubquerySelect ?? (() => {})}
             onAnalyze={onAnalyze ?? (() => {})}
+            databaseEngine={(analyzerDatabaseEngine ?? "generic") as any}
+            onDatabaseEngineChange={onAnalyzerDatabaseEngineChange ?? (() => {})}
           />
         ) : (
           <BrowserExplorer
