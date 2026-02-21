@@ -14,6 +14,8 @@ import { MetricExtractorPanel } from "@/components/MetricExtractorPanel";
 import { QueryDiscoveriesPanel, type QueryAnalysisResult } from "@/components/QueryDiscoveriesPanel";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
+import { ImagePreviewPanel } from "@/components/ImagePreviewPanel";
+import { DEFAULT_MODEL_CONFIG, type ModelConfig } from "@/components/ModelConfigPanel";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
 import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
@@ -66,6 +68,7 @@ import {
   FileText,
   Wrench,
   Shield,
+  ImageIcon,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -136,6 +139,9 @@ export default function Workspace() {
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
+
+  // Model configuration state — used by text-to-infographic
+  const [modelConfig, setModelConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
 
   // Mobile workspace tab — controls which panel is visible on mobile
   type MobileTab = "document" | "toolbox" | "discussion";
@@ -1610,7 +1616,7 @@ RULES:
           }}
           onVoiceInfographicMode={(obj, transcript, templateId) => {
             setSelectedTemplateId(templateId);
-            const initialDoc = `# Voice to Infographic\n\n*Processing transcript (${transcript.split(/\s+/).length} words)...*`;
+            const initialDoc = `# Text to Infographic\n\n*Processing transcript (${transcript.split(/\s+/).length} words)...*`;
             setDocument({ id: generateId("doc"), rawText: initialDoc });
             setObjective(obj);
             const viConfig = getAppFlowConfig(templateId);
@@ -1712,6 +1718,9 @@ RULES:
       onAnalyzerSubqueryHover={setHoveredSubqueryId}
       onAnalyzerSubquerySelect={setSelectedSubqueryId}
       onAnalyze={handleAnalyzeQuery}
+      modelConfig={modelConfig}
+      onModelConfigChange={setModelConfig}
+      provokeMode={selectedTemplateId === "text-to-infographic" ? "suggest" : "challenge"}
     />
   );
 
@@ -1735,7 +1744,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "metrics" ? BarChart3 : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "metrics" ? BarChart3 : tab.id === "image-preview" ? ImageIcon : Zap;
           return (
             <button
               key={tab.id}
@@ -1803,6 +1812,8 @@ RULES:
             onRespondToMessage={handleRespondToMessage}
           />
         </div>
+      ) : rightPanelMode === "image-preview" ? (
+        <ImagePreviewPanel documentText={document.rawText} />
       ) : rightPanelMode === "metrics" ? (
         <MetricExtractorPanel
           documentText={document.rawText}
