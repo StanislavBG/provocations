@@ -736,7 +736,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             value={text}
             onChange={(val) => onTextChange?.(val)}
             onSelect={handleSelect}
-            className="w-full text-foreground/90 font-mono text-sm"
+            className="w-full text-foreground font-mono text-sm"
             placeholder="Start typing your markdown document..."
             showCopy={true}
             showClear={false}
