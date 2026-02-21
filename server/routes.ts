@@ -1197,10 +1197,16 @@ Output only valid JSON, no markdown.`;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
       if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
 
-      const allMetrics = await storage.getAllUsageMetrics();
+      // Fetch metrics and ALL known user IDs in parallel
+      const [allMetrics, allKnownUserIds] = await Promise.all([
+        storage.getAllUsageMetrics(),
+        storage.getAllKnownUserIds(),
+      ]);
 
-      // Collect unique user IDs
-      const userIds = Array.from(new Set(allMetrics.map((m) => m.userId)));
+      // Merge: users from metrics table + users from other tables (docs, tracking, etc.)
+      const userIdSet = new Set(allKnownUserIds);
+      allMetrics.forEach((m) => userIdSet.add(m.userId));
+      const userIds = Array.from(userIdSet);
 
       // Resolve user info from Clerk
       const userInfoMap: Record<string, { email: string; displayName: string }> = {};
@@ -1232,7 +1238,7 @@ Output only valid JSON, no markdown.`;
         ...allKeys.filter((k) => !METRIC_ORDER.includes(k)).sort(),
       ];
 
-      // Build per-user rows
+      // Build per-user rows — includes users with zero metrics
       const users = userIds.map((uid) => {
         const userMetrics = allMetrics.filter((m) => m.userId === uid);
         const metrics: Record<string, number> = {};
