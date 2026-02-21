@@ -2119,11 +2119,61 @@ If no metrics are found, return: { "metrics": [] }`,
   // ── Deep SQL query analysis ──
   app.post("/api/analyze-query", async (req, res) => {
     try {
-      const { query } = req.body;
+      const { query, databaseEngine, prioritizedCategories, previousFeedback } = req.body;
 
       if (!query || typeof query !== "string") {
         return res.status(400).json({ error: "Query text is required" });
       }
+
+      const engine = typeof databaseEngine === "string" ? databaseEngine : "generic";
+      const priorities: string[] = Array.isArray(prioritizedCategories) ? prioritizedCategories : [];
+      const feedback: { accepted: string[]; rejected: string[] } =
+        previousFeedback && typeof previousFeedback === "object"
+          ? { accepted: Array.isArray(previousFeedback.accepted) ? previousFeedback.accepted : [], rejected: Array.isArray(previousFeedback.rejected) ? previousFeedback.rejected : [] }
+          : { accepted: [], rejected: [] };
+
+      // Build engine-specific guidance
+      const engineGuidance = engine !== "generic" ? `
+═══════════════════════════════════════════════════
+ DATABASE ENGINE: ${engine.toUpperCase()}
+═══════════════════════════════════════════════════
+
+All analysis, suggestions, and code changes MUST target **${engine}** specifically:
+${engine === "postgresql" ? `- Use PostgreSQL syntax: $1/$2 parameters, :: type casts, ILIKE, ARRAY types, LATERAL joins, CTEs are optimization fences pre-v12
+- Leverage PostgreSQL features: partial indexes, expression indexes, EXPLAIN ANALYZE hints, pg_stat_statements
+- Note PostgreSQL-specific gotchas: CTE materialization behavior by version, MVCC implications, VACUUM considerations` : ""}${engine === "mysql" ? `- Use MySQL syntax: backtick identifiers, LIMIT without OFFSET, IFNULL, GROUP_CONCAT, derived table restrictions
+- Leverage MySQL features: covering indexes, index hints (USE INDEX/FORCE INDEX), query cache considerations, InnoDB vs MyISAM
+- Note MySQL-specific gotchas: implicit type conversions, ONLY_FULL_GROUP_BY mode, subquery materialization in older versions` : ""}${engine === "sqlserver" ? `- Use SQL Server syntax: square bracket identifiers, TOP instead of LIMIT, ISNULL, STRING_AGG, CROSS APPLY/OUTER APPLY
+- Leverage SQL Server features: included columns in indexes, filtered indexes, query store, execution plan analysis
+- Note SQL Server-specific gotchas: parameter sniffing, OPTION(RECOMPILE), tempdb spills, implicit conversions with varchar/nvarchar` : ""}${engine === "oracle" ? `- Use Oracle syntax: ROWNUM/FETCH FIRST, NVL, CONNECT BY, dual table, (+) outer join notation (prefer ANSI)
+- Leverage Oracle features: bitmap indexes, function-based indexes, materialized views, hints (/*+ ... */)
+- Note Oracle-specific gotchas: NULL and empty string equivalence, implicit DATE conversions, optimizer statistics freshness` : ""}${engine === "sqlite" ? `- Use SQLite syntax: no RIGHT/FULL OUTER JOIN, limited ALTER TABLE, type affinity system
+- Leverage SQLite features: WITHOUT ROWID tables, partial indexes, JSON1 extension
+- Note SQLite-specific gotchas: no true concurrent writes, type affinity surprises, lack of RIGHT JOIN` : ""}
+When suggesting changes, ensure all afterCode is valid ${engine} syntax.` : "";
+
+      // Build priority guidance
+      const priorityGuidance = priorities.length > 0 ? `
+═══════════════════════════════════════════════════
+ USER PRIORITIES
+═══════════════════════════════════════════════════
+
+The user has indicated they care most about these categories (in order):
+${priorities.map((p, i) => `${i + 1}. ${p}`).join("\n")}
+
+Weight your analysis accordingly — give more detailed findings and more changeRecommendations for prioritized categories. Still cover all categories but be more thorough on priorities.` : "";
+
+      // Build feedback context
+      const feedbackContext = (feedback.accepted.length > 0 || feedback.rejected.length > 0) ? `
+═══════════════════════════════════════════════════
+ PREVIOUS FEEDBACK FROM USER
+═══════════════════════════════════════════════════
+
+The user has reviewed previous analysis results:
+${feedback.accepted.length > 0 ? `\nACCEPTED findings (user found these valuable — find more like them):\n${feedback.accepted.map(f => `- ${f}`).join("\n")}` : ""}
+${feedback.rejected.length > 0 ? `\nREJECTED findings (user disagreed — avoid similar suggestions):\n${feedback.rejected.map(f => `- ${f}`).join("\n")}` : ""}
+
+Use this feedback to calibrate your analysis. Produce findings aligned with what the user accepted and avoid patterns similar to what they rejected.` : "";
 
       const response = await llm.generate({
         maxTokens: 16000,
@@ -2153,6 +2203,25 @@ Before including any changeRecommendation or optimization with beforeCode/afterC
 □ SUBQUERY CORRELATION: Are correlated subquery references preserved correctly?
 
 If ANY check fails → DO NOT include the change. A wrong suggestion is worse than no suggestion.
+${engineGuidance}${priorityGuidance}${feedbackContext}
+═══════════════════════════════════════════════════
+ DYNAMIC FEEDBACK CATEGORIES
+═══════════════════════════════════════════════════
+
+Analyze the query and generate feedback categories DYNAMICALLY based on what you actually find.
+Do NOT use a fixed list. Instead, examine the query's characteristics and create categories that reflect the actual issues and patterns present.
+
+Examples of categories you might generate (only include what's relevant):
+- "JOIN Optimization" — if the query has complex joins
+- "Index Utilization" — if there are SARGability or index concerns
+- "NULL Safety" — if NULL handling is a concern
+- "CTE Efficiency" — if the query uses CTEs
+- "Window Function Usage" — if window functions are present
+- "Subquery Refactoring" — if correlated subqueries could be improved
+- "Type Safety" — if there are implicit type conversions
+- "Aggregation Logic" — if GROUP BY or aggregates need attention
+
+Each finding (subquery analysis, optimization opportunity) MUST be tagged with one of your generated categories.
 
 ═══════════════════════════════════════════════════
  COMPREHENSIVE SQL ANALYSIS DIMENSIONS
@@ -2210,15 +2279,17 @@ Evaluate EVERY applicable dimension for each subpart and for the overall query:
 
 Given a SQL query, produce:
 
-1. **Decomposition** — Break into logical subparts (CTEs, subqueries, UNION branches, JOINs, aggregation blocks, window functions, CASE blocks). Each gets: id, name, exact SQL snippet, character offsets (start/end).
+1. **feedbackCategories** — Array of dynamically generated categories based on the query. Each category: id (kebab-case), label (human-readable), description (what it covers), severity (worst severity among its findings: "good"|"info"|"warning"|"critical"), count (number of findings in this category).
 
-2. **Summary** per subpart — 2-3 sentences: what it does, which tables/columns, what business logic.
+2. **Decomposition** — Break into logical subparts (CTEs, subqueries, UNION branches, JOINs, aggregation blocks, window functions, CASE blocks). Each gets: id, name, exact SQL snippet, character offsets (start/end), category (the category id this finding belongs to).
 
-3. **Evaluation** per subpart — Assess across ALL applicable dimensions above. Be specific: cite exact code, explain WHY something is good or problematic. Rate severity: "good", "info", "warning", "critical".
+3. **Summary** per subpart — 2-3 sentences: what it does, which tables/columns, what business logic.
 
-4. **Recommendations** per subpart — Text suggestions covering all relevant dimensions.
+4. **Evaluation** per subpart — Assess across ALL applicable dimensions above. Be specific: cite exact code, explain WHY something is good or problematic. Rate severity: "good", "info", "warning", "critical".
 
-5. **changeRecommendations** per subpart — Concrete before/after SQL. ONLY include if QA-validated.
+5. **Recommendations** per subpart — Text suggestions covering all relevant dimensions.
+
+6. **changeRecommendations** per subpart — Concrete before/after SQL. ONLY include if QA-validated.
    - title: short descriptive name
    - rationale: cite specific code issues and explain why the change helps
    - beforeCode: exact current SQL to change (must match the query text)
@@ -2226,14 +2297,23 @@ Given a SQL query, produce:
    - impact: what improves (performance gain, readability, correctness, safety, etc.)
    Each subpart: 0-3 changes. Severity "good" subparts get 0 changes.
 
-6. **Metrics** — All aggregations, KPIs, calculated fields, business measures.
+7. **Metrics** — All aggregations, KPIs, calculated fields, business measures.
 
-7. **Overall evaluation** — 4-6 sentence holistic assessment covering: architecture, performance profile, maintainability, correctness confidence, and top priorities.
+8. **Overall evaluation** — 4-6 sentence holistic assessment covering: architecture, performance profile, maintainability, correctness confidence, and top priorities.${engine !== "generic" ? ` Include ${engine}-specific observations.` : ""}
 
-8. **Optimization opportunities** — Cross-cutting improvements with QA-validated before/after code where applicable.
+9. **Optimization opportunities** — Cross-cutting improvements with QA-validated before/after code where applicable. Each tagged with a category id.
 
 Respond with valid JSON only:
 {
+  "feedbackCategories": [
+    {
+      "id": "join-optimization",
+      "label": "JOIN Optimization",
+      "description": "Issues related to JOIN types, conditions, and performance",
+      "severity": "warning",
+      "count": 3
+    }
+  ],
   "subqueries": [
     {
       "id": "sq1",
@@ -2244,6 +2324,7 @@ Respond with valid JSON only:
       "summary": "Detailed 2-3 sentence explanation",
       "evaluation": "Multi-dimensional assessment citing specific code",
       "severity": "good|info|warning|critical",
+      "category": "join-optimization",
       "recommendations": ["Suggestion 1", "Suggestion 2"],
       "changeRecommendations": [
         {
@@ -2265,6 +2346,7 @@ Respond with valid JSON only:
       "title": "Title",
       "description": "Detailed explanation with code references",
       "severity": "info|warning|critical",
+      "category": "join-optimization",
       "affectedSubquery": "sq1 or null",
       "beforeCode": "current pattern (QA-validated)",
       "afterCode": "improved pattern (QA-validated)",
@@ -2285,6 +2367,7 @@ Respond with valid JSON only:
       const parsed = JSON.parse(jsonStr);
 
       res.json({
+        feedbackCategories: Array.isArray(parsed.feedbackCategories) ? parsed.feedbackCategories : [],
         subqueries: Array.isArray(parsed.subqueries) ? parsed.subqueries : [],
         metrics: Array.isArray(parsed.metrics) ? parsed.metrics : [],
         overallEvaluation: parsed.overallEvaluation || "",
