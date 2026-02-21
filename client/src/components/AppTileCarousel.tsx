@@ -108,7 +108,7 @@ function AppTile({
       className={cn(
         "relative flex flex-col text-left w-full h-full",
         "rounded-xl border bg-card/80 backdrop-blur-sm",
-        "p-4 sm:p-5 gap-2.5 transition-all duration-200",
+        "p-3 sm:p-4 gap-2 transition-all duration-200",
         "hover:border-primary/40 hover:shadow-md hover:bg-card",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         "group cursor-pointer",
@@ -116,8 +116,8 @@ function AppTile({
     >
       {/* Header row: icon + title + favorite */}
       <div className="flex items-start gap-3">
-        <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
-          <Icon className="w-5 h-5" />
+        <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
+          <Icon className="w-4 h-4" />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold leading-tight">
@@ -147,14 +147,9 @@ function AppTile({
         </button>
       </div>
 
-      {/* How to use — beginner instructions */}
-      <p className="text-xs leading-relaxed text-foreground/80 line-clamp-3">
-        {template.howTo}
-      </p>
-
       {/* Use cases */}
       <ul className="flex flex-col gap-1 mt-auto">
-        {template.useCases.slice(0, 3).map((uc, i) => (
+        {template.useCases.slice(0, 2).map((uc, i) => (
           <li
             key={i}
             className="text-[11px] leading-snug text-muted-foreground flex items-start gap-1.5"
@@ -216,7 +211,7 @@ function DotIndicator({
 // Horizontal rotating carousel — shows 3 panels, rotates every 5s
 // ---------------------------------------------------------------------------
 
-const VISIBLE_COUNT = 3;
+const VISIBLE_COUNT = 6;
 const ROTATION_INTERVAL_MS = 5000;
 
 interface AppTileCarouselProps {
@@ -327,8 +322,8 @@ export function AppTileCarousel({
         </div>
       </div>
 
-      {/* Horizontal 3-panel grid */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-3 gap-3 px-1">
+      {/* 3×2 panel grid */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-3 sm:grid-rows-2 gap-3 px-1">
         {visibleTemplates.map((template, i) => (
           <div
             key={`${currentIndex}-${i}`}
