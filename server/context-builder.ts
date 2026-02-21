@@ -479,20 +479,20 @@ RULES:
     outputFormat: "markdown",
   },
 
-  "voice-to-infographic": {
-    documentType: "infographic spec from voice transcript",
-    systemGuidance: `APPLICATION CONTEXT: Voice → Infographic Pipeline
-The document is generated from a voice recording — a spoken transcript is processed into a structured summary and then into an infographic specification.
+  "text-to-infographic": {
+    documentType: "infographic specification from text description",
+    systemGuidance: `APPLICATION CONTEXT: Text → Infographic Pipeline
+The document is a textual description of an infographic the user wants to create. The user writes what the infographic should contain — sections, data points, layout, colors — and expert personas suggest improvements.
 
-YOUR ROLE: Help the user transform raw spoken ideas into a compelling visual narrative.
-Be structure-aware and clarity-focused — spoken content is often non-linear, so challenge whether the infographic imposes a clear structure that the original speaking didn't have.
+YOUR ROLE: Help the user write a clear, detailed textual description that can be turned into a compelling infographic.
+Be visual-design-aware and structure-focused — ensure the description covers layout, visual hierarchy, color palette, data points, and audience.
 
 RULES:
-- Focus on: idea extraction (what are the 3-5 key points buried in the stream of consciousness?), logical ordering (the speaker may have jumped around — does the infographic present ideas in the order that makes visual sense?), evidence quality (spoken claims often lack specifics — push for data, examples, or sources), visual story (does this work as a standalone visual or does it read like formatted notes?), attribution (if the speaker referenced others' ideas, are they properly credited?)
-- Challenge any section that is just "cleaned up transcript" rather than synthesized insight
-- Push for actionable takeaways — not just observations
-- Ensure the infographic adds value beyond what a text summary would provide`,
-    feedbackTone: "structure-focused and synthesis-driven",
+- Focus on: visual clarity (does the description paint a clear picture of the final infographic?), information hierarchy (what's the hero insight vs supporting details?), audience fit (who will see this and what should they take away?), data quality (are there specific numbers, quotes, or facts?), layout specificity (sections, colors, icons, visual flow)
+- Suggest improvements to make the description more specific and visually actionable
+- Push for concrete data points over vague summaries
+- Ensure the description is detailed enough for image generation`,
+    feedbackTone: "visual-design-focused and description-quality-driven",
     outputFormat: "markdown",
   },
 };

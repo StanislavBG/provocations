@@ -7,6 +7,7 @@ import { ProvokeText } from "./ProvokeText";
 import { BrowserExplorer } from "./BrowserExplorer";
 import { ContextCapturePanel } from "./ContextCapturePanel";
 import { QueryAnalyzerView } from "./QueryAnalyzerView";
+import { ModelConfigPanel, type ModelConfig } from "./ModelConfigPanel";
 import type { SubqueryAnalysis } from "./QueryDiscoveriesPanel";
 import {
   MessageCircleQuestion,
@@ -36,13 +37,14 @@ import {
   Target,
   Search,
 } from "lucide-react";
-import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument } from "@shared/schema";
+import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument, PersonaDomain } from "@shared/schema";
 import type { LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
-import { builtInPersonas, getAllPersonas } from "@shared/personas";
+import { builtInPersonas, getAllPersonas, getPersonasByDomain } from "@shared/personas";
+import { ChevronRight, Settings } from "lucide-react";
 
 // ── Toolbox app type ──
 
-export type ToolboxApp = "provoke" | "website" | "context" | "analyzer";
+export type ToolboxApp = "provoke" | "website" | "context" | "analyzer" | "model-config";
 
 // ── Persona metadata (derived from centralized persona definitions) ──
 
@@ -121,6 +123,13 @@ interface ProvocationToolboxProps {
   onAnalyzerSubqueryHover?: (id: string | null) => void;
   onAnalyzerSubquerySelect?: (id: string | null) => void;
   onAnalyze?: () => void;
+
+  // Model config props
+  modelConfig?: ModelConfig;
+  onModelConfigChange?: (config: ModelConfig) => void;
+
+  // Provoke mode — "suggest" for text-to-infographic (personas suggest descriptions)
+  provokeMode?: "challenge" | "suggest";
 }
 
 /** Icon lookup for left-panel tab IDs */
@@ -129,6 +138,7 @@ const LEFT_TAB_ICONS: Record<string, typeof Blocks> = {
   website: Globe,
   context: Layers,
   analyzer: Search,
+  "model-config": Settings,
 };
 
 export function ProvocationToolbox({
@@ -160,6 +170,9 @@ export function ProvocationToolbox({
   onAnalyzerSubqueryHover,
   onAnalyzerSubquerySelect,
   onAnalyze,
+  modelConfig,
+  onModelConfigChange,
+  provokeMode = "challenge",
 }: ProvocationToolboxProps) {
   const hasCapturedContext = !!(capturedContext && capturedContext.length > 0);
 
@@ -231,7 +244,10 @@ export function ProvocationToolbox({
             isMerging={isMerging}
             interviewEntryCount={interviewEntryCount}
             onStartInterview={onStartInterview}
+            provokeMode={provokeMode}
           />
+        ) : activeApp === "model-config" && modelConfig && onModelConfigChange ? (
+          <ModelConfigPanel config={modelConfig} onChange={onModelConfigChange} />
         ) : activeApp === "context" ? (
           <ContextTabContent
             contextCollection={contextCollection}
@@ -360,6 +376,14 @@ function ContextCollectionPreview({
   );
 }
 
+// ── Domain metadata for grouping ──
+
+const DOMAIN_META: { domain: PersonaDomain; label: string; color: string }[] = [
+  { domain: "business", label: "Business", color: "text-amber-600 dark:text-amber-400" },
+  { domain: "technology", label: "Technology", color: "text-cyan-600 dark:text-cyan-400" },
+  { domain: "marketing", label: "Marketing", color: "text-rose-600 dark:text-rose-400" },
+];
+
 // ── Provoke Config App (extracted from InterviewPanel's setup mode) ──
 
 interface ProvokeConfigAppProps {
@@ -371,6 +395,8 @@ interface ProvokeConfigAppProps {
     personas: ProvocationType[];
     guidance?: string;
   }) => void;
+  /** "challenge" = default provocation mode, "suggest" = personas suggest descriptions (text-to-infographic) */
+  provokeMode?: "challenge" | "suggest";
 }
 
 function ProvokeConfigApp({
@@ -378,13 +404,30 @@ function ProvokeConfigApp({
   isMerging,
   interviewEntryCount,
   onStartInterview,
+  provokeMode = "challenge",
 }: ProvokeConfigAppProps) {
+  const isSuggestMode = provokeMode === "suggest";
+
   // Persona state — Think Big is selected by default
   const [selectedPersonas, setSelectedPersonas] = useState<Set<ProvocationType>>(
     () => new Set<ProvocationType>(["thinking_bigger"])
   );
   const [guidance, setGuidance] = useState("");
   const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
+
+  // Domain accordion state — tracks which domains are expanded
+  const [expandedDomains, setExpandedDomains] = useState<Set<PersonaDomain>>(
+    () => new Set<PersonaDomain>()
+  );
+
+  const toggleDomain = useCallback((domain: PersonaDomain) => {
+    setExpandedDomains(prev => {
+      const next = new Set(prev);
+      if (next.has(domain)) next.delete(domain);
+      else next.add(domain);
+      return next;
+    });
+  }, []);
 
   const togglePersona = useCallback((type: ProvocationType) => {
     setSelectedPersonas(prev => {
@@ -397,116 +440,142 @@ function ProvokeConfigApp({
       // Auto-apply persona change to active interview
       if (isInterviewActive) {
         onStartInterview({
-          mode: "challenge",
+          mode: isSuggestMode ? "advise" : "challenge",
           personas: Array.from(next),
           guidance: guidance.trim() || undefined,
         });
       }
       return next;
     });
-  }, [isInterviewActive, onStartInterview, guidance]);
-
-  // Auto-apply persona/guidance changes to the active interview
-  const applyDirection = useCallback(() => {
-    onStartInterview({
-      mode: "challenge",
-      personas: Array.from(selectedPersonas),
-      guidance: guidance.trim() || undefined,
-    });
-  }, [selectedPersonas, guidance, onStartInterview]);
+  }, [isInterviewActive, onStartInterview, guidance, isSuggestMode]);
 
   // Custom persona expanded state
   const [isCustomExpanded, setIsCustomExpanded] = useState(false);
 
+  // Count selected personas per domain
+  const selectedCountByDomain = (domain: PersonaDomain) => {
+    const domainPersonas = getPersonasByDomain(domain);
+    return domainPersonas.filter(p => selectedPersonas.has(p.id as ProvocationType)).length;
+  };
+
   return (
-    <div className="h-full flex flex-col overflow-auto">
-      {/* Configuration setup */}
+    <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
-        {/* 1. Persona toggles — FIRST */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <UserCircle className="w-4 h-4 text-primary" />
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Personas
-            </label>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-help">
-                  <Info className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-primary transition-colors" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-[280px]">
-                <p className="text-xs font-medium mb-1">Choose your reviewers</p>
-                <p className="text-xs text-muted-foreground">Each persona brings a distinct professional lens to challenge your thinking. Select one or more to shape the interview questions around their expertise. Leave empty for general questions.</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <div className="flex items-center gap-1 flex-wrap">
-            {allPersonaTypes.map((type) => {
-              const Icon = personaIcons[type];
-              const isSelected = selectedPersonas.has(type);
-              const isThinkBig = type === "thinking_bigger";
-              return (
-                <Tooltip key={type}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant={isSelected ? "default" : "outline"}
-                      className={`gap-1 text-xs h-7 px-2 ${
-                        isSelected
-                          ? isThinkBig
-                            ? "bg-violet-600 hover:bg-violet-700 text-white"
-                            : ""
-                          : "opacity-50"
-                      } ${isThinkBig && !isSelected ? "border-violet-300 dark:border-violet-700" : ""}`}
-                      onClick={() => togglePersona(type)}
-                    >
-                      <Icon className="w-3 h-3" />
-                      {personaLabels[type]}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[260px]">
-                    <p className="text-xs font-medium mb-0.5">{personaLabels[type]}</p>
-                    <p className="text-xs text-muted-foreground">{personaDescriptions[type]}</p>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <UserCircle className="w-4 h-4 text-primary" />
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            {isSuggestMode ? "Suggest Personas" : "Personas"}
+          </label>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">
+                <Info className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-primary transition-colors" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-[280px]">
+              <p className="text-xs font-medium mb-1">
+                {isSuggestMode ? "Choose experts to suggest descriptions" : "Choose your reviewers"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isSuggestMode
+                  ? "Each persona suggests improvements to your infographic description from their expertise. Accept suggestions to refine your text."
+                  : "Each persona brings a distinct professional lens to challenge your thinking. Select one or more to shape the interview questions around their expertise."}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
-            {/* Custom persona — opens guidance input */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant={isCustomExpanded ? "default" : "outline"}
-                  className={`gap-1 text-xs h-7 px-2 ${
-                    isCustomExpanded
-                      ? "bg-indigo-600 hover:bg-indigo-700 text-white"
-                      : "opacity-50 border-indigo-300 dark:border-indigo-700 hover:opacity-100"
-                  }`}
-                  onClick={() => setIsCustomExpanded(!isCustomExpanded)}
+        {/* Domain-grouped persona accordions */}
+        <div className="space-y-1">
+          {DOMAIN_META.map(({ domain, label, color }) => {
+            const isExpanded = expandedDomains.has(domain);
+            const domainPersonas = getPersonasByDomain(domain);
+            const selectedCount = selectedCountByDomain(domain);
+
+            return (
+              <div key={domain} className="rounded-lg border bg-card overflow-hidden">
+                {/* Domain header — click to expand/collapse */}
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+                  onClick={() => toggleDomain(domain)}
                 >
-                  <Pencil className="w-3 h-3" />
-                  Custom
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[260px]">
-                <p className="text-xs font-medium mb-0.5">Custom Focus</p>
-                <p className="text-xs text-muted-foreground">Define your own area of focus. Tell the AI exactly what to push you on — pricing strategy, technical debt, go-to-market, anything specific to your context.</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
+                  <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                  <span className={`text-xs font-semibold uppercase tracking-wider ${color}`}>
+                    {label}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {domainPersonas.length} personas
+                  </span>
+                  {selectedCount > 0 && (
+                    <Badge variant="secondary" className="ml-auto h-4 min-w-[16px] px-1 text-[10px]">
+                      {selectedCount}
+                    </Badge>
+                  )}
+                </button>
 
-          {/* Custom guidance — collapsed ProvokeText input */}
+                {/* Expanded persona list */}
+                {isExpanded && (
+                  <div className="px-3 pb-2 space-y-1">
+                    {domainPersonas.map((persona) => {
+                      const type = persona.id as ProvocationType;
+                      const Icon = personaIcons[type] || Blocks;
+                      const isSelected = selectedPersonas.has(type);
+
+                      return (
+                        <button
+                          key={type}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors ${
+                            isSelected
+                              ? "bg-primary/10 text-foreground"
+                              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          }`}
+                          onClick={() => togglePersona(type)}
+                        >
+                          <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : ""}`} />
+                          <span className="font-medium">{persona.label}</span>
+                          {isSelected && (
+                            <Badge variant="default" className="ml-auto h-4 px-1 text-[9px]">
+                              {isSuggestMode ? "suggesting" : "active"}
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Custom persona — opens guidance input */}
+        <div className="space-y-2">
+          <Button
+            size="sm"
+            variant={isCustomExpanded ? "default" : "outline"}
+            className={`gap-1 text-xs h-7 px-2 w-full ${
+              isCustomExpanded
+                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                : "opacity-70 border-indigo-300 dark:border-indigo-700 hover:opacity-100"
+            }`}
+            onClick={() => setIsCustomExpanded(!isCustomExpanded)}
+          >
+            <Pencil className="w-3 h-3" />
+            Custom Focus
+          </Button>
+
           {isCustomExpanded && (
-            <div className="mt-2 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2">
+            <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2">
               <label className="text-xs font-medium text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Crosshair className="w-3 h-3" />
                 Focus Area
               </label>
               <ProvokeText
                 chrome="inline"
-                placeholder="e.g. 'Push me on pricing strategy and unit economics'"
+                placeholder={isSuggestMode
+                  ? "e.g. 'Focus on data visualization clarity and color contrast'"
+                  : "e.g. 'Push me on pricing strategy and unit economics'"}
                 value={guidance}
                 onChange={setGuidance}
                 className="text-sm"
@@ -521,21 +590,21 @@ function ProvokeConfigApp({
               )}
             </div>
           )}
-
-          <p className="text-xs text-muted-foreground">
-            {selectedPersonas.size === 0 && !isCustomExpanded
-              ? "Select personas to focus the interview, or leave empty for general questions."
-              : `${selectedPersonas.size} persona${selectedPersonas.size > 1 ? "s" : ""} selected${isCustomExpanded ? " + Custom focus" : ""}`}
-          </p>
         </div>
 
-      </div>
+        {/* Selection summary */}
+        <p className="text-xs text-muted-foreground">
+          {selectedPersonas.size === 0 && !isCustomExpanded
+            ? isSuggestMode
+              ? "Select personas to get description suggestions from their expertise."
+              : "Select personas to focus the interview, or leave empty for general questions."
+            : `${selectedPersonas.size} persona${selectedPersonas.size > 1 ? "s" : ""} selected${isCustomExpanded ? " + Custom focus" : ""}`}
+        </p>
 
-      {/* Status info */}
-      <div className="px-4 pb-4">
+        {/* Status info */}
         {isInterviewActive && (
           <p className="text-xs text-center text-muted-foreground">
-            Interview is active — check the Discussion panel.
+            {isSuggestMode ? "Personas are suggesting — check the Discussion panel." : "Interview is active — check the Discussion panel."}
           </p>
         )}
         {!isInterviewActive && interviewEntryCount > 0 && (
@@ -544,7 +613,7 @@ function ProvokeConfigApp({
           </p>
         )}
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 

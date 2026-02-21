@@ -424,7 +424,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                   ? "Describe what you're recording"
                   : activePrebuilt?.id === "youtube-to-infographic"
                     ? "Enter a YouTube channel to extract insights"
-                    : activePrebuilt?.id === "voice-to-infographic"
+                    : activePrebuilt?.id === "text-to-infographic"
                       ? "Paste or upload your voice transcript"
                       : "Provide your starting material"}
             </h2>
@@ -522,7 +522,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
-          ) : activePrebuilt?.id === "voice-to-infographic" && onVoiceInfographicMode ? (
+          ) : activePrebuilt?.id === "text-to-infographic" && onVoiceInfographicMode ? (
             <div className="space-y-3">
               <ProvokeText
                 chrome="container"
@@ -876,7 +876,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       )}
 
       {/* Fixed bottom bar: step progress + action */}
-      {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "youtube-to-infographic" && activePrebuilt?.id !== "voice-to-infographic" && (
+      {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "youtube-to-infographic" && activePrebuilt?.id !== "text-to-infographic" && (
         <div className="shrink-0 border-t bg-card">
           <div className={`w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 px-3 md:px-6 py-2 ${
             isWritePrompt ? "" : "max-w-6xl"

@@ -1310,6 +1310,62 @@ Output only valid JSON, no markdown.`;
     res.json(voiceCaptureConfig);
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // IMAGE GENERATION — generates an image from a textual description
+  // ═══════════════════════════════════════════════════════════════════════
+  app.post("/api/generate-image", async (req, res) => {
+    try {
+      const { description } = req.body;
+      if (!description || typeof description !== "string" || !description.trim()) {
+        return res.status(400).json({ error: "description is required" });
+      }
+
+      // Truncate to a reasonable prompt length for image generation
+      const prompt = description.slice(0, 4000);
+
+      // Use OpenAI DALL-E if available, otherwise return placeholder
+      const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (openaiKey) {
+        const OpenAI = (await import("openai")).default;
+        const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+        const client = new OpenAI({ apiKey: openaiKey, ...(baseURL ? { baseURL } : {}) });
+
+        const response = await client.images.generate({
+          model: "dall-e-3",
+          prompt: `Create an infographic based on the following description:\n\n${prompt}`,
+          n: 1,
+          size: "1024x1024",
+          response_format: "b64_json",
+        });
+
+        const imageData = response.data?.[0];
+        const base64 = (imageData as { b64_json?: string })?.b64_json ?? "";
+        const imageUrl = `data:image/png;base64,${base64}`;
+        const revisedPrompt = (imageData as { revised_prompt?: string })?.revised_prompt;
+
+        return res.json({ imageUrl, revisedPrompt });
+      }
+
+      // Fallback: generate a descriptive placeholder using the LLM
+      const placeholderResult = await llm.generate({
+        system: "You are a visual design assistant. Given a description, create a short summary of what the infographic would look like. Respond with only the summary.",
+        messages: [{ role: "user", content: prompt }],
+        maxTokens: 200,
+        temperature: 0.5,
+      });
+
+      return res.json({
+        imageUrl: "",
+        revisedPrompt: placeholderResult.text,
+        error: "Image generation requires an OpenAI API key with DALL-E access. The description has been processed but no image was generated.",
+      });
+    } catch (error) {
+      console.error("[generate-image] error:", error);
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Image generation failed", details: msg });
+    }
+  });
+
   // Unified write endpoint - single interface to the AI writer
   app.post("/api/write", async (req, res) => {
     try {
@@ -3473,7 +3529,7 @@ Output ONLY the JSON — no markdown, no explanation.`,
 
   // Extract transcript from a YouTube video (Step 1 only — transcript extraction)
   // The client then calls /api/pipeline/summarize and /api/pipeline/infographic
-  // to complete the shared pipeline (same as voice-to-infographic).
+  // to complete the shared pipeline (same as text-to-infographic).
   app.post("/api/youtube/process-video", async (req, res) => {
     try {
       const parsed = processVideoRequestSchema.safeParse(req.body);

@@ -1,7 +1,7 @@
 /**
  * Shared pipeline utilities for the transcript → summary → infographic flow.
  *
- * Used by both "YouTube to Infographic" and "Voice to Infographic" templates.
+ * Used by both "YouTube to Infographic" and "Text to Infographic" templates.
  * The pipeline is identical — the only difference is how the transcript is obtained:
  *   - YouTube: extracted from video via /api/youtube/process-video
  *   - Voice:   pasted/uploaded by the user
