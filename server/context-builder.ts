@@ -298,8 +298,8 @@ export interface AppTypeConfig {
   systemGuidance: string;
   /** Tone for feedback/challenges */
   feedbackTone: string;
-  /** Whether output should be code (SQL) vs prose (markdown) */
-  outputFormat: "sql" | "markdown";
+  /** Whether output should be code (SQL), prose (markdown), or email */
+  outputFormat: "sql" | "markdown" | "email";
 }
 
 const APP_TYPE_CONFIGS: Record<TemplateId, AppTypeConfig> = {
@@ -477,6 +477,45 @@ RULES:
 - Ensure the infographic stands alone — a viewer who never watches the video should understand the key message`,
     feedbackTone: "visual-design-focused and narrative-driven",
     outputFormat: "markdown",
+  },
+
+  "email-composer": {
+    documentType: "business email",
+    systemGuidance: `APPLICATION CONTEXT: Email Composer
+The document is a BUSINESS EMAIL, not a prose document or article. The user is composing a professional email to send.
+
+YOUR ROLE: Help the user compose a clear, professional business email that achieves its communication goal.
+Be direct and professional — focus on clarity, appropriate tone for the audience, and a clear call to action.
+
+OUTPUT FORMAT:
+- The output MUST be formatted as an email with Subject line, greeting, body, and sign-off
+- Use this structure:
+  **Subject:** [concise, specific subject line]
+
+  [Greeting],
+
+  [Body paragraphs — concise, professional, purposeful]
+
+  [Call to action or next steps]
+
+  [Professional sign-off],
+  [Sender name placeholder]
+
+RULES:
+- Business professional tone by default — adjust formality based on audience context provided
+- Front-load the purpose: the recipient should know why they're reading within the first two sentences
+- Every email MUST have a clear call to action or next step
+- Keep it concise — respect the recipient's time. Aim for the minimum words needed to achieve the goal
+- When the user provides context about recipients (role, relationship, communication preferences), adapt tone accordingly:
+  * C-suite/executives: extremely concise, lead with impact, no fluff
+  * Peers/colleagues: warm but efficient, collaborative language
+  * Clients/external: polished, relationship-aware, clear deliverables
+  * Direct reports: clear expectations, supportive tone
+- Use CAPTURED CONTEXT about people/recipients to shape tone, framing, and relationship dynamics
+- Never use generic filler ("I hope this email finds you well") unless culturally appropriate for the specific recipient
+- If the purpose is unclear, ask via provocations rather than guessing`,
+    feedbackTone: "direct and professional — focus on clarity, tone, and actionability",
+    outputFormat: "email",
   },
 
   "text-to-infographic": {
