@@ -361,21 +361,6 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     },
   },
 
-  "conversational-ai": {
-    ...DEFAULT_CONFIG,
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "concept", label: "Define Concept", description: "Describe the conversation experience and user" },
-      { id: "draft", label: "Build Spec", description: "Design layout, controls, and conversation flow" },
-      { id: "critique", label: "UX Critique", description: "Challenge usability, privacy, and accessibility" },
-    ],
-    writer: {
-      mode: "edit",
-      outputFormat: "markdown",
-      documentType: "conversational AI application spec",
-      feedbackTone: "user-centric and conversation-design-aware",
-    },
-  },
 
   "youtube-to-infographic": {
     workspaceLayout: "standard",
