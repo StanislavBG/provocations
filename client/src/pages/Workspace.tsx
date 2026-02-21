@@ -1521,20 +1521,18 @@ RULES:
     }
   }, [transcriptSummary, showTranscriptOverlay, writeMutation.isPending]);
 
-  // Safety timeout: if the transcript overlay stays open for > 30s without user interaction, close it
+  // Safety timeout: if the transcript overlay stays open without active recording, close it quickly
   useEffect(() => {
-    if (!showTranscriptOverlay) return;
+    if (!showTranscriptOverlay || isRecordingFromMain) return;
     const safety = setTimeout(() => {
-      if (showTranscriptOverlay && !isRecordingFromMain) {
-        console.warn("[Workspace] Transcript overlay safety timeout — auto-closing");
-        setShowTranscriptOverlay(false);
-        setRawTranscript("");
-        setCleanedTranscript(undefined);
-        setTranscriptSummary("");
-        setIsRecordingFromMain(false);
-        setPendingVoiceContext(null);
-      }
-    }, 30_000);
+      console.warn("[Workspace] Transcript overlay safety timeout — auto-closing");
+      setShowTranscriptOverlay(false);
+      setRawTranscript("");
+      setCleanedTranscript(undefined);
+      setTranscriptSummary("");
+      setIsRecordingFromMain(false);
+      setPendingVoiceContext(null);
+    }, 5_000);
     return () => clearTimeout(safety);
   }, [showTranscriptOverlay, isRecordingFromMain]);
 
