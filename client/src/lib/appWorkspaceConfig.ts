@@ -16,7 +16,7 @@ import type { ProvocationType, TemplateId } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Identifiers for left-panel (toolbox) tabs */
-export type LeftPanelTabId = "provoke" | "website" | "context" | "analyzer";
+export type LeftPanelTabId = "provoke" | "website" | "context" | "analyzer" | "model-config";
 
 /** Configuration for a single left-panel tab */
 export interface LeftPanelTabConfig {
@@ -26,7 +26,7 @@ export interface LeftPanelTabConfig {
 }
 
 /** Identifiers for right-panel tabs */
-export type RightPanelTabId = "discussion" | "metrics" | "discoveries";
+export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview";
 
 /** Configuration for a single right-panel tab */
 export interface RightPanelTabConfig {
@@ -149,6 +149,17 @@ const RIGHT_METRICS: RightPanelTabConfig = {
 const RIGHT_DISCOVERIES: RightPanelTabConfig = {
   id: "discoveries",
   label: "Discoveries",
+};
+
+const TAB_MODEL_CONFIG: LeftPanelTabConfig = {
+  id: "model-config",
+  label: "Model Config",
+  description: "Configure LLM parameters: temperature, max tokens, and more",
+};
+
+const RIGHT_IMAGE_PREVIEW: RightPanelTabConfig = {
+  id: "image-preview",
+  label: "Image Preview",
 };
 
 // ---------------------------------------------------------------------------
@@ -388,23 +399,22 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     },
   },
 
-  "voice-to-infographic": {
+  "text-to-infographic": {
     workspaceLayout: "standard",
-    defaultToolboxTab: "context",
+    defaultToolboxTab: "provoke",
     autoStartInterview: false,
     autoStartPersonas: undefined,
 
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "upload", label: "Upload Transcript", description: "Paste or upload a voice capture transcript" },
-      { id: "transcript-summary", label: "Transcript & Summary", description: "Produce a detailed, infographic-ready summary with key points, statistics, and actionable tips" },
-      { id: "infographic", label: "Generate Infographic", description: "Transform the detailed summary into a structured visual specification" },
-      { id: "refine", label: "Refine", description: "Challenge and polish the infographic specification" },
+      { id: "describe", label: "Write Description", description: "Write the textual description of your infographic" },
+      { id: "refine", label: "Persona Suggestions", description: "Expert personas suggest improvements to your description" },
+      { id: "generate", label: "Generate Image", description: "Generate a visual from your finalized description" },
     ],
 
-    leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_MODEL_CONFIG, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_IMAGE_PREVIEW, RIGHT_DISCUSSION],
 
     writer: {
       mode: "edit",
