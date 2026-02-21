@@ -328,6 +328,57 @@ The LLM adapter in `server/llm.ts` auto-detects these variables. You can verify 
 - `headerActions`: Slot for extra buttons in the container header
 - `label` / `labelIcon`: Container header label
 
+### ADR: Adding a New Application (Three-Layer Contract)
+
+Every application (template) in Provocations is defined across **three files** that must stay in sync. The `TemplateId` type in `shared/schema.ts` enforces this at build time — if you add a new ID, TypeScript will error until all three layers have a matching entry.
+
+**The three layers:**
+
+| # | File | What it defines | Type |
+|---|------|----------------|------|
+| 1 | `client/src/lib/prebuiltTemplates.ts` | UI identity — title, icon, description, starter text, draft questions, category | `PrebuiltTemplate` |
+| 2 | `client/src/lib/appWorkspaceConfig.ts` | Workspace behavior — layout, panel tabs, writer mode, auto-start interview | `AppFlowConfig` |
+| 3 | `server/context-builder.ts` | LLM guidance — system prompt, output format, feedback tone, document type | `AppTypeConfig` |
+
+**Mandatory checklist when adding a new application:**
+
+1. **Add the template ID** to the `templateIds` array in `shared/schema.ts`
+2. **Add the `PrebuiltTemplate`** object in `prebuiltTemplates.ts` with:
+   - `id` matching the new `templateIds` entry exactly
+   - `title`, `shortLabel`, `subtitle`, `description`, `howTo`
+   - `icon` (lucide React component)
+   - `objective` (pre-populated objective text)
+   - `draftQuestions` (3-5 probing questions for the draft phase)
+   - `templateContent` (markdown template or empty for freeform)
+   - `provocationSources` and `provocationExamples`
+   - `steps` (workflow progress steps)
+   - `category` (`"build"` | `"write"` | `"analyze"` | `"capture"`)
+3. **Add the `AppFlowConfig`** entry in `appWorkspaceConfig.ts` with:
+   - `workspaceLayout` (`"standard"` or `"voice-capture"`)
+   - `defaultToolboxTab` (which left panel tab opens first)
+   - `autoStartInterview` + `autoStartPersonas`
+   - `leftPanelTabs` and `rightPanelTabs` (ordered tab configs)
+   - `writer` config: `mode` (`"edit"` | `"analyze"` | `"aggregate"`), `outputFormat`, `documentType`
+4. **Add the `AppTypeConfig`** entry in `context-builder.ts` with:
+   - `documentType` (human-readable label for the output)
+   - `systemGuidance` (full system prompt injected into every LLM call for this app)
+   - `feedbackTone` (how challenges/advice should sound)
+   - `outputFormat` (`"markdown"` or `"sql"`)
+5. **Run `npm run check`** — TypeScript will verify all three layers have the new ID
+
+**Type enforcement:**
+- `templateIds` in `shared/schema.ts` is the single source of truth (`as const` array)
+- `TemplateId` type is derived from it
+- `APP_CONFIGS` is `Record<TemplateId, AppFlowConfig>` — missing entry = build error
+- `APP_TYPE_CONFIGS` is `Record<TemplateId, AppTypeConfig>` — missing entry = build error
+- All `appType` fields in Zod request schemas use `z.enum(templateIds)` — invalid IDs are rejected at API validation
+
+**Rules:**
+- Template IDs must be lowercase kebab-case (e.g. `"my-new-app"`)
+- The `writer.mode` determines how the document evolves: `"edit"` rewrites, `"analyze"` is read-only, `"aggregate"` appends
+- The `systemGuidance` in the backend config is the most important field — it shapes every LLM interaction for that app
+- Every app must work with the challenge/advice loop (personas generate challenges, user responds, document evolves)
+
 ### Document Storage — Zero-Knowledge Encryption
 - **All user-provided text is encrypted at rest** with AES-256-GCM (server-side)
   - Document content: encrypted (ciphertext + salt + iv)

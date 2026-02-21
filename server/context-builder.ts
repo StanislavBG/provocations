@@ -17,6 +17,7 @@ import type {
   StreamingRequirement,
   InstructionType,
   WireframeAnalysisResponse,
+  TemplateId,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById } from "@shared/personas";
 
@@ -301,7 +302,7 @@ export interface AppTypeConfig {
   outputFormat: "sql" | "markdown";
 }
 
-const APP_TYPE_CONFIGS: Record<string, AppTypeConfig> = {
+const APP_TYPE_CONFIGS: Record<TemplateId, AppTypeConfig> = {
   "write-a-prompt": {
     documentType: "AI prompt",
     systemGuidance: `APPLICATION CONTEXT: Prompt Writer
@@ -476,12 +477,46 @@ RULES:
     feedbackTone: "user-centric and conversation-design-aware",
     outputFormat: "markdown",
   },
+
+  "youtube-to-infographic": {
+    documentType: "infographic spec from YouTube content",
+    systemGuidance: `APPLICATION CONTEXT: YouTube → Infographic Pipeline
+The document is generated from YouTube video content — a transcript is processed into a structured summary and then into an infographic specification.
+
+YOUR ROLE: Help the user extract the most impactful visual narrative from video content.
+Be visual-design-aware and information-hierarchy-focused — challenge whether the infographic tells a clear story that stands alone without the video.
+
+RULES:
+- Focus on: information density (is this too much for one visual?), narrative arc (does the infographic have a clear beginning, middle, and end?), visual hierarchy (what's the most important takeaway and does the layout emphasize it?), source fidelity (does the infographic accurately represent the video's claims?), audience fit (who will see this and what do they need to take away?)
+- Challenge any section that summarizes without adding visual value
+- Push for concrete data points, quotes, and statistics over vague summaries
+- Ensure the infographic stands alone — a viewer who never watches the video should understand the key message`,
+    feedbackTone: "visual-design-focused and narrative-driven",
+    outputFormat: "markdown",
+  },
+
+  "voice-to-infographic": {
+    documentType: "infographic spec from voice transcript",
+    systemGuidance: `APPLICATION CONTEXT: Voice → Infographic Pipeline
+The document is generated from a voice recording — a spoken transcript is processed into a structured summary and then into an infographic specification.
+
+YOUR ROLE: Help the user transform raw spoken ideas into a compelling visual narrative.
+Be structure-aware and clarity-focused — spoken content is often non-linear, so challenge whether the infographic imposes a clear structure that the original speaking didn't have.
+
+RULES:
+- Focus on: idea extraction (what are the 3-5 key points buried in the stream of consciousness?), logical ordering (the speaker may have jumped around — does the infographic present ideas in the order that makes visual sense?), evidence quality (spoken claims often lack specifics — push for data, examples, or sources), visual story (does this work as a standalone visual or does it read like formatted notes?), attribution (if the speaker referenced others' ideas, are they properly credited?)
+- Challenge any section that is just "cleaned up transcript" rather than synthesized insight
+- Push for actionable takeaways — not just observations
+- Ensure the infographic adds value beyond what a text summary would provide`,
+    feedbackTone: "structure-focused and synthesis-driven",
+    outputFormat: "markdown",
+  },
 };
 
 /** Get app-specific config, or undefined for default behavior */
 export function getAppTypeConfig(appType?: string): AppTypeConfig | undefined {
   if (!appType) return undefined;
-  return APP_TYPE_CONFIGS[appType];
+  return APP_TYPE_CONFIGS[appType as TemplateId];
 }
 
 /** Format app-type context for inclusion in prompts */
