@@ -9,7 +9,7 @@
  * Add new entries here when a template needs distinct workspace behavior.
  */
 
-import type { ProvocationType } from "@shared/schema";
+import type { ProvocationType, TemplateId } from "@shared/schema";
 
 // ---------------------------------------------------------------------------
 // Panel tab types
@@ -182,7 +182,7 @@ const DEFAULT_CONFIG: AppFlowConfig = {
 // Per-template overrides — only templates that differ from the default
 // ---------------------------------------------------------------------------
 
-const APP_CONFIGS: Record<string, AppFlowConfig> = {
+const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
   "write-a-prompt": {
     ...DEFAULT_CONFIG,
     flowSteps: [
@@ -442,7 +442,7 @@ export function getAppFlowConfig(
   templateId: string | null | undefined,
 ): AppFlowConfig {
   if (!templateId) return DEFAULT_CONFIG;
-  return APP_CONFIGS[templateId] ?? DEFAULT_CONFIG;
+  return APP_CONFIGS[templateId as TemplateId] ?? DEFAULT_CONFIG;
 }
 
 /**
