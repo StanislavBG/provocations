@@ -147,6 +147,11 @@ function AppTile({
         </button>
       </div>
 
+      {/* Description */}
+      <p className="text-xs text-muted-foreground/80 leading-relaxed line-clamp-3">
+        {template.description}
+      </p>
+
       {/* Use cases */}
       <ul className="flex flex-col gap-1 mt-auto">
         {template.useCases.slice(0, 2).map((uc, i) => (
