@@ -76,6 +76,7 @@ import { createAdminPromptEditorState } from "@/lib/agentSerializer";
 import StepBuilder from "@/components/StepBuilder";
 import StepEditor from "@/components/StepEditor";
 import AgentRunner from "@/components/AgentRunner";
+import { templateIds } from "@shared/schema";
 import type {
   Document,
   ProvocationType,
@@ -93,7 +94,6 @@ import type {
   AskQuestionResponse,
   Advice,
   AgentStep,
-  templateIds,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -242,29 +242,36 @@ export default function Workspace() {
     staleTime: 30_000,
   });
 
+  // ── Admin edit state (set when editing an agent-prompt from Admin panel) ──
+  const [adminEditTaskType, setAdminEditTaskType] = useState<string | null>(null);
+
   // ── App Launch Params — cross-app deep linking ──
   const launchParamsConsumed = useRef(false);
   useEffect(() => {
     if (launchParamsConsumed.current) return;
 
+    let resolvedTemplateId: string | null = null;
+
     // Path-based deep link: /app/:templateId
     if (routeMatch && routeParams?.templateId) {
       if ((templateIds as readonly string[]).includes(routeParams.templateId)) {
-        launchParamsConsumed.current = true;
-        setSelectedTemplateId(routeParams.templateId);
-        return;
+        resolvedTemplateId = routeParams.templateId;
       }
     }
 
+    // Parse query-string for intent params (intent, entityType, entityId, etc.)
     const params = parseAppLaunchParams(window.location.search);
-    if (!params) return;
+
+    // If no route match AND no query params, nothing to do
+    if (!resolvedTemplateId && !params) return;
+
     launchParamsConsumed.current = true;
 
-    // Set template
-    setSelectedTemplateId(params.app);
+    // Set template from route path or query-string app param
+    setSelectedTemplateId(resolvedTemplateId ?? params?.app ?? null);
 
     // Handle persona edit intent
-    if (params.intent === "edit" && params.entityType === "persona" && params.entityId) {
+    if (params?.intent === "edit" && params.entityType === "persona" && params.entityId) {
       const persona = builtInPersonas[params.entityId as ProvocationType];
       if (persona) {
         const markdown = serializePersonaToMarkdown(persona);
@@ -280,13 +287,14 @@ export default function Workspace() {
     }
 
     // Handle agent-prompt edit intent (admin editing LLM task type system prompts)
-    if (params.intent === "edit" && params.entityType === "agent-prompt" && params.entityId) {
+    if (params?.intent === "edit" && params.entityType === "agent-prompt" && params.entityId) {
       const taskType = params.entityId;
+      setAdminEditTaskType(taskType);
       // Fetch the current prompt for this task type from the admin endpoint
       apiRequest("GET", "/api/admin/agent-prompts")
         .then((res) => res.json())
-        .then((data: { taskType: string; description: string; currentPrompt: string; hasOverride: boolean }[]) => {
-          const entry = data.find((p: { taskType: string }) => p.taskType === taskType);
+        .then((resp: { prompts: { taskType: string; description: string; currentPrompt: string; hasOverride: boolean }[] }) => {
+          const entry = resp.prompts.find((p) => p.taskType === taskType);
           if (entry) {
             const state = createAdminPromptEditorState(taskType, entry.description, entry.currentPrompt);
             setAgentSteps(state.steps);
@@ -432,6 +440,37 @@ export default function Workspace() {
   }, [document.rawText, savedDocTitle, objective]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Query Analyzer mutation ──
+
+  // ── Save Prompt Override mutation (admin agent-prompt editing) ──
+  const savePromptOverrideMutation = useMutation({
+    mutationFn: async () => {
+      if (!adminEditTaskType) throw new Error("No task type set for saving");
+      const systemPrompt = agentSteps[0]?.actor?.systemPrompt;
+      if (!systemPrompt) throw new Error("No system prompt to save");
+      const res = await apiRequest("PUT", `/api/admin/agent-overrides/${adminEditTaskType}`, {
+        systemPrompt,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Prompt override saved",
+        description: `Override for "${adminEditTaskType}" saved successfully`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to save override",
+        description: error.message,
+        variant: "destructive",
+      });
+      errorLogStore.push({
+        step: "Save Prompt Override",
+        endpoint: `/api/admin/agent-overrides/${adminEditTaskType}`,
+        message: error.message,
+      });
+    },
+  });
 
   // ── Writer mutation ──
 
@@ -1611,14 +1650,37 @@ RULES:
       provokeMode={selectedTemplateId === "text-to-infographic" ? "suggest" : "challenge"}
       customTabContent={selectedTemplateId === "agent-editor" ? {
         steps: (
-          <StepBuilder
-            steps={agentSteps}
-            onStepsChange={setAgentSteps}
-            selectedStepId={selectedStepId}
-            onSelectStep={setSelectedStepId}
-            persona={agentPersona}
-            agentName={agentName}
-          />
+          <div className="flex flex-col h-full">
+            {adminEditTaskType && (
+              <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
+                <span className="text-xs text-muted-foreground flex-1">
+                  Editing: <span className="font-medium text-foreground">{adminEditTaskType}</span>
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => savePromptOverrideMutation.mutate()}
+                  disabled={savePromptOverrideMutation.isPending || agentSteps.length === 0}
+                >
+                  {savePromptOverrideMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <HardDrive className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Save Prompt Override
+                </Button>
+              </div>
+            )}
+            <div className="flex-1 overflow-auto">
+              <StepBuilder
+                steps={agentSteps}
+                onStepsChange={setAgentSteps}
+                selectedStepId={selectedStepId}
+                onSelectStep={setSelectedStepId}
+                persona={agentPersona}
+                agentName={agentName}
+              />
+            </div>
+          </div>
         ),
       } : undefined}
     />

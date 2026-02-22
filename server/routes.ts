@@ -1264,6 +1264,7 @@ Output only valid JSON, no markdown.`;
         const override = overrideMap.get(taskType);
         return {
           taskType,
+          group: base.group,
           description: base.description,
           currentPrompt: override?.systemPrompt ?? base.basePrompt,
           isOverridden: !!override,
