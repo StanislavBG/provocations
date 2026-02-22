@@ -53,20 +53,25 @@ npm run db:push  # Push Drizzle schema to database
 - `POST /api/documents` — CRUD for encrypted documents
 - `POST /api/screenshot` — Server-side screenshot via Playwright
 
-### Applications (Templates)
-Each application is defined across three layers (schema → UI → LLM guidance):
-- **Write a Prompt** — AIM framework prompt writing
-- **Query Editor** — SQL analysis and optimization
-- **Product Requirement** — Incremental feature PRDs
-- **New Application** — Full SaaS spec from scratch
-- **Screen Capture** — Screenshots to requirements
-- **Research Paper** — Academic/exploratory writing
-- **Persona / Agent** — Character and AI agent profiles
-- **Research / Context** — Context library building
-- **Voice Capture** — Speak ideas, structure later
-- **YouTube to Infographic** — Video content to visual specs
-- **Text to Infographic** — Text descriptions to visuals
-- **Email Composer** — Business professional emails
+### Applications (12 Templates)
+Each application is defined across three code layers (schema → UI → LLM guidance) plus a documentation layer (`apps/<templateId>/CLAUDE.md`):
+
+| App | Category | Layout |
+|-----|----------|--------|
+| Write a Prompt | write | standard |
+| Product Requirement | build | standard |
+| New Application | build | standard |
+| Screen Capture | analyze | standard |
+| Research Paper | write | standard |
+| Persona / Agent | write | standard |
+| Research / Context | capture | standard |
+| Voice Capture | capture | voice-capture (unique) |
+| YouTube to Infographic | capture | standard |
+| Text to Infographic | capture | infographic-studio (unique) |
+| Email Composer | write | standard |
+| Agent Editor | build | standard |
+
+Per-app documentation lives in `apps/<templateId>/CLAUDE.md` — synced to the document store via `POST /api/admin/sync-app-docs`.
 
 ## Environment Variables
 
@@ -103,6 +108,7 @@ Each application is defined across three layers (schema → UI → LLM guidance)
 - Voice: Web Speech API + custom audio worklets
 
 ## Recent Changes
+- February 22, 2026: Added per-app CLAUDE.md documentation graph — 12 isolated app guides in `apps/<templateId>/CLAUDE.md` with admin sync endpoint to document store
 - February 21, 2026: Added Email Composer application — single-step business email composition with audience-adaptive tone and 'email' output format
 - February 21, 2026: Added persistent app sidebar with global layout for switching between applications
 - February 21, 2026: Enhanced query analyzer with dynamic categories, engine selector, and feedback iteration

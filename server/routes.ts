@@ -1679,6 +1679,156 @@ Output only valid JSON, no markdown.`;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
+  // ADMIN: SYNC APP DOCS — reads apps/*/CLAUDE.md from disk and upserts
+  // them as encrypted documents in the admin's folder hierarchy:
+  //   Applications / Provocations / <App Title>
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Map templateId → human-readable title for folder names
+  const APP_TITLES: Record<string, string> = {
+    "write-a-prompt": "Write a Prompt",
+    "product-requirement": "Product Requirement",
+    "new-application": "New Application",
+    "streaming": "Screen Capture",
+    "research-paper": "Research Paper",
+    "persona-definition": "Persona Agent",
+    "research-context": "Research into Context",
+    "voice-capture": "Voice Capture",
+    "youtube-to-infographic": "YouTube to Infographic",
+    "text-to-infographic": "Text to Infographic",
+    "email-composer": "Email Composer",
+    "agent-editor": "Agent Editor",
+  };
+
+  /**
+   * Find an existing folder by decrypting names and matching, or create a new one.
+   */
+  async function findOrCreateFolder(
+    userId: string,
+    folderName: string,
+    parentFolderId: number | null,
+    encryptionKey: string,
+  ): Promise<number> {
+    const existing = await storage.listFolders(userId, parentFolderId);
+    for (const f of existing) {
+      let name = f.name;
+      if (f.nameCiphertext && f.nameSalt && f.nameIv) {
+        try {
+          name = decrypt({ ciphertext: f.nameCiphertext, salt: f.nameSalt, iv: f.nameIv }, encryptionKey);
+        } catch { /* fall through to legacy name */ }
+      }
+      if (name === folderName) return f.id;
+    }
+    // Create the folder
+    const encryptedName = encrypt(folderName, encryptionKey);
+    const folder = await storage.createFolder(
+      userId,
+      "[encrypted]",
+      parentFolderId,
+      { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
+    );
+    return folder.id;
+  }
+
+  app.post("/api/admin/sync-app-docs", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const fs = await import("fs");
+      const path = await import("path");
+
+      const key = getEncryptionKey();
+      const appsDir = path.resolve(process.cwd(), "apps");
+
+      // Build folder hierarchy: Applications → Provocations
+      const applicationsFolderId = await findOrCreateFolder(userId, "Applications", null, key);
+      const provocationsFolderId = await findOrCreateFolder(userId, "Provocations", applicationsFolderId, key);
+
+      const results: { templateId: string; action: string; docId?: number }[] = [];
+
+      // Read all app directories
+      let appDirs: string[];
+      try {
+        appDirs = fs.readdirSync(appsDir).filter((d: string) => {
+          try { return fs.statSync(path.join(appsDir, d)).isDirectory(); } catch { return false; }
+        });
+      } catch {
+        return res.status(404).json({ error: "apps/ directory not found" });
+      }
+
+      for (const templateId of appDirs) {
+        const claudeMdPath = path.join(appsDir, templateId, "CLAUDE.md");
+        if (!fs.existsSync(claudeMdPath)) {
+          results.push({ templateId, action: "skipped — no CLAUDE.md" });
+          continue;
+        }
+
+        const content = fs.readFileSync(claudeMdPath, "utf-8");
+        const appTitle = APP_TITLES[templateId] || templateId;
+        const docTitle = `${appTitle} — App Guide`;
+
+        // Find or create the app subfolder under Provocations
+        const appFolderId = await findOrCreateFolder(userId, appTitle, provocationsFolderId, key);
+
+        // Check if a document already exists in this folder
+        const existingDocs = await storage.listDocuments(userId, appFolderId);
+        let existingDocId: number | null = null;
+        for (const doc of existingDocs) {
+          let title = doc.title;
+          if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+            try {
+              title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key);
+            } catch { /* fall through */ }
+          }
+          if (title === docTitle) {
+            existingDocId = doc.id;
+            break;
+          }
+        }
+
+        const encryptedContent = encrypt(content, key);
+        const encryptedTitle = encrypt(docTitle, key);
+
+        if (existingDocId) {
+          // Update existing document
+          await storage.updateDocument(existingDocId, {
+            title: "[encrypted]",
+            titleCiphertext: encryptedTitle.ciphertext,
+            titleSalt: encryptedTitle.salt,
+            titleIv: encryptedTitle.iv,
+            ciphertext: encryptedContent.ciphertext,
+            salt: encryptedContent.salt,
+            iv: encryptedContent.iv,
+            folderId: appFolderId,
+          });
+          results.push({ templateId, action: "updated", docId: existingDocId });
+        } else {
+          // Create new document
+          const doc = await storage.saveDocument({
+            userId,
+            title: "[encrypted]",
+            titleCiphertext: encryptedTitle.ciphertext,
+            titleSalt: encryptedTitle.salt,
+            titleIv: encryptedTitle.iv,
+            ciphertext: encryptedContent.ciphertext,
+            salt: encryptedContent.salt,
+            iv: encryptedContent.iv,
+            folderId: appFolderId,
+          });
+          results.push({ templateId, action: "created", docId: doc.id });
+        }
+      }
+
+      res.json({ success: true, synced: results });
+    } catch (error) {
+      console.error("Sync app docs error:", error);
+      res.status(500).json({ error: "Failed to sync app docs" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
   // IMAGE GENERATION — generates an image from a textual description
   // ═══════════════════════════════════════════════════════════════════════
   app.post("/api/generate-image", async (req, res) => {
