@@ -1,8 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Search, Loader2, AlertTriangle, CheckCircle, Info, AlertCircle } from "lucide-react";
+import { Search, Loader2, AlertTriangle, CheckCircle, Info, AlertCircle, Database } from "lucide-react";
 import type { SubqueryAnalysis } from "./QueryDiscoveriesPanel";
+
+export const DATABASE_ENGINES = [
+  { id: "generic", label: "Auto-detect" },
+  { id: "postgresql", label: "PostgreSQL" },
+  { id: "mysql", label: "MySQL" },
+  { id: "sqlserver", label: "SQL Server" },
+  { id: "oracle", label: "Oracle" },
+  { id: "sqlite", label: "SQLite" },
+] as const;
+
+export type DatabaseEngine = (typeof DATABASE_ENGINES)[number]["id"];
 
 interface QueryAnalyzerViewProps {
   sqlText: string;
@@ -13,6 +24,8 @@ interface QueryAnalyzerViewProps {
   onSubqueryHover: (id: string | null) => void;
   onSubquerySelect: (id: string | null) => void;
   onAnalyze: () => void;
+  databaseEngine: DatabaseEngine;
+  onDatabaseEngineChange: (engine: DatabaseEngine) => void;
 }
 
 const severityColor: Record<string, string> = {
@@ -47,6 +60,8 @@ export function QueryAnalyzerView({
   onSubqueryHover,
   onSubquerySelect,
   onAnalyze,
+  databaseEngine,
+  onDatabaseEngineChange,
 }: QueryAnalyzerViewProps) {
   const codeRef = useRef<HTMLPreElement>(null);
   const spanRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
@@ -161,6 +176,19 @@ export function QueryAnalyzerView({
         <Search className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-sm">Query Analysis</h3>
         <div className="flex-1" />
+        {/* Database engine selector */}
+        <div className="flex items-center gap-1.5">
+          <Database className="w-3 h-3 text-muted-foreground" />
+          <select
+            value={databaseEngine}
+            onChange={(e) => onDatabaseEngineChange(e.target.value as DatabaseEngine)}
+            className="text-xs bg-transparent border rounded px-1.5 py-0.5 text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {DATABASE_ENGINES.map((eng) => (
+              <option key={eng.id} value={eng.id}>{eng.label}</option>
+            ))}
+          </select>
+        </div>
         {subqueries.length > 0 && (
           <span className="text-xs text-muted-foreground">
             {subqueries.length} subpart{subqueries.length !== 1 ? "s" : ""} identified

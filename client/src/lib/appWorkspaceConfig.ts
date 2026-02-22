@@ -65,8 +65,8 @@ export type WriterMode = "edit" | "analyze" | "aggregate";
 export interface WriterBehaviorConfig {
   /** How the writer fundamentally behaves — edit, analyze, or aggregate */
   mode: WriterMode;
-  /** Output format — "sql" routes to /api/query-write, "markdown" to /api/write */
-  outputFormat: "markdown" | "sql";
+  /** Output format — "sql" routes to /api/query-write, "markdown"/"email" to /api/write */
+  outputFormat: "markdown" | "sql" | "email";
   /** Document type label used in prompts (e.g. "SQL query", "product requirement") */
   documentType: string;
   /** Feedback tone override for challenges and advice */
@@ -396,6 +396,28 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "infographic brief from YouTube content",
       feedbackTone: "visual-design-focused and data-driven",
+    },
+  },
+
+  "email-composer": {
+    ...DEFAULT_CONFIG,
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "compose", label: "Compose Email", description: "Describe purpose and audience, then generate" },
+    ],
+
+    leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+
+    rightPanelTabs: [RIGHT_DISCUSSION],
+
+    writer: {
+      mode: "edit",
+      outputFormat: "email",
+      documentType: "business email",
+      feedbackTone: "direct and professional — focus on clarity, tone, and actionability",
     },
   },
 

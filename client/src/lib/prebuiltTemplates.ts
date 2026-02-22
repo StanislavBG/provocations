@@ -11,6 +11,7 @@ import {
   Mic,
   Youtube,
   FileAudio,
+  Mail,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -914,6 +915,42 @@ How sections are ordered — most impactful insight first, supporting details be
       { id: "transcript-summary", label: "Transcript & summary" },
       { id: "infographic", label: "Generate infographic" },
     ],
+  },
+  {
+    id: "email-composer",
+    category: "write",
+    title: "Email Composer",
+    shortLabel: "Email",
+    subtitle: "Business professional emails, fast",
+    description:
+      "For composing polished business emails quickly. Describe the purpose — a follow-up, a proposal, a difficult conversation — and optionally describe the recipients so the tone and framing adapt. The output is a ready-to-send email, not a document. Single-step: paste your objective, get a professional email.",
+    howTo: "Describe the purpose of your email and who it's for. Optionally add context about the recipients (role, relationship, communication style) so the email adapts its tone. The system generates a business-professional email you can copy and send.",
+    useCases: [
+      "Writing a follow-up email after a client meeting",
+      "Composing a proposal or partnership request to a stakeholder",
+      "Drafting a difficult conversation — delivering bad news, pushing back on scope, or escalating an issue",
+    ],
+    icon: Mail,
+    objective:
+      "Compose a clear, professional business email that achieves the stated communication goal with appropriate tone for the audience",
+    starterText: "",
+    draftQuestions: [
+      "What is the purpose of this email? (follow-up, request, proposal, update, escalation, introduction, etc.)",
+      "Who are you sending this to? Describe their role, your relationship, and any relevant context about how they prefer to communicate.",
+      "What's the key message or ask? What should the recipient do after reading this email?",
+    ],
+    templateContent: "",
+    provocationSources: [
+      "Communications Director",
+      "Executive Assistant",
+      "Recipient's Perspective",
+    ],
+    provocationExamples: [
+      "Your subject line is vague. Would you open this email if you received 200 a day? — Communications Director",
+      "You buried the ask in paragraph three. Busy people read the first two sentences. Move it up. — Executive Assistant",
+      "I read this twice and I still don't know what you want me to do. What's the call to action? — Recipient's Perspective",
+    ],
+    steps: [{ id: "compose", label: "Compose your email" }],
   },
 ];
 
