@@ -33,6 +33,7 @@ import { ContextCapturePanel } from "@/components/ContextCapturePanel";
 import { ContextStatusPanel } from "@/components/ContextStatusPanel";
 import { StepProgressBar } from "@/components/StepProgressBar";
 import { prebuiltTemplates, TEMPLATE_CATEGORIES, type PrebuiltTemplate, type TemplateCategory } from "@/lib/prebuiltTemplates";
+import { getObjectiveConfig } from "@/lib/appWorkspaceConfig";
 import { AppTileCarousel } from "@/components/AppTileCarousel";
 import { useAppFavorites } from "@/hooks/use-app-favorites";
 import type { ReferenceDocument, ContextItem } from "@shared/schema";
@@ -40,7 +41,7 @@ import { generateId } from "@/lib/utils";
 
 
 interface TextInputFormProps {
-  onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[], templateId?: string) => void;
+  onSubmit: (text: string, objective: string, referenceDocuments: ReferenceDocument[], templateId?: string, secondaryObjective?: string) => void;
   onBlankDocument?: (objective: string) => void;
   onStreamingMode?: (objective: string, websiteUrl?: string, templateId?: string) => void;
   onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
@@ -77,6 +78,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
+  const [secondaryObjective, setSecondaryObjective] = useState("");
   const [captureUrl, setCaptureUrl] = useState("");
   const [youtubeChannelUrl, setYoutubeChannelUrl] = useState("");
   const [voiceTranscript, setVoiceTranscript] = useState("");
@@ -88,7 +90,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
   // Storage quick-load state
   const [storageOpen, setStorageOpen] = useState(false);
+  const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
   const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
+
+  // Objective config for current template
+  const objConfig = getObjectiveConfig(activePrebuilt?.id);
 
   // Category tab state for grouping templates
   const [activeCategory, setActiveCategory] = useState<TemplateCategory>("build");
@@ -109,9 +115,28 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       const res = await apiRequest("GET", "/api/documents");
       return res.json();
     },
-    enabled: storageOpen, // only fetch when popover opens
+    enabled: storageOpen || objectiveStoreOpen, // fetch when either popover opens
     staleTime: 30_000,
   });
+
+  /** Load a document from Context Store into the objective field (replace) */
+  const handleLoadObjectiveFromStore = useCallback(async (docId: number, docTitle: string) => {
+    setLoadingDocId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        setObjective(data.content);
+        setObjectiveStoreOpen(false);
+        toast({ title: "Loaded", description: `"${docTitle}" loaded into ${objConfig.primaryLabel.toLowerCase()}.` });
+      }
+    } catch (error) {
+      console.error("Failed to load document:", error);
+      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
+    } finally {
+      setLoadingDocId(null);
+    }
+  }, [toast, objConfig.primaryLabel]);
 
   const handleLoadStorageDoc = useCallback(async (docId: number, docTitle: string) => {
     setLoadingDocId(docId);
@@ -145,7 +170,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       const effectiveObjective = isWritePrompt
         ? "Reformat and structure this draft into a clear, effective prompt using the AIM framework (Actor, Input, Mission). Preserve the user's intent while organizing it into the three AIM sections."
         : (objective.trim() || "Create a compelling, well-structured document");
-      onSubmit(text.trim(), effectiveObjective, referenceDocuments, activePrebuilt?.id);
+      onSubmit(text.trim(), effectiveObjective, referenceDocuments, activePrebuilt?.id, secondaryObjective.trim() || undefined);
     }
   };
 
@@ -387,28 +412,84 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </button>
           )}
 
-          {/* Custom objective input */}
-          {isCustomObjective && (
-            <ProvokeText
-              chrome="container"
-              label="Your objective"
-              labelIcon={Target}
-              description="Describe what you're creating — this is your intent, in your words."
-              id="objective"
-              data-testid="input-objective"
-              placeholder="A persuasive investor pitch... A technical design doc... A team announcement..."
-              className="text-sm leading-relaxed font-serif"
-              value={objective}
-              onChange={setObjective}
-              minRows={2}
-              maxRows={3}
-              autoFocus
-              voice={{ mode: "replace" }}
-              onVoiceTranscript={setObjective}
-              textProcessor={(text, mode) =>
-                processText(text, mode, mode === "clean" ? "objective" : undefined)
-              }
-            />
+          {/* Objective input — always visible when a template or custom is selected */}
+          {hasObjectiveType && (
+            <div className="space-y-2">
+              <ProvokeText
+                chrome="container"
+                label={objConfig.primaryLabel}
+                labelIcon={Target}
+                description={objConfig.primaryDescription ?? "Describe what you're creating — this is your intent, in your words."}
+                id="objective"
+                data-testid="input-objective"
+                placeholder={objConfig.primaryPlaceholder}
+                className="text-sm leading-relaxed font-serif"
+                value={objective}
+                onChange={setObjective}
+                minRows={2}
+                maxRows={3}
+                autoFocus={isCustomObjective}
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setObjective}
+                textProcessor={(text, mode) =>
+                  processText(text, mode, mode === "clean" ? "objective" : undefined)
+                }
+                headerActions={objConfig.showLoadFromStore ? (
+                  <Popover open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
+                        <HardDrive className="w-3.5 h-3.5" />
+                        Load
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-72 p-0">
+                      <div className="px-3 py-2 border-b">
+                        <p className="text-sm font-medium">Load from Context Store</p>
+                        <p className="text-xs text-muted-foreground">Replace {objConfig.primaryLabel.toLowerCase()} with saved content</p>
+                      </div>
+                      <ScrollArea className="max-h-60">
+                        <div className="p-1">
+                          {savedDocs?.documents?.length ? savedDocs.documents.map((doc) => (
+                            <button
+                              key={doc.id}
+                              onClick={() => handleLoadObjectiveFromStore(doc.id, doc.title)}
+                              disabled={loadingDocId === doc.id}
+                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <span className="truncate flex-1">{doc.title}</span>
+                              {loadingDocId === doc.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            </button>
+                          )) : (
+                            <p className="px-3 py-4 text-sm text-muted-foreground text-center">No saved documents yet</p>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                ) : undefined}
+              />
+
+              {/* Secondary objective — shown when the app defines a meaningful secondary label */}
+              {objConfig.secondaryDescription && (
+                <ProvokeText
+                  chrome="container"
+                  label={objConfig.secondaryLabel}
+                  labelIcon={Crosshair}
+                  description={objConfig.secondaryDescription}
+                  id="secondary-objective"
+                  data-testid="input-secondary-objective"
+                  placeholder={objConfig.secondaryPlaceholder}
+                  className="text-sm leading-relaxed font-serif"
+                  value={secondaryObjective}
+                  onChange={setSecondaryObjective}
+                  minRows={2}
+                  maxRows={3}
+                  voice={{ mode: "replace" }}
+                  onVoiceTranscript={setSecondaryObjective}
+                />
+              )}
+            </div>
           )}
         </div>
 
@@ -712,12 +793,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                           title="Load context from saved documents"
                         >
                           <HardDrive className="w-3.5 h-3.5" />
-                          Storage
+                          Context Store
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent align="end" className="w-72 p-0">
                         <div className="px-3 py-2 border-b">
-                          <p className="text-sm font-medium">Load from storage</p>
+                          <p className="text-sm font-medium">Load from Context Store</p>
                           <p className="text-xs text-muted-foreground">Select a saved document to use as context</p>
                         </div>
                         <ScrollArea className="max-h-60">
@@ -812,12 +893,12 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                         title="Load context from saved documents"
                       >
                         <HardDrive className="w-3.5 h-3.5" />
-                        Storage
+                        Context Store
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-72 p-0">
                       <div className="px-3 py-2 border-b">
-                        <p className="text-sm font-medium">Load from storage</p>
+                        <p className="text-sm font-medium">Load from Context Store</p>
                         <p className="text-xs text-muted-foreground">Select a saved document to use as context</p>
                       </div>
                       <ScrollArea className="max-h-60">

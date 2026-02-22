@@ -309,7 +309,7 @@ export function StoragePanel({
       {/* ── Header ── */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
         <HardDrive className="w-5 h-5 text-primary" />
-        <h2 className="font-semibold text-base flex-1">Storage</h2>
+        <h2 className="font-semibold text-base flex-1">Private Context Store</h2>
 
         {/* Save bar — inline in header when content exists */}
         {hasContent && (
