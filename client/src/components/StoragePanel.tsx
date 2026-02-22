@@ -42,6 +42,22 @@ interface DragData {
 
 const DRAG_MIME = "application/x-provocations-drag";
 
+/**
+ * Compute left-padding for folder tree items at a given depth.
+ * Uses a diminishing scale so levels 1-4 get full 14px increments,
+ * levels 5-7 get 10px, and levels 8-10 get 6px.
+ * This keeps the tree readable up to 10 levels inside a w-56 (224px) panel.
+ */
+function treeIndent(depth: number): number {
+  let px = 4; // base padding
+  for (let i = 1; i <= depth; i++) {
+    if (i <= 4) px += 14;
+    else if (i <= 7) px += 10;
+    else px += 6;
+  }
+  return px;
+}
+
 function encodeDragData(data: DragData): string {
   return JSON.stringify(data);
 }
@@ -469,7 +485,7 @@ export function StoragePanel({
     : getChildren(currentFolderId);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
       {/* ── Header ── */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
         <HardDrive className="w-5 h-5 text-primary" />
@@ -506,7 +522,7 @@ export function StoragePanel({
       <div className="flex-1 flex overflow-hidden">
 
         {/* ── LEFT PANEL: Folder tree ── */}
-        <div className="w-56 shrink-0 border-r flex flex-col overflow-hidden bg-card/40">
+        <div className="w-56 shrink-0 border-r flex flex-col overflow-hidden bg-card">
           <div className="px-3 py-2.5 border-b flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Folders</span>
             <Button
@@ -620,7 +636,7 @@ export function StoragePanel({
           }}
         >
           {/* Breadcrumb */}
-          <div className="flex items-center gap-1 px-4 py-2 border-b text-xs overflow-x-auto shrink-0 bg-card/20">
+          <div className="flex items-center gap-1 px-4 py-2 border-b text-xs overflow-x-auto shrink-0 bg-card/60">
             {folderPath.map((entry, idx) => (
               <span key={idx} className="flex items-center gap-1 shrink-0">
                 {idx > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
@@ -724,7 +740,7 @@ export function StoragePanel({
           </ScrollArea>
 
           {/* Middle panel footer */}
-          <div className="flex items-center gap-2 px-4 py-2 border-t shrink-0 bg-card/20">
+          <div className="flex items-center gap-2 px-4 py-2 border-t shrink-0 bg-card/60">
             {folderPath.length > 1 && (
               <Button
                 variant="ghost"
@@ -744,7 +760,7 @@ export function StoragePanel({
         </div>
 
         {/* ── RIGHT PANEL: Document preview ── */}
-        <div className="w-[40%] min-w-[300px] border-l flex flex-col overflow-hidden bg-card/20">
+        <div className="w-[40%] min-w-[300px] border-l flex flex-col overflow-hidden bg-card">
           {isLoadingPreview ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -901,7 +917,7 @@ function InlineFolderCreate({
   return (
     <div
       className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/30"
-      style={{ paddingLeft: `${depth * 16 + 8}px` }}
+      style={{ paddingLeft: `${treeIndent(depth)}px` }}
     >
       <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
       <Input
@@ -1000,7 +1016,7 @@ function FolderTreeBranch({
       {isRenaming ? (
         <div
           className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/30"
-          style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          style={{ paddingLeft: `${treeIndent(depth)}px` }}
         >
           <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <Input
@@ -1038,7 +1054,7 @@ function FolderTreeBranch({
                   ? "bg-primary/10 text-primary font-medium"
                   : "text-foreground/80 hover:bg-muted/50"
             }`}
-            style={{ paddingLeft: `${depth * 16 + 4}px`, paddingRight: "4px" }}
+            style={{ paddingLeft: `${treeIndent(depth)}px`, paddingRight: "4px" }}
           >
             {/* Expand/collapse toggle */}
             <button
@@ -1230,12 +1246,12 @@ function MiddlePanelFolder({
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions — always visible */}
       <div className="flex items-center gap-0.5 shrink-0">
         <Button
           size="icon"
           variant="ghost"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-6 w-6"
           title="Move to..."
           onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
         >
@@ -1244,7 +1260,7 @@ function MiddlePanelFolder({
         <Button
           size="icon"
           variant="ghost"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-6 w-6"
           title="Rename"
           onClick={(e) => { e.stopPropagation(); onStartRename(); }}
         >
@@ -1253,7 +1269,7 @@ function MiddlePanelFolder({
         <Button
           size="icon"
           variant="ghost"
-          className="h-6 w-6 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-6 w-6 text-destructive/60 hover:text-destructive"
           title="Delete"
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
         >
@@ -1355,7 +1371,7 @@ function DocumentRow({
         </div>
       </button>
 
-      {/* Actions */}
+      {/* Actions — always visible so users discover rename/move/delete */}
       <div className="flex items-center gap-0.5 shrink-0">
         {isCurrent && (
           <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
@@ -1363,7 +1379,7 @@ function DocumentRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-6 w-6"
           title="Move to..."
           onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
         >
@@ -1372,7 +1388,7 @@ function DocumentRow({
         <Button
           size="icon"
           variant="ghost"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-6 w-6"
           title="Rename"
           onClick={(e) => { e.stopPropagation(); onStartRename(); }}
         >
@@ -1530,7 +1546,7 @@ function MoveToFolderItem({
         className={`flex items-center gap-1 rounded-md transition-colors ${
           disabled ? "opacity-40 cursor-not-allowed" : ""
         }`}
-        style={{ paddingLeft: `${depth * 16}px` }}
+        style={{ paddingLeft: `${treeIndent(depth)}px` }}
       >
         {/* Expand toggle */}
         <button

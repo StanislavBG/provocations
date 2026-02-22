@@ -17,7 +17,6 @@ import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToo
 import { ImagePreviewPanel } from "@/components/ImagePreviewPanel";
 import { DEFAULT_MODEL_CONFIG, type ModelConfig } from "@/components/ModelConfigPanel";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
-import { AppSidebar } from "@/components/AppSidebar";
 import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
@@ -142,9 +141,6 @@ export default function Workspace() {
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
-
-  // Sidebar collapsed state — persistent left nav
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Model configuration state — used by text-to-infographic
   const [modelConfig, setModelConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
@@ -1971,20 +1967,6 @@ RULES:
 
   const isStandardWorkspace = !isInputPhase && !isVoiceCapture;
 
-  // Handle app selection from sidebar
-  const handleSidebarSelect = useCallback((template: { id: string; objective: string; category: string }) => {
-    if (document.rawText.trim() && selectedTemplateId && template.id !== selectedTemplateId) {
-      setSelectedTemplateId(template.id);
-      const config = getAppFlowConfig(template.id);
-      setActiveToolboxApp(config.defaultToolboxTab as ToolboxApp);
-      return;
-    }
-    setSelectedTemplateId(template.id);
-    if (!objective) setObjective(template.objective);
-    const config = getAppFlowConfig(template.id);
-    setActiveToolboxApp(config.defaultToolboxTab as ToolboxApp);
-  }, [document.rawText, selectedTemplateId, objective]);
-
   return (
     <div className="h-screen flex flex-col">
       {/* ── Persistent global bar ── */}
@@ -2180,15 +2162,8 @@ RULES:
 
       {/* ── Main layout: Sidebar + Content ── */}
       <div className="flex-1 flex flex-row overflow-hidden">
-        {/* Persistent left sidebar — app navigation (hidden during input phase) */}
-        {!isMobile && !isInputPhase && (
-          <AppSidebar
-            selectedAppId={selectedTemplateId}
-            onSelectApp={handleSidebarSelect}
-            collapsed={sidebarCollapsed}
-            onCollapsedChange={setSidebarCollapsed}
-          />
-        )}
+        {/* Left sidebar removed — app selection lives in the input-phase tile carousel.
+            Once inside a workspace the sidebar was a redundant 4th panel. */}
 
         {/* Main content area — renders current app experience */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
