@@ -30,26 +30,33 @@ export function parseAppLaunchParams(search: string): AppLaunchParams | null {
 }
 
 /**
- * Build a URL path + query string from AppLaunchParams.
- * Only includes non-undefined values.
+ * Build a URL path from AppLaunchParams.
+ * Uses path-based routing: /app/{templateId}?intent=...&entityType=...
+ * Falls back to query-string for backwards compat if no app is specified.
  */
 export function buildAppLaunchUrl(params: AppLaunchParams): string {
-  const searchParams = new URLSearchParams();
+  const extra = new URLSearchParams();
   for (const key of KNOWN_KEYS) {
+    if (key === "app") continue; // app goes into the path
     const val = params[key];
     if (val !== undefined && val !== null) {
-      searchParams.set(key, String(val));
+      extra.set(key, String(val));
     }
   }
-  return `/?${searchParams.toString()}`;
+  const qs = extra.toString();
+  if (params.app) {
+    return `/app/${params.app}${qs ? `?${qs}` : ""}`;
+  }
+  return `/?${qs}`;
 }
 
 /**
- * Clear launch params from the browser URL without triggering navigation.
- * Called after Workspace consumes the params.
+ * Clear launch params (query string only) from the browser URL without
+ * triggering navigation. The path-based /app/:templateId is kept because
+ * the Workspace component manages it via setSelectedTemplateId.
  */
 export function clearLaunchParams(): void {
-  if (typeof window !== "undefined") {
-    window.history.replaceState({}, "", "/");
+  if (typeof window !== "undefined" && window.location.search) {
+    window.history.replaceState({}, "", window.location.pathname);
   }
 }
