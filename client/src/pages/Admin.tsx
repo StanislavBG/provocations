@@ -852,6 +852,7 @@ function PersonaDefinitionList() {
 
 interface AgentPromptInfo {
   taskType: string;
+  group: string;
   description: string;
   currentPrompt: string;
   isOverridden: boolean;
@@ -929,69 +930,91 @@ function AgentPromptList() {
     );
   }
 
+  // Group prompts by their functional category
+  const grouped = prompts.reduce<Record<string, AgentPromptInfo[]>>((acc, p) => {
+    const g = p.group || "Other";
+    (acc[g] ??= []).push(p);
+    return acc;
+  }, {});
+
+  // Stable group ordering
+  const groupOrder = ["Document Writing", "Persona Interactions", "Interview", "Requirements Discovery", "Utilities"];
+  const orderedGroups = groupOrder.filter((g) => grouped[g]?.length);
+
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-muted-foreground mb-4">
-        All LLM task types used across Provocations. Edit the system prompt to customize behavior.
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        All LLM task types used across Provocations, grouped by function. Edit the system prompt to customize behavior.
       </p>
-      {prompts.map((prompt) => {
-        const editUrl = buildAppLaunchUrl({
-          app: "agent-editor",
-          intent: "edit",
-          entityType: "agent-prompt",
-          entityId: prompt.taskType,
-          source: "admin",
-        });
-
+      {orderedGroups.map((groupName) => {
+        const groupPrompts = grouped[groupName];
         return (
-          <div
-            key={prompt.taskType}
-            className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/30 transition-colors"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm font-mono">{prompt.taskType}</span>
-                {prompt.isOverridden && (
-                  <Badge variant="secondary" className="text-[9px]">DB Override</Badge>
-                )}
-                {prompt.humanCurated && (
-                  <Lock className="w-3 h-3 text-amber-600 shrink-0" />
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">{prompt.description}</p>
-              <p className="text-[11px] text-muted-foreground/70 mt-1 font-mono truncate max-w-[500px]">
-                {prompt.currentPrompt.slice(0, 120)}...
-              </p>
+          <div key={groupName} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold">{groupName}</h4>
+              <Badge variant="outline" className="text-[10px]">{groupPrompts.length}</Badge>
             </div>
+            {groupPrompts.map((prompt) => {
+              const editUrl = buildAppLaunchUrl({
+                app: "agent-editor",
+                intent: "edit",
+                entityType: "agent-prompt",
+                entityId: prompt.taskType,
+                source: "admin",
+              });
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <a href={editUrl}>
-                <Button size="sm" variant="outline" className="gap-1 text-xs h-7">
-                  <Pencil className="w-3 h-3" />
-                  Edit
-                </Button>
-              </a>
-              <Button
-                size="sm"
-                variant={prompt.humanCurated ? "default" : "outline"}
-                className={`gap-1 text-xs h-7 ${prompt.humanCurated ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
-                onClick={() => lockMutation.mutate({ taskType: prompt.taskType, humanCurated: !prompt.humanCurated })}
-                disabled={lockMutation.isPending}
-              >
-                {prompt.humanCurated ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-              </Button>
-              {prompt.isOverridden && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1 text-xs h-7 text-muted-foreground"
-                  onClick={() => revertMutation.mutate(prompt.taskType)}
-                  disabled={revertMutation.isPending}
+              return (
+                <div
+                  key={prompt.taskType}
+                  className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/30 transition-colors"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                </Button>
-              )}
-            </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm font-mono">{prompt.taskType}</span>
+                      {prompt.isOverridden && (
+                        <Badge variant="secondary" className="text-[9px]">DB Override</Badge>
+                      )}
+                      {prompt.humanCurated && (
+                        <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{prompt.description}</p>
+                    <p className="text-[11px] text-muted-foreground/70 mt-1 font-mono truncate max-w-[500px]">
+                      {prompt.currentPrompt.slice(0, 120)}...
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <a href={editUrl}>
+                      <Button size="sm" variant="outline" className="gap-1 text-xs h-7">
+                        <Pencil className="w-3 h-3" />
+                        Edit
+                      </Button>
+                    </a>
+                    <Button
+                      size="sm"
+                      variant={prompt.humanCurated ? "default" : "outline"}
+                      className={`gap-1 text-xs h-7 ${prompt.humanCurated ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
+                      onClick={() => lockMutation.mutate({ taskType: prompt.taskType, humanCurated: !prompt.humanCurated })}
+                      disabled={lockMutation.isPending}
+                    >
+                      {prompt.humanCurated ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                    </Button>
+                    {prompt.isOverridden && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1 text-xs h-7 text-muted-foreground"
+                        onClick={() => revertMutation.mutate(prompt.taskType)}
+                        disabled={revertMutation.isPending}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       })}
