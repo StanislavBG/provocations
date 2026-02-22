@@ -1,4 +1,5 @@
 import { Switch, Route } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -17,6 +18,15 @@ import Workspace from "@/pages/Workspace";
 import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
 import { ErrorConsole } from "@/components/ErrorConsole";
+import { trackEvent } from "@/lib/tracking";
+
+/** Fires a "login" tracking event once when the signed-in shell mounts. */
+function LoginTracker() {
+  useEffect(() => {
+    trackEvent("login");
+  }, []);
+  return null;
+}
 
 function Router() {
   return (
@@ -60,6 +70,7 @@ function App() {
             </div>
           </SignedOut>
           <SignedIn>
+            <LoginTracker />
             <Router />
             <ErrorConsole />
           </SignedIn>

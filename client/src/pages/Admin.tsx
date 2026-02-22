@@ -697,8 +697,31 @@ function ResearchTriggerCard() {
   );
 }
 
+/** Format a timestamp as a human-readable relative time string */
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 /** Human-readable labels and descriptions for metric keys */
 const METRIC_META: Record<string, { label: string; description: string; unit?: string }> = {
+  logins: {
+    label: "Logins",
+    description: "Number of times the user signed in or loaded the app",
+  },
+  page_views: {
+    label: "Page Views",
+    description: "Number of workspace page loads (front page visits)",
+  },
   time_saved_minutes: {
     label: "Time Saved",
     description: "Estimated minutes saved through AI collaboration vs. writing from scratch (19 WPM composition speed + reading time)",
@@ -731,6 +754,9 @@ function UserMetricsTable({ data }: { data: UserMetricsMatrix }) {
             <th className="text-left px-4 py-2.5 font-semibold sticky left-0 bg-card z-10 min-w-[180px]">
               User
             </th>
+            <th className="text-right px-3 py-2.5 font-medium whitespace-nowrap" title="Most recent activity timestamp">
+              <span className="cursor-help border-b border-dotted border-muted-foreground/40">Last Seen</span>
+            </th>
             {data.metricKeys.map((key) => {
               const meta = METRIC_META[key];
               return (
@@ -757,6 +783,15 @@ function UserMetricsTable({ data }: { data: UserMetricsMatrix }) {
                 <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
                   {user.email}
                 </div>
+              </td>
+              <td className="text-right px-3 py-2 tabular-nums whitespace-nowrap text-xs">
+                {user.lastSeenAt ? (
+                  <span title={new Date(user.lastSeenAt).toLocaleString()}>
+                    {formatRelativeTime(user.lastSeenAt)}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground/40">—</span>
+                )}
               </td>
               {data.metricKeys.map((key) => {
                 const val = user.metrics[key] ?? 0;

@@ -827,6 +827,26 @@ export class DatabaseStorage implements IStorage {
     await db.delete(agentPromptOverrides).where(eq(agentPromptOverrides.taskType, taskType));
   }
 
+  /** Per-user login/page-view activity from tracking_events */
+  async getUserActivityStats(): Promise<{ userId: string; loginCount: number; pageViewCount: number; lastSeenAt: string | null }[]> {
+    const rows = await db
+      .select({
+        userId: trackingEvents.userId,
+        loginCount: sql<number>`COUNT(*) FILTER (WHERE ${trackingEvents.eventType} = 'login')`,
+        pageViewCount: sql<number>`COUNT(*) FILTER (WHERE ${trackingEvents.eventType} = 'page_view')`,
+        lastSeenAt: sql<string>`MAX(${trackingEvents.createdAt})`,
+      })
+      .from(trackingEvents)
+      .groupBy(trackingEvents.userId);
+
+    return rows.map((r) => ({
+      userId: r.userId,
+      loginCount: Number(r.loginCount ?? 0),
+      pageViewCount: Number(r.pageViewCount ?? 0),
+      lastSeenAt: r.lastSeenAt ?? null,
+    }));
+  }
+
   /** Collect all distinct user IDs from documents, tracking events, and usage metrics */
   async getAllKnownUserIds(): Promise<string[]> {
     const [docUsers, trackingUsers, metricUsers] = await Promise.all([
