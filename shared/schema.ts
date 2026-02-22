@@ -488,6 +488,7 @@ export interface DocumentListItem {
   id: number;
   title: string;
   folderId?: number | null;
+  locked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -497,6 +498,7 @@ export interface DocumentPayload {
   title: string;
   content: string;
   folderId?: number | null;
+  locked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -531,6 +533,7 @@ export interface FolderItem {
   id: number;
   name: string;
   parentFolderId: number | null;
+  locked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
