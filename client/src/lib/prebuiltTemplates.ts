@@ -762,6 +762,7 @@ What needs to happen next based on this capture?`,
   {
     id: "youtube-to-infographic",
     category: "capture",
+    comingSoon: true,
     title: "YouTube to Infographic",
     shortLabel: "YouTube",
     subtitle: "Channel videos to visual summaries",
