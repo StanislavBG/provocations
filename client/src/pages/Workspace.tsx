@@ -25,7 +25,7 @@ import { StoragePanel } from "@/components/StoragePanel";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { UserButton } from "@clerk/clerk-react";
 import { useRole } from "@/hooks/use-role";
-import { Link } from "wouter";
+import { Link, useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +93,7 @@ import type {
   AskQuestionResponse,
   Advice,
   AgentStep,
+  templateIds,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -109,6 +110,8 @@ export default function Workspace() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const { isAdmin } = useRole();
+  const [, navigate] = useLocation();
+  const [routeMatch, routeParams] = useRoute("/app/:templateId");
 
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState<string>("");
@@ -127,7 +130,17 @@ export default function Workspace() {
   }, [objective]);
 
   // Which template was selected in step 1 — drives workspace behavior
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateIdRaw] = useState<string | null>(null);
+
+  /** Set the selected template and sync the browser URL */
+  const setSelectedTemplateId = useCallback((id: string | null) => {
+    setSelectedTemplateIdRaw(id);
+    if (id) {
+      window.history.replaceState({}, "", `/app/${id}`);
+    } else {
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
 
   // Computed flow config — the single source of truth for app-specific behavior
   const appFlowConfig: AppFlowConfig = getAppFlowConfig(selectedTemplateId);
@@ -233,6 +246,16 @@ export default function Workspace() {
   const launchParamsConsumed = useRef(false);
   useEffect(() => {
     if (launchParamsConsumed.current) return;
+
+    // Path-based deep link: /app/:templateId
+    if (routeMatch && routeParams?.templateId) {
+      if ((templateIds as readonly string[]).includes(routeParams.templateId)) {
+        launchParamsConsumed.current = true;
+        setSelectedTemplateId(routeParams.templateId);
+        return;
+      }
+    }
+
     const params = parseAppLaunchParams(window.location.search);
     if (!params) return;
     launchParamsConsumed.current = true;
