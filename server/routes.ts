@@ -1680,11 +1680,10 @@ Output only valid JSON, no markdown.`;
         const client = new OpenAI({ apiKey: openaiKey, ...(baseURL ? { baseURL } : {}) });
 
         const response = await client.images.generate({
-          model: "dall-e-3",
+          model: "gpt-image-1",
           prompt: `Create an infographic based on the following description:\n\n${prompt}`,
           n: 1,
           size: "1024x1024",
-          response_format: "b64_json",
         });
 
         const imageData = response.data?.[0];

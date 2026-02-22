@@ -1485,16 +1485,15 @@ RULES:
           }}
           onVoiceInfographicMode={(obj, transcript, templateId) => {
             setSelectedTemplateId(templateId);
-            const initialDoc = `# Text to Infographic\n\n*Processing transcript (${transcript.split(/\s+/).length} words)...*`;
-            setDocument({ id: generateId("doc"), rawText: initialDoc });
+            setDocument({ id: generateId("doc"), rawText: transcript });
             setObjective(obj);
             const viConfig = getAppFlowConfig(templateId);
             setActiveToolboxApp(viConfig.defaultToolboxTab as ToolboxApp);
             const initialVersion: DocumentVersion = {
               id: generateId("v"),
-              text: initialDoc,
+              text: transcript,
               timestamp: Date.now(),
-              description: "Voice infographic workspace initialized",
+              description: "Raw text loaded into infographic workspace",
             };
             setVersions([initialVersion]);
             // Store transcript in context for processing
