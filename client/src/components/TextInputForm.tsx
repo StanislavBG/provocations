@@ -9,7 +9,6 @@ import {
   PenLine,
   PencilLine,
   Check,
-  ChevronDown,
   Crosshair,
   Radio,
   NotebookPen,
@@ -85,7 +84,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
-  const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
 
   // Storage quick-load state
@@ -185,24 +183,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     setIsCustomObjective(false);
     setActiveCategory(template.category);
     onTemplateSelect?.(template.id);
-
-    setCardsExpanded(false);
   };
 
   const handleSelectCustom = () => {
     setActivePrebuilt(null);
     setIsCustomObjective(true);
     onTemplateSelect?.("custom");
-
     setObjective("");
-    setCardsExpanded(false);
-  };
-
-  const handleChangeType = () => {
-    setCardsExpanded(true);
-    requestAnimationFrame(() => {
-      stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
   };
 
   const handleDraftQuestionResponse = (question: string, response: string) => {
@@ -320,96 +307,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
         {/* ── STEP ONE: Your objective (template already selected) ── */}
         <div className="shrink-0 space-y-2" ref={stepOneRef}>
-          {/* Hide heading when write-a-prompt is selected (AIM description replaces it below) */}
-          {!(isWritePrompt && !cardsExpanded) && (
+          {/* Heading — hidden for write-a-prompt (AIM description replaces it) */}
+          {!isWritePrompt && (
             <h2 className="text-base font-semibold">
               What do <em>you</em> want to create?
             </h2>
-          )}
-
-          {/* Category tab bar + filtered template chips (expanded change-type mode) */}
-          {cardsExpanded && (
-            <div className="space-y-2">
-              {/* Category tabs */}
-              <div className="flex items-center gap-1 border-b">
-                {TEMPLATE_CATEGORIES.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      activeCategory === cat.id
-                        ? "border-primary text-primary"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                    title={cat.description}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Filtered template chips */}
-              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                {prebuiltTemplates
-                  .filter((t) => t.category === activeCategory)
-                  .map((template) => {
-                    const Icon = template.icon;
-                    const isActive = activePrebuilt?.id === template.id;
-
-                    return (
-                      <button
-                        key={template.id}
-                        onClick={() => handleSelectPrebuilt(template)}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
-                          isActive
-                            ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                            : "border-border hover:border-primary/40 hover:bg-primary/5"
-                        }`}
-                      >
-                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                        <span>{template.title}</span>
-                        {isActive && <Check className="w-3 h-3 text-primary" />}
-                      </button>
-                    );
-                  })}
-
-                {/* "Custom" chip — shown in every category */}
-                <button
-                  onClick={handleSelectCustom}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed text-sm transition-all duration-150 ${
-                    isCustomObjective
-                      ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                      : "border-border hover:border-primary/40 hover:bg-primary/5"
-                  }`}
-                >
-                  <PenLine className={`w-4 h-4 shrink-0 ${isCustomObjective ? "text-primary" : "text-muted-foreground"}`} />
-                  <span>Custom</span>
-                  {isCustomObjective && <Check className="w-3 h-3 text-primary" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Collapsed selection indicator */}
-          {!cardsExpanded && (
-            <button
-              onClick={handleChangeType}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 transition-colors"
-            >
-              {activePrebuilt ? (
-                <>
-                  {(() => { const I = activePrebuilt.icon; return <I className="w-4 h-4 text-primary" />; })()}
-                  <span className="font-medium">{activePrebuilt.title}</span>
-                </>
-              ) : (
-                <>
-                  <PenLine className="w-4 h-4 text-primary" />
-                  <span className="font-medium">Custom</span>
-                  {objective && <span className="text-muted-foreground truncate max-w-[200px]">&mdash; {objective}</span>}
-                </>
-              )}
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
-            </button>
           )}
 
           {/* Objective input — always visible when a template or custom is selected */}
@@ -500,39 +402,19 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
           {isWritePrompt ? null : (
             <h2 className="shrink-0 text-base font-semibold">
               {activePrebuilt?.id === "streaming"
-                ? "Describe what you're capturing requirements for"
+                ? "Configure capture workspace"
                 : activePrebuilt?.id === "voice-capture"
-                  ? "Describe what you're recording"
+                  ? "Start recording"
                   : activePrebuilt?.id === "youtube-to-infographic"
-                    ? "Enter a YouTube channel to extract insights"
+                    ? "YouTube channel source"
                     : activePrebuilt?.id === "text-to-infographic"
-                      ? "Paste or upload your voice transcript"
+                      ? "Transcript source"
                       : "Provide your starting material"}
             </h2>
           )}
 
           {activePrebuilt?.id === "voice-capture" && onVoiceCaptureMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="Session topic"
-                labelIcon={Target}
-                description="What is this recording session about? Meeting notes, brainstorm, interview, etc."
-                id="voice-capture-objective"
-                placeholder="Team standup meeting... Product brainstorm... User interview..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               <Button
                 onClick={() => onVoiceCaptureMode(
                   objective.trim() || "Voice capture session",
@@ -549,26 +431,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </div>
           ) : activePrebuilt?.id === "youtube-to-infographic" && onYouTubeInfographicMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="What insights are you looking for?"
-                labelIcon={Target}
-                description="Describe the kind of content you want to extract — tips, tutorials, strategies, etc."
-                id="youtube-objective"
-                placeholder="Extract key productivity tips... Summarize tech tutorials... Capture marketing strategies..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Youtube className="w-4 h-4 text-red-500" />
@@ -605,26 +467,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </div>
           ) : activePrebuilt?.id === "text-to-infographic" && onVoiceInfographicMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="What is this transcript about?"
-                labelIcon={Target}
-                description="Describe the session — meeting, lecture, interview — so the summary captures the right focus."
-                id="voice-infographic-objective"
-                placeholder="Team product review meeting... Guest lecture on AI... User research interview..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <FileAudio className="w-4 h-4 text-primary" />
@@ -679,26 +521,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </div>
           ) : activePrebuilt?.id === "streaming" && onStreamingMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="Objective"
-                labelIcon={Target}
-                description="Describe what you're capturing — a feature, a flow, an existing screen you want to improve."
-                id="streaming-objective"
-                placeholder="Capture requirements for a checkout flow... Document enhancements to the dashboard..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               {/* Website URL input */}
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
