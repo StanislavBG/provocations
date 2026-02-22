@@ -1694,6 +1694,7 @@ RULES:
           capturedContext={capturedContext}
           onCapturedContextChange={setCapturedContext}
           onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
+          selectedTemplateId={selectedTemplateId}
         />
       </div>
       <StepTracker
