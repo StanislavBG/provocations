@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProvokeText } from "@/components/ProvokeText";
 import {
   Plus,
@@ -8,12 +10,18 @@ import {
   Link,
   X,
   FileText,
+  HardDrive,
   MessageSquareText,
   ExternalLink,
   Trash2,
   ChevronDown,
   ChevronUp,
+  Check,
+  Loader2,
+  Upload,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { ContextItem, ContextItemType } from "@shared/schema";
 import { generateId } from "@/lib/utils";
 
@@ -23,14 +31,71 @@ interface ContextCapturePanelProps {
 }
 
 export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePanelProps) {
+  const { toast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [addingType, setAddingType] = useState<ContextItemType | null>(null);
+  const [showStorePicker, setShowStorePicker] = useState(false);
+  const [loadingStoreDocId, setLoadingStoreDocId] = useState<number | null>(null);
+  const [loadedStoreDocIds, setLoadedStoreDocIds] = useState<Set<number>>(new Set());
 
   // Inline form state
   const [formContent, setFormContent] = useState("");
   const [formAnnotation, setFormAnnotation] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const pasteAreaRef = useRef<HTMLDivElement>(null);
+
+  // Fetch saved documents for Context Store picker
+  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
+    queryKey: ["/api/documents"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/documents");
+      return res.json();
+    },
+    enabled: showStorePicker,
+    staleTime: 30_000,
+  });
+
+  const handleLoadStoreDoc = useCallback(async (docId: number, docTitle: string) => {
+    setLoadingStoreDocId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        const newItem: ContextItem = {
+          id: generateId("ctx"),
+          type: "text",
+          content: data.content,
+          annotation: `Loaded from Context Store: "${docTitle}"`,
+          createdAt: Date.now(),
+        };
+        onItemsChange([...items, newItem]);
+        setLoadedStoreDocIds((prev) => new Set(prev).add(docId));
+      }
+    } catch {
+      // Silently fail — user sees no new item added
+    } finally {
+      setLoadingStoreDocId(null);
+    }
+  }, [items, onItemsChange]);
+
+  const handleFileUploadAsContext = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result;
+      if (typeof content === "string" && content.trim()) {
+        const newItem: ContextItem = {
+          id: generateId("ctx"),
+          type: "text",
+          content: content.trim(),
+          annotation: `Uploaded file: "${file.name}"`,
+          createdAt: Date.now(),
+        };
+        onItemsChange([...items, newItem]);
+        toast({ title: "File uploaded", description: `"${file.name}" added as context.` });
+      }
+    };
+    reader.readAsText(file);
+  }, [items, onItemsChange, toast]);
 
   const resetForm = useCallback(() => {
     setIsAdding(false);
@@ -124,7 +189,7 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
       )}
 
       {/* Type selector */}
-      {isAdding && !addingType && (
+      {isAdding && !addingType && !showStorePicker && (
         <div className="rounded-lg border bg-card p-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -135,6 +200,14 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
             </Button>
           </div>
           <div className="flex gap-2">
+            {/* Context Store — first option */}
+            <button
+              onClick={() => setShowStorePicker(true)}
+              className="flex-1 flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border border-primary/30 bg-primary/5 hover:border-primary/50 hover:bg-primary/10 transition-all"
+            >
+              <HardDrive className="w-5 h-5 text-primary" />
+              <span className="text-xs font-medium">Context Store</span>
+            </button>
             {(Object.entries(typeConfig) as [ContextItemType, typeof typeConfig["text"]][]).map(([type, config]) => {
               const Icon = config.icon;
               return (
@@ -148,6 +221,78 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Context Store document picker */}
+      {showStorePicker && (
+        <div className="rounded-lg border bg-card p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-primary" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Context Store
+              </span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setShowStorePicker(false); resetForm(); }}>
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Select documents to attach as context</p>
+          <ScrollArea className="max-h-48">
+            {isLoadingDocs ? (
+              <div className="py-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading...
+              </div>
+            ) : !savedDocs?.documents?.length ? (
+              <div className="py-4 text-center text-sm text-muted-foreground">
+                No saved documents yet
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {savedDocs.documents.map((doc) => (
+                  <button
+                    key={doc.id}
+                    onClick={() => handleLoadStoreDoc(doc.id, doc.title)}
+                    disabled={loadingStoreDocId !== null || loadedStoreDocIds.has(doc.id)}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 text-left text-sm rounded-md hover:bg-muted/50 transition-colors disabled:opacity-50"
+                  >
+                    {loadingStoreDocId === doc.id ? (
+                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
+                    ) : loadedStoreDocIds.has(doc.id) ? (
+                      <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="truncate flex-1">{doc.title}</span>
+                    {loadedStoreDocIds.has(doc.id) && (
+                      <span className="text-[10px] text-primary font-medium shrink-0">Added</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+              <Upload className="w-3.5 h-3.5" />
+              Upload file
+              <input
+                type="file"
+                accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUploadAsContext(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <Button variant="outline" size="sm" onClick={() => { setShowStorePicker(false); resetForm(); }}>
+              Done
+            </Button>
           </div>
         </div>
       )}
