@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, FileDown, FileArchive, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info, Clock } from "lucide-react";
+import { Download, FileDown, FileArchive, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info, Clock, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useWhisperRecorder } from "@/hooks/use-whisper";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer, markdownToHtml } from "@/components/MarkdownRenderer";
 
@@ -77,7 +78,6 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const [feedbackText, setFeedbackText] = useState("");
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef("");
   const promptInputRef = useRef<HTMLInputElement>(null);
   const isRecordingRef = useRef(false);
@@ -152,59 +152,15 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     selectedTextRef.current = selectedText;
   }, [selectedText]);
 
-  // Initialize speech recognition only once
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = "";
-      let interimTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
-      }
-      if (finalTranscript) {
-        transcriptRef.current += finalTranscript + " ";
-      }
-      const displayTranscript = transcriptRef.current + interimTranscript;
-      onTranscriptUpdateRef.current?.(displayTranscript, true);
-    };
-
-    recognition.onerror = (event: any) => {
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      onTranscriptUpdateRef.current?.("", false);
-      if (event.error === 'not-allowed') {
-        toast({
-          title: "Microphone Access Required",
-          description: "Please allow microphone access in your browser to use voice input.",
-          variant: "destructive",
-        });
-      } else if (event.error === 'no-speech') {
-        toast({
-          title: "No Speech Detected",
-          description: "Please speak into your microphone and try again.",
-        });
-      } else if (event.error !== 'aborted') {
-        toast({
-          title: "Voice Recording Error",
-          description: "Speech recognition failed. Please try again.",
-          variant: "destructive",
-        });
-      }
-    };
-
-    recognition.onend = () => {
-      const transcript = transcriptRef.current.trim();
+  // ── Whisper-powered voice recording (translates any language to English) ──
+  const {
+    isTranscribing,
+    startRecording: whisperStart,
+    stopRecording: whisperStop,
+    toggleRecording,
+  } = useWhisperRecorder({
+    onTranscript: (text) => {
+      const transcript = text.trim();
       const currentSelectedText = selectedTextRef.current;
       if (transcript && currentSelectedText && onVoiceMergeRef.current) {
         onVoiceMergeRef.current(currentSelectedText, transcript);
@@ -215,35 +171,20 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
       setIsRecording(false);
       setSelectedText("");
       setSelectionPosition(null);
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      recognition.abort();
-    };
-  }, [toast]);
-
-  const toggleRecording = useCallback(() => {
-    if (!recognitionRef.current) return;
-
-    if (isRecordingRef.current) {
-      recognitionRef.current.stop();
-    } else {
-      transcriptRef.current = "";
-      onTranscriptUpdateRef.current?.("", true);
-      try {
-        recognitionRef.current.start();
-        isRecordingRef.current = true;
-        setIsRecording(true);
-      } catch (error) {
-        console.error("Failed to start recording:", error);
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        onTranscriptUpdateRef.current?.("", false);
+    },
+    onInterimTranscript: (text) => {
+      transcriptRef.current = text;
+      onTranscriptUpdateRef.current?.(text, true);
+    },
+    onRecordingChange: (recording) => {
+      isRecordingRef.current = recording;
+      setIsRecording(recording);
+      if (recording) {
+        transcriptRef.current = "";
+        onTranscriptUpdateRef.current?.("", true);
       }
-    }
-  }, []);
+    },
+  });
 
   // Handle closing the prompt input
   const handleClosePrompt = useCallback(() => {
@@ -807,11 +748,16 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
                 size="sm"
                 variant={isRecording ? "destructive" : "default"}
                 onClick={toggleRecording}
-                disabled={isMerging || isProcessingEdit}
+                disabled={isMerging || isProcessingEdit || isTranscribing}
                 className={`gap-1.5 ${isRecording ? "animate-pulse" : ""}`}
-                title={isRecording ? "Stop recording" : "Speak feedback about selection"}
+                title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Speak feedback about selection"}
               >
-                {isRecording ? (
+                {isTranscribing ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    ...
+                  </>
+                ) : isRecording ? (
                   <>
                     <Square className="w-3 h-3" />
                     Stop

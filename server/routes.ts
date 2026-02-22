@@ -2456,6 +2456,60 @@ Output only the evolved markdown document. No explanations.`;
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // WHISPER TRANSCRIPTION — translate any-language audio to English text
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /** Check if Whisper transcription is available (requires OpenAI API key) */
+  app.get("/api/transcribe/status", (_req, res) => {
+    const hasKey = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY);
+    res.json({ available: hasKey });
+  });
+
+  /** Accept base64-encoded audio, translate+transcribe to English via Whisper */
+  app.post("/api/transcribe", async (req, res) => {
+    try {
+      const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (!openaiKey) {
+        return res.status(503).json({ error: "Whisper transcription not available — no OpenAI API key configured" });
+      }
+
+      const { audio, mimeType } = req.body;
+      if (!audio || typeof audio !== "string") {
+        return res.status(400).json({ error: "audio (base64) is required" });
+      }
+
+      const buffer = Buffer.from(audio, "base64");
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: "Empty audio data" });
+      }
+      if (buffer.length > 25 * 1024 * 1024) {
+        return res.status(400).json({ error: "Audio exceeds 25MB limit" });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const { toFile } = await import("openai");
+      const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      const client = new OpenAI({ apiKey: openaiKey, ...(baseURL ? { baseURL } : {}) });
+
+      // Determine file extension from MIME type
+      const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
+      const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
+
+      // Use "translations" endpoint — always outputs English regardless of input language
+      const result = await client.audio.translations.create({
+        file,
+        model: "whisper-1",
+      });
+
+      res.json({ text: result.text });
+    } catch (error) {
+      console.error("Transcribe error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Transcription failed", details: errorMessage });
+    }
+  });
+
   // Summarize voice transcript into clear intent
   app.post("/api/summarize-intent", async (req, res) => {
     try {
