@@ -18,6 +18,7 @@ import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
 import { InfographicStudioWorkspace } from "@/components/InfographicStudioWorkspace";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
+import { errorLogStore } from "@/lib/errorLog";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { StoragePanel } from "@/components/StoragePanel";
@@ -507,12 +508,10 @@ RULES:
       }
     },
     onError: (error) => {
-      setTranscriptSummary(`Update failed: ${error instanceof Error ? error.message : "Something went wrong"}. Please try again.`);
-      toast({
-        title: "Update Failed",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Something went wrong";
+      setTranscriptSummary(`Update failed: ${msg}. Please try again.`);
+      errorLogStore.push({ step: "Write Document", endpoint: "/api/write", message: msg });
+      toast({ title: "Update Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -561,11 +560,9 @@ RULES:
       }
     },
     onError: (error) => {
-      toast({
-        title: "Draft Creation Failed",
-        description: error instanceof Error ? error.message : "Could not create the first draft. Please try again.",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Could not create the first draft. Please try again.";
+      errorLogStore.push({ step: "Create Draft", endpoint: "/api/write", message: msg });
+      toast({ title: "Draft Creation Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -613,11 +610,9 @@ RULES:
       setCurrentInterviewTopic(topic);
     },
     onError: (error) => {
-      toast({
-        title: "Interview Error",
-        description: error instanceof Error ? error.message : "Failed to generate question",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Failed to generate question";
+      errorLogStore.push({ step: "Interview Question", endpoint: "/api/interview/question", message: msg });
+      toast({ title: "Interview Error", description: msg, variant: "destructive" });
     },
   });
 
@@ -687,11 +682,9 @@ RULES:
       }
     },
     onError: (error) => {
-      toast({
-        title: "Merge Failed",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Something went wrong";
+      errorLogStore.push({ step: "Interview Summary Merge", endpoint: "/api/interview/summary", message: msg });
+      toast({ title: "Merge Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -759,11 +752,9 @@ RULES:
       }
     },
     onError: (error) => {
-      toast({
-        title: "Merge Failed",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Something went wrong";
+      errorLogStore.push({ step: "Interview Incremental Merge", endpoint: "/api/write", message: msg });
+      toast({ title: "Merge Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -806,11 +797,9 @@ RULES:
       setCurrentAdviceText(data.advice?.content || null);
     },
     onError: (error) => {
-      toast({
-        title: "Failed to load advice",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Something went wrong";
+      errorLogStore.push({ step: "Generate Advice", endpoint: "/api/generate-advice", message: msg });
+      toast({ title: "Failed to load advice", description: msg, variant: "destructive" });
     },
   });
 
@@ -852,11 +841,9 @@ RULES:
       setDiscussionMessages(prev => [...prev, userMsg, responseMsg]);
     },
     onError: (error) => {
-      toast({
-        title: "Failed to get response",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Something went wrong";
+      errorLogStore.push({ step: "Discussion Ask", endpoint: "/api/discussion/ask", message: msg });
+      toast({ title: "Failed to get response", description: msg, variant: "destructive" });
     },
   });
 
@@ -875,11 +862,9 @@ RULES:
       setWireframeAnalysis(data);
     },
     onError: (error) => {
-      toast({
-        title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Failed to analyze website",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Failed to analyze website";
+      errorLogStore.push({ step: "Website Analysis", endpoint: "/api/streaming/wireframe-analysis", message: msg });
+      toast({ title: "Analysis Failed", description: msg, variant: "destructive" });
     },
   });
 
