@@ -1,16 +1,25 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ProvokeText } from "./ProvokeText";
 import {
   MessageCircleQuestion,
   Send,
   Check,
+  Sparkles,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 interface DraftQuestionsPanelProps {
   questions: string[];
   onResponse: (question: string, response: string) => void;
+  /** When provided, enables "Tailor questions" button to generate context-aware questions */
+  objective?: string;
+  secondaryObjective?: string;
+  templateId?: string;
 }
 
 interface QuestionState {
@@ -19,12 +28,18 @@ interface QuestionState {
   responded: Set<number>;
 }
 
-export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPanelProps) {
+export function DraftQuestionsPanel({ questions, onResponse, objective, secondaryObjective, templateId }: DraftQuestionsPanelProps) {
   const [state, setState] = useState<QuestionState>({
     expandedIndex: null,
     textValue: "",
     responded: new Set(),
   });
+
+  // Dynamic question generation state
+  const [dynamicQuestions, setDynamicQuestions] = useState<string[] | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const activeQuestions = dynamicQuestions ?? questions;
 
   if (questions.length === 0) return null;
 
@@ -47,7 +62,7 @@ export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPan
 
   const handleSubmitText = () => {
     if (state.expandedIndex === null || !state.textValue.trim()) return;
-    const question = questions[state.expandedIndex];
+    const question = activeQuestions[state.expandedIndex];
     onResponse(question, state.textValue.trim());
     setState((prev) => ({
       ...prev,
@@ -59,7 +74,7 @@ export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPan
 
   const handleVoiceTranscript = (transcript: string) => {
     if (state.expandedIndex === null || !transcript.trim()) return;
-    const question = questions[state.expandedIndex];
+    const question = activeQuestions[state.expandedIndex];
     onResponse(question, transcript.trim());
     setState((prev) => ({
       ...prev,
@@ -67,6 +82,34 @@ export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPan
       responded: new Set(prev.responded).add(prev.expandedIndex!),
       expandedIndex: null,
     }));
+  };
+
+  const handleTailorQuestions = async () => {
+    if (!objective?.trim() || isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const res = await apiRequest("POST", "/api/generate-draft-questions", {
+        objective: objective.trim(),
+        secondaryObjective: secondaryObjective?.trim() || undefined,
+        templateId,
+        existingQuestions: questions,
+      });
+      const data = await res.json();
+      if (data.questions && Array.isArray(data.questions)) {
+        setDynamicQuestions(data.questions);
+        // Reset responded state since questions changed
+        setState((prev) => ({ ...prev, responded: new Set(), expandedIndex: null, textValue: "" }));
+      }
+    } catch {
+      // Fall back to static questions silently
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleResetQuestions = () => {
+    setDynamicQuestions(null);
+    setState((prev) => ({ ...prev, responded: new Set(), expandedIndex: null, textValue: "" }));
   };
 
   return (
@@ -78,18 +121,55 @@ export function DraftQuestionsPanel({ questions, onResponse }: DraftQuestionsPan
           Think about
         </span>
         <Badge variant="outline" className="text-[10px] ml-auto">
-          {questions.length}
+          {activeQuestions.length}
         </Badge>
       </div>
 
+      {/* Tailor / Reset buttons */}
+      {objective?.trim() && (
+        <div className="flex items-center gap-1">
+          {!dynamicQuestions ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-6 w-full"
+              onClick={handleTailorQuestions}
+              disabled={isGenerating}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Tailoring...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3 h-3" />
+                  Tailor to your objective
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs h-6 w-full text-muted-foreground"
+              onClick={handleResetQuestions}
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset to defaults
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* All question bubbles */}
       <div className="flex flex-col gap-2">
-        {questions.map((question, index) => {
+        {activeQuestions.map((question, index) => {
           const isExpanded = state.expandedIndex === index;
           const isResponded = state.responded.has(index);
 
           return (
-            <div key={index}>
+            <div key={`${dynamicQuestions ? "d" : "s"}-${index}`}>
               {isExpanded ? (
                 /* Expanded: orange highlight box with ProvokeText input */
                 <Card className="border-primary/30 bg-primary/5 shadow-sm transition-all duration-200">

@@ -157,7 +157,7 @@ function AppTile({
             {template.subtitle}
           </p>
         </div>
-        {!isComingSoon && (
+        {!isComingSoon && !isExternal && (
           <button
             type="button"
             onClick={(e) => {
