@@ -18,7 +18,9 @@ import {
   ChevronUp,
   Check,
   Loader2,
+  Upload,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { ContextItem, ContextItemType } from "@shared/schema";
 import { generateId } from "@/lib/utils";
@@ -29,6 +31,7 @@ interface ContextCapturePanelProps {
 }
 
 export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePanelProps) {
+  const { toast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [addingType, setAddingType] = useState<ContextItemType | null>(null);
   const [showStorePicker, setShowStorePicker] = useState(false);
@@ -74,6 +77,25 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
       setLoadingStoreDocId(null);
     }
   }, [items, onItemsChange]);
+
+  const handleFileUploadAsContext = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result;
+      if (typeof content === "string" && content.trim()) {
+        const newItem: ContextItem = {
+          id: generateId("ctx"),
+          type: "text",
+          content: content.trim(),
+          annotation: `Uploaded file: "${file.name}"`,
+          createdAt: Date.now(),
+        };
+        onItemsChange([...items, newItem]);
+        toast({ title: "File uploaded", description: `"${file.name}" added as context.` });
+      }
+    };
+    reader.readAsText(file);
+  }, [items, onItemsChange, toast]);
 
   const resetForm = useCallback(() => {
     setIsAdding(false);
@@ -253,7 +275,21 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
               </div>
             )}
           </ScrollArea>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+              <Upload className="w-3.5 h-3.5" />
+              Upload file
+              <input
+                type="file"
+                accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUploadAsContext(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
             <Button variant="outline" size="sm" onClick={() => { setShowStorePicker(false); resetForm(); }}>
               Done
             </Button>
