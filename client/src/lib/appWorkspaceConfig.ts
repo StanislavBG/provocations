@@ -74,6 +74,30 @@ export interface WriterBehaviorConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Objective configuration
+// ---------------------------------------------------------------------------
+
+/** Per-application objective label and behavior overrides */
+export interface ObjectiveConfig {
+  primaryLabel: string;
+  primaryPlaceholder: string;
+  primaryDescription?: string;
+  secondaryLabel: string;
+  secondaryPlaceholder: string;
+  secondaryDescription?: string;
+  /** Show "Load from Context Store" button on the primary objective */
+  showLoadFromStore?: boolean;
+}
+
+const DEFAULT_OBJECTIVE_CONFIG: ObjectiveConfig = {
+  primaryLabel: "Objective",
+  primaryPlaceholder: "What are you creating? Describe your objective...",
+  secondaryLabel: "Secondary objective",
+  secondaryPlaceholder: "Optional: a secondary goal, constraint, or perspective to keep in mind...",
+  showLoadFromStore: false,
+};
+
+// ---------------------------------------------------------------------------
 // Full application flow config
 // ---------------------------------------------------------------------------
 
@@ -106,6 +130,9 @@ export interface AppFlowConfig {
 
   /** Writer behavior — output format, document type, tone */
   writer: WriterBehaviorConfig;
+
+  /** App-specific objective labels and behavior. Falls back to DEFAULT_OBJECTIVE_CONFIG. */
+  objectiveConfig?: ObjectiveConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +269,15 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "draft", label: "Build PRD", description: "Generate your product requirement document" },
       { id: "challenge", label: "Challenge & Refine", description: "Let expert personas stress-test your spec" },
     ],
+    objectiveConfig: {
+      primaryLabel: "Overall Application Description",
+      primaryPlaceholder: "Describe the application this feature belongs to — its purpose, users, and domain...",
+      primaryDescription: "Stable context about your application. Load from Context Store if you've saved it before.",
+      secondaryLabel: "Describe the Next Project",
+      secondaryPlaceholder: "What specific feature, change, or project are you writing requirements for?",
+      secondaryDescription: "The specific feature or change you're building requirements for right now.",
+      showLoadFromStore: true,
+    },
     writer: {
       mode: "edit",
       outputFormat: "markdown",
@@ -460,6 +496,17 @@ export function getAppFlowConfig(
 ): AppFlowConfig {
   if (!templateId) return DEFAULT_CONFIG;
   return APP_CONFIGS[templateId as TemplateId] ?? DEFAULT_CONFIG;
+}
+
+/**
+ * Look up the objective config for a given template.
+ * Falls back to DEFAULT_OBJECTIVE_CONFIG for unknown or null IDs.
+ */
+export function getObjectiveConfig(
+  templateId: string | null | undefined,
+): ObjectiveConfig {
+  const config = getAppFlowConfig(templateId);
+  return config.objectiveConfig ?? DEFAULT_OBJECTIVE_CONFIG;
 }
 
 /**

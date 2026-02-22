@@ -556,7 +556,7 @@ export function VoiceCaptureWorkspace({
       const title = objective || `Voice Capture ${new Date().toLocaleDateString()}`;
       await onSave(title, null);
       setLastSaveTime(Date.now());
-      toast({ title: "Saved", description: "Transcript saved to storage." });
+      toast({ title: "Saved", description: "Transcript saved to Context Store." });
     } catch {
       toast({
         title: "Save failed",
