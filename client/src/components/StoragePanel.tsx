@@ -11,12 +11,14 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import {
   X,
   FolderOpen,
+  Folder,
   FolderPlus,
   FileText,
   Trash2,
   Pencil,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Loader2,
   Save,
   Check,
@@ -25,8 +27,34 @@ import {
   Calendar,
   Type,
   Eye,
+  GripVertical,
+  FolderInput,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
+
+// ── Drag-and-drop data types ──
+type DragItemType = "document" | "folder";
+interface DragData {
+  type: DragItemType;
+  id: number;
+  title: string;
+}
+
+const DRAG_MIME = "application/x-provocations-drag";
+
+function encodeDragData(data: DragData): string {
+  return JSON.stringify(data);
+}
+
+function decodeDragData(dt: DataTransfer): DragData | null {
+  try {
+    const raw = dt.getData(DRAG_MIME);
+    if (!raw) return null;
+    return JSON.parse(raw) as DragData;
+  } catch {
+    return null;
+  }
+}
 
 interface StoragePanelProps {
   isOpen: boolean;
@@ -81,6 +109,16 @@ export function StoragePanel({
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [previewDoc, setPreviewDoc] = useState<PreviewDoc | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  // Expand/collapse state for folder tree (folder id → expanded)
+  const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
+
+  // Drag-and-drop state
+  const [dragOverFolderId, setDragOverFolderId] = useState<number | null | undefined>(undefined);
+  // undefined = nothing being dragged over, null = root "My Documents"
+
+  // Move-to dialog state
+  const [moveTarget, setMoveTarget] = useState<DragData | null>(null);
 
   useEffect(() => {
     if (currentTitle) setSaveTitle(currentTitle);
@@ -209,7 +247,102 @@ export function StoragePanel({
     },
   });
 
-  // ── Handlers ──
+  const moveDocMutation = useMutation({
+    mutationFn: async ({ id, folderId }: { id: number; folderId: number | null }) => {
+      const res = await apiRequest("PATCH", `/api/documents/${id}/move`, { folderId });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      toast({ title: "Document moved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to move document", variant: "destructive" });
+    },
+  });
+
+  const moveFolderMutation = useMutation({
+    mutationFn: async ({ id, parentFolderId }: { id: number; parentFolderId: number | null }) => {
+      const res = await apiRequest("PATCH", `/api/folders/${id}/move`, { parentFolderId });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      toast({ title: "Folder moved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to move folder", variant: "destructive" });
+    },
+  });
+
+  // ── Expand/collapse helpers ──
+
+  const toggleFolder = useCallback((folderId: number) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Auto-expand folders in the current path
+  useEffect(() => {
+    if (folderPath.length > 1) {
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        for (const entry of folderPath) {
+          if (entry.id !== null) next.add(entry.id);
+        }
+        return next;
+      });
+    }
+  }, [folderPath]);
+
+  // ── Drop handler ──
+
+  const handleDrop = useCallback(
+    (targetFolderId: number | null, e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOverFolderId(undefined);
+
+      const data = decodeDragData(e.dataTransfer);
+      if (!data) return;
+
+      if (data.type === "document") {
+        moveDocMutation.mutate({ id: data.id, folderId: targetFolderId });
+      } else if (data.type === "folder") {
+        // Don't move folder into itself
+        if (data.id === targetFolderId) return;
+        moveFolderMutation.mutate({ id: data.id, parentFolderId: targetFolderId });
+      }
+    },
+    [moveDocMutation, moveFolderMutation],
+  );
+
+  // ── Move-to dialog handler ──
+
+  const handleMoveToFolder = useCallback(
+    (targetFolderId: number | null) => {
+      if (!moveTarget) return;
+      if (moveTarget.type === "document") {
+        moveDocMutation.mutate({ id: moveTarget.id, folderId: targetFolderId });
+      } else if (moveTarget.type === "folder") {
+        if (moveTarget.id === targetFolderId) return;
+        moveFolderMutation.mutate({ id: moveTarget.id, parentFolderId: targetFolderId });
+      }
+      setMoveTarget(null);
+    },
+    [moveTarget, moveDocMutation, moveFolderMutation],
+  );
+
+  // ── Navigation ──
 
   const navigateToFolder = useCallback((folderId: number | null, folderName: string) => {
     setCurrentFolderId(folderId);
@@ -294,6 +427,32 @@ export function StoragePanel({
     return allDocs.filter((d) => d.folderId === folderId).length;
   };
 
+  // Recursive total count (docs in folder + all subfolders)
+  const getTotalDocCount = (folderId: number | null): number => {
+    let count = getDocCount(folderId);
+    if (folderId !== null) {
+      for (const child of getChildren(folderId)) {
+        count += getTotalDocCount(child.id);
+      }
+    }
+    return count;
+  };
+
+  // Get depth of a folder in the hierarchy
+  const getFolderDepth = (folderId: number): number => {
+    const folder = allFolders.find((f) => f.id === folderId);
+    if (!folder || folder.parentFolderId === null) return 1;
+    return 1 + getFolderDepth(folder.parentFolderId);
+  };
+
+  // Check if a folder is a descendant of another
+  const isDescendant = (folderId: number, ancestorId: number): boolean => {
+    const folder = allFolders.find((f) => f.id === folderId);
+    if (!folder || !folder.parentFolderId) return false;
+    if (folder.parentFolderId === ancestorId) return true;
+    return isDescendant(folder.parentFolderId, ancestorId);
+  };
+
   // Word count for preview
   const previewWordCount = previewDoc?.content
     ? previewDoc.content.trim().split(/\s+/).filter(Boolean).length
@@ -303,6 +462,11 @@ export function StoragePanel({
   const isMarkdown = previewDoc?.content
     ? /^#{1,6}\s|^\*\*|^\-\s|^\d+\.\s|```/.test(previewDoc.content.slice(0, 500))
     : false;
+
+  // ── Subfolders in current directory (for middle panel) ──
+  const currentSubfolders = currentFolderId === null
+    ? rootFolders
+    : getChildren(currentFolderId);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-md animate-in fade-in duration-200">
@@ -359,13 +523,21 @@ export function StoragePanel({
 
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-2 space-y-0.5">
-              {/* Root / My Documents */}
-              <FolderTreeItem
-                label="My Documents"
-                folderId={null}
+              {/* Root / My Documents — drop target */}
+              <RootDropTarget
                 isActive={currentFolderId === null}
                 docCount={getDocCount(null)}
-                depth={0}
+                isDragOver={dragOverFolderId === null}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragOverFolderId(null);
+                }}
+                onDragLeave={(e) => {
+                  e.stopPropagation();
+                  setDragOverFolderId(undefined);
+                }}
+                onDrop={(e) => handleDrop(null, e)}
                 onClick={() => {
                   setCurrentFolderId(null);
                   setFolderPath([{ id: null, name: "My Documents" }]);
@@ -390,18 +562,30 @@ export function StoragePanel({
                 <FolderTreeBranch
                   key={folder.id}
                   folder={folder}
+                  allFolders={allFolders}
                   getChildren={getChildren}
                   getDocCount={getDocCount}
+                  getTotalDocCount={getTotalDocCount}
                   currentFolderId={currentFolderId}
                   renamingFolderId={renamingFolderId}
                   renameText={renameText}
                   depth={1}
+                  expandedFolders={expandedFolders}
+                  onToggleExpand={toggleFolder}
+                  dragOverFolderId={dragOverFolderId}
+                  onDragOverFolder={setDragOverFolderId}
+                  onDrop={handleDrop}
                   onNavigate={(id, name) => navigateToFolder(id, name)}
                   onStartRename={(id, name) => { setRenamingFolderId(id); setRenameText(name); }}
                   onRename={(id, name) => renameFolderMutation.mutate({ id, name })}
                   onCancelRename={() => { setRenamingFolderId(null); setRenameText(""); }}
                   onRenameTextChange={setRenameText}
-                  onDelete={(id) => deleteFolderMutation.mutate(id)}
+                  onDelete={(id) => {
+                    if (window.confirm("Delete this folder and all its contents?")) {
+                      deleteFolderMutation.mutate(id);
+                    }
+                  }}
+                  onMoveTo={(data) => setMoveTarget(data)}
                   isCreatingFolder={isCreatingFolder}
                   newFolderName={newFolderName}
                   onNewFolderNameChange={setNewFolderName}
@@ -415,7 +599,26 @@ export function StoragePanel({
         </div>
 
         {/* ── MIDDLE PANEL: Documents in current folder ── */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div
+          className="flex-1 min-w-0 flex flex-col overflow-hidden"
+          onDragOver={(e) => {
+            // Allow drops on the middle panel body (move to current folder)
+            if (e.dataTransfer.types.includes(DRAG_MIME)) {
+              e.preventDefault();
+            }
+          }}
+          onDrop={(e) => {
+            // Drop onto middle panel = move to current folder
+            const data = decodeDragData(e.dataTransfer);
+            if (data) {
+              e.preventDefault();
+              if (data.type === "document") {
+                moveDocMutation.mutate({ id: data.id, folderId: currentFolderId });
+              }
+              // Don't allow folder drop onto the same parent
+            }
+          }}
+        >
           {/* Breadcrumb */}
           <div className="flex items-center gap-1 px-4 py-2 border-b text-xs overflow-x-auto shrink-0 bg-card/20">
             {folderPath.map((entry, idx) => (
@@ -432,11 +635,14 @@ export function StoragePanel({
               </span>
             ))}
             <span className="ml-auto text-muted-foreground/60">
+              {currentSubfolders.length > 0 && (
+                <span className="mr-2">{currentSubfolders.length} folder{currentSubfolders.length !== 1 ? "s" : ""}</span>
+              )}
               {documentsList.length} document{documentsList.length !== 1 ? "s" : ""}
             </span>
           </div>
 
-          {/* Document list */}
+          {/* Document & subfolder list */}
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-3 space-y-1">
               {isLoading && (
@@ -445,7 +651,36 @@ export function StoragePanel({
                 </div>
               )}
 
-              {!isLoading && documentsList.length === 0 && (
+              {/* Subfolders in current directory */}
+              {!isLoading && currentSubfolders.map((folder) => (
+                <MiddlePanelFolder
+                  key={`f-${folder.id}`}
+                  folder={folder}
+                  docCount={getTotalDocCount(folder.id)}
+                  onNavigate={() => navigateToFolder(folder.id, folder.name)}
+                  onStartRename={() => { setRenamingFolderId(folder.id); setRenameText(folder.name); }}
+                  onDelete={() => {
+                    if (window.confirm(`Delete "${folder.name}" and all its contents?`)) {
+                      deleteFolderMutation.mutate(folder.id);
+                    }
+                  }}
+                  onMoveTo={() => setMoveTarget({ type: "folder", id: folder.id, title: folder.name })}
+                  isRenaming={renamingFolderId === folder.id}
+                  renameText={renameText}
+                  onRenameTextChange={setRenameText}
+                  onRename={() => {
+                    if (renameText.trim()) renameFolderMutation.mutate({ id: folder.id, name: renameText.trim() });
+                  }}
+                  onCancelRename={() => { setRenamingFolderId(null); setRenameText(""); }}
+                />
+              ))}
+
+              {/* Separator between folders and docs */}
+              {!isLoading && currentSubfolders.length > 0 && documentsList.length > 0 && (
+                <div className="border-t my-2" />
+              )}
+
+              {!isLoading && documentsList.length === 0 && currentSubfolders.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
                   <FolderOpen className="w-10 h-10 text-muted-foreground/20" />
                   <div>
@@ -457,97 +692,32 @@ export function StoragePanel({
                 </div>
               )}
 
-              {documentsList.map((doc) => {
+              {!isLoading && documentsList.map((doc) => {
                 const isSelected = selectedDocId === doc.id;
                 const isCurrent = currentDocId === doc.id;
                 return (
-                  <div
+                  <DocumentRow
                     key={`d-${doc.id}`}
-                    className={`group w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors overflow-hidden ${
-                      isSelected
-                        ? "bg-primary/10 border border-primary/30"
-                        : isCurrent
-                          ? "bg-muted/50 border border-muted"
-                          : "hover:bg-muted/40 border border-transparent"
-                    }`}
-                  >
-                    {/* Click area — file icon + title/date */}
-                    <button
-                      type="button"
-                      onClick={() => handlePreviewDocument(doc.id)}
-                      onDoubleClick={() => handleOpenDocument(doc.id)}
-                      className="flex items-center gap-2 flex-1 min-w-0 text-left"
-                    >
-                      <FileText className={`w-4 h-4 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
-                      <div className="flex-1 min-w-0 overflow-hidden">
-                        {renamingDocId === doc.id ? (
-                          <Input
-                            value={renameText}
-                            onChange={(e) => setRenameText(e.target.value)}
-                            className="h-7 text-sm"
-                            autoFocus
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === "Enter" && renameText.trim()) {
-                                renameDocMutation.mutate({ id: doc.id, title: renameText.trim() });
-                              }
-                              if (e.key === "Escape") {
-                                setRenamingDocId(null);
-                                setRenameText("");
-                              }
-                            }}
-                          />
-                        ) : (
-                          <>
-                            <p className="text-sm font-medium truncate">{doc.title}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {new Date(doc.updatedAt).toLocaleDateString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </button>
-
-                    {/* Always-visible actions: rename (hover) + delete (always) */}
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      {isCurrent && (
-                        <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
-                      )}
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Rename"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRenamingDocId(doc.id);
-                          setRenameText(doc.title);
-                        }}
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 text-destructive/60 hover:text-destructive"
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`Delete "${doc.title}"?`)) {
-                            deleteDocMutation.mutate(doc.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
+                    doc={doc}
+                    isSelected={isSelected}
+                    isCurrent={isCurrent}
+                    isRenaming={renamingDocId === doc.id}
+                    renameText={renameText}
+                    onRenameTextChange={setRenameText}
+                    onStartRename={() => { setRenamingDocId(doc.id); setRenameText(doc.title); }}
+                    onRename={() => {
+                      if (renameText.trim()) renameDocMutation.mutate({ id: doc.id, title: renameText.trim() });
+                    }}
+                    onCancelRename={() => { setRenamingDocId(null); setRenameText(""); }}
+                    onPreview={() => handlePreviewDocument(doc.id)}
+                    onOpen={() => handleOpenDocument(doc.id)}
+                    onDelete={() => {
+                      if (window.confirm(`Delete "${doc.title}"?`)) {
+                        deleteDocMutation.mutate(doc.id);
+                      }
+                    }}
+                    onMoveTo={() => setMoveTarget({ type: "document", id: doc.id, title: doc.title })}
+                  />
                 );
               })}
             </div>
@@ -568,7 +738,7 @@ export function StoragePanel({
             )}
             <div className="flex-1" />
             <p className="text-[10px] text-muted-foreground/50">
-              Click to preview, double-click to open
+              Drag items to move. Click to preview, double-click to open.
             </p>
           </div>
         </div>
@@ -647,48 +817,73 @@ export function StoragePanel({
           )}
         </div>
       </div>
+
+      {/* ── Move-to dialog (modal) ── */}
+      {moveTarget && (
+        <MoveToDialog
+          item={moveTarget}
+          allFolders={allFolders}
+          rootFolders={rootFolders}
+          getChildren={getChildren}
+          getFolderDepth={getFolderDepth}
+          isDescendant={isDescendant}
+          onMove={handleMoveToFolder}
+          onCancel={() => setMoveTarget(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Folder tree sub-components
+// Root drop target (My Documents)
 // ---------------------------------------------------------------------------
 
-function FolderTreeItem({
-  label,
-  folderId,
+function RootDropTarget({
   isActive,
   docCount,
-  depth,
+  isDragOver,
+  onDragOver,
+  onDragLeave,
+  onDrop,
   onClick,
 }: {
-  label: string;
-  folderId: number | null;
   isActive: boolean;
   docCount: number;
-  depth: number;
+  isDragOver: boolean;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-sm transition-colors ${
-        isActive
-          ? "bg-primary/10 text-primary font-medium"
-          : "text-foreground/80 hover:bg-muted/50"
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-sm transition-all ${
+        isDragOver
+          ? "bg-primary/20 ring-2 ring-primary/40 text-primary font-medium"
+          : isActive
+            ? "bg-primary/10 text-primary font-medium"
+            : "text-foreground/80 hover:bg-muted/50"
       }`}
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      style={{ paddingLeft: "8px" }}
     >
-      <FolderOpen className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-amber-500"}`} />
-      <span className="flex-1 truncate">{label}</span>
+      <FolderOpen className={`w-4 h-4 shrink-0 ${isActive || isDragOver ? "text-primary" : "text-amber-500"}`} />
+      <span className="flex-1 truncate">My Documents</span>
       {docCount > 0 && (
         <span className="text-[10px] text-muted-foreground/60 shrink-0">{docCount}</span>
       )}
     </button>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Folder tree sub-components (LEFT PANEL)
+// ---------------------------------------------------------------------------
 
 function InlineFolderCreate({
   depth,
@@ -706,7 +901,7 @@ function InlineFolderCreate({
   return (
     <div
       className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/30"
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      style={{ paddingLeft: `${depth * 16 + 8}px` }}
     >
       <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
       <Input
@@ -732,18 +927,26 @@ function InlineFolderCreate({
 
 function FolderTreeBranch({
   folder,
+  allFolders,
   getChildren,
   getDocCount,
+  getTotalDocCount,
   currentFolderId,
   renamingFolderId,
   renameText,
   depth,
+  expandedFolders,
+  onToggleExpand,
+  dragOverFolderId,
+  onDragOverFolder,
+  onDrop,
   onNavigate,
   onStartRename,
   onRename,
   onCancelRename,
   onRenameTextChange,
   onDelete,
+  onMoveTo,
   isCreatingFolder,
   newFolderName,
   onNewFolderNameChange,
@@ -752,18 +955,26 @@ function FolderTreeBranch({
   targetFolderId,
 }: {
   folder: FolderItem;
+  allFolders: FolderItem[];
   getChildren: (parentId: number) => FolderItem[];
   getDocCount: (folderId: number | null) => number;
+  getTotalDocCount: (folderId: number | null) => number;
   currentFolderId: number | null;
   renamingFolderId: number | null;
   renameText: string;
   depth: number;
+  expandedFolders: Set<number>;
+  onToggleExpand: (id: number) => void;
+  dragOverFolderId: number | null | undefined;
+  onDragOverFolder: (id: number | null | undefined) => void;
+  onDrop: (targetFolderId: number | null, e: React.DragEvent) => void;
   onNavigate: (id: number, name: string) => void;
   onStartRename: (id: number, name: string) => void;
   onRename: (id: number, name: string) => void;
   onCancelRename: () => void;
   onRenameTextChange: (v: string) => void;
   onDelete: (id: number) => void;
+  onMoveTo: (data: DragData) => void;
   isCreatingFolder: boolean;
   newFolderName: string;
   onNewFolderNameChange: (v: string) => void;
@@ -772,15 +983,24 @@ function FolderTreeBranch({
   targetFolderId: number | null;
 }) {
   const children = getChildren(folder.id);
+  const hasChildren = children.length > 0;
   const isActive = currentFolderId === folder.id;
   const isRenaming = renamingFolderId === folder.id;
+  const isExpanded = expandedFolders.has(folder.id);
+  const isDragOver = dragOverFolderId === folder.id;
+  const totalDocs = getTotalDocCount(folder.id);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "folder", id: folder.id, title: folder.name }));
+    e.dataTransfer.effectAllowed = "move";
+  };
 
   return (
     <>
       {isRenaming ? (
         <div
           className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/30"
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          style={{ paddingLeft: `${depth * 16 + 8}px` }}
         >
           <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <Input
@@ -795,17 +1015,83 @@ function FolderTreeBranch({
           />
         </div>
       ) : (
-        <div className="group relative">
-          <FolderTreeItem
-            label={folder.name}
-            folderId={folder.id}
-            isActive={isActive}
-            docCount={getDocCount(folder.id)}
-            depth={depth}
-            onClick={() => onNavigate(folder.id, folder.name)}
-          />
+        <div
+          className="group relative"
+          draggable
+          onDragStart={handleDragStart}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDragOverFolder(folder.id);
+          }}
+          onDragLeave={(e) => {
+            e.stopPropagation();
+            onDragOverFolder(undefined);
+          }}
+          onDrop={(e) => onDrop(folder.id, e)}
+        >
+          <div
+            className={`w-full flex items-center gap-1 py-1.5 rounded-md text-left text-sm transition-all cursor-pointer ${
+              isDragOver
+                ? "bg-primary/20 ring-2 ring-primary/40 text-primary font-medium"
+                : isActive
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-foreground/80 hover:bg-muted/50"
+            }`}
+            style={{ paddingLeft: `${depth * 16 + 4}px`, paddingRight: "4px" }}
+          >
+            {/* Expand/collapse toggle */}
+            <button
+              type="button"
+              className={`w-4 h-4 flex items-center justify-center shrink-0 rounded transition-colors hover:bg-muted ${
+                hasChildren ? "opacity-100" : "opacity-0 pointer-events-none"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand(folder.id);
+              }}
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+            </button>
+
+            {/* Drag grip (subtle) */}
+            <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+
+            {/* Folder icon + label */}
+            <button
+              type="button"
+              className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+              onClick={() => onNavigate(folder.id, folder.name)}
+            >
+              {isExpanded ? (
+                <FolderOpen className={`w-4 h-4 shrink-0 ${isActive || isDragOver ? "text-primary" : "text-amber-500"}`} />
+              ) : (
+                <Folder className={`w-4 h-4 shrink-0 ${isActive || isDragOver ? "text-primary" : "text-amber-500"}`} />
+              )}
+              <span className="flex-1 truncate text-xs">{folder.name}</span>
+            </button>
+
+            {/* Doc count */}
+            {totalDocs > 0 && (
+              <span className="text-[10px] text-muted-foreground/60 shrink-0 mr-1">{totalDocs}</span>
+            )}
+          </div>
+
           {/* Hover actions */}
           <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5"
+              title="Move to..."
+              onClick={(e) => { e.stopPropagation(); onMoveTo({ type: "folder", id: folder.id, title: folder.name }); }}
+            >
+              <FolderInput className="w-2.5 h-2.5" />
+            </Button>
             <Button
               size="icon"
               variant="ghost"
@@ -839,29 +1125,460 @@ function FolderTreeBranch({
         />
       )}
 
-      {/* Children */}
-      {children.map((child) => (
+      {/* Children (only if expanded) */}
+      {isExpanded && children.map((child) => (
         <FolderTreeBranch
           key={child.id}
           folder={child}
+          allFolders={allFolders}
           getChildren={getChildren}
           getDocCount={getDocCount}
+          getTotalDocCount={getTotalDocCount}
           currentFolderId={currentFolderId}
           renamingFolderId={renamingFolderId}
           renameText={renameText}
           depth={depth + 1}
+          expandedFolders={expandedFolders}
+          onToggleExpand={onToggleExpand}
+          dragOverFolderId={dragOverFolderId}
+          onDragOverFolder={onDragOverFolder}
+          onDrop={onDrop}
           onNavigate={onNavigate}
           onStartRename={onStartRename}
           onRename={onRename}
           onCancelRename={onCancelRename}
           onRenameTextChange={onRenameTextChange}
           onDelete={onDelete}
+          onMoveTo={onMoveTo}
           isCreatingFolder={isCreatingFolder}
           newFolderName={newFolderName}
           onNewFolderNameChange={onNewFolderNameChange}
           onCreateFolder={onCreateFolder}
           onCancelCreateFolder={onCancelCreateFolder}
           targetFolderId={targetFolderId}
+        />
+      ))}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Middle panel: subfolder row
+// ---------------------------------------------------------------------------
+
+function MiddlePanelFolder({
+  folder,
+  docCount,
+  onNavigate,
+  onStartRename,
+  onDelete,
+  onMoveTo,
+  isRenaming,
+  renameText,
+  onRenameTextChange,
+  onRename,
+  onCancelRename,
+}: {
+  folder: FolderItem;
+  docCount: number;
+  onNavigate: () => void;
+  onStartRename: () => void;
+  onDelete: () => void;
+  onMoveTo: () => void;
+  isRenaming: boolean;
+  renameText: string;
+  onRenameTextChange: (v: string) => void;
+  onRename: () => void;
+  onCancelRename: () => void;
+}) {
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "folder", id: folder.id, title: folder.name }));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  return (
+    <div
+      className="group w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors overflow-hidden hover:bg-muted/40 border border-transparent cursor-pointer"
+      draggable={!isRenaming}
+      onDragStart={handleDragStart}
+      onClick={onNavigate}
+      onDoubleClick={onNavigate}
+    >
+      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+      <Folder className="w-4 h-4 shrink-0 text-amber-500" />
+      <div className="flex-1 min-w-0 overflow-hidden">
+        {isRenaming ? (
+          <Input
+            value={renameText}
+            onChange={(e) => onRenameTextChange(e.target.value)}
+            className="h-7 text-sm"
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") onRename();
+              if (e.key === "Escape") onCancelRename();
+            }}
+          />
+        ) : (
+          <>
+            <p className="text-sm font-medium truncate">{folder.name}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {docCount} item{docCount !== 1 ? "s" : ""}
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Move to..."
+          onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
+        >
+          <FolderInput className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Rename"
+          onClick={(e) => { e.stopPropagation(); onStartRename(); }}
+        >
+          <Pencil className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        >
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Middle panel: document row (draggable)
+// ---------------------------------------------------------------------------
+
+function DocumentRow({
+  doc,
+  isSelected,
+  isCurrent,
+  isRenaming,
+  renameText,
+  onRenameTextChange,
+  onStartRename,
+  onRename,
+  onCancelRename,
+  onPreview,
+  onOpen,
+  onDelete,
+  onMoveTo,
+}: {
+  doc: DocumentListItem;
+  isSelected: boolean;
+  isCurrent: boolean;
+  isRenaming: boolean;
+  renameText: string;
+  onRenameTextChange: (v: string) => void;
+  onStartRename: () => void;
+  onRename: () => void;
+  onCancelRename: () => void;
+  onPreview: () => void;
+  onOpen: () => void;
+  onDelete: () => void;
+  onMoveTo: () => void;
+}) {
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "document", id: doc.id, title: doc.title }));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  return (
+    <div
+      className={`group w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors overflow-hidden ${
+        isSelected
+          ? "bg-primary/10 border border-primary/30"
+          : isCurrent
+            ? "bg-muted/50 border border-muted"
+            : "hover:bg-muted/40 border border-transparent"
+      }`}
+      draggable={!isRenaming}
+      onDragStart={handleDragStart}
+    >
+      {/* Drag grip */}
+      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+
+      {/* Click area — file icon + title/date */}
+      <button
+        type="button"
+        onClick={onPreview}
+        onDoubleClick={onOpen}
+        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+      >
+        <FileText className={`w-4 h-4 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
+        <div className="flex-1 min-w-0 overflow-hidden">
+          {isRenaming ? (
+            <Input
+              value={renameText}
+              onChange={(e) => onRenameTextChange(e.target.value)}
+              className="h-7 text-sm"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") onRename();
+                if (e.key === "Escape") onCancelRename();
+              }}
+            />
+          ) : (
+            <>
+              <p className="text-sm font-medium truncate">{doc.title}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {new Date(doc.updatedAt).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </>
+          )}
+        </div>
+      </button>
+
+      {/* Actions */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        {isCurrent && (
+          <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
+        )}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Move to..."
+          onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
+        >
+          <FolderInput className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Rename"
+          onClick={(e) => { e.stopPropagation(); onStartRename(); }}
+        >
+          <Pencil className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 text-destructive/60 hover:text-destructive"
+          title="Delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        >
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Move-to dialog
+// ---------------------------------------------------------------------------
+
+function MoveToDialog({
+  item,
+  allFolders,
+  rootFolders,
+  getChildren,
+  getFolderDepth,
+  isDescendant,
+  onMove,
+  onCancel,
+}: {
+  item: DragData;
+  allFolders: FolderItem[];
+  rootFolders: FolderItem[];
+  getChildren: (parentId: number) => FolderItem[];
+  getFolderDepth: (folderId: number) => number;
+  isDescendant: (folderId: number, ancestorId: number) => boolean;
+  onMove: (targetFolderId: number | null) => void;
+  onCancel: () => void;
+}) {
+  const [selectedTarget, setSelectedTarget] = useState<number | null | undefined>(undefined);
+
+  const canSelectFolder = (folderId: number): boolean => {
+    // Can't move folder into itself
+    if (item.type === "folder" && item.id === folderId) return false;
+    // Can't move folder into its own descendant
+    if (item.type === "folder" && isDescendant(folderId, item.id)) return false;
+    // Max 10 levels of nesting
+    if (item.type === "folder") {
+      const targetDepth = getFolderDepth(folderId);
+      if (targetDepth >= 10) return false;
+    }
+    return true;
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="bg-card border rounded-xl shadow-2xl w-[400px] max-h-[500px] flex flex-col animate-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
+          <FolderInput className="w-5 h-5 text-primary" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">Move "{item.title}"</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Select a destination folder</p>
+          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onCancel}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Folder tree */}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-3 space-y-0.5">
+            {/* Root */}
+            <button
+              type="button"
+              onClick={() => setSelectedTarget(null)}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left text-sm transition-colors ${
+                selectedTarget === null
+                  ? "bg-primary/10 text-primary font-medium ring-1 ring-primary/30"
+                  : "hover:bg-muted/50"
+              }`}
+            >
+              <FolderOpen className="w-4 h-4 shrink-0 text-amber-500" />
+              <span>My Documents (root)</span>
+            </button>
+
+            {/* Folders */}
+            {rootFolders.map((f) => (
+              <MoveToFolderItem
+                key={f.id}
+                folder={f}
+                getChildren={getChildren}
+                selectedTarget={selectedTarget}
+                onSelect={setSelectedTarget}
+                canSelect={canSelectFolder}
+                depth={1}
+                itemBeingMoved={item}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t shrink-0">
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            disabled={selectedTarget === undefined}
+            onClick={() => {
+              if (selectedTarget !== undefined) onMove(selectedTarget);
+            }}
+            className="gap-1.5"
+          >
+            <FolderInput className="w-3.5 h-3.5" />
+            Move here
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MoveToFolderItem({
+  folder,
+  getChildren,
+  selectedTarget,
+  onSelect,
+  canSelect,
+  depth,
+  itemBeingMoved,
+}: {
+  folder: FolderItem;
+  getChildren: (parentId: number) => FolderItem[];
+  selectedTarget: number | null | undefined;
+  onSelect: (id: number) => void;
+  canSelect: (id: number) => boolean;
+  depth: number;
+  itemBeingMoved: DragData;
+}) {
+  const [expanded, setExpanded] = useState(depth <= 2);
+  const children = getChildren(folder.id);
+  const hasChildren = children.length > 0;
+  const disabled = !canSelect(folder.id);
+  const isSelected = selectedTarget === folder.id;
+  const isSelf = itemBeingMoved.type === "folder" && itemBeingMoved.id === folder.id;
+
+  return (
+    <>
+      <div
+        className={`flex items-center gap-1 rounded-md transition-colors ${
+          disabled ? "opacity-40 cursor-not-allowed" : ""
+        }`}
+        style={{ paddingLeft: `${depth * 16}px` }}
+      >
+        {/* Expand toggle */}
+        <button
+          type="button"
+          className={`w-4 h-4 flex items-center justify-center shrink-0 rounded ${
+            hasChildren ? "hover:bg-muted" : "opacity-0 pointer-events-none"
+          }`}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        </button>
+
+        {/* Folder button */}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => !disabled && onSelect(folder.id)}
+          className={`flex items-center gap-2 flex-1 px-2 py-1.5 rounded-md text-left text-sm transition-colors ${
+            isSelected
+              ? "bg-primary/10 text-primary font-medium ring-1 ring-primary/30"
+              : disabled
+                ? ""
+                : "hover:bg-muted/50"
+          }`}
+        >
+          {expanded ? (
+            <FolderOpen className="w-4 h-4 shrink-0 text-amber-500" />
+          ) : (
+            <Folder className="w-4 h-4 shrink-0 text-amber-500" />
+          )}
+          <span className="truncate">{folder.name}</span>
+          {isSelf && (
+            <span className="text-[10px] text-muted-foreground ml-auto">(this item)</span>
+          )}
+        </button>
+      </div>
+
+      {/* Children */}
+      {expanded && children.map((child) => (
+        <MoveToFolderItem
+          key={child.id}
+          folder={child}
+          getChildren={getChildren}
+          selectedTarget={selectedTarget}
+          onSelect={onSelect}
+          canSelect={canSelect}
+          depth={depth + 1}
+          itemBeingMoved={itemBeingMoved}
         />
       ))}
     </>

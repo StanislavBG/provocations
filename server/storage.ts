@@ -69,6 +69,7 @@ export interface IStorage {
   createFolder(userId: string, name: string, parentFolderId?: number | null, encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string }): Promise<FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }>;
   listFolders(userId: string, parentFolderId?: number | null): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null })[]>;
   renameFolder(id: number, name: string, encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string }): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }) | null>;
+  moveFolder(id: number, parentFolderId: number | null): Promise<{ id: number; parentFolderId: number | null; updatedAt: string } | null>;
   deleteFolder(id: number): Promise<void>;
   getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null } | null>;
   // User preferences
@@ -371,6 +372,18 @@ export class DatabaseStorage implements IStorage {
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     };
+  }
+
+  async moveFolder(id: number, parentFolderId: number | null): Promise<{ id: number; parentFolderId: number | null; updatedAt: string } | null> {
+    const now = new Date();
+    const rows = await db
+      .update(folders)
+      .set({ parentFolderId, updatedAt: now })
+      .where(eq(folders.id, id))
+      .returning({ id: folders.id, parentFolderId: folders.parentFolderId, updatedAt: folders.updatedAt });
+
+    if (rows.length === 0) return null;
+    return { id: rows[0].id, parentFolderId: rows[0].parentFolderId, updatedAt: rows[0].updatedAt.toISOString() };
   }
 
   async deleteFolder(id: number): Promise<void> {

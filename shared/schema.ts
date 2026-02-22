@@ -525,6 +525,18 @@ export const renameFolderRequestSchema = z.object({
 
 export type RenameFolderRequest = z.infer<typeof renameFolderRequestSchema>;
 
+export const moveDocumentRequestSchema = z.object({
+  folderId: z.number().nullable(),
+});
+
+export type MoveDocumentRequest = z.infer<typeof moveDocumentRequestSchema>;
+
+export const moveFolderRequestSchema = z.object({
+  parentFolderId: z.number().nullable(),
+});
+
+export type MoveFolderRequest = z.infer<typeof moveFolderRequestSchema>;
+
 export interface FolderItem {
   id: number;
   name: string;

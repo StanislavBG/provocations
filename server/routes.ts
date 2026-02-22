@@ -17,6 +17,8 @@ import {
   renameDocumentRequestSchema,
   createFolderRequestSchema,
   renameFolderRequestSchema,
+  moveDocumentRequestSchema,
+  moveFolderRequestSchema,
   streamingQuestionRequestSchema,
   wireframeAnalysisRequestSchema,
   streamingRefineRequestSchema,
@@ -3010,6 +3012,35 @@ Output only valid JSON, no markdown.`,
     }
   });
 
+  // Move a document to a different folder
+  app.patch("/api/documents/:id/move", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid document ID" });
+
+      const parsed = moveDocumentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const existing = await storage.getDocument(id);
+      if (!existing) return res.status(404).json({ error: "Document not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+
+      const result = await storage.moveDocument(id, parsed.data.folderId);
+      if (!result) return res.status(404).json({ error: "Document not found" });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Move document error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to move document", details: errorMessage });
+    }
+  });
+
   // Delete a document (ownership verified via Clerk userId)
   app.delete("/api/documents/:id", async (req, res) => {
     try {
@@ -3145,6 +3176,54 @@ Output only valid JSON, no markdown.`,
       console.error("Rename folder error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to rename folder", details: errorMessage });
+    }
+  });
+
+  // Move a folder to a different parent folder
+  app.patch("/api/folders/:id/move", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid folder ID" });
+
+      const parsed = moveFolderRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      // Prevent moving a folder into itself
+      if (parsed.data.parentFolderId === id) {
+        return res.status(400).json({ error: "Cannot move a folder into itself" });
+      }
+
+      // Prevent moving into own descendant (cycle detection)
+      if (parsed.data.parentFolderId !== null) {
+        const allFoldersForUser = await storage.listFolders(userId);
+        const isDescendant = (folderId: number, ancestorId: number): boolean => {
+          const folder = allFoldersForUser.find(f => f.id === folderId);
+          if (!folder || !folder.parentFolderId) return false;
+          if (folder.parentFolderId === ancestorId) return true;
+          return isDescendant(folder.parentFolderId, ancestorId);
+        };
+        if (isDescendant(parsed.data.parentFolderId, id)) {
+          return res.status(400).json({ error: "Cannot move a folder into its own descendant" });
+        }
+      }
+
+      const existing = await storage.getFolder(id);
+      if (!existing) return res.status(404).json({ error: "Folder not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+
+      const result = await storage.moveFolder(id, parsed.data.parentFolderId);
+      if (!result) return res.status(404).json({ error: "Folder not found" });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Move folder error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to move folder", details: errorMessage });
     }
   });
 
