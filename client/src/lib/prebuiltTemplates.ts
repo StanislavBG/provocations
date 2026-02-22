@@ -40,6 +40,8 @@ export interface PrebuiltTemplate {
   provocationExamples: string[]; // example provocations for the card preview
   steps: TemplateStep[]; // workflow steps shown in the bottom progress bar
   category: TemplateCategory; // groups templates into tabbed categories on the landing page
+  /** When true, the tile shows a "Coming Soon" badge and cannot be selected */
+  comingSoon?: boolean;
 }
 
 export const prebuiltTemplates: PrebuiltTemplate[] = [
@@ -605,16 +607,17 @@ Typical way they end an interaction.
   {
     id: "research-context",
     category: "capture",
-    title: "Research / Context",
+    comingSoon: true,
+    title: "Research into Context",
     shortLabel: "Research",
-    subtitle: "Capture, organize, and build context",
+    subtitle: "Conversational research captured as structured context",
     description:
-      "For building a rich context library around a topic. Capture links, excerpts, notes, and references — then let the AI help you organize, cross-reference, and identify gaps. The output is a structured research brief you can feed into any other app or project. Perfect for pre-work before writing a PRD, paper, or strategy doc.",
-    howTo: "Add links, paste text excerpts, or upload files as context items. Describe what you're researching and what gaps you're trying to fill. The system organizes your sources, cross-references them, identifies contradictions and gaps, and produces a structured research brief.",
+      "Dynamically converse with AI to explore a topic, then capture structured nuggets of information — facts, insights, quotes, data points — directly into your context library in a dedicated Research folder. Each captured item is tagged, organized, and ready to feed into any other application. Think of it as a research conversation where the valuable parts stick.",
+    howTo: "Start a conversation about the topic you're researching. As the AI surfaces useful information, capture specific nuggets into structured context items stored in a Research folder. Tag, annotate, and organize as you go. When you're done, your Research folder contains a curated, reusable knowledge base.",
     useCases: [
-      "Gathering background material before writing a PRD or proposal",
-      "Organizing notes from multiple sources into one place",
-      "Building a knowledge base for a project or decision",
+      "Exploring a new domain through conversation and saving key findings",
+      "Building a curated context folder before starting a PRD or strategy doc",
+      "Capturing structured research nuggets from an AI-assisted deep dive",
     ],
     icon: BookOpenCheck,
     objective:
