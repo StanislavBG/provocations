@@ -2108,8 +2108,8 @@ RULES:
 
       {/* ── Main layout: Sidebar + Content ── */}
       <div className="flex-1 flex flex-row overflow-hidden">
-        {/* Persistent left sidebar — app navigation */}
-        {!isMobile && (
+        {/* Persistent left sidebar — app navigation (hidden during input phase) */}
+        {!isMobile && !isInputPhase && (
           <AppSidebar
             selectedAppId={selectedTemplateId}
             onSelectApp={handleSidebarSelect}
