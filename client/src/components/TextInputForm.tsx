@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -52,6 +52,8 @@ interface TextInputFormProps {
   onCapturedContextChange: (items: ContextItem[]) => void;
   /** Notifies parent when a template is selected (for StepTracker) */
   onTemplateSelect?: (templateId: string | null) => void;
+  /** Parent-controlled template ID — when set to null the form resets to the carousel */
+  selectedTemplateId?: string | null;
 }
 
 /**
@@ -73,7 +75,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
@@ -85,6 +87,21 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
+
+  // Reset internal form state when parent clears the template (e.g. "New" button)
+  useEffect(() => {
+    if (selectedTemplateId === null) {
+      setActivePrebuilt(null);
+      setIsCustomObjective(false);
+      setText("");
+      setObjective("");
+      setSecondaryObjective("");
+      setCaptureUrl("");
+      setYoutubeChannelUrl("");
+      setVoiceTranscript("");
+      setActiveCategory("build");
+    }
+  }, [selectedTemplateId]);
 
   // Storage quick-load state
   const [storageOpen, setStorageOpen] = useState(false);
@@ -256,20 +273,34 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 .map((template) => {
                   const Icon = template.icon;
                   const isActive = activePrebuilt?.id === template.id;
+                  const isComingSoon = !!template.comingSoon;
+                  const isExternal = !!template.externalUrl;
 
                   return (
                     <button
                       key={template.id}
-                      onClick={() => handleSelectPrebuilt(template)}
+                      onClick={() => {
+                        if (isComingSoon) return;
+                        if (isExternal) {
+                          window.open(template.externalUrl, "_blank", "noopener,noreferrer");
+                          return;
+                        }
+                        handleSelectPrebuilt(template);
+                      }}
+                      disabled={isComingSoon}
                       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
-                        isActive
-                          ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                          : "border-border hover:border-primary/40 hover:bg-primary/5"
+                        isComingSoon
+                          ? "opacity-50 cursor-default border-border"
+                          : isActive && !isExternal
+                            ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
+                            : "border-border hover:border-primary/40 hover:bg-primary/5"
                       }`}
                     >
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive && !isExternal ? "text-primary" : "text-muted-foreground"}`} />
                       <span>{template.title}</span>
-                      {isActive && <Check className="w-3 h-3 text-primary" />}
+                      {isComingSoon && <span className="text-[10px] uppercase tracking-wider text-primary/70 font-semibold ml-1">Soon</span>}
+                      {isExternal && !isComingSoon && <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-semibold ml-1">External</span>}
+                      {isActive && !isComingSoon && !isExternal && <Check className="w-3 h-3 text-primary" />}
                     </button>
                   );
                 })}

@@ -6,7 +6,6 @@ import { encrypt, decrypt } from "./crypto";
 import { llm } from "./llm";
 import {
   writeRequestSchema,
-  queryWriteRequestSchema,
   generateChallengeRequestSchema,
   generateAdviceRequestSchema,
   interviewQuestionRequestSchema,
@@ -629,17 +628,16 @@ Instead:
       const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
-      const isSQLChallenge = challengeAppConfig?.outputFormat === "sql";
       const response = await llm.generate({
         maxTokens: 4096,
-        system: `${challengeAppContext ? challengeAppContext + "\n\n" : ""}You are a ${isSQLChallenge ? "supportive SQL peer reviewer" : "critical thinking partner"}. Your job is to ${isSQLChallenge ? "provide constructive suggestions for the user's SQL query — identify opportunities for improvement in performance, readability, and maintainability. Frame suggestions positively, not as criticisms." : "CHALLENGE the user's document — identify gaps, weaknesses, and assumptions."}
+        system: `${challengeAppContext ? challengeAppContext + "\n\n" : ""}You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
 
 DOCUMENT OBJECTIVE: ${objective}
-Evaluate the ${challengeAppConfig?.documentType || "document"} against this objective. Every ${isSQLChallenge ? "suggestion" : "challenge"} must relate to how well the ${challengeAppConfig?.documentType || "document"} achieves this goal.
+Evaluate the ${challengeAppConfig?.documentType || "document"} against this objective. Every challenge must relate to how well the ${challengeAppConfig?.documentType || "document"} achieves this goal.
 
-IMPORTANT: Only generate ${isSQLChallenge ? "suggestions" : "challenges"}. Do NOT provide ${isSQLChallenge ? "rewritten SQL" : "advice, solutions, or suggestions"}. The user will request advice separately.
+IMPORTANT: Only generate challenges. Do NOT provide advice, solutions, or suggestions. The user will request advice separately.
 
-Generate ${isSQLChallenge ? "suggestions" : "challenges"} from these personas:
+Generate challenges from these personas:
 ${personaDescriptions}
 ${refContext}${guidanceContext}${lockGuardrail}
 
@@ -752,10 +750,10 @@ Output only valid JSON, no markdown.`,
       //   3. challenge  — the specific gap/weakness identified earlier
       //   4. persona    — who is speaking and their advice prompt
       //   5. discussion — the ongoing conversation for continuity
-      //   6. appType    — application-specific context (e.g. query-editor)
+      //   6. appType    — application-specific context
       const systemPrompt = `${appContext ? appContext + "\n\n" : ""}${persona.prompts.advice}
 
-You are the ${persona.label}. ${appConfig?.outputFormat === "sql" ? "A colleague has raised a suggestion about the user's SQL query." : "A colleague has raised a provocation against the user's document."} Your job is to provide expert advice that helps the user resolve that ${appConfig?.outputFormat === "sql" ? "suggestion" : "provocation"}.
+You are the ${persona.label}. A colleague has raised a provocation against the user's document. Your job is to provide expert advice that helps the user resolve that provocation.
 
 THE PROVOCATION (this is your primary grounding — your advice must directly address this):
 Title: ${challengeTitle}
@@ -1654,90 +1652,6 @@ INSTRUCTION APPLIED: ${instruction}`
     }
   });
 
-  // ── Dedicated SQL query writer ──
-  // Focused on writing/editing SQL queries — never generates prose.
-  // Uses captured context (if any) to inform the changes.
-  app.post("/api/query-write", async (req, res) => {
-    try {
-      const parsed = queryWriteRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { query, instruction: rawInstruction, capturedContext } = parsed.data;
-
-      // Clean voice transcripts
-      let instruction = rawInstruction;
-      if (isLikelyVoiceTranscript(rawInstruction)) {
-        instruction = await cleanVoiceTranscript(rawInstruction);
-      }
-
-      // Build context section from captured items
-      let contextSection = "";
-      if (capturedContext && capturedContext.length > 0) {
-        const contextEntries = capturedContext.map((item, i) => {
-          const num = i + 1;
-          const annotation = item.annotation ? `\n   Note: ${item.annotation}` : "";
-          if (item.type === "text") {
-            return `${num}. [TEXT] ${item.content.slice(0, 1000)}${item.content.length > 1000 ? "..." : ""}${annotation}`;
-          } else if (item.type === "image") {
-            return `${num}. [IMAGE] (visual reference)${annotation}`;
-          } else {
-            return `${num}. [LINK] ${item.content}${annotation}`;
-          }
-        }).join("\n\n");
-
-        contextSection = `\n\nREFERENCE CONTEXT (use to inform your SQL edits — these are materials the author collected):
-${contextEntries}`;
-      }
-
-      const response = await llm.generate({
-        maxTokens: 16384,
-        temperature: 0.1,
-        system: `You are an expert SQL query writer, formatter, and editor. Your ONLY output is SQL.
-
-ABSOLUTE RULES:
-1. Output MUST be valid SQL — NEVER output prose, markdown, documentation, explanations, or commentary
-2. NEVER wrap output in code fences (\`\`\`) — return raw SQL only
-3. NEVER add text before or after the SQL query
-4. Apply proper indentation with consistent style throughout
-5. Each major clause (SELECT, FROM, WHERE, JOIN, GROUP BY, ORDER BY, HAVING, UNION) starts on a new line
-6. Indent subqueries, CTEs, CASE blocks, and nested expressions
-7. Use UPPERCASE for SQL keywords consistently
-8. Add blank lines between CTEs and between major query sections for readability
-9. Align related items (SELECT columns, JOIN conditions) for scannability
-10. Preserve ALL comments from the original query
-11. When the instruction asks for changes (add column, modify WHERE, etc.), apply them precisely
-12. When the instruction is vague (like "beautify" or "format"), focus on formatting and readability only
-13. SEMANTIC EQUIVALENCE: unless the instruction explicitly requests a logic change, the output query MUST return the same results as the input query
-
-The output is the complete SQL query. Nothing else — no explanations, no summaries, no markdown.${contextSection}`,
-        messages: [
-          {
-            role: "user",
-            content: `SQL QUERY:
-${query}
-
-INSTRUCTION: ${instruction}`
-          }
-        ],
-      });
-
-      const resultSql = (response.text || query).trim()
-        .replace(/^```(?:sql)?\n?/i, "").replace(/\n?```$/i, "").trim();
-
-      res.json({
-        document: resultSql,
-        summary: "SQL query updated",
-        instructionType: "style" as InstructionType,
-      });
-    } catch (error) {
-      console.error("Query write error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to write query", details: errorMessage });
-    }
-  });
-
   // Streaming write endpoint for long documents
   app.post("/api/write/stream", async (req, res) => {
     try {
@@ -2057,328 +1971,6 @@ Return ONLY a JSON array of objects with "question" (string) and "category" (one
       console.error("Generate questions error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to generate questions", details: errorMessage });
-    }
-  });
-
-  // ── Extract metrics from SQL queries ──
-  app.post("/api/extract-metrics", async (req, res) => {
-    try {
-      const { query } = req.body;
-
-      if (!query || typeof query !== "string") {
-        return res.status(400).json({ error: "Query text is required" });
-      }
-
-      const response = await llm.generate({
-        maxTokens: 4000,
-        temperature: 0.2,
-        system: `You are a senior data analyst who extracts business metrics and KPIs from SQL queries and database documents.
-
-Analyze the provided query or document and extract every identifiable metric, measure, or KPI. For each metric, provide:
-- **name**: A concise, human-readable metric name (e.g., "Monthly Active Users", "Average Order Value")
-- **definition**: A clear 1–2 sentence business definition explaining what this metric measures and why it matters
-- **formula**: (optional) The SQL expression, aggregation, or calculation that computes this metric
-
-Look for:
-- Aggregations (COUNT, SUM, AVG, MIN, MAX)
-- Calculated fields and derived columns
-- Ratios and percentages
-- Window functions that compute running totals, ranks, or moving averages
-- CASE expressions that categorize or bucket data
-- Any column alias that suggests a business metric
-
-If the document describes metrics in prose rather than SQL, extract those definitions as well.
-
-Respond with valid JSON only, in this exact format:
-{
-  "metrics": [
-    { "name": "Metric Name", "definition": "What this metric measures.", "formula": "SQL expression or null" }
-  ]
-}
-
-If no metrics are found, return: { "metrics": [] }`,
-        messages: [
-          {
-            role: "user",
-            content: `Extract all metrics and KPIs from the following:\n\n${query.slice(0, 15000)}`
-          }
-        ],
-      });
-
-      const text = response.text.trim();
-      // Parse JSON from the response, handling markdown code fences
-      const jsonStr = text.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
-      const parsed = JSON.parse(jsonStr);
-
-      res.json({ metrics: Array.isArray(parsed.metrics) ? parsed.metrics : [] });
-    } catch (error) {
-      console.error("Extract metrics error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to extract metrics", details: errorMessage });
-    }
-  });
-
-  // ── Deep SQL query analysis ──
-  app.post("/api/analyze-query", async (req, res) => {
-    try {
-      const { query, databaseEngine, prioritizedCategories, previousFeedback } = req.body;
-
-      if (!query || typeof query !== "string") {
-        return res.status(400).json({ error: "Query text is required" });
-      }
-
-      const engine = typeof databaseEngine === "string" ? databaseEngine : "generic";
-      const priorities: string[] = Array.isArray(prioritizedCategories) ? prioritizedCategories : [];
-      const feedback: { accepted: string[]; rejected: string[] } =
-        previousFeedback && typeof previousFeedback === "object"
-          ? { accepted: Array.isArray(previousFeedback.accepted) ? previousFeedback.accepted : [], rejected: Array.isArray(previousFeedback.rejected) ? previousFeedback.rejected : [] }
-          : { accepted: [], rejected: [] };
-
-      // Build engine-specific guidance
-      const engineGuidance = engine !== "generic" ? `
-═══════════════════════════════════════════════════
- DATABASE ENGINE: ${engine.toUpperCase()}
-═══════════════════════════════════════════════════
-
-All analysis, suggestions, and code changes MUST target **${engine}** specifically:
-${engine === "postgresql" ? `- Use PostgreSQL syntax: $1/$2 parameters, :: type casts, ILIKE, ARRAY types, LATERAL joins, CTEs are optimization fences pre-v12
-- Leverage PostgreSQL features: partial indexes, expression indexes, EXPLAIN ANALYZE hints, pg_stat_statements
-- Note PostgreSQL-specific gotchas: CTE materialization behavior by version, MVCC implications, VACUUM considerations` : ""}${engine === "mysql" ? `- Use MySQL syntax: backtick identifiers, LIMIT without OFFSET, IFNULL, GROUP_CONCAT, derived table restrictions
-- Leverage MySQL features: covering indexes, index hints (USE INDEX/FORCE INDEX), query cache considerations, InnoDB vs MyISAM
-- Note MySQL-specific gotchas: implicit type conversions, ONLY_FULL_GROUP_BY mode, subquery materialization in older versions` : ""}${engine === "sqlserver" ? `- Use SQL Server syntax: square bracket identifiers, TOP instead of LIMIT, ISNULL, STRING_AGG, CROSS APPLY/OUTER APPLY
-- Leverage SQL Server features: included columns in indexes, filtered indexes, query store, execution plan analysis
-- Note SQL Server-specific gotchas: parameter sniffing, OPTION(RECOMPILE), tempdb spills, implicit conversions with varchar/nvarchar` : ""}${engine === "oracle" ? `- Use Oracle syntax: ROWNUM/FETCH FIRST, NVL, CONNECT BY, dual table, (+) outer join notation (prefer ANSI)
-- Leverage Oracle features: bitmap indexes, function-based indexes, materialized views, hints (/*+ ... */)
-- Note Oracle-specific gotchas: NULL and empty string equivalence, implicit DATE conversions, optimizer statistics freshness` : ""}${engine === "sqlite" ? `- Use SQLite syntax: no RIGHT/FULL OUTER JOIN, limited ALTER TABLE, type affinity system
-- Leverage SQLite features: WITHOUT ROWID tables, partial indexes, JSON1 extension
-- Note SQLite-specific gotchas: no true concurrent writes, type affinity surprises, lack of RIGHT JOIN` : ""}
-When suggesting changes, ensure all afterCode is valid ${engine} syntax.` : "";
-
-      // Build priority guidance
-      const priorityGuidance = priorities.length > 0 ? `
-═══════════════════════════════════════════════════
- USER PRIORITIES
-═══════════════════════════════════════════════════
-
-The user has indicated they care most about these categories (in order):
-${priorities.map((p, i) => `${i + 1}. ${p}`).join("\n")}
-
-Weight your analysis accordingly — give more detailed findings and more changeRecommendations for prioritized categories. Still cover all categories but be more thorough on priorities.` : "";
-
-      // Build feedback context
-      const feedbackContext = (feedback.accepted.length > 0 || feedback.rejected.length > 0) ? `
-═══════════════════════════════════════════════════
- PREVIOUS FEEDBACK FROM USER
-═══════════════════════════════════════════════════
-
-The user has reviewed previous analysis results:
-${feedback.accepted.length > 0 ? `\nACCEPTED findings (user found these valuable — find more like them):\n${feedback.accepted.map(f => `- ${f}`).join("\n")}` : ""}
-${feedback.rejected.length > 0 ? `\nREJECTED findings (user disagreed — avoid similar suggestions):\n${feedback.rejected.map(f => `- ${f}`).join("\n")}` : ""}
-
-Use this feedback to calibrate your analysis. Produce findings aligned with what the user accepted and avoid patterns similar to what they rejected.` : "";
-
-      const response = await llm.generate({
-        maxTokens: 16000,
-        temperature: 0.15,
-        system: `You are a panel of two expert SQL roles working together:
-
-**ROLE 1 — Senior SQL Architect (the Analyst)**
-You perform deep, rigorous, comprehensive analysis of SQL queries. You evaluate EVERY dimension of SQL quality. You are thorough, opinionated, and cite specific code.
-
-**ROLE 2 — QA SQL Engineer (the Validator)**
-You review every suggestion the Analyst makes. Before ANY changeRecommendation is included, YOU must verify it passes all QA checks. If a suggestion fails QA, it is EXCLUDED from the output.
-
-═══════════════════════════════════════════════════
- QA VALIDATION PROTOCOL (applied to EVERY suggestion)
-═══════════════════════════════════════════════════
-
-Before including any changeRecommendation or optimization with beforeCode/afterCode, the QA Engineer must verify:
-
-□ LOGICAL EQUIVALENCE: Does afterCode return EXACTLY the same result set as beforeCode for ALL possible data, including NULLs, empty sets, duplicates, and edge cases?
-□ JOIN SEMANTICS: Are JOIN types preserved? Does an INNER JOIN stay INNER? Is a LEFT JOIN not accidentally converted to INNER?
-□ NULL HANDLING: Does the change preserve NULL behavior? (e.g., NOT IN with NULLs vs NOT EXISTS behave differently)
-□ AGGREGATION INTEGRITY: Are GROUP BY granularity and aggregate functions unchanged?
-□ ORDERING: If ORDER BY matters, is it preserved?
-□ VARIABLE PAIRING: Are correlated parameter pairs (e.g., @Q1 with @Q1_TYPE, @Q2 with @Q2_TYPE) kept together? NEVER merge distinct pairs into IN() or OR that breaks the pairing.
-□ PREDICATE LOGIC: Are AND/OR precedence and boolean logic identical?
-□ DATA TYPE SAFETY: No implicit type conversions that could change filtering behavior?
-□ SUBQUERY CORRELATION: Are correlated subquery references preserved correctly?
-
-If ANY check fails → DO NOT include the change. A wrong suggestion is worse than no suggestion.
-${engineGuidance}${priorityGuidance}${feedbackContext}
-═══════════════════════════════════════════════════
- DYNAMIC FEEDBACK CATEGORIES
-═══════════════════════════════════════════════════
-
-Analyze the query and generate feedback categories DYNAMICALLY based on what you actually find.
-Do NOT use a fixed list. Instead, examine the query's characteristics and create categories that reflect the actual issues and patterns present.
-
-Examples of categories you might generate (only include what's relevant):
-- "JOIN Optimization" — if the query has complex joins
-- "Index Utilization" — if there are SARGability or index concerns
-- "NULL Safety" — if NULL handling is a concern
-- "CTE Efficiency" — if the query uses CTEs
-- "Window Function Usage" — if window functions are present
-- "Subquery Refactoring" — if correlated subqueries could be improved
-- "Type Safety" — if there are implicit type conversions
-- "Aggregation Logic" — if GROUP BY or aggregates need attention
-
-Each finding (subquery analysis, optimization opportunity) MUST be tagged with one of your generated categories.
-
-═══════════════════════════════════════════════════
- COMPREHENSIVE SQL ANALYSIS DIMENSIONS
-═══════════════════════════════════════════════════
-
-Evaluate EVERY applicable dimension for each subpart and for the overall query:
-
-**1. Correctness & Logic**
-- Predicate accuracy: Are WHERE/HAVING conditions logically correct?
-- JOIN correctness: Right join type? Correct join keys? Missing join conditions causing cartesian products?
-- NULL awareness: Are NULLs handled properly in comparisons, aggregations, CASE expressions, and IN clauses?
-- Data type mismatches: Implicit conversions that could cause wrong results or poor performance?
-- DISTINCT usage: Necessary or masking a duplicate-producing join?
-- UNION vs UNION ALL: Is deduplication intended or accidental overhead?
-
-**2. Performance & Efficiency**
-- SARGability: Are predicates sargable? (No functions on indexed columns in WHERE)
-- Index friendliness: Could the query benefit from indexes? Are composite index column orders optimal?
-- Scan vs seek: Are there table scans that could be seeks with better predicates?
-- Unnecessary computation: Calculated columns that could be simplified or precomputed?
-- Subquery vs JOIN: Would a JOIN outperform a correlated subquery (or vice versa)?
-- Redundant operations: Unnecessary DISTINCT, redundant WHERE conditions, repeated expressions?
-- CTE materialization: Are CTEs used wisely? Could they cause repeated evaluation?
-- Predicate pushdown: Are filters applied as early as possible?
-- Data volume: Are large intermediate result sets produced unnecessarily?
-
-**3. Readability & Maintainability**
-- Naming clarity: Are aliases meaningful? (t1, t2 vs orders, customers)
-- Consistent formatting: Indentation, keyword casing, clause alignment
-- Comment coverage: Are complex business rules documented?
-- Logical flow: Is the query structured so a reader can follow the data pipeline?
-- Magic numbers/strings: Are there unexplained literals that should be named?
-
-**4. Best Practices & Standards**
-- SELECT * usage: Should explicit columns be listed?
-- Explicit JOIN syntax: Using ANSI JOIN vs implicit comma joins?
-- Consistent aliasing: AS keyword usage, table alias conventions
-- Date handling: Are date comparisons range-safe? Timezone-aware?
-- String comparisons: Case sensitivity, trailing spaces, collation issues?
-- Determinism: Are results deterministic? Non-deterministic ORDER BY with LIMIT?
-- Parameter sniffing risk: Complex parameterized queries that might suffer from plan caching?
-
-**5. Security & Safety**
-- SQL injection risk: Dynamic SQL built from user input?
-- Privilege escalation: Unnecessary access to sensitive tables/columns?
-- Data exposure: Selecting more columns than needed?
-
-**6. Portability & Compatibility**
-- Dialect-specific features: Using vendor-specific syntax that may not port?
-- Deprecated syntax: Using outdated constructs?
-
-═══════════════════════════════════════════════════
- OUTPUT REQUIREMENTS
-═══════════════════════════════════════════════════
-
-Given a SQL query, produce:
-
-1. **feedbackCategories** — Array of dynamically generated categories based on the query. Each category: id (kebab-case), label (human-readable), description (what it covers), severity (worst severity among its findings: "good"|"info"|"warning"|"critical"), count (number of findings in this category).
-
-2. **Decomposition** — Break into logical subparts (CTEs, subqueries, UNION branches, JOINs, aggregation blocks, window functions, CASE blocks). Each gets: id, name, exact SQL snippet, character offsets (start/end), category (the category id this finding belongs to).
-
-3. **Summary** per subpart — 2-3 sentences: what it does, which tables/columns, what business logic.
-
-4. **Evaluation** per subpart — Assess across ALL applicable dimensions above. Be specific: cite exact code, explain WHY something is good or problematic. Rate severity: "good", "info", "warning", "critical".
-
-5. **Recommendations** per subpart — Text suggestions covering all relevant dimensions.
-
-6. **changeRecommendations** per subpart — Concrete before/after SQL. ONLY include if QA-validated.
-   - title: short descriptive name
-   - rationale: cite specific code issues and explain why the change helps
-   - beforeCode: exact current SQL to change (must match the query text)
-   - afterCode: improved SQL (MUST be QA-validated for logical equivalence)
-   - impact: what improves (performance gain, readability, correctness, safety, etc.)
-   Each subpart: 0-3 changes. Severity "good" subparts get 0 changes.
-
-7. **Metrics** — All aggregations, KPIs, calculated fields, business measures.
-
-8. **Overall evaluation** — 4-6 sentence holistic assessment covering: architecture, performance profile, maintainability, correctness confidence, and top priorities.${engine !== "generic" ? ` Include ${engine}-specific observations.` : ""}
-
-9. **Optimization opportunities** — Cross-cutting improvements with QA-validated before/after code where applicable. Each tagged with a category id.
-
-Respond with valid JSON only:
-{
-  "feedbackCategories": [
-    {
-      "id": "join-optimization",
-      "label": "JOIN Optimization",
-      "description": "Issues related to JOIN types, conditions, and performance",
-      "severity": "warning",
-      "count": 3
-    }
-  ],
-  "subqueries": [
-    {
-      "id": "sq1",
-      "name": "Descriptive Name",
-      "sqlSnippet": "exact SQL text",
-      "startOffset": 0,
-      "endOffset": 100,
-      "summary": "Detailed 2-3 sentence explanation",
-      "evaluation": "Multi-dimensional assessment citing specific code",
-      "severity": "good|info|warning|critical",
-      "category": "join-optimization",
-      "recommendations": ["Suggestion 1", "Suggestion 2"],
-      "changeRecommendations": [
-        {
-          "title": "Change name",
-          "rationale": "Why — citing specific code and QA validation",
-          "beforeCode": "exact current SQL",
-          "afterCode": "improved SQL (QA-validated)",
-          "impact": "What improves"
-        }
-      ]
-    }
-  ],
-  "metrics": [
-    { "name": "Metric Name", "definition": "What it measures", "formula": "SQL expression" }
-  ],
-  "overallEvaluation": "Holistic 4-6 sentence assessment",
-  "optimizationOpportunities": [
-    {
-      "title": "Title",
-      "description": "Detailed explanation with code references",
-      "severity": "info|warning|critical",
-      "category": "join-optimization",
-      "affectedSubquery": "sq1 or null",
-      "beforeCode": "current pattern (QA-validated)",
-      "afterCode": "improved pattern (QA-validated)",
-      "impact": "Measurable improvement"
-    }
-  ]
-}`,
-        messages: [
-          {
-            role: "user",
-            content: `Analyze the following SQL query in depth:\n\n${query.slice(0, 50000)}`
-          }
-        ],
-      });
-
-      const text = response.text.trim();
-      const jsonStr = text.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
-      const parsed = JSON.parse(jsonStr);
-
-      res.json({
-        feedbackCategories: Array.isArray(parsed.feedbackCategories) ? parsed.feedbackCategories : [],
-        subqueries: Array.isArray(parsed.subqueries) ? parsed.subqueries : [],
-        metrics: Array.isArray(parsed.metrics) ? parsed.metrics : [],
-        overallEvaluation: parsed.overallEvaluation || "",
-        optimizationOpportunities: Array.isArray(parsed.optimizationOpportunities) ? parsed.optimizationOpportunities : [],
-      });
-    } catch (error) {
-      console.error("Analyze query error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to analyze query", details: errorMessage });
     }
   });
 
