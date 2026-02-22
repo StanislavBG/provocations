@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
-import { getAppFlowConfig, type AppFlowConfig, type RightPanelTabId, type WorkspaceLayout } from "@/lib/appWorkspaceConfig";
+import { getAppFlowConfig, getObjectiveConfig, type AppFlowConfig, type RightPanelTabId, type WorkspaceLayout } from "@/lib/appWorkspaceConfig";
 import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
@@ -33,6 +33,8 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -136,6 +138,7 @@ export default function Workspace() {
 
   // Computed flow config — the single source of truth for app-specific behavior
   const appFlowConfig: AppFlowConfig = getAppFlowConfig(selectedTemplateId);
+  const objectiveConfig = getObjectiveConfig(selectedTemplateId);
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
@@ -216,6 +219,19 @@ export default function Workspace() {
 
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
+
+  // Objective "Load from Context Store" popover state
+  const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
+  const [objectiveStoreLoadingId, setObjectiveStoreLoadingId] = useState<number | null>(null);
+  const { data: objectiveStoreDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
+    queryKey: ["/api/documents"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/documents");
+      return res.json();
+    },
+    enabled: objectiveStoreOpen,
+    staleTime: 30_000,
+  });
 
   // ── App Launch Params — cross-app deep linking ──
   const launchParamsConsumed = useRef(false);
@@ -1370,6 +1386,24 @@ RULES:
     recordUsageMetrics("save");
   }, [document, savedDocId, recordUsageMetrics]);
 
+  /** Load a document from Context Store into the objective (replace) */
+  const handleLoadObjectiveFromStore = useCallback(async (docId: number, docTitle: string) => {
+    setObjectiveStoreLoadingId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        setObjective(data.content);
+        setObjectiveStoreOpen(false);
+        toast({ title: "Loaded", description: `"${docTitle}" loaded into ${objectiveConfig.primaryLabel.toLowerCase()}.` });
+      }
+    } catch {
+      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
+    } finally {
+      setObjectiveStoreLoadingId(null);
+    }
+  }, [objectiveConfig.primaryLabel, toast]);
+
   const handleStorageLoad = useCallback((doc: { id: number; title: string; content: string }) => {
     setDocument({ id: generateId("doc"), rawText: doc.content });
     setSavedDocId(doc.id);
@@ -1583,8 +1617,9 @@ RULES:
     <>
       <div className="flex-1 overflow-y-auto">
         <TextInputForm
-          onSubmit={(text, obj, refs, templateId) => {
+          onSubmit={(text, obj, refs, templateId, secObj) => {
             setSelectedTemplateId(templateId ?? null);
+            if (secObj) setSecondaryObjective(secObj);
             createDraftMutation.mutate({ context: text, obj, refs, templateId: templateId ?? undefined });
           }}
           isLoading={createDraftMutation.isPending}
@@ -1977,14 +2012,14 @@ RULES:
               </Button>
             )}
             <Button
-              data-testid="button-storage"
+              data-testid="button-context-store"
               variant="outline"
               size="sm"
               onClick={() => setShowStoragePanel(true)}
               className="gap-1.5"
             >
               <HardDrive className="w-4 h-4" />
-              <span className="hidden sm:inline">Storage</span>
+              <span className="hidden sm:inline">Context Store</span>
             </Button>
             <Button
               data-testid="button-reset"
@@ -2017,8 +2052,9 @@ RULES:
             onClick={() => setIsObjectiveCollapsed(false)}
           >
             <Target className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-xs font-medium text-muted-foreground/70 shrink-0">{objectiveConfig.primaryLabel}</span>
             <span className="text-sm text-muted-foreground truncate flex-1">
-              {objective || "Set your objective..."}
+              {objective || `Set your ${objectiveConfig.primaryLabel.toLowerCase()}...`}
             </span>
             <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
@@ -2028,11 +2064,11 @@ RULES:
               chrome="container"
               variant="textarea"
               data-testid="input-objective-header"
-              label="Objective"
+              label={objectiveConfig.primaryLabel}
               labelIcon={Target}
               value={objective}
               onChange={setObjective}
-              placeholder="What are you creating? Describe your objective..."
+              placeholder={objectiveConfig.primaryPlaceholder}
               className="text-sm leading-relaxed font-serif"
               minRows={2}
               maxRows={4}
@@ -2045,29 +2081,65 @@ RULES:
               onRecordingChange={setIsRecordingObjective}
               textProcessor={processObjectiveText}
               headerActions={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsObjectiveCollapsed(true);
-                  }}
-                  title="Minimize objective"
-                >
-                  <ChevronUp className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  {objectiveConfig.showLoadFromStore && (
+                    <Popover open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
+                          <HardDrive className="w-3.5 h-3.5" />
+                          Load
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-72 p-0">
+                        <div className="px-3 py-2 border-b">
+                          <p className="text-sm font-medium">Load from Context Store</p>
+                          <p className="text-xs text-muted-foreground">Replace {objectiveConfig.primaryLabel.toLowerCase()} with saved content</p>
+                        </div>
+                        <ScrollArea className="max-h-60">
+                          <div className="p-1">
+                            {objectiveStoreDocs?.documents?.length ? objectiveStoreDocs.documents.map((doc) => (
+                              <button
+                                key={doc.id}
+                                onClick={() => handleLoadObjectiveFromStore(doc.id, doc.title)}
+                                disabled={objectiveStoreLoadingId === doc.id}
+                                className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                <span className="truncate flex-1">{doc.title}</span>
+                                {objectiveStoreLoadingId === doc.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                              </button>
+                            )) : (
+                              <p className="px-3 py-4 text-sm text-muted-foreground text-center">No saved documents yet</p>
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsObjectiveCollapsed(true);
+                    }}
+                    title="Minimize objective"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </Button>
+                </div>
               }
             />
             <ProvokeText
               chrome="container"
               variant="textarea"
               data-testid="input-secondary-objective-header"
-              label="Secondary objective"
+              label={objectiveConfig.secondaryLabel}
               labelIcon={Crosshair}
               value={secondaryObjective}
               onChange={setSecondaryObjective}
-              placeholder="Optional: a secondary goal, constraint, or perspective to keep in mind..."
+              placeholder={objectiveConfig.secondaryPlaceholder}
               className="text-sm leading-relaxed font-serif"
               minRows={1}
               maxRows={3}
