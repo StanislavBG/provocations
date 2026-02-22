@@ -124,7 +124,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   const stepOneRef = useRef<HTMLDivElement>(null);
 
   // ── Storage quick-load: fetch saved documents list ──
-  const { data: savedDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
+  // Track which documents have been loaded from the context store
+  const [loadedDocIds, setLoadedDocIds] = useState<Set<number>>(new Set());
+
+  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
     queryKey: ["/api/documents"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/documents");
@@ -160,7 +163,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       const data = await res.json();
       if (data.content) {
         setText((prev) => prev ? prev + "\n\n---\n\n" + data.content : data.content);
-        setStorageOpen(false);
+        setLoadedDocIds((prev) => new Set(prev).add(docId));
         toast({ title: "Context loaded", description: `"${docTitle}" added as starting material.` });
       }
     } catch (error) {
@@ -171,8 +174,21 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     }
   }, [toast]);
 
+  /** Load a text file (.txt, .md, .csv, .json) from disk into the context textarea */
+  const handleFileUpload = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result;
+      if (typeof content === "string" && content.trim()) {
+        setText((prev) => prev ? prev + "\n\n---\n\n" + content : content);
+        toast({ title: "File loaded", description: `"${file.name}" added as starting material.` });
+      }
+    };
+    reader.readAsText(file);
+  }, [toast]);
+
   const handleSubmit = () => {
-    if (text.trim()) {
+    if (text.trim() || loadedDocIds.size > 0) {
       const referenceDocuments: ReferenceDocument[] = [];
       if (activePrebuilt?.templateContent) {
         referenceDocuments.push({
@@ -184,7 +200,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       }
       const effectiveObjective = isWritePrompt
         ? "Reformat and structure this draft into a clear, effective prompt using the AIM framework (Actor, Input, Mission). Preserve the user's intent while organizing it into the three AIM sections."
-        : (objective.trim() || "Create a compelling, well-structured document");
+        : (objective.trim() || text.trim().slice(0, 500) || "Create a compelling, well-structured document");
       onSubmit(text.trim(), effectiveObjective, referenceDocuments, activePrebuilt?.id, secondaryObjective.trim() || undefined);
     }
   };
@@ -367,6 +383,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 textProcessor={(text, mode) =>
                   processText(text, mode, mode === "clean" ? "objective" : undefined)
                 }
+                showCharCount
+                maxCharCount={10000}
+                maxAudioDuration="2min"
                 headerActions={objConfig.showLoadFromStore ? (
                   <Popover open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
                     <PopoverTrigger asChild>
@@ -429,20 +448,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
         {/* ── STEP TWO: Your context ── */}
         {hasObjectiveType && (
         <div className="flex flex-col flex-1 min-h-0 gap-2">
-          {/* Heading — hidden for write-a-prompt (label is inside the container) */}
-          {isWritePrompt ? null : (
-            <h2 className="shrink-0 text-base font-semibold">
-              {activePrebuilt?.id === "streaming"
-                ? "Configure capture workspace"
-                : activePrebuilt?.id === "voice-capture"
-                  ? "Start recording"
-                  : activePrebuilt?.id === "youtube-to-infographic"
-                    ? "YouTube channel source"
-                    : activePrebuilt?.id === "text-to-infographic"
-                      ? "Transcript source"
-                      : "Provide your starting material"}
-            </h2>
-          )}
+          {/* Step heading removed — step progress bar in footer provides the context */}
 
           {activePrebuilt?.id === "voice-capture" && onVoiceCaptureMode ? (
             <div className="space-y-3">
@@ -596,6 +602,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 <DraftQuestionsPanel
                   questions={activePrebuilt.draftQuestions}
                   onResponse={handleDraftQuestionResponse}
+                  objective={objective}
+                  secondaryObjective={secondaryObjective}
+                  templateId={activePrebuilt?.id}
                 />
               )}
 
@@ -646,16 +655,26 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                           title="Load context from saved documents"
                         >
                           <HardDrive className="w-3.5 h-3.5" />
-                          Context Store
+                          Load
+                          {loadedDocIds.size > 0 && (
+                            <span className="ml-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                              {loadedDocIds.size}
+                            </span>
+                          )}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent align="end" className="w-72 p-0">
                         <div className="px-3 py-2 border-b">
                           <p className="text-sm font-medium">Load from Context Store</p>
-                          <p className="text-xs text-muted-foreground">Select a saved document to use as context</p>
+                          <p className="text-xs text-muted-foreground">Select documents or upload files</p>
                         </div>
                         <ScrollArea className="max-h-60">
-                          {!savedDocs?.documents?.length ? (
+                          {isLoadingDocs ? (
+                            <div className="px-3 py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Loading...
+                            </div>
+                          ) : !savedDocs?.documents?.length ? (
                             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
                               No saved documents yet
                             </div>
@@ -665,20 +684,44 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                                 <button
                                   key={doc.id}
                                   onClick={() => handleLoadStorageDoc(doc.id, doc.title)}
-                                  disabled={loadingDocId !== null}
+                                  disabled={loadingDocId !== null || loadedDocIds.has(doc.id)}
                                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
                                 >
                                   {loadingDocId === doc.id ? (
                                     <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
+                                  ) : loadedDocIds.has(doc.id) ? (
+                                    <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
                                   ) : (
                                     <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
                                   )}
                                   <span className="truncate flex-1">{doc.title}</span>
+                                  {loadedDocIds.has(doc.id) && (
+                                    <span className="text-[10px] text-primary font-medium shrink-0">Loaded</span>
+                                  )}
                                 </button>
                               ))}
                             </div>
                           )}
                         </ScrollArea>
+                        <div className="flex items-center justify-between px-3 py-2 border-t">
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload file
+                            <input
+                              type="file"
+                              accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileUpload(file);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                          <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setStorageOpen(false)}>
+                            Done
+                          </Button>
+                        </div>
                       </PopoverContent>
                     </Popover>
                     <Button
@@ -746,16 +789,26 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                         title="Load context from saved documents"
                       >
                         <HardDrive className="w-3.5 h-3.5" />
-                        Context Store
+                        Load
+                        {loadedDocIds.size > 0 && (
+                          <span className="ml-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                            {loadedDocIds.size}
+                          </span>
+                        )}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-72 p-0">
                       <div className="px-3 py-2 border-b">
                         <p className="text-sm font-medium">Load from Context Store</p>
-                        <p className="text-xs text-muted-foreground">Select a saved document to use as context</p>
+                        <p className="text-xs text-muted-foreground">Select documents or upload files</p>
                       </div>
                       <ScrollArea className="max-h-60">
-                        {!savedDocs?.documents?.length ? (
+                        {isLoadingDocs ? (
+                          <div className="px-3 py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Loading...
+                          </div>
+                        ) : !savedDocs?.documents?.length ? (
                           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
                             No saved documents yet
                           </div>
@@ -765,20 +818,44 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                               <button
                                 key={doc.id}
                                 onClick={() => handleLoadStorageDoc(doc.id, doc.title)}
-                                disabled={loadingDocId !== null}
+                                disabled={loadingDocId !== null || loadedDocIds.has(doc.id)}
                                 className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
                               >
                                 {loadingDocId === doc.id ? (
                                   <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
+                                ) : loadedDocIds.has(doc.id) ? (
+                                  <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
                                 ) : (
                                   <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
                                 )}
                                 <span className="truncate flex-1">{doc.title}</span>
+                                {loadedDocIds.has(doc.id) && (
+                                  <span className="text-[10px] text-primary font-medium shrink-0">Loaded</span>
+                                )}
                               </button>
                             ))}
                           </div>
                         )}
                       </ScrollArea>
+                      <div className="flex items-center justify-between px-3 py-2 border-t">
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                          <Upload className="w-3.5 h-3.5" />
+                          Upload file
+                          <input
+                            type="file"
+                            accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleFileUpload(file);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setStorageOpen(false)}>
+                          Done
+                        </Button>
+                      </div>
                     </PopoverContent>
                   </Popover>
                 }
@@ -798,6 +875,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 <DraftQuestionsPanel
                   questions={activePrebuilt.draftQuestions}
                   onResponse={handleDraftQuestionResponse}
+                  objective={objective}
+                  secondaryObjective={secondaryObjective}
+                  templateId={activePrebuilt?.id}
                 />
               )}
               {renderContextSection()}
@@ -822,7 +902,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             <Button
               data-testid="button-analyze"
               onClick={handleSubmit}
-              disabled={!text.trim() || isLoading}
+              disabled={!(text.trim() || loadedDocIds.size > 0) || isLoading}
               size="lg"
               className="gap-2 shrink-0 w-full sm:w-auto"
             >

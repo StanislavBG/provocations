@@ -864,9 +864,10 @@ function AgentPromptList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: promptsData, isLoading } = useQuery<{ prompts: AgentPromptInfo[] }>({
+  const { data: promptsData, isLoading, isError, error } = useQuery<{ prompts: AgentPromptInfo[] }>({
     queryKey: ["/api/admin/agent-prompts"],
     queryFn: () => apiRequest("GET", "/api/admin/agent-prompts").then((r) => r.json()),
+    retry: 1,
   });
 
   const lockMutation = useMutation({
@@ -904,7 +905,29 @@ function AgentPromptList() {
     return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
   }
 
+  if (isError) {
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 space-y-2">
+        <p className="text-sm font-medium text-destructive">Failed to load LLM agents</p>
+        <p className="text-xs text-muted-foreground">
+          {error instanceof Error ? error.message : "Unknown error"}. This usually means the database migration hasn't been run. Try running <code className="font-mono bg-muted px-1 rounded">npm run db:push</code> to create the agent_prompt_overrides table.
+        </p>
+      </div>
+    );
+  }
+
   const prompts = promptsData?.prompts ?? [];
+
+  if (prompts.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-muted/30 p-4 space-y-2">
+        <p className="text-sm font-medium">No LLM agents found</p>
+        <p className="text-xs text-muted-foreground">
+          The TASK_TYPES array in server/invoke.ts appears to be empty or the API returned no results. Check server logs for details.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">

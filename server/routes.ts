@@ -1250,8 +1250,14 @@ Output only valid JSON, no markdown.`;
         return res.status(403).json({ error: "Admin access required" });
       }
 
-      const overrides = await storage.getAllAgentPromptOverrides();
-      const overrideMap = new Map(overrides.map((o) => [o.taskType, o]));
+      // Fetch DB overrides — gracefully degrade if table doesn't exist yet
+      let overrideMap = new Map<string, { systemPrompt: string; humanCurated: boolean; curatedBy: string | null; curatedAt: Date | null }>();
+      try {
+        const overrides = await storage.getAllAgentPromptOverrides();
+        overrideMap = new Map(overrides.map((o) => [o.taskType, o]));
+      } catch (dbError) {
+        console.warn("agent_prompt_overrides table may not exist yet — returning code defaults only:", dbError);
+      }
 
       const prompts = TASK_TYPES.map((taskType) => {
         const base = BASE_PROMPTS[taskType];
@@ -3785,6 +3791,53 @@ Generate infographic specification.`,
       console.error("Pipeline infographic error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to generate infographic", details: errorMessage });
+    }
+  });
+
+  // ── Generate contextual draft questions ──
+
+  app.post("/api/generate-draft-questions", async (req, res) => {
+    try {
+      const { objective, secondaryObjective, templateId, existingQuestions } = req.body;
+
+      if (!objective || typeof objective !== "string") {
+        return res.status(400).json({ error: "Objective is required" });
+      }
+      if (!existingQuestions || !Array.isArray(existingQuestions)) {
+        return res.status(400).json({ error: "Existing questions array is required" });
+      }
+
+      const response = await llm.generate({
+        maxTokens: 1000,
+        temperature: 0.7,
+        system: `You generate probing questions to help users think deeply about their project before writing. Questions should be specific to the user's stated objective and challenge their assumptions.
+
+Rules:
+- Generate exactly ${existingQuestions.length} questions
+- Questions must be open-ended (not yes/no)
+- Questions must be specific to the user's objective (not generic)
+- Each question should address a different dimension (audience, scope, constraints, success criteria, risks, etc.)
+- Keep questions concise (1-2 sentences max)
+- Return ONLY a JSON array of strings, no other text`,
+        messages: [
+          {
+            role: "user",
+            content: `Objective: ${objective}${secondaryObjective ? `\nProject description: ${secondaryObjective}` : ""}${templateId ? `\nTemplate type: ${templateId}` : ""}
+
+Default template questions for reference:
+${existingQuestions.map((q: string, i: number) => `${i + 1}. ${q}`).join("\n")}
+
+Generate ${existingQuestions.length} tailored questions specific to this objective.`,
+          },
+        ],
+      });
+
+      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const questions = JSON.parse(jsonText);
+      res.json({ questions });
+    } catch (error) {
+      console.error("Generate draft questions error:", error);
+      res.status(500).json({ error: "Failed to generate questions" });
     }
   });
 
