@@ -174,6 +174,19 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     }
   }, [toast]);
 
+  /** Load a text file (.txt, .md, .csv, .json) from disk into the context textarea */
+  const handleFileUpload = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result;
+      if (typeof content === "string" && content.trim()) {
+        setText((prev) => prev ? prev + "\n\n---\n\n" + content : content);
+        toast({ title: "File loaded", description: `"${file.name}" added as starting material.` });
+      }
+    };
+    reader.readAsText(file);
+  }, [toast]);
+
   const handleSubmit = () => {
     if (text.trim() || loadedDocIds.size > 0) {
       const referenceDocuments: ReferenceDocument[] = [];
@@ -653,7 +666,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                       <PopoverContent align="end" className="w-72 p-0">
                         <div className="px-3 py-2 border-b">
                           <p className="text-sm font-medium">Load from Context Store</p>
-                          <p className="text-xs text-muted-foreground">Select documents to use as context</p>
+                          <p className="text-xs text-muted-foreground">Select documents or upload files</p>
                         </div>
                         <ScrollArea className="max-h-60">
                           {isLoadingDocs ? (
@@ -690,6 +703,25 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                             </div>
                           )}
                         </ScrollArea>
+                        <div className="flex items-center justify-between px-3 py-2 border-t">
+                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload file
+                            <input
+                              type="file"
+                              accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileUpload(file);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                          <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setStorageOpen(false)}>
+                            Done
+                          </Button>
+                        </div>
                       </PopoverContent>
                     </Popover>
                     <Button
@@ -768,7 +800,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                     <PopoverContent align="end" className="w-72 p-0">
                       <div className="px-3 py-2 border-b">
                         <p className="text-sm font-medium">Load from Context Store</p>
-                        <p className="text-xs text-muted-foreground">Select documents to use as context</p>
+                        <p className="text-xs text-muted-foreground">Select documents or upload files</p>
                       </div>
                       <ScrollArea className="max-h-60">
                         {isLoadingDocs ? (
@@ -805,6 +837,25 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                           </div>
                         )}
                       </ScrollArea>
+                      <div className="flex items-center justify-between px-3 py-2 border-t">
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                          <Upload className="w-3.5 h-3.5" />
+                          Upload file
+                          <input
+                            type="file"
+                            accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleFileUpload(file);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setStorageOpen(false)}>
+                          Done
+                        </Button>
+                      </div>
                     </PopoverContent>
                   </Popover>
                 }
