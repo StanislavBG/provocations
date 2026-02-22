@@ -52,8 +52,10 @@ import {
 import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
 import { personaSchema } from "@shared/schema";
 import { trackingEventSchema } from "@shared/schema";
-import { invoke, TASK_TYPES, type TaskType } from "./invoke";
+import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
+import { executeAgent } from "./agent-executor";
+import { agentDefinitionSchema, agentStepSchema } from "@shared/schema";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -1038,6 +1040,347 @@ Output only valid JSON, no markdown.`;
       res.json({ personas: all });
     } catch (error) {
       res.status(500).json({ error: "Failed to export personas" });
+    }
+  });
+
+  // ── Agent definition CRUD (user-owned) ──
+
+  // Create new agent definition
+  app.post("/api/agents", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const parsed = agentDefinitionSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid agent definition", details: parsed.error.issues });
+
+      const result = await storage.createAgentDefinition({
+        agentId: parsed.data.agentId,
+        userId: auth.userId,
+        name: parsed.data.name,
+        description: parsed.data.description,
+        persona: parsed.data.persona,
+        steps: JSON.stringify(parsed.data.steps),
+      });
+      res.json(result);
+    } catch (error: any) {
+      if (error.code === "23505") return res.status(409).json({ error: "Agent ID already exists" });
+      console.error("Create agent error:", error);
+      res.status(500).json({ error: "Failed to create agent" });
+    }
+  });
+
+  // List user's agent definitions
+  app.get("/api/agents", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const agents = await storage.listAgentDefinitions(auth.userId);
+      res.json({
+        agents: agents.map((a) => ({
+          ...a,
+          steps: JSON.parse(a.steps),
+        })),
+      });
+    } catch (error) {
+      console.error("List agents error:", error);
+      res.status(500).json({ error: "Failed to list agents" });
+    }
+  });
+
+  // Get single agent definition
+  app.get("/api/agents/:agentId", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const agent = await storage.getAgentDefinition(req.params.agentId);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
+
+      res.json({ ...agent, steps: JSON.parse(agent.steps) });
+    } catch (error) {
+      console.error("Get agent error:", error);
+      res.status(500).json({ error: "Failed to get agent" });
+    }
+  });
+
+  // Update agent definition
+  app.put("/api/agents/:agentId", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const agent = await storage.getAgentDefinition(req.params.agentId);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
+
+      const { name, description, persona, steps } = req.body;
+      const result = await storage.updateAgentDefinition(req.params.agentId, {
+        name,
+        description,
+        persona,
+        steps: steps ? JSON.stringify(steps) : undefined,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Update agent error:", error);
+      res.status(500).json({ error: "Failed to update agent" });
+    }
+  });
+
+  // Delete agent definition
+  app.delete("/api/agents/:agentId", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const agent = await storage.getAgentDefinition(req.params.agentId);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
+
+      await storage.deleteAgentDefinition(req.params.agentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete agent error:", error);
+      res.status(500).json({ error: "Failed to delete agent" });
+    }
+  });
+
+  // ── Agent execution ──
+
+  // Execute a saved agent (non-streaming)
+  app.post("/api/agents/:agentId/execute", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const agent = await storage.getAgentDefinition(req.params.agentId);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
+
+      const { input } = req.body;
+      if (!input || typeof input !== "string") return res.status(400).json({ error: "Input is required" });
+
+      const steps = JSON.parse(agent.steps);
+      const result = await executeAgent(steps, input, agent.persona || "");
+      res.json(result);
+    } catch (error) {
+      console.error("Execute agent error:", error);
+      res.status(500).json({ error: "Failed to execute agent" });
+    }
+  });
+
+  // Execute a saved agent (streaming via SSE)
+  app.post("/api/agents/:agentId/execute/stream", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const agent = await storage.getAgentDefinition(req.params.agentId);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
+
+      const { input } = req.body;
+      if (!input || typeof input !== "string") return res.status(400).json({ error: "Input is required" });
+
+      // Set up SSE
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const steps = JSON.parse(agent.steps);
+      const sortedSteps = [...steps].sort((a: any, b: any) => a.order - b.order);
+      let currentInput = input;
+
+      for (const step of sortedSteps) {
+        res.write(`data: ${JSON.stringify({ type: "step-start", stepId: step.id })}\n\n`);
+
+        const result = await executeAgent([step], currentInput, agent.persona || "");
+        const stepResult = result.steps[0];
+
+        if (stepResult.validationPassed) {
+          res.write(`data: ${JSON.stringify({ type: "step-complete", stepId: step.id, result: stepResult })}\n\n`);
+          currentInput = stepResult.output;
+        } else {
+          res.write(`data: ${JSON.stringify({ type: "step-error", stepId: step.id, result: stepResult, error: stepResult.error })}\n\n`);
+          if (!step.output?.fallback) break;
+          currentInput = stepResult.output;
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ type: "execution-complete", finalOutput: currentInput })}\n\n`);
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (error) {
+      console.error("Stream execute agent error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to execute agent" });
+      } else {
+        res.write(`data: ${JSON.stringify({ type: "error", error: "Execution failed" })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
+  // Execute an inline (unsaved) agent definition
+  app.post("/api/agents/execute-inline", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { persona, steps, input } = req.body;
+      if (!input || typeof input !== "string") return res.status(400).json({ error: "Input is required" });
+      if (!Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: "Steps are required" });
+
+      const result = await executeAgent(steps, input, persona || "");
+      res.json(result);
+    } catch (error) {
+      console.error("Inline execute agent error:", error);
+      res.status(500).json({ error: "Failed to execute agent" });
+    }
+  });
+
+  // ── Admin: Agent prompt override management ──
+
+  // List all 13 task types with their current base prompts
+  app.get("/api/admin/agent-prompts", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const overrides = await storage.getAllAgentPromptOverrides();
+      const overrideMap = new Map(overrides.map((o) => [o.taskType, o]));
+
+      const prompts = TASK_TYPES.map((taskType) => {
+        const base = BASE_PROMPTS[taskType];
+        const override = overrideMap.get(taskType);
+        return {
+          taskType,
+          description: base.description,
+          currentPrompt: override?.systemPrompt ?? base.basePrompt,
+          isOverridden: !!override,
+          humanCurated: override?.humanCurated ?? false,
+          curatedBy: override?.curatedBy ?? null,
+          curatedAt: override?.curatedAt ?? null,
+        };
+      });
+
+      res.json({ prompts });
+    } catch (error) {
+      console.error("List agent prompts error:", error);
+      res.status(500).json({ error: "Failed to list agent prompts" });
+    }
+  });
+
+  // List all agent prompt overrides with lock status
+  app.get("/api/admin/agent-overrides", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const overrides = await storage.getAllAgentPromptOverrides();
+      res.json({ overrides: overrides.map((o) => ({
+        taskType: o.taskType,
+        humanCurated: o.humanCurated,
+        curatedAt: o.curatedAt,
+      })) });
+    } catch (error) {
+      console.error("List agent overrides error:", error);
+      res.status(500).json({ error: "Failed to list agent overrides" });
+    }
+  });
+
+  // Save system prompt override for a task type
+  app.put("/api/admin/agent-overrides/:taskType", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { taskType } = req.params;
+      if (!TASK_TYPES.includes(taskType as TaskType)) {
+        return res.status(400).json({ error: `Invalid task type: ${taskType}` });
+      }
+
+      const { systemPrompt } = req.body;
+      if (!systemPrompt || typeof systemPrompt !== "string") {
+        return res.status(400).json({ error: "systemPrompt is required" });
+      }
+
+      const result = await storage.upsertAgentPromptOverride({
+        taskType,
+        systemPrompt,
+        humanCurated: req.body.humanCurated ?? false,
+        curatedBy: auth.userId,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Save agent override error:", error);
+      res.status(500).json({ error: "Failed to save agent override" });
+    }
+  });
+
+  // Toggle lock on an agent prompt override
+  app.patch("/api/admin/agent-overrides/:taskType/lock", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { taskType } = req.params;
+      const { humanCurated } = req.body;
+      if (typeof humanCurated !== "boolean") {
+        return res.status(400).json({ error: "humanCurated (boolean) is required" });
+      }
+
+      // Get existing override, or create one from the base prompt
+      let existing = await storage.getAgentPromptOverride(taskType);
+      if (!existing) {
+        const base = BASE_PROMPTS[taskType as TaskType];
+        if (!base) return res.status(404).json({ error: "Task type not found" });
+        existing = await storage.upsertAgentPromptOverride({
+          taskType,
+          systemPrompt: base.basePrompt,
+          humanCurated,
+          curatedBy: auth.userId,
+        });
+      } else {
+        existing = await storage.upsertAgentPromptOverride({
+          taskType,
+          systemPrompt: existing.systemPrompt,
+          humanCurated,
+          curatedBy: auth.userId,
+        });
+      }
+
+      res.json({ taskType, humanCurated: existing.humanCurated });
+    } catch (error) {
+      console.error("Toggle agent lock error:", error);
+      res.status(500).json({ error: "Failed to toggle agent lock" });
+    }
+  });
+
+  // Delete agent prompt override — revert to code default
+  app.delete("/api/admin/agent-overrides/:taskType", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      await storage.deleteAgentPromptOverride(req.params.taskType);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete agent override error:", error);
+      res.status(500).json({ error: "Failed to delete agent override" });
     }
   });
 

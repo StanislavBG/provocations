@@ -534,6 +534,26 @@ RULES:
     feedbackTone: "visual-design-focused and description-quality-driven",
     outputFormat: "markdown",
   },
+
+  "agent-editor": {
+    documentType: "agent workflow definition",
+    systemGuidance: `APPLICATION CONTEXT: Agent Editor
+The document defines a multi-step AI agent workflow using the Input → Actor → Output framework.
+
+YOUR ROLE: Help the user design clear, well-structured agent steps. Each step must have:
+1. A clear input source (user-provided, previous step output, or global context)
+2. A focused system prompt (the actor) that stays within token limits
+3. An explicit output definition with type and validation rules
+
+RULES:
+- Challenge vague system prompts — push for specificity and measurable output criteria
+- Flag token budget issues — system prompts over 2000 tokens should be questioned
+- Ensure step-to-step compatibility — output types must match next step's expected input
+- Validate the chain end-to-end — first step must accept user input, last step must produce the declared final output
+- Challenge missing fallback/error handling for steps that could fail`,
+    feedbackTone: "precise and architecture-focused",
+    outputFormat: "markdown",
+  },
 };
 
 /** Get app-specific config, or undefined for default behavior */
