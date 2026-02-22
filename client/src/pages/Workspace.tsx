@@ -9,15 +9,13 @@ import { TextInputForm } from "@/components/TextInputForm";
 import { InterviewPanel } from "@/components/InterviewPanel";
 import { LogStatsPanel } from "@/components/LogStatsPanel";
 import { ReadingPane } from "@/components/ReadingPane";
-import { QueryTabBar, type QueryTab } from "@/components/QueryTabBar";
-import { MetricExtractorPanel } from "@/components/MetricExtractorPanel";
-import { QueryDiscoveriesPanel, type QueryAnalysisResult } from "@/components/QueryDiscoveriesPanel";
 import { TranscriptOverlay } from "@/components/TranscriptOverlay";
 import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToolbox";
 import { ImagePreviewPanel } from "@/components/ImagePreviewPanel";
 import { DEFAULT_MODEL_CONFIG, type ModelConfig } from "@/components/ModelConfigPanel";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
 import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
+import { InfographicStudioWorkspace } from "@/components/InfographicStudioWorkspace";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -63,7 +61,6 @@ import {
   Share2,
   Copy,
   HardDrive,
-  BarChart3,
   MessageCircle,
   Zap,
   FileText,
@@ -105,15 +102,6 @@ async function processObjectiveText(text: string, mode: string): Promise<string>
   });
   const data = (await response.json()) as { summary?: string };
   return data.summary ?? text;
-}
-
-/** Detect whether text looks like a SQL query (not markdown/prose) */
-function isLikelySqlQuery(text: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed) return false;
-  // Must start with a SQL keyword and NOT look like markdown
-  const sqlStart = /^\s*(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|EXPLAIN)\b/i;
-  return sqlStart.test(trimmed) && !trimmed.startsWith("#") && !trimmed.startsWith("*");
 }
 
 export default function Workspace() {
@@ -212,7 +200,6 @@ export default function Workspace() {
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const lastAnalyzedUrl = useRef<string>("");
-  const pendingAutoAnalyze = useRef(false);
 
   // Storage panel state
   const [showStoragePanel, setShowStoragePanel] = useState(false);
@@ -325,13 +312,6 @@ export default function Workspace() {
   // Right panel mode — defaults to first tab in config
   const [rightPanelMode, setRightPanelMode] = useState<RightPanelTabId>("discussion");
 
-  // ── Query Analyzer state ──
-  const [queryAnalysis, setQueryAnalysis] = useState<QueryAnalysisResult | null>(null);
-  const [selectedSubqueryId, setSelectedSubqueryId] = useState<string | null>(null);
-  const [hoveredSubqueryId, setHoveredSubqueryId] = useState<string | null>(null);
-  const [databaseEngine, setDatabaseEngine] = useState<string>("generic");
-  const [findingFeedback, setFindingFeedback] = useState<Record<string, "accepted" | "rejected" | null>>({});
-
   // ── Tab operations ──
 
   const saveCurrentTabState = useCallback((): TabState => ({
@@ -429,86 +409,16 @@ export default function Workspace() {
 
   // ── Query Analyzer mutation ──
 
-  const analyzeQueryMutation = useMutation({
-    mutationFn: async () => {
-      // Build feedback context from accept/reject state
-      const accepted: string[] = [];
-      const rejected: string[] = [];
-      for (const [id, fb] of Object.entries(findingFeedback)) {
-        if (fb === "accepted") {
-          const sq = queryAnalysis?.subqueries.find(s => s.id === id);
-          if (sq) accepted.push(`${sq.name}: ${sq.summary}`);
-          else accepted.push(id);
-        } else if (fb === "rejected") {
-          const sq = queryAnalysis?.subqueries.find(s => s.id === id);
-          if (sq) rejected.push(`${sq.name}: ${sq.summary}`);
-          else rejected.push(id);
-        }
-      }
-
-      const response = await apiRequest("POST", "/api/analyze-query", {
-        query: document.rawText,
-        databaseEngine,
-        previousFeedback: (accepted.length > 0 || rejected.length > 0) ? { accepted, rejected } : undefined,
-      });
-      return await response.json() as QueryAnalysisResult;
-    },
-    onSuccess: (data) => {
-      setQueryAnalysis(data);
-      setSelectedSubqueryId(null);
-      setHoveredSubqueryId(null);
-    },
-    onError: (error) => {
-      toast({
-        title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Could not analyze query",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleAnalyzeQuery = useCallback(() => {
-    analyzeQueryMutation.mutate();
-    // Auto-switch right panel to Discoveries when analyzing (if available in config)
-    const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
-    if (hasDiscoveries) {
-      setRightPanelMode("discoveries");
-    }
-  }, [analyzeQueryMutation, appFlowConfig.rightPanelTabs]);
-
-  // Auto-trigger analysis after SQL document is set (deferred from createDraftMutation.onSuccess)
-  useEffect(() => {
-    if (pendingAutoAnalyze.current && document.rawText && isLikelySqlQuery(document.rawText)) {
-      pendingAutoAnalyze.current = false;
-      analyzeQueryMutation.mutate();
-    }
-  }, [document.rawText]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Writer mutation ──
 
   const writeMutation = useMutation({
     mutationFn: async (request: Omit<WriteRequest, "document" | "objective" | "referenceDocuments" | "editHistory" | "capturedContext"> & { description?: string }) => {
       if (!document) throw new Error("No document to write to");
 
-      const writerMode = appFlowConfig.writer.mode;
 
-      // ── ANALYZE mode: document stays immutable, return analysis results ──
-      if (writerMode === "analyze") {
-        const response = await apiRequest("POST", "/api/analyze-query", {
-          query: document.rawText,
-        });
-        const analysis = await response.json() as QueryAnalysisResult;
-        // Store analysis in state (handled in onSuccess via a flag)
-        // Return a synthetic WriteResponse so the mutation type stays consistent
-        return {
-          document: document.rawText, // unchanged
-          summary: analysis.overallEvaluation || "Query analysis complete",
-          _analysisResult: analysis,  // piggyback the analysis data
-        } as WriteResponse & { _analysisResult?: QueryAnalysisResult };
-      }
 
       // ── AGGREGATE mode: append + reorganize, don't rewrite from scratch ──
-      if (writerMode === "aggregate") {
+      if (appFlowConfig.writer.mode === "aggregate") {
         const aggregateInstruction = `AGGREGATE MODE — You are a note-taker and context organizer. Do NOT rewrite or replace existing content.
 
 TASK: Incorporate the following new material into this document:
@@ -537,17 +447,6 @@ RULES:
       }
 
       // ── EDIT mode (default): rewrite/evolve document ──
-      const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
-      if (useSqlEndpoint) {
-        const response = await apiRequest("POST", "/api/query-write", {
-          query: document.rawText,
-          instruction: request.instruction,
-          appType: selectedTemplateId || undefined,
-          capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-        });
-        return await response.json() as WriteResponse;
-      }
-
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
         objective,
@@ -560,35 +459,14 @@ RULES:
       });
       return await response.json() as WriteResponse;
     },
-    onSuccess: (data: WriteResponse & { _analysisResult?: QueryAnalysisResult }, variables) => {
-      const writerMode = appFlowConfig.writer.mode;
-
-      // ── ANALYZE mode: populate right panel with analysis, don't update document ──
-      if (writerMode === "analyze" && data._analysisResult) {
-        setQueryAnalysis(data._analysisResult);
-        setSelectedSubqueryId(null);
-        setHoveredSubqueryId(null);
-        // Switch to discoveries panel
-        const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
-        if (hasDiscoveries) {
-          setRightPanelMode("discoveries");
-        }
-        setTranscriptSummary(data._analysisResult.overallEvaluation || "Analysis complete.");
-        trackEvent("write_executed", { metadata: { instructionType: "analyze" } });
-        toast({
-          title: "Query Analyzed",
-          description: "Evaluation results are in the Discoveries panel.",
-        });
-        return;
-      }
-
+    onSuccess: (data: WriteResponse, variables) => {
       // ── EDIT & AGGREGATE modes: update document ──
       if (document) {
         const newVersion: DocumentVersion = {
           id: generateId("v"),
           text: data.document,
           timestamp: Date.now(),
-          description: variables.description || data.summary || (writerMode === "aggregate" ? "Content aggregated" : "Document updated")
+          description: variables.description || data.summary || (appFlowConfig.writer.mode === "aggregate" ? "Content aggregated" : "Document updated")
         };
         setVersions(prev => [...prev, newVersion]);
         setDocument({ ...document, rawText: data.document });
@@ -623,7 +501,7 @@ RULES:
         setTranscriptSummary(summaryText);
 
         toast({
-          title: writerMode === "aggregate" ? "Content Added" : "Document Updated",
+          title: appFlowConfig.writer.mode === "aggregate" ? "Content Added" : "Document Updated",
           description: data.summary || "Your changes have been applied.",
         });
       }
@@ -644,19 +522,6 @@ RULES:
     mutationFn: async ({ context, obj, refs, templateId }: { context: string; obj: string; refs: ReferenceDocument[]; templateId?: string }) => {
       // Resolve config for the template being created (may differ from current selectedTemplateId
       // because the draft mutation fires before state is fully updated)
-      const draftConfig = getAppFlowConfig(templateId);
-      const useSqlEndpoint = draftConfig.writer.outputFormat === "sql" || isLikelySqlQuery(context);
-
-      if (useSqlEndpoint) {
-        const response = await apiRequest("POST", "/api/query-write", {
-          query: context,
-          instruction: "Beautify and format this SQL query. Apply proper indentation, consistent keyword casing, readable structure, and line breaks. If the input is not SQL, extract any SQL from it and format that. Output ONLY the SQL query.",
-          appType: templateId || "query-editor",
-          capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-        });
-        return await response.json() as WriteResponse;
-      }
-
       const response = await apiRequest("POST", "/api/write", {
         document: context,
         objective: obj,
@@ -687,15 +552,6 @@ RULES:
       // Track document creation and phase change
       trackEvent("document_created", { templateId: variables.templateId });
       trackEvent("phase_changed", { metadata: { from: "input", to: "workspace" } });
-
-      // Auto-run query analysis for SQL documents — use config to determine defaults
-      const draftFlowConfig = getAppFlowConfig(variables.templateId);
-      if (draftFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(data.document)) {
-        setActiveToolboxApp(draftFlowConfig.defaultToolboxTab as ToolboxApp);
-        // Set right panel to first configured tab
-        setRightPanelMode(draftFlowConfig.rightPanelTabs[0]?.id ?? "discussion");
-        pendingAutoAnalyze.current = true;
-      }
 
       if (data.summary) {
         toast({
@@ -769,21 +625,6 @@ RULES:
     mutationFn: async () => {
       if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
 
-      const writerMode = appFlowConfig.writer.mode;
-
-      // ── ANALYZE mode: run analysis instead of merging ──
-      if (writerMode === "analyze") {
-        const response = await apiRequest("POST", "/api/analyze-query", {
-          query: document.rawText,
-        });
-        const analysis = await response.json() as QueryAnalysisResult;
-        return {
-          document: document.rawText,
-          summary: analysis.overallEvaluation || "Query analysis complete",
-          _analysisResult: analysis,
-        } as WriteResponse & { _analysisResult?: QueryAnalysisResult };
-      }
-
       // Step 1: Get summarized instruction from interview entries
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
         objective,
@@ -795,52 +636,24 @@ RULES:
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
       // ── AGGREGATE mode: wrap instruction for append behavior ──
-      const effectiveInstruction = writerMode === "aggregate"
+      const effectiveInstruction = appFlowConfig.writer.mode === "aggregate"
         ? `AGGREGATE MODE — Incorporate the following interview insights into this document without rewriting existing content:\n\n${instruction}\n\nPreserve all existing entries. Append new insights. Reorganize sections if needed.`
         : instruction;
 
-      // Step 2: Use the writer to merge into document (route via config)
-      const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
-      const writeResponse = useSqlEndpoint
-        ? await apiRequest("POST", "/api/query-write", {
-            query: document.rawText,
-            instruction: effectiveInstruction,
-            appType: selectedTemplateId || undefined,
-            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-          })
-        : await apiRequest("POST", "/api/write", {
-            document: document.rawText,
-            objective,
-            secondaryObjective: secondaryObjective.trim() || undefined,
-            appType: selectedTemplateId || undefined,
-            instruction: effectiveInstruction,
-            referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
-            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-            editHistory: editHistory.length > 0 ? editHistory : undefined,
-          });
+      // Step 2: Use the writer to merge into document
+      const writeResponse = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
+        appType: selectedTemplateId || undefined,
+        instruction: effectiveInstruction,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        editHistory: editHistory.length > 0 ? editHistory : undefined,
+      });
       return await writeResponse.json() as WriteResponse;
     },
-    onSuccess: (data: WriteResponse & { _analysisResult?: QueryAnalysisResult }) => {
-      const writerMode = appFlowConfig.writer.mode;
-
-      // ── ANALYZE mode: populate discoveries panel ──
-      if (writerMode === "analyze" && data._analysisResult) {
-        setQueryAnalysis(data._analysisResult);
-        setSelectedSubqueryId(null);
-        setHoveredSubqueryId(null);
-        const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
-        if (hasDiscoveries) setRightPanelMode("discoveries");
-
-        setIsInterviewActive(false);
-        setCurrentInterviewQuestion(null);
-        setCurrentInterviewTopic(null);
-
-        toast({
-          title: "Interview Complete — Query Analyzed",
-          description: "Evaluation results are in the Discoveries panel.",
-        });
-        return;
-      }
+    onSuccess: (data: WriteResponse) => {
 
       // ── EDIT & AGGREGATE modes: update document ──
       if (document) {
@@ -848,7 +661,7 @@ RULES:
           id: generateId("v"),
           text: data.document,
           timestamp: Date.now(),
-          description: writerMode === "aggregate"
+          description: appFlowConfig.writer.mode === "aggregate"
             ? `Interview insights added (${interviewEntries.length} answers)`
             : `Interview merge (${interviewEntries.length} answers)`,
         };
@@ -868,7 +681,7 @@ RULES:
         setCurrentInterviewTopic(null);
 
         toast({
-          title: writerMode === "aggregate" ? "Interview Insights Added" : "Interview Merged",
+          title: appFlowConfig.writer.mode === "aggregate" ? "Interview Insights Added" : "Interview Merged",
           description: `${interviewEntries.length} answers integrated into your document.`,
         });
       }
@@ -887,20 +700,7 @@ RULES:
     mutationFn: async () => {
       if (!document || interviewEntries.length === 0) throw new Error("No entries to merge");
 
-      const writerMode = appFlowConfig.writer.mode;
 
-      // ── ANALYZE mode: run analysis instead of merging ──
-      if (writerMode === "analyze") {
-        const response = await apiRequest("POST", "/api/analyze-query", {
-          query: document.rawText,
-        });
-        const analysis = await response.json() as QueryAnalysisResult;
-        return {
-          document: document.rawText,
-          summary: analysis.overallEvaluation || "Query analysis complete",
-          _analysisResult: analysis,
-        } as WriteResponse & { _analysisResult?: QueryAnalysisResult };
-      }
 
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
         objective,
@@ -911,55 +711,30 @@ RULES:
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
-      const effectiveInstruction = writerMode === "aggregate"
+      const effectiveInstruction = appFlowConfig.writer.mode === "aggregate"
         ? `AGGREGATE MODE — Incorporate the following interview insights without rewriting existing content:\n\n${instruction}\n\nPreserve all existing entries. Append new insights. Reorganize sections if needed.`
         : instruction;
 
-      const useSqlEndpoint = appFlowConfig.writer.outputFormat === "sql" || isLikelySqlQuery(document.rawText);
-      const writeResponse = useSqlEndpoint
-        ? await apiRequest("POST", "/api/query-write", {
-            query: document.rawText,
-            instruction: effectiveInstruction,
-            appType: selectedTemplateId || undefined,
-            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-          })
-        : await apiRequest("POST", "/api/write", {
-            document: document.rawText,
-            objective,
-            secondaryObjective: secondaryObjective.trim() || undefined,
-            appType: selectedTemplateId || undefined,
-            instruction: effectiveInstruction,
-            referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
-            capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
-            editHistory: editHistory.length > 0 ? editHistory : undefined,
-          });
+      const writeResponse = await apiRequest("POST", "/api/write", {
+        document: document.rawText,
+        objective,
+        secondaryObjective: secondaryObjective.trim() || undefined,
+        appType: selectedTemplateId || undefined,
+        instruction: effectiveInstruction,
+        referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
+        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        editHistory: editHistory.length > 0 ? editHistory : undefined,
+      });
       return await writeResponse.json() as WriteResponse;
     },
-    onSuccess: (data: WriteResponse & { _analysisResult?: QueryAnalysisResult }) => {
-      const writerMode = appFlowConfig.writer.mode;
-
-      // ── ANALYZE mode: populate discoveries panel ──
-      if (writerMode === "analyze" && data._analysisResult) {
-        setQueryAnalysis(data._analysisResult);
-        setSelectedSubqueryId(null);
-        setHoveredSubqueryId(null);
-        const hasDiscoveries = appFlowConfig.rightPanelTabs.some(t => t.id === "discoveries");
-        if (hasDiscoveries) setRightPanelMode("discoveries");
-        setInterviewEntries([]);
-        toast({
-          title: "Query Re-Analyzed",
-          description: "Updated evaluation in the Discoveries panel.",
-        });
-        return;
-      }
-
+    onSuccess: (data: WriteResponse) => {
       // ── EDIT & AGGREGATE modes: update document ──
       if (document) {
         const newVersion: DocumentVersion = {
           id: generateId("v"),
           text: data.document,
           timestamp: Date.now(),
-          description: writerMode === "aggregate"
+          description: appFlowConfig.writer.mode === "aggregate"
             ? `Interview insights added (${interviewEntries.length} answers)`
             : `Incremental merge (${interviewEntries.length} answers)`,
         };
@@ -978,7 +753,7 @@ RULES:
         setInterviewEntries([]);
 
         toast({
-          title: writerMode === "aggregate" ? "Insights Added" : "Merged to Draft",
+          title: appFlowConfig.writer.mode === "aggregate" ? "Insights Added" : "Merged to Draft",
           description: `${interviewEntries.length} answers integrated. Interview continues.`,
         });
       }
@@ -1320,10 +1095,6 @@ RULES:
     setRightPanelMode("discussion");
     // Reset template selection (so appFlowConfig resets to default)
     setSelectedTemplateId(null);
-    // Reset analyzer state
-    setQueryAnalysis(null);
-    setSelectedSubqueryId(null);
-    setHoveredSubqueryId(null);
   }, []);
 
   // Show confirmation when there's work in progress, otherwise reset immediately
@@ -1741,6 +1512,7 @@ RULES:
           capturedContext={capturedContext}
           onCapturedContextChange={setCapturedContext}
           onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
+          selectedTemplateId={selectedTemplateId}
         />
       </div>
       <StepTracker
@@ -1763,6 +1535,25 @@ RULES:
         savedDocId={savedDocId}
         onSave={handleStorageSave}
         onSavedDocIdChange={setSavedDocId}
+      />
+
+      <StepTracker
+        currentPhase="edit"
+        selectedTemplate={selectedTemplateName}
+        appFlowSteps={appFlowConfig.flowSteps}
+        appLeftPanelTabs={appFlowConfig.leftPanelTabs}
+      />
+    </>
+  ) : null;
+
+  // Infographic studio content — 3-panel pipeline (raw text | summary | gallery)
+  const isInfographicStudio = !isInputPhase && appFlowConfig.workspaceLayout === "infographic-studio";
+  const infographicStudioContent = isInfographicStudio ? (
+    <>
+      <InfographicStudioWorkspace
+        rawText={document.rawText}
+        onRawTextChange={(text) => setDocument({ ...document, rawText: text })}
+        objective={objective}
       />
 
       <StepTracker
@@ -1808,16 +1599,6 @@ RULES:
       }
       capturedContext={capturedContext}
       onCapturedContextChange={setCapturedContext}
-      analyzerSqlText={document.rawText}
-      analyzerSubqueries={queryAnalysis?.subqueries ?? []}
-      analyzerIsAnalyzing={analyzeQueryMutation.isPending}
-      analyzerSelectedSubqueryId={selectedSubqueryId}
-      analyzerHoveredSubqueryId={hoveredSubqueryId}
-      onAnalyzerSubqueryHover={setHoveredSubqueryId}
-      onAnalyzerSubquerySelect={setSelectedSubqueryId}
-      onAnalyze={handleAnalyzeQuery}
-      analyzerDatabaseEngine={databaseEngine}
-      onAnalyzerDatabaseEngineChange={setDatabaseEngine}
       modelConfig={modelConfig}
       onModelConfigChange={setModelConfig}
       provokeMode={selectedTemplateId === "text-to-infographic" ? "suggest" : "challenge"}
@@ -1856,7 +1637,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "metrics" ? BarChart3 : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : Zap;
           return (
             <button
               key={tab.id}
@@ -1926,65 +1707,17 @@ RULES:
         </div>
       ) : rightPanelMode === "image-preview" ? (
         <ImagePreviewPanel documentText={document.rawText} />
-      ) : rightPanelMode === "metrics" ? (
-        <MetricExtractorPanel
-          documentText={document.rawText}
-          onCaptureAsContext={handleCaptureMetrics}
-        />
       ) : rightPanelMode === "execution" ? (
         <AgentRunner
           steps={agentSteps}
           persona={agentPersona}
         />
-      ) : (
-        <QueryDiscoveriesPanel
-          analysis={queryAnalysis}
-          isAnalyzing={analyzeQueryMutation.isPending}
-          selectedSubqueryId={selectedSubqueryId}
-          hoveredSubqueryId={hoveredSubqueryId}
-          onSubqueryHover={setHoveredSubqueryId}
-          onSubquerySelect={setSelectedSubqueryId}
-          onCaptureMetrics={handleCaptureMetrics}
-          findingFeedback={findingFeedback}
-          onFindingFeedback={(id, fb) => setFindingFeedback(prev => ({ ...prev, [id]: fb }))}
-          onAcceptChange={(beforeCode, afterCode) => {
-            const currentText = document.rawText;
-            const idx = currentText.indexOf(beforeCode);
-            if (idx !== -1) {
-              const newText = currentText.slice(0, idx) + afterCode + currentText.slice(idx + beforeCode.length);
-              setDocument({ ...document, rawText: newText });
-              toast({
-                title: "Change Applied",
-                description: "The SQL change has been applied to your query.",
-              });
-            } else {
-              toast({
-                title: "Could Not Apply",
-                description: "The exact code snippet was not found in the current query. It may have already been changed.",
-                variant: "destructive",
-              });
-            }
-          }}
-        />
-      )}
+      ) : null}
     </div>
   );
 
-  // Tab bar data derived from state
-  const tabBarTabs: QueryTab[] = tabs.map(t => ({ id: t.id, title: t.title }));
   const documentPanel = (
     <div className="h-full flex flex-col relative min-h-0">
-      {/* Chrome-like tab bar */}
-      {tabs.length > 0 && (
-        <QueryTabBar
-          tabs={tabBarTabs}
-          activeTabId={activeTabId}
-          onTabSelect={handleTabSelect}
-          onTabClose={handleTabClose}
-          onTabRename={handleTabRename}
-          onNewTab={handleNewTab}
-        />
-      )}
 
       {selectedTemplateId === "agent-editor" ? (
         <div className="h-full overflow-y-auto">
@@ -2047,7 +1780,7 @@ RULES:
 
   // ── Unified Layout — persistent sidebar + global bar ──
 
-  const isStandardWorkspace = !isInputPhase && !isVoiceCapture;
+  const isStandardWorkspace = !isInputPhase && !isVoiceCapture && !isInfographicStudio;
 
   return (
     <div className="h-screen flex flex-col">
@@ -2253,6 +1986,7 @@ RULES:
       {/* ── Phase-specific content ── */}
       {inputPhaseContent}
       {voiceCaptureContent}
+      {infographicStudioContent}
 
       {/* ── Standard workspace content ── */}
       {isStandardWorkspace && (
