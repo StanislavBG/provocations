@@ -33,6 +33,7 @@ import {
   Layers,
   FileText,
   Target,
+  ListOrdered,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument, PersonaDomain } from "@shared/schema";
 import type { LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
@@ -41,7 +42,7 @@ import { ChevronRight, Settings } from "lucide-react";
 
 // ── Toolbox app type ──
 
-export type ToolboxApp = "provoke" | "website" | "context" | "model-config";
+export type ToolboxApp = "provoke" | "website" | "context" | "model-config" | "steps";
 
 // ── Persona metadata (derived from centralized persona definitions) ──
 
@@ -117,6 +118,9 @@ interface ProvocationToolboxProps {
 
   // Provoke mode — "suggest" for text-to-infographic (personas suggest descriptions)
   provokeMode?: "challenge" | "suggest";
+
+  /** Custom tab content — Workspace can inject React nodes for app-specific tabs (e.g. "steps") */
+  customTabContent?: Partial<Record<ToolboxApp, ReactNode>>;
 }
 
 /** Icon lookup for left-panel tab IDs */
@@ -125,6 +129,7 @@ const LEFT_TAB_ICONS: Record<string, typeof Blocks> = {
   website: Globe,
   context: Layers,
   "model-config": Settings,
+  steps: ListOrdered,
 };
 
 export function ProvocationToolbox({
@@ -151,6 +156,7 @@ export function ProvocationToolbox({
   modelConfig,
   onModelConfigChange,
   provokeMode = "challenge",
+  customTabContent,
 }: ProvocationToolboxProps) {
   const hasCapturedContext = !!(capturedContext && capturedContext.length > 0);
 
@@ -215,7 +221,9 @@ export function ProvocationToolbox({
 
       {/* App content */}
       <div className="flex-1 overflow-hidden">
-        {activeApp === "provoke" ? (
+        {customTabContent?.[activeApp] ? (
+          customTabContent[activeApp]
+        ) : activeApp === "provoke" ? (
           <ProvokeConfigApp
             isInterviewActive={isInterviewActive}
             isMerging={isMerging}

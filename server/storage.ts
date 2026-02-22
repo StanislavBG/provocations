@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -85,6 +85,17 @@ export interface IStorage {
     curatedBy?: string | null;
   }): Promise<StoredPersonaOverride>;
   deletePersonaOverride(personaId: string): Promise<void>;
+  // Agent definitions (user-created agents)
+  createAgentDefinition(data: { agentId: string; userId: string; name: string; description?: string; persona?: string; steps: string }): Promise<StoredAgentDefinition>;
+  listAgentDefinitions(userId: string): Promise<StoredAgentDefinition[]>;
+  getAgentDefinition(agentId: string): Promise<StoredAgentDefinition | null>;
+  updateAgentDefinition(agentId: string, data: { name?: string; description?: string; persona?: string; steps?: string }): Promise<StoredAgentDefinition | null>;
+  deleteAgentDefinition(agentId: string): Promise<void>;
+  // Agent prompt overrides (admin edits to system LLM calls)
+  getAgentPromptOverride(taskType: string): Promise<StoredAgentPromptOverride | null>;
+  getAllAgentPromptOverrides(): Promise<StoredAgentPromptOverride[]>;
+  upsertAgentPromptOverride(data: { taskType: string; systemPrompt: string; humanCurated: boolean; curatedBy?: string | null }): Promise<StoredAgentPromptOverride>;
+  deleteAgentPromptOverride(taskType: string): Promise<void>;
   // All known user IDs across the system
   getAllKnownUserIds(): Promise<string[]>;
 }
@@ -700,6 +711,120 @@ export class DatabaseStorage implements IStorage {
 
   async deletePersonaOverride(personaId: string): Promise<void> {
     await db.delete(personaOverrides).where(eq(personaOverrides.personaId, personaId));
+  }
+
+  // ── Agent definitions ──
+
+  async createAgentDefinition(data: {
+    agentId: string;
+    userId: string;
+    name: string;
+    description?: string;
+    persona?: string;
+    steps: string;
+  }): Promise<StoredAgentDefinition> {
+    const [row] = await db
+      .insert(agentDefinitions)
+      .values({
+        agentId: data.agentId,
+        userId: data.userId,
+        name: data.name,
+        description: data.description ?? null,
+        persona: data.persona ?? null,
+        steps: data.steps,
+      })
+      .returning();
+    return row;
+  }
+
+  async listAgentDefinitions(userId: string): Promise<StoredAgentDefinition[]> {
+    return db
+      .select()
+      .from(agentDefinitions)
+      .where(eq(agentDefinitions.userId, userId))
+      .orderBy(desc(agentDefinitions.updatedAt));
+  }
+
+  async getAgentDefinition(agentId: string): Promise<StoredAgentDefinition | null> {
+    const [row] = await db
+      .select()
+      .from(agentDefinitions)
+      .where(eq(agentDefinitions.agentId, agentId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async updateAgentDefinition(
+    agentId: string,
+    data: { name?: string; description?: string; persona?: string; steps?: string },
+  ): Promise<StoredAgentDefinition | null> {
+    const now = new Date();
+    const set: Record<string, unknown> = { updatedAt: now };
+    if (data.name !== undefined) set.name = data.name;
+    if (data.description !== undefined) set.description = data.description;
+    if (data.persona !== undefined) set.persona = data.persona;
+    if (data.steps !== undefined) set.steps = data.steps;
+
+    const [row] = await db
+      .update(agentDefinitions)
+      .set(set)
+      .where(eq(agentDefinitions.agentId, agentId))
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteAgentDefinition(agentId: string): Promise<void> {
+    await db.delete(agentDefinitions).where(eq(agentDefinitions.agentId, agentId));
+  }
+
+  // ── Agent prompt overrides ──
+
+  async getAgentPromptOverride(taskType: string): Promise<StoredAgentPromptOverride | null> {
+    const [row] = await db
+      .select()
+      .from(agentPromptOverrides)
+      .where(eq(agentPromptOverrides.taskType, taskType))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getAllAgentPromptOverrides(): Promise<StoredAgentPromptOverride[]> {
+    return db.select().from(agentPromptOverrides).orderBy(agentPromptOverrides.taskType);
+  }
+
+  async upsertAgentPromptOverride(data: {
+    taskType: string;
+    systemPrompt: string;
+    humanCurated: boolean;
+    curatedBy?: string | null;
+  }): Promise<StoredAgentPromptOverride> {
+    const now = new Date();
+    const [row] = await db
+      .insert(agentPromptOverrides)
+      .values({
+        taskType: data.taskType,
+        systemPrompt: data.systemPrompt,
+        humanCurated: data.humanCurated,
+        curatedBy: data.curatedBy ?? null,
+        curatedAt: data.humanCurated ? now : null,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: agentPromptOverrides.taskType,
+        set: {
+          systemPrompt: data.systemPrompt,
+          humanCurated: data.humanCurated,
+          curatedBy: data.curatedBy ?? null,
+          curatedAt: data.humanCurated ? now : null,
+          updatedAt: now,
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async deleteAgentPromptOverride(taskType: string): Promise<void> {
+    await db.delete(agentPromptOverrides).where(eq(agentPromptOverrides.taskType, taskType));
   }
 
   /** Collect all distinct user IDs from documents, tracking events, and usage metrics */

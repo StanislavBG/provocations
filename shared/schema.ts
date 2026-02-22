@@ -102,6 +102,7 @@ export const templateIds = [
   "youtube-to-infographic",
   "text-to-infographic",
   "email-composer",
+  "agent-editor",
 ] as const;
 
 export type TemplateId = typeof templateIds[number];
@@ -891,3 +892,52 @@ export const appLaunchParamsSchema = z.object({
 });
 
 export type AppLaunchParams = z.infer<typeof appLaunchParamsSchema>;
+
+// ── Agent Editor types ──
+// Structured step definitions for multi-step AI agent workflows.
+// Each step follows the Input → Actor → Output pattern.
+
+export const agentStepInputSchema = z.object({
+  source: z.enum(["user", "previous-step", "context"]),
+  description: z.string(),
+  sourceStepId: z.string().optional(),
+  dataType: z.enum(["text", "json", "table"]),
+});
+
+export const agentStepActorSchema = z.object({
+  systemPrompt: z.string(),
+  maxTokens: z.number().min(100).max(16384).default(2000),
+  temperature: z.number().min(0).max(2).default(0.7),
+});
+
+export const agentStepOutputSchema = z.object({
+  label: z.string(),
+  description: z.string(),
+  dataType: z.enum(["text", "json", "table", "markdown"]),
+  validationSchema: z.string().optional(),
+  validationRegex: z.string().optional(),
+  fallback: z.string().optional(),
+});
+
+export const agentStepSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  order: z.number(),
+  input: agentStepInputSchema,
+  actor: agentStepActorSchema,
+  output: agentStepOutputSchema,
+});
+
+export const agentDefinitionSchema = z.object({
+  agentId: z.string(),
+  name: z.string(),
+  description: z.string(),
+  persona: z.string(),
+  steps: z.array(agentStepSchema),
+});
+
+export type AgentStep = z.infer<typeof agentStepSchema>;
+export type AgentDefinition = z.infer<typeof agentDefinitionSchema>;
+export type AgentStepInput = z.infer<typeof agentStepInputSchema>;
+export type AgentStepActor = z.infer<typeof agentStepActorSchema>;
+export type AgentStepOutput = z.infer<typeof agentStepOutputSchema>;

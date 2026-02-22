@@ -16,7 +16,7 @@ import type { ProvocationType, TemplateId } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Identifiers for left-panel (toolbox) tabs */
-export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config";
+export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config" | "steps";
 
 /** Configuration for a single left-panel tab */
 export interface LeftPanelTabConfig {
@@ -26,7 +26,7 @@ export interface LeftPanelTabConfig {
 }
 
 /** Identifiers for right-panel tabs */
-export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview";
+export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution";
 
 /** Configuration for a single right-panel tab */
 export interface RightPanelTabConfig {
@@ -172,6 +172,17 @@ const TAB_MODEL_CONFIG: LeftPanelTabConfig = {
 const RIGHT_IMAGE_PREVIEW: RightPanelTabConfig = {
   id: "image-preview",
   label: "Image Preview",
+};
+
+const TAB_STEPS: LeftPanelTabConfig = {
+  id: "steps",
+  label: "Steps",
+  description: "Build and manage agent workflow steps with Input → Actor → Output definitions",
+};
+
+const RIGHT_EXECUTION: RightPanelTabConfig = {
+  id: "execution",
+  label: "Execution",
 };
 
 // ---------------------------------------------------------------------------
@@ -439,6 +450,31 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "infographic brief from text description",
       feedbackTone: "clarity-focused and visually structured",
+    },
+  },
+
+  "agent-editor": {
+    workspaceLayout: "standard",
+    defaultToolboxTab: "steps",
+    autoStartInterview: true,
+    autoStartPersonas: ["architect" as ProvocationType],
+
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "define", label: "Define Agent", description: "Set persona, name, and description" },
+      { id: "steps", label: "Build Steps", description: "Design Input → Actor → Output chain" },
+      { id: "test", label: "Test & Refine", description: "Execute and iterate on your agent" },
+    ],
+
+    leftPanelTabs: [TAB_STEPS, TAB_PROVOKE, TAB_CONTEXT],
+
+    rightPanelTabs: [RIGHT_EXECUTION, RIGHT_DISCUSSION],
+
+    writer: {
+      mode: "edit",
+      outputFormat: "markdown",
+      documentType: "agent workflow definition",
+      feedbackTone: "precise and architecture-focused",
     },
   },
 };
