@@ -6,9 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ProvokeText } from "./ProvokeText";
 import { BrowserExplorer } from "./BrowserExplorer";
 import { ContextCapturePanel } from "./ContextCapturePanel";
-import { QueryAnalyzerView } from "./QueryAnalyzerView";
 import { ModelConfigPanel, type ModelConfig } from "./ModelConfigPanel";
-import type { SubqueryAnalysis } from "./QueryDiscoveriesPanel";
 import {
   MessageCircleQuestion,
   Play,
@@ -35,7 +33,6 @@ import {
   Layers,
   FileText,
   Target,
-  Search,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument, PersonaDomain } from "@shared/schema";
 import type { LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
@@ -44,7 +41,7 @@ import { ChevronRight, Settings } from "lucide-react";
 
 // ── Toolbox app type ──
 
-export type ToolboxApp = "provoke" | "website" | "context" | "analyzer" | "model-config";
+export type ToolboxApp = "provoke" | "website" | "context" | "model-config";
 
 // ── Persona metadata (derived from centralized persona definitions) ──
 
@@ -114,18 +111,6 @@ interface ProvocationToolboxProps {
   capturedContext?: ContextItem[];
   onCapturedContextChange?: (items: ContextItem[]) => void;
 
-  // Query Analyzer app props
-  analyzerSqlText?: string;
-  analyzerSubqueries?: SubqueryAnalysis[];
-  analyzerIsAnalyzing?: boolean;
-  analyzerSelectedSubqueryId?: string | null;
-  analyzerHoveredSubqueryId?: string | null;
-  onAnalyzerSubqueryHover?: (id: string | null) => void;
-  onAnalyzerSubquerySelect?: (id: string | null) => void;
-  onAnalyze?: () => void;
-  analyzerDatabaseEngine?: string;
-  onAnalyzerDatabaseEngineChange?: (engine: string) => void;
-
   // Model config props
   modelConfig?: ModelConfig;
   onModelConfigChange?: (config: ModelConfig) => void;
@@ -139,7 +124,6 @@ const LEFT_TAB_ICONS: Record<string, typeof Blocks> = {
   provoke: MessageCircleQuestion,
   website: Globe,
   context: Layers,
-  analyzer: Search,
   "model-config": Settings,
 };
 
@@ -164,16 +148,6 @@ export function ProvocationToolbox({
   referenceDocuments,
   capturedContext,
   onCapturedContextChange,
-  analyzerSqlText,
-  analyzerSubqueries,
-  analyzerIsAnalyzing,
-  analyzerSelectedSubqueryId,
-  analyzerHoveredSubqueryId,
-  onAnalyzerSubqueryHover,
-  onAnalyzerSubquerySelect,
-  onAnalyze,
-  analyzerDatabaseEngine,
-  onAnalyzerDatabaseEngineChange,
   modelConfig,
   onModelConfigChange,
   provokeMode = "challenge",
@@ -185,7 +159,6 @@ export function ProvocationToolbox({
     { id: "provoke" as const, label: "Provoke", description: "" },
     { id: "context" as const, label: "Context", description: "" },
     { id: "website" as const, label: "Website", description: "" },
-    { id: "analyzer" as const, label: "Analyzer", description: "" },
   ];
 
   return (
@@ -258,19 +231,6 @@ export function ProvocationToolbox({
             referenceDocuments={referenceDocuments}
             capturedContext={capturedContext}
             onCapturedContextChange={onCapturedContextChange}
-          />
-        ) : activeApp === "analyzer" ? (
-          <QueryAnalyzerView
-            sqlText={analyzerSqlText ?? ""}
-            subqueries={analyzerSubqueries ?? []}
-            isAnalyzing={analyzerIsAnalyzing ?? false}
-            selectedSubqueryId={analyzerSelectedSubqueryId ?? null}
-            hoveredSubqueryId={analyzerHoveredSubqueryId ?? null}
-            onSubqueryHover={onAnalyzerSubqueryHover ?? (() => {})}
-            onSubquerySelect={onAnalyzerSubquerySelect ?? (() => {})}
-            onAnalyze={onAnalyze ?? (() => {})}
-            databaseEngine={(analyzerDatabaseEngine ?? "generic") as any}
-            onDatabaseEngineChange={onAnalyzerDatabaseEngineChange ?? (() => {})}
           />
         ) : (
           <BrowserExplorer

@@ -40,6 +40,10 @@ export interface PrebuiltTemplate {
   provocationExamples: string[]; // example provocations for the card preview
   steps: TemplateStep[]; // workflow steps shown in the bottom progress bar
   category: TemplateCategory; // groups templates into tabbed categories on the landing page
+  /** When true, the tile shows a "Coming Soon" badge and cannot be selected */
+  comingSoon?: boolean;
+  /** When set, clicking the tile opens this URL in a new tab instead of entering the workspace */
+  externalUrl?: string;
 }
 
 export const prebuiltTemplates: PrebuiltTemplate[] = [
@@ -78,116 +82,26 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "query-editor",
     category: "analyze",
+    externalUrl: "https://QueryFlow.replit.app",
     title: "Query Editor",
-    shortLabel: "Query Analyzer",
-    subtitle: "SQL analysis, schema-aware optimization",
+    shortLabel: "QueryFlow",
+    subtitle: "SQL analysis & optimization — opens QueryFlow",
     description:
-      "For analyzing and optimizing complex SQL queries. Paste a query (and optionally your database schema) and the system breaks it into components — SELECT clauses, JOINs, subqueries — with explanations, optimization suggestions, and schema-aware insights. Provocations challenge your query's readability, performance, and correctness.",
-    howTo: "Paste your SQL query into the text area. Optionally add your database schema (CREATE TABLE statements) as context. The system breaks your query into pieces — SELECT, JOINs, WHERE — explains each one, and suggests improvements for speed and readability.",
+      "Analyze and optimize SQL queries with schema-aware insights, performance recommendations, and query decomposition. Opens in QueryFlow — a dedicated query analysis application.",
+    howTo: "Click to open QueryFlow in a new tab.",
     useCases: [
       "Optimizing a slow database query before it goes to production",
       "Understanding a complex query someone else wrote",
       "Checking if your query has bugs or missing indexes",
     ],
     icon: DatabaseZap,
-    objective:
-      "Help the analyst groom their SQL query for performance, readability, and improved visibility. Provide constructive, non-judgmental feedback — frame suggestions as improvements, not criticisms. The document IS the SQL query itself.",
+    objective: "",
     starterText: "",
-    draftQuestions: [
-      "What database engine is this query for? (PostgreSQL, MySQL, SQL Server, Oracle, SQLite) — syntax and optimization advice depend on the dialect.",
-      "Can you share the database schema? Paste a CREATE TABLE statement, a list of tables and columns, or describe the key tables and their relationships. Schema context makes analysis dramatically better.",
-      "What does this query power? (a dashboard, a report, an API endpoint, a migration) — knowing the use case helps prioritize readability vs. raw performance.",
-      "Are there known performance issues? Slow execution, timeouts, or lock contention? If so, which part of the query do you suspect?",
-    ],
-    templateContent: `# Query Analysis
-
-## Original Query
-Paste the full SQL query here.
-
-\`\`\`sql
--- Your query goes here
-\`\`\`
-
-## Database Schema (Optional)
-Provide the relevant schema — CREATE TABLE statements, a list of tables/columns, or a description of the data model.
-
-\`\`\`sql
--- CREATE TABLE statements, column lists, or schema description
-\`\`\`
-
-## Query Context
-### Purpose
-What does this query do? What feature or report does it power?
-
-### Database Engine
-Which database? (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
-
-### Known Issues
-Any performance problems, incorrect results, or maintainability concerns?
-
-## Component Breakdown
-### Main SELECT
-What columns are being selected and why?
-
-### FROM / JOINs
-What tables are involved? Are the join types (INNER, LEFT, etc.) correct?
-
-### WHERE / Filtering
-What conditions filter the results? Are they using indexes effectively?
-
-### Subqueries
-Are there nested queries? Can they be simplified or converted to JOINs/CTEs?
-
-### GROUP BY / Aggregations
-What is being aggregated? Are the grouping columns correct?
-
-### ORDER BY / LIMIT
-How are results sorted and paginated?
-
-## Schema Validation
-### Table & Column References
-Do all referenced tables and columns exist in the schema?
-
-### Type Mismatches
-Are there implicit type conversions that could cause issues?
-
-### Missing Indexes
-Based on the schema, which columns used in WHERE/JOIN should be indexed?
-
-## Optimization Suggestions
-### Readability
-- Formatting, aliasing, CTE extraction
-
-### Performance
-- Index usage, join order, subquery elimination
-
-### Correctness
-- Edge cases, NULL handling, off-by-one in pagination
-
-## Rewritten Query
-The improved version with explanations of what changed and why.
-
-\`\`\`sql
--- Optimized query here
-\`\`\`
-
-## Version History
-Track each modification with a brief description of what changed.`,
-    provocationSources: [
-      "DBA",
-      "Query Planner",
-      "Schema Guardian",
-      "Code Reviewer",
-      "Production Oncall",
-    ],
-    provocationExamples: [
-      "This query scans the entire orders table. There's no index on the WHERE clause column — this will time out at scale. — DBA",
-      "You're using a correlated subquery that executes once per row. Have you considered a CTE or a window function? — Query Planner",
-      "The query references a column 'user_status' but your schema shows it's called 'status'. This will fail at runtime. — Schema Guardian",
-      "There are 7 joins and no aliases. Nobody can review this. Break it into CTEs with meaningful names. — Code Reviewer",
-      "This query runs every 30 seconds on a dashboard. At 200ms per execution, it's consuming 15% of your read replica. Is the result cacheable? — Production Oncall",
-    ],
-    steps: [{ id: "context", label: "Paste your query" }],
+    draftQuestions: [],
+    templateContent: "",
+    provocationSources: [],
+    provocationExamples: [],
+    steps: [],
   },
   {
     id: "product-requirement",
@@ -605,16 +519,17 @@ Typical way they end an interaction.
   {
     id: "research-context",
     category: "capture",
-    title: "Research / Context",
+    comingSoon: true,
+    title: "Research into Context",
     shortLabel: "Research",
-    subtitle: "Capture, organize, and build context",
+    subtitle: "Conversational research captured as structured context",
     description:
-      "For building a rich context library around a topic. Capture links, excerpts, notes, and references — then let the AI help you organize, cross-reference, and identify gaps. The output is a structured research brief you can feed into any other app or project. Perfect for pre-work before writing a PRD, paper, or strategy doc.",
-    howTo: "Add links, paste text excerpts, or upload files as context items. Describe what you're researching and what gaps you're trying to fill. The system organizes your sources, cross-references them, identifies contradictions and gaps, and produces a structured research brief.",
+      "Dynamically converse with AI to explore a topic, then capture structured nuggets of information — facts, insights, quotes, data points — directly into your context library in a dedicated Research folder. Each captured item is tagged, organized, and ready to feed into any other application. Think of it as a research conversation where the valuable parts stick.",
+    howTo: "Start a conversation about the topic you're researching. As the AI surfaces useful information, capture specific nuggets into structured context items stored in a Research folder. Tag, annotate, and organize as you go. When you're done, your Research folder contains a curated, reusable knowledge base.",
     useCases: [
-      "Gathering background material before writing a PRD or proposal",
-      "Organizing notes from multiple sources into one place",
-      "Building a knowledge base for a project or decision",
+      "Exploring a new domain through conversation and saving key findings",
+      "Building a curated context folder before starting a PRD or strategy doc",
+      "Capturing structured research nuggets from an AI-assisted deep dive",
     ],
     icon: BookOpenCheck,
     objective:
@@ -759,6 +674,7 @@ What needs to happen next based on this capture?`,
   {
     id: "youtube-to-infographic",
     category: "capture",
+    comingSoon: true,
     title: "YouTube to Infographic",
     shortLabel: "YouTube",
     subtitle: "Channel videos to visual summaries",

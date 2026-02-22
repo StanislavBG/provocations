@@ -16,7 +16,7 @@ import type { ProvocationType, TemplateId } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Identifiers for left-panel (toolbox) tabs */
-export type LeftPanelTabId = "provoke" | "website" | "context" | "analyzer" | "model-config";
+export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config";
 
 /** Configuration for a single left-panel tab */
 export interface LeftPanelTabConfig {
@@ -104,10 +104,11 @@ const DEFAULT_OBJECTIVE_CONFIG: ObjectiveConfig = {
 /**
  * Workspace layout — controls the top-level UI structure.
  *
- * "standard"      — Default 3-panel layout (toolbox | document | discussion).
- * "voice-capture" — Single-page voice recording workspace with auto-save.
+ * "standard"            — Default 3-panel layout (toolbox | document | discussion).
+ * "voice-capture"       — Single-page voice recording workspace with auto-save.
+ * "infographic-studio"  — 3-panel infographic pipeline (raw text | summary + controls | image gallery).
  */
-export type WorkspaceLayout = "standard" | "voice-capture";
+export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio";
 
 export interface AppFlowConfig {
   /** Top-level workspace layout. Defaults to "standard" (3-panel). */
@@ -157,25 +158,9 @@ const TAB_CONTEXT: LeftPanelTabConfig = {
   description: "View collected reference materials, templates, and supporting context",
 };
 
-const TAB_ANALYZER: LeftPanelTabConfig = {
-  id: "analyzer",
-  label: "Analyzer",
-  description: "SQL query decomposition, optimization, and metrics extraction",
-};
-
 const RIGHT_DISCUSSION: RightPanelTabConfig = {
   id: "discussion",
   label: "Discussion",
-};
-
-const RIGHT_METRICS: RightPanelTabConfig = {
-  id: "metrics",
-  label: "Metrics",
-};
-
-const RIGHT_DISCOVERIES: RightPanelTabConfig = {
-  id: "discoveries",
-  label: "Discoveries",
 };
 
 const TAB_MODEL_CONFIG: LeftPanelTabConfig = {
@@ -233,31 +218,6 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "AI prompt",
       feedbackTone: "direct and clarity-focused",
-    },
-  },
-
-  "query-editor": {
-    workspaceLayout: "standard",
-    defaultToolboxTab: "analyzer",
-    autoStartInterview: true,
-    autoStartPersonas: ["thinking_bigger" as ProvocationType],
-
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "paste", label: "Paste Query", description: "Paste your SQL and provide schema context" },
-      { id: "analyze", label: "Analyze", description: "Decompose and understand query structure" },
-      { id: "optimize", label: "Optimize", description: "Improve performance, readability, and correctness" },
-    ],
-
-    leftPanelTabs: [TAB_ANALYZER, TAB_PROVOKE, TAB_CONTEXT],
-
-    rightPanelTabs: [RIGHT_DISCOVERIES, RIGHT_DISCUSSION, RIGHT_METRICS],
-
-    writer: {
-      mode: "analyze",
-      outputFormat: "sql",
-      documentType: "SQL query",
-      feedbackTone: "constructive and non-judgmental",
     },
   },
 
@@ -458,16 +418,16 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
   },
 
   "text-to-infographic": {
-    workspaceLayout: "standard",
+    workspaceLayout: "infographic-studio",
     defaultToolboxTab: "provoke",
     autoStartInterview: false,
     autoStartPersonas: undefined,
 
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "describe", label: "Write Description", description: "Write the textual description of your infographic" },
-      { id: "refine", label: "Persona Suggestions", description: "Expert personas suggest improvements to your description" },
-      { id: "generate", label: "Generate Image", description: "Generate a visual from your finalized description" },
+      { id: "describe", label: "Write Raw Text", description: "Paste or type your raw content" },
+      { id: "summarize", label: "Summarize & Expand", description: "LLM generates a rich summary with controls" },
+      { id: "generate", label: "Generate Infographics", description: "Create 3 visual variants at different temperatures" },
     ],
 
     leftPanelTabs: [TAB_PROVOKE, TAB_MODEL_CONFIG, TAB_CONTEXT],
@@ -477,7 +437,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     writer: {
       mode: "edit",
       outputFormat: "markdown",
-      documentType: "infographic brief from voice transcript",
+      documentType: "infographic brief from text description",
       feedbackTone: "clarity-focused and visually structured",
     },
   },
