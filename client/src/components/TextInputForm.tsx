@@ -273,20 +273,25 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 .map((template) => {
                   const Icon = template.icon;
                   const isActive = activePrebuilt?.id === template.id;
+                  const isComingSoon = !!template.comingSoon;
 
                   return (
                     <button
                       key={template.id}
-                      onClick={() => handleSelectPrebuilt(template)}
+                      onClick={() => !isComingSoon && handleSelectPrebuilt(template)}
+                      disabled={isComingSoon}
                       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
-                        isActive
-                          ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                          : "border-border hover:border-primary/40 hover:bg-primary/5"
+                        isComingSoon
+                          ? "opacity-50 cursor-default border-border"
+                          : isActive
+                            ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
+                            : "border-border hover:border-primary/40 hover:bg-primary/5"
                       }`}
                     >
                       <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                       <span>{template.title}</span>
-                      {isActive && <Check className="w-3 h-3 text-primary" />}
+                      {isComingSoon && <span className="text-[10px] uppercase tracking-wider text-primary/70 font-semibold ml-1">Soon</span>}
+                      {isActive && !isComingSoon && <Check className="w-3 h-3 text-primary" />}
                     </button>
                   );
                 })}

@@ -100,23 +100,37 @@ function AppTile({
   onRate: (id: string, v: number) => void;
 }) {
   const Icon = template.icon;
+  const isComingSoon = !!template.comingSoon;
 
   return (
     <button
       type="button"
-      onClick={() => onSelect(template)}
+      onClick={() => !isComingSoon && onSelect(template)}
+      disabled={isComingSoon}
       className={cn(
         "relative flex flex-col text-left w-full h-full",
         "rounded-xl border bg-card/80 backdrop-blur-sm",
         "p-3 sm:p-4 gap-2 transition-all duration-200",
-        "hover:border-primary/40 hover:shadow-md hover:bg-card",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        "group cursor-pointer",
+        "group",
+        isComingSoon
+          ? "opacity-60 cursor-default"
+          : "hover:border-primary/40 hover:shadow-md hover:bg-card cursor-pointer",
       )}
     >
+      {/* Coming Soon badge */}
+      {isComingSoon && (
+        <span className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-primary/15 text-primary border border-primary/20">
+          Coming Soon
+        </span>
+      )}
+
       {/* Header row: icon + title + favorite */}
       <div className="flex items-start gap-3">
-        <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
+        <div className={cn(
+          "shrink-0 flex items-center justify-center w-8 h-8 rounded-lg",
+          isComingSoon ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+        )}>
           <Icon className="w-4 h-4" />
         </div>
         <div className="flex-1 min-w-0">
@@ -127,24 +141,26 @@ function AppTile({
             {template.subtitle}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite(template.id);
-          }}
-          className="shrink-0 p-1 rounded-md transition-colors hover:bg-primary/10"
-          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          <Heart
-            className={cn(
-              "w-4 h-4 transition-colors",
-              isFavorite
-                ? "fill-red-400 text-red-400"
-                : "text-muted-foreground/40 group-hover:text-muted-foreground",
-            )}
-          />
-        </button>
+        {!isComingSoon && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(template.id);
+            }}
+            className="shrink-0 p-1 rounded-md transition-colors hover:bg-primary/10"
+            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            <Heart
+              className={cn(
+                "w-4 h-4 transition-colors",
+                isFavorite
+                  ? "fill-red-400 text-red-400"
+                  : "text-muted-foreground/40 group-hover:text-muted-foreground",
+              )}
+            />
+          </button>
+        )}
       </div>
 
       {/* Description */}
@@ -166,15 +182,17 @@ function AppTile({
       </ul>
 
       {/* Rating row */}
-      <div className="flex items-center justify-between pt-2 border-t border-border/50">
-        <StarRating
-          value={rating}
-          onChange={(v) => onRate(template.id, v)}
-        />
-        <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
-          {template.category}
-        </span>
-      </div>
+      {!isComingSoon && (
+        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+          <StarRating
+            value={rating}
+            onChange={(v) => onRate(template.id, v)}
+          />
+          <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+            {template.category}
+          </span>
+        </div>
+      )}
     </button>
   );
 }
