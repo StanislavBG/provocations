@@ -12,6 +12,7 @@ import {
   Youtube,
   FileAudio,
   Mail,
+  Workflow,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -867,6 +868,43 @@ How sections are ordered — most impactful insight first, supporting details be
       "I read this twice and I still don't know what you want me to do. What's the call to action? — Recipient's Perspective",
     ],
     steps: [{ id: "compose", label: "Compose your email" }],
+  },
+  {
+    id: "agent-editor",
+    category: "build",
+    title: "Agent Editor",
+    shortLabel: "Agent",
+    subtitle: "Design multi-step AI workflows",
+    description:
+      "Design intelligent agent workflows with structured steps. Define a persona, chain Input → Actor → Output steps, monitor token usage, and test your agent — all in one place.",
+    howTo: "1. Define your agent's persona and role. 2. Add steps — each with input, system prompt, and expected output. 3. Use the token counter to stay within model limits. 4. Run your agent to test the flow.",
+    useCases: [
+      "Building a research pipeline that summarizes → ranks → reports",
+      "Creating a content workflow that outlines → drafts → edits",
+      "Designing a data analysis chain that extracts → validates → visualizes",
+    ],
+    icon: Workflow,
+    objective:
+      "Design a multi-step AI agent workflow with clear input, processing, and output for each step",
+    starterText: "",
+    draftQuestions: [
+      "What should this agent do? Describe the end-to-end task in plain language.",
+      "What does the first step need as input? Is it user-provided or from another system?",
+      "What should the final output look like? Text report, JSON data, a table?",
+      "How many steps do you think this needs? Walk me through the chain.",
+    ],
+    templateContent: "",
+    provocationSources: ["Workflow Architect", "Prompt Quality Reviewer"],
+    provocationExamples: [
+      "Step 2 expects JSON but Step 1 outputs plain text — how will you bridge that?",
+      "Your system prompt is 3000 tokens — that leaves limited room for context. Can you tighten it?",
+      "What happens if Step 1 returns empty results? Does Step 2 have a fallback?",
+    ],
+    steps: [
+      { id: "define", label: "Define Agent" },
+      { id: "steps", label: "Build Steps" },
+      { id: "test", label: "Test & Refine" },
+    ],
   },
 ];
 

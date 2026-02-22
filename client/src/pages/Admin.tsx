@@ -26,6 +26,8 @@ import {
   Pencil,
   Lock,
   Unlock,
+  Workflow,
+  RotateCcw,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useCallback } from "react";
@@ -110,7 +112,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <Tabs defaultValue="dashboard">
-          <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
             <TabsTrigger value="dashboard" className="gap-2">
               <BarChart3 className="w-4 h-4" />
               Dashboard
@@ -122,6 +124,10 @@ export default function Admin() {
             <TabsTrigger value="personas" className="gap-2">
               <FolderTree className="w-4 h-4" />
               Personas
+            </TabsTrigger>
+            <TabsTrigger value="agents" className="gap-2">
+              <Workflow className="w-4 h-4" />
+              LLM Agents
             </TabsTrigger>
           </TabsList>
 
@@ -288,6 +294,23 @@ export default function Admin() {
               </CardHeader>
               <CardContent>
                 <PersonaDefinitionList />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ════════════════════════════════════════ */}
+          {/* Tab 4: LLM Agents (Prompt Overrides)    */}
+          {/* ════════════════════════════════════════ */}
+          <TabsContent value="agents" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Workflow className="w-4 h-4" />
+                  LLM Task Prompts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AgentPromptList />
               </CardContent>
             </Card>
           </TabsContent>
@@ -821,6 +844,134 @@ function PersonaDefinitionList() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Agent Prompt List — shows all 13 LLM task types with edit/lock/revert ──
+
+interface AgentPromptInfo {
+  taskType: string;
+  description: string;
+  currentPrompt: string;
+  isOverridden: boolean;
+  humanCurated: boolean;
+  curatedBy: string | null;
+  curatedAt: string | null;
+}
+
+function AgentPromptList() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: promptsData, isLoading } = useQuery<{ prompts: AgentPromptInfo[] }>({
+    queryKey: ["/api/admin/agent-prompts"],
+    queryFn: () => apiRequest("GET", "/api/admin/agent-prompts").then((r) => r.json()),
+  });
+
+  const lockMutation = useMutation({
+    mutationFn: async ({ taskType, humanCurated }: { taskType: string; humanCurated: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/agent-overrides/${taskType}/lock`, { humanCurated });
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agent-prompts"] });
+      toast({
+        title: vars.humanCurated ? "Prompt locked" : "Prompt unlocked",
+        description: `${vars.taskType} is now ${vars.humanCurated ? "locked" : "unlocked"}`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Failed to toggle lock", variant: "destructive" });
+    },
+  });
+
+  const revertMutation = useMutation({
+    mutationFn: async (taskType: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/agent-overrides/${taskType}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agent-prompts"] });
+      toast({ title: "Reverted to code default" });
+    },
+    onError: () => {
+      toast({ title: "Failed to revert", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  }
+
+  const prompts = promptsData?.prompts ?? [];
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground mb-4">
+        All LLM task types used across Provocations. Edit the system prompt to customize behavior.
+      </p>
+      {prompts.map((prompt) => {
+        const editUrl = buildAppLaunchUrl({
+          app: "agent-editor",
+          intent: "edit",
+          entityType: "agent-prompt",
+          entityId: prompt.taskType,
+          source: "admin",
+        });
+
+        return (
+          <div
+            key={prompt.taskType}
+            className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm font-mono">{prompt.taskType}</span>
+                {prompt.isOverridden && (
+                  <Badge variant="secondary" className="text-[9px]">DB Override</Badge>
+                )}
+                {prompt.humanCurated && (
+                  <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{prompt.description}</p>
+              <p className="text-[11px] text-muted-foreground/70 mt-1 font-mono truncate max-w-[500px]">
+                {prompt.currentPrompt.slice(0, 120)}...
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <a href={editUrl}>
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7">
+                  <Pencil className="w-3 h-3" />
+                  Edit
+                </Button>
+              </a>
+              <Button
+                size="sm"
+                variant={prompt.humanCurated ? "default" : "outline"}
+                className={`gap-1 text-xs h-7 ${prompt.humanCurated ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
+                onClick={() => lockMutation.mutate({ taskType: prompt.taskType, humanCurated: !prompt.humanCurated })}
+                disabled={lockMutation.isPending}
+              >
+                {prompt.humanCurated ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+              </Button>
+              {prompt.isOverridden && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1 text-xs h-7 text-muted-foreground"
+                  onClick={() => revertMutation.mutate(prompt.taskType)}
+                  disabled={revertMutation.isPending}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

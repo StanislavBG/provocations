@@ -189,3 +189,39 @@ export const personaOverrides = pgTable("persona_overrides", {
 
 export type StoredPersonaOverride = typeof personaOverrides.$inferSelect;
 
+// Agent definitions — user-created multi-step agent workflows.
+// Each agent defines a persona and a chain of Input → Actor → Output steps.
+export const agentDefinitions = pgTable("agent_definitions", {
+  id: serial("id").primaryKey(),
+  agentId: varchar("agent_id", { length: 128 }).notNull().unique(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  persona: text("persona"),
+  steps: text("steps").notNull(), // JSON array of AgentStep
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_agent_definitions_user_id").on(table.userId),
+  uniqueIndex("idx_agent_definitions_agent_id").on(table.agentId),
+]);
+
+export type StoredAgentDefinition = typeof agentDefinitions.$inferSelect;
+
+// Agent prompt overrides — admin edits to existing LLM task type system prompts.
+// Mirrors the persona_overrides pattern: DB wins over code default.
+export const agentPromptOverrides = pgTable("agent_prompt_overrides", {
+  id: serial("id").primaryKey(),
+  taskType: varchar("task_type", { length: 64 }).notNull().unique(),
+  systemPrompt: text("system_prompt").notNull(),
+  humanCurated: boolean("human_curated").default(false).notNull(),
+  curatedBy: varchar("curated_by", { length: 128 }),
+  curatedAt: timestamp("curated_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  uniqueIndex("idx_agent_prompt_overrides_task_type").on(table.taskType),
+]);
+
+export type StoredAgentPromptOverride = typeof agentPromptOverrides.$inferSelect;
+
