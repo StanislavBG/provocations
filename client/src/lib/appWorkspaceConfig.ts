@@ -104,10 +104,11 @@ const DEFAULT_OBJECTIVE_CONFIG: ObjectiveConfig = {
 /**
  * Workspace layout — controls the top-level UI structure.
  *
- * "standard"      — Default 3-panel layout (toolbox | document | discussion).
- * "voice-capture" — Single-page voice recording workspace with auto-save.
+ * "standard"            — Default 3-panel layout (toolbox | document | discussion).
+ * "voice-capture"       — Single-page voice recording workspace with auto-save.
+ * "infographic-studio"  — 3-panel infographic pipeline (raw text | summary + controls | image gallery).
  */
-export type WorkspaceLayout = "standard" | "voice-capture";
+export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio";
 
 export interface AppFlowConfig {
   /** Top-level workspace layout. Defaults to "standard" (3-panel). */
@@ -458,16 +459,16 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
   },
 
   "text-to-infographic": {
-    workspaceLayout: "standard",
+    workspaceLayout: "infographic-studio",
     defaultToolboxTab: "provoke",
     autoStartInterview: false,
     autoStartPersonas: undefined,
 
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "describe", label: "Write Description", description: "Write the textual description of your infographic" },
-      { id: "refine", label: "Persona Suggestions", description: "Expert personas suggest improvements to your description" },
-      { id: "generate", label: "Generate Image", description: "Generate a visual from your finalized description" },
+      { id: "describe", label: "Write Raw Text", description: "Paste or type your raw content" },
+      { id: "summarize", label: "Summarize & Expand", description: "LLM generates a rich summary with controls" },
+      { id: "generate", label: "Generate Infographics", description: "Create 3 visual variants at different temperatures" },
     ],
 
     leftPanelTabs: [TAB_PROVOKE, TAB_MODEL_CONFIG, TAB_CONTEXT],
@@ -477,7 +478,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     writer: {
       mode: "edit",
       outputFormat: "markdown",
-      documentType: "infographic brief from voice transcript",
+      documentType: "infographic brief from text description",
       feedbackTone: "clarity-focused and visually structured",
     },
   },
