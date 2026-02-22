@@ -34,6 +34,7 @@ import {
   LayoutGrid,
   Type,
   Sparkles,
+  Upload,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -326,6 +327,19 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
     link.click();
   }, []);
 
+  /** Upload a text file and append its content to the raw text panel */
+  const handleFileUpload = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result;
+      if (typeof content === "string" && content.trim()) {
+        onRawTextChange(rawText ? rawText + "\n\n" + content : content);
+        toast({ title: "File loaded", description: `"${file.name}" added to raw text.` });
+      }
+    };
+    reader.readAsText(file);
+  }, [rawText, onRawTextChange, toast]);
+
   const hasRawText = rawText.trim().length > 0;
   const hasSummary = summaryText.trim().length > 0;
   const anyGenerating = variants.some((v) => v.isGenerating);
@@ -345,9 +359,25 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
               <div className="flex items-center gap-2 px-4 py-2.5">
                 <FileText className="w-4 h-4 text-primary" />
                 <h3 className="text-sm font-semibold">Raw Text</h3>
-                <Badge variant="outline" className="text-[10px] ml-auto">
-                  {rawText.length} chars
-                </Badge>
+                <div className="ml-auto flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload
+                    <input
+                      type="file"
+                      accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <Badge variant="outline" className="text-[10px]">
+                    {rawText.length} chars
+                  </Badge>
+                </div>
               </div>
 
               {/* Enrichment options — collapsed into a compact grid */}
@@ -420,11 +450,36 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
         {/* ── MIDDLE PANEL: Summary + LLM Controls ── */}
         <ResizablePanel defaultSize={35} minSize={20}>
           <div className="h-full flex flex-col">
-            {/* Header */}
+            {/* Header — mirrors the right panel header layout */}
             <div className="shrink-0 border-b bg-muted/20">
-              <div className="flex items-center gap-2 px-4 py-2.5">
-                <Wand2 className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-semibold">Summary & Description</h3>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Summary & Description</h3>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-xs h-7"
+                  onClick={() => summarizeMutation.mutate()}
+                  disabled={!hasRawText || summarizeMutation.isPending}
+                >
+                  {summarizeMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Generating...
+                    </>
+                  ) : hasSummary ? (
+                    <>
+                      <RefreshCw className="w-3 h-3" />
+                      Regenerate Summary
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3 h-3" />
+                      Generate Summary
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
 
@@ -457,31 +512,6 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
                   onChange={(v) => setControls((c) => ({ ...c, detailLevel: v }))}
                 />
               </div>
-
-              {/* Generate summary button */}
-              <Button
-                onClick={() => summarizeMutation.mutate()}
-                disabled={!hasRawText || summarizeMutation.isPending}
-                className="w-full gap-2"
-                size="sm"
-              >
-                {summarizeMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Generating summary...
-                  </>
-                ) : hasSummary ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Regenerate Summary
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-3.5 h-3.5" />
-                    Generate Summary from Raw Text
-                  </>
-                )}
-              </Button>
             </div>
 
             {/* Summary text display */}
