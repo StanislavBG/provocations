@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle,
@@ -14,6 +14,12 @@ import {
   Check,
   ArrowRight,
   Code2,
+  X,
+  ThumbsUp,
+  ThumbsDown,
+  Filter,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import type { ContextItem } from "@shared/schema";
 
@@ -25,6 +31,14 @@ export interface ChangeRecommendation {
   impact: string;
 }
 
+export interface FeedbackCategory {
+  id: string;
+  label: string;
+  description: string;
+  severity: "good" | "info" | "warning" | "critical";
+  count: number;
+}
+
 export interface SubqueryAnalysis {
   id: string;
   name: string;
@@ -34,6 +48,7 @@ export interface SubqueryAnalysis {
   summary: string;
   evaluation: string;
   severity: "good" | "info" | "warning" | "critical";
+  category?: string;
   recommendations: string[];
   changeRecommendations?: ChangeRecommendation[];
 }
@@ -42,6 +57,7 @@ export interface OptimizationOpportunity {
   title: string;
   description: string;
   severity: "info" | "warning" | "critical";
+  category?: string;
   affectedSubquery?: string;
   beforeCode?: string;
   afterCode?: string;
@@ -54,7 +70,10 @@ export interface ExtractedMetric {
   formula?: string;
 }
 
+export type FindingFeedback = "accepted" | "rejected" | null;
+
 export interface QueryAnalysisResult {
+  feedbackCategories?: FeedbackCategory[];
   subqueries: SubqueryAnalysis[];
   metrics: ExtractedMetric[];
   overallEvaluation: string;
@@ -70,6 +89,8 @@ interface QueryDiscoveriesPanelProps {
   onSubquerySelect: (id: string | null) => void;
   onCaptureMetrics: (items: ContextItem[]) => void;
   onAcceptChange?: (beforeCode: string, afterCode: string) => void;
+  findingFeedback?: Record<string, FindingFeedback>;
+  onFindingFeedback?: (findingId: string, feedback: FindingFeedback) => void;
 }
 
 const SeverityIcon = ({ severity, className }: { severity: string; className?: string }) => {
@@ -104,10 +125,14 @@ export function QueryDiscoveriesPanel({
   onSubquerySelect,
   onCaptureMetrics,
   onAcceptChange,
+  findingFeedback,
+  onFindingFeedback,
 }: QueryDiscoveriesPanelProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["subqueries", "overall", "opportunities", "metrics"])
+    new Set(["subqueries", "overall", "opportunities", "metrics", "categories"])
   );
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
+  const [beforeAfterMode, setBeforeAfterMode] = useState<Record<string, "side-by-side" | "unified">>({});
 
   const toggleSection = (key: string) => {
     setExpandedSections(prev => {
@@ -117,6 +142,21 @@ export function QueryDiscoveriesPanel({
       return next;
     });
   };
+
+  // Filter subqueries and opportunities by active category
+  const filteredSubqueries = useMemo(() => {
+    if (!analysis) return [];
+    if (!activeCategoryFilter) return analysis.subqueries;
+    return analysis.subqueries.filter(sq => sq.category === activeCategoryFilter);
+  }, [analysis, activeCategoryFilter]);
+
+  const filteredOpportunities = useMemo(() => {
+    if (!analysis) return [];
+    if (!activeCategoryFilter) return analysis.optimizationOpportunities;
+    return analysis.optimizationOpportunities.filter(opp => opp.category === activeCategoryFilter);
+  }, [analysis, activeCategoryFilter]);
+
+  const getViewMode = (key: string): "side-by-side" | "unified" => beforeAfterMode[key] || "side-by-side";
 
   if (!analysis && !isAnalyzing) {
     return (
@@ -179,20 +219,62 @@ export function QueryDiscoveriesPanel({
         </div>
       )}
 
-      {/* Subquery Analysis */}
-      {analysis.subqueries.length > 0 && (
+      {/* Dynamic Feedback Categories */}
+      {analysis.feedbackCategories && analysis.feedbackCategories.length > 0 && (
         <div className="border-b">
-          <SectionHeader id="subqueries" icon={Zap} title="Subquery Analysis" count={analysis.subqueries.length} iconColor="text-blue-500" />
+          <SectionHeader id="categories" icon={Filter} title="Categories" count={analysis.feedbackCategories.length} iconColor="text-indigo-500" />
+          {expandedSections.has("categories") && (
+            <div className="px-3 pb-3">
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+                    !activeCategoryFilter
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                  }`}
+                  onClick={() => setActiveCategoryFilter(null)}
+                >
+                  All
+                </button>
+                {analysis.feedbackCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+                      activeCategoryFilter === cat.id
+                        ? `${severityBgColor[cat.severity]} border-current/20`
+                        : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                    }`}
+                    onClick={() => setActiveCategoryFilter(activeCategoryFilter === cat.id ? null : cat.id)}
+                    title={cat.description}
+                  >
+                    <SeverityIcon severity={cat.severity} className="w-3 h-3" />
+                    {cat.label}
+                    <span className="text-[10px] opacity-70">({cat.count})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Subquery Analysis */}
+      {filteredSubqueries.length > 0 && (
+        <div className="border-b">
+          <SectionHeader id="subqueries" icon={Zap} title="Subquery Analysis" count={filteredSubqueries.length} iconColor="text-blue-500" />
           {expandedSections.has("subqueries") && (
             <div className="px-3 pb-3 space-y-2">
-              {analysis.subqueries.map((sq) => {
+              {filteredSubqueries.map((sq) => {
                 const isSelected = selectedSubqueryId === sq.id;
                 const isHovered = hoveredSubqueryId === sq.id;
+                const fb = findingFeedback?.[sq.id] ?? null;
 
                 return (
                   <div
                     key={sq.id}
                     className={`rounded-lg border p-3 cursor-pointer transition-all duration-150 ${
+                      fb === "rejected" ? "opacity-50" : ""
+                    } ${
                       isSelected
                         ? `${severityBgColor[sq.severity]} ring-1 ring-inset ring-current/10`
                         : isHovered
@@ -209,7 +291,31 @@ export function QueryDiscoveriesPanel({
                         className={`w-4 h-4 mt-0.5 shrink-0 ${severityTextColor[sq.severity]}`}
                       />
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-semibold leading-tight">{sq.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold leading-tight flex-1">{sq.name}</h4>
+                          {/* Accept/Reject feedback buttons */}
+                          {onFindingFeedback && (
+                            <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                              <button
+                                className={`p-1 rounded transition-colors ${fb === "accepted" ? "text-emerald-500 bg-emerald-500/10" : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"}`}
+                                onClick={() => onFindingFeedback(sq.id, fb === "accepted" ? null : "accepted")}
+                                title="This finding is useful"
+                              >
+                                <ThumbsUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                className={`p-1 rounded transition-colors ${fb === "rejected" ? "text-red-500 bg-red-500/10" : "text-muted-foreground hover:text-red-500 hover:bg-red-500/10"}`}
+                                onClick={() => onFindingFeedback(sq.id, fb === "rejected" ? null : "rejected")}
+                                title="This finding is not relevant"
+                              >
+                                <ThumbsDown className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {sq.category && (
+                          <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground mt-1">{sq.category}</span>
+                        )}
                         <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{sq.summary}</p>
 
                         {/* Show evaluation, recommendations, and code changes when selected */}
@@ -238,45 +344,73 @@ export function QueryDiscoveriesPanel({
                                   <Code2 className="w-3 h-3" />
                                   Suggested Changes:
                                 </span>
-                                {sq.changeRecommendations.map((cr, ci) => (
-                                  <div key={ci} className="rounded border bg-background/80 overflow-hidden">
-                                    <div className="px-2.5 py-1.5 border-b bg-muted/30">
-                                      <div className="text-xs font-medium text-foreground/90">{cr.title}</div>
-                                      <div className="text-xs text-muted-foreground mt-0.5">{cr.rationale}</div>
-                                    </div>
-                                    <div className="grid grid-cols-2 divide-x text-xs font-mono">
-                                      <div className="p-2">
-                                        <div className="text-[10px] uppercase tracking-wider text-red-500/70 font-sans font-medium mb-1">Before</div>
-                                        <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-red-500/5 rounded p-1.5 overflow-x-auto">{cr.beforeCode}</pre>
-                                      </div>
-                                      <div className="p-2">
-                                        <div className="text-[10px] uppercase tracking-wider text-emerald-500/70 font-sans font-medium mb-1">After</div>
-                                        <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{cr.afterCode}</pre>
-                                      </div>
-                                    </div>
-                                    {cr.impact && (
-                                      <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-t bg-muted/20">
-                                        Impact: {cr.impact}
-                                      </div>
-                                    )}
-                                    {onAcceptChange && (
-                                      <div className="px-2.5 py-1.5 border-t bg-muted/10 flex justify-end">
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-6 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30"
+                                {sq.changeRecommendations.map((cr, ci) => {
+                                  const viewKey = `${sq.id}-${ci}`;
+                                  const mode = getViewMode(viewKey);
+                                  return (
+                                    <div key={ci} className="rounded border bg-background/80 overflow-hidden">
+                                      <div className="px-2.5 py-1.5 border-b bg-muted/30 flex items-start gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-xs font-medium text-foreground/90">{cr.title}</div>
+                                          <div className="text-xs text-muted-foreground mt-0.5">{cr.rationale}</div>
+                                        </div>
+                                        <button
+                                          className="text-muted-foreground hover:text-foreground p-0.5 shrink-0"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            onAcceptChange(cr.beforeCode, cr.afterCode);
+                                            setBeforeAfterMode(prev => ({ ...prev, [viewKey]: mode === "side-by-side" ? "unified" : "side-by-side" }));
                                           }}
+                                          title={mode === "side-by-side" ? "Switch to unified view" : "Switch to side-by-side view"}
                                         >
-                                          <Check className="w-3 h-3" />
-                                          Accept Change
-                                        </Button>
+                                          {mode === "side-by-side" ? <ToggleLeft className="w-3.5 h-3.5" /> : <ToggleRight className="w-3.5 h-3.5" />}
+                                        </button>
                                       </div>
-                                    )}
-                                  </div>
-                                ))}
+                                      {mode === "side-by-side" ? (
+                                        <div className="grid grid-cols-2 divide-x text-xs font-mono">
+                                          <div className="p-2">
+                                            <div className="text-[10px] uppercase tracking-wider text-red-500/70 font-sans font-medium mb-1">Before</div>
+                                            <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-red-500/5 rounded p-1.5 overflow-x-auto">{cr.beforeCode}</pre>
+                                          </div>
+                                          <div className="p-2">
+                                            <div className="text-[10px] uppercase tracking-wider text-emerald-500/70 font-sans font-medium mb-1">After</div>
+                                            <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{cr.afterCode}</pre>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="p-2 text-xs font-mono space-y-1">
+                                          <div>
+                                            <pre className="whitespace-pre-wrap text-[11px] text-red-600/80 bg-red-500/5 rounded p-1.5 overflow-x-auto line-through decoration-red-400/50">{cr.beforeCode}</pre>
+                                          </div>
+                                          <ArrowRight className="w-3 h-3 text-muted-foreground mx-auto" />
+                                          <div>
+                                            <pre className="whitespace-pre-wrap text-[11px] text-emerald-600/80 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{cr.afterCode}</pre>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {cr.impact && (
+                                        <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-t bg-muted/20">
+                                          Impact: {cr.impact}
+                                        </div>
+                                      )}
+                                      {onAcceptChange && (
+                                        <div className="px-2.5 py-1.5 border-t bg-muted/10 flex justify-end">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-6 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onAcceptChange(cr.beforeCode, cr.afterCode);
+                                            }}
+                                          >
+                                            <Check className="w-3 h-3" />
+                                            Accept Change
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -292,76 +426,125 @@ export function QueryDiscoveriesPanel({
       )}
 
       {/* Optimization Opportunities */}
-      {analysis.optimizationOpportunities.length > 0 && (
+      {filteredOpportunities.length > 0 && (
         <div className="border-b">
-          <SectionHeader id="opportunities" icon={Lightbulb} title="Opportunities" count={analysis.optimizationOpportunities.length} iconColor="text-amber-500" />
+          <SectionHeader id="opportunities" icon={Lightbulb} title="Opportunities" count={filteredOpportunities.length} iconColor="text-amber-500" />
           {expandedSections.has("opportunities") && (
             <div className="px-3 pb-3 space-y-2">
-              {analysis.optimizationOpportunities.map((opp, i) => (
-                <div
-                  key={i}
-                  className={`rounded-lg border p-3 ${severityBgColor[opp.severity] || severityBgColor.info}`}
-                  onClick={() => {
-                    if (opp.affectedSubquery) {
-                      onSubquerySelect(opp.affectedSubquery);
-                    }
-                  }}
-                  style={{ cursor: opp.affectedSubquery ? "pointer" : "default" }}
-                >
-                  <div className="flex items-start gap-2">
-                    <SeverityIcon
-                      severity={opp.severity}
-                      className={`w-4 h-4 mt-0.5 shrink-0 ${severityTextColor[opp.severity]}`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold leading-tight">{opp.title}</h4>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{opp.description}</p>
-                      {/* Before/After code for optimization opportunities */}
-                      {opp.beforeCode && opp.afterCode && (
-                        <div className="mt-2 rounded border bg-background/80 overflow-hidden">
-                          <div className="grid grid-cols-2 divide-x text-xs font-mono">
-                            <div className="p-2">
-                              <div className="text-[10px] uppercase tracking-wider text-red-500/70 font-sans font-medium mb-1">Before</div>
-                              <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-red-500/5 rounded p-1.5 overflow-x-auto">{opp.beforeCode}</pre>
-                            </div>
-                            <div className="p-2">
-                              <div className="text-[10px] uppercase tracking-wider text-emerald-500/70 font-sans font-medium mb-1">After</div>
-                              <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{opp.afterCode}</pre>
-                            </div>
-                          </div>
-                          {opp.impact && (
-                            <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-t bg-muted/20">
-                              Impact: {opp.impact}
-                            </div>
-                          )}
-                          {onAcceptChange && (
-                            <div className="px-2.5 py-1.5 border-t bg-muted/10 flex justify-end">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onAcceptChange(opp.beforeCode!, opp.afterCode!);
-                                }}
+              {filteredOpportunities.map((opp, i) => {
+                const oppId = `opp-${i}`;
+                const fb = findingFeedback?.[oppId] ?? null;
+                const viewKey = `opp-${i}`;
+                const mode = getViewMode(viewKey);
+                return (
+                  <div
+                    key={i}
+                    className={`rounded-lg border p-3 ${fb === "rejected" ? "opacity-50" : ""} ${severityBgColor[opp.severity] || severityBgColor.info}`}
+                    onClick={() => {
+                      if (opp.affectedSubquery) {
+                        onSubquerySelect(opp.affectedSubquery);
+                      }
+                    }}
+                    style={{ cursor: opp.affectedSubquery ? "pointer" : "default" }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <SeverityIcon
+                        severity={opp.severity}
+                        className={`w-4 h-4 mt-0.5 shrink-0 ${severityTextColor[opp.severity]}`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold leading-tight flex-1">{opp.title}</h4>
+                          {onFindingFeedback && (
+                            <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                              <button
+                                className={`p-1 rounded transition-colors ${fb === "accepted" ? "text-emerald-500 bg-emerald-500/10" : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"}`}
+                                onClick={() => onFindingFeedback(oppId, fb === "accepted" ? null : "accepted")}
+                                title="This finding is useful"
                               >
-                                <Check className="w-3 h-3" />
-                                Accept Change
-                              </Button>
+                                <ThumbsUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                className={`p-1 rounded transition-colors ${fb === "rejected" ? "text-red-500 bg-red-500/10" : "text-muted-foreground hover:text-red-500 hover:bg-red-500/10"}`}
+                                onClick={() => onFindingFeedback(oppId, fb === "rejected" ? null : "rejected")}
+                                title="This finding is not relevant"
+                              >
+                                <ThumbsDown className="w-3 h-3" />
+                              </button>
                             </div>
                           )}
                         </div>
-                      )}
-                      {opp.affectedSubquery && (
-                        <span className="inline-flex items-center gap-1 mt-1.5 text-xs text-primary/80">
-                          <Zap className="w-3 h-3" />
-                          Click to see affected subquery
-                        </span>
-                      )}
+                        {opp.category && (
+                          <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground mt-1">{opp.category}</span>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{opp.description}</p>
+                        {/* Before/After code for optimization opportunities */}
+                        {opp.beforeCode && opp.afterCode && (
+                          <div className="mt-2 rounded border bg-background/80 overflow-hidden">
+                            <div className="flex justify-end px-2 pt-1">
+                              <button
+                                className="text-muted-foreground hover:text-foreground p-0.5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setBeforeAfterMode(prev => ({ ...prev, [viewKey]: mode === "side-by-side" ? "unified" : "side-by-side" }));
+                                }}
+                                title={mode === "side-by-side" ? "Switch to unified view" : "Switch to side-by-side view"}
+                              >
+                                {mode === "side-by-side" ? <ToggleLeft className="w-3.5 h-3.5" /> : <ToggleRight className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                            {mode === "side-by-side" ? (
+                              <div className="grid grid-cols-2 divide-x text-xs font-mono">
+                                <div className="p-2">
+                                  <div className="text-[10px] uppercase tracking-wider text-red-500/70 font-sans font-medium mb-1">Before</div>
+                                  <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-red-500/5 rounded p-1.5 overflow-x-auto">{opp.beforeCode}</pre>
+                                </div>
+                                <div className="p-2">
+                                  <div className="text-[10px] uppercase tracking-wider text-emerald-500/70 font-sans font-medium mb-1">After</div>
+                                  <pre className="whitespace-pre-wrap text-[11px] text-foreground/70 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{opp.afterCode}</pre>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-2 text-xs font-mono space-y-1">
+                                <pre className="whitespace-pre-wrap text-[11px] text-red-600/80 bg-red-500/5 rounded p-1.5 overflow-x-auto line-through decoration-red-400/50">{opp.beforeCode}</pre>
+                                <ArrowRight className="w-3 h-3 text-muted-foreground mx-auto" />
+                                <pre className="whitespace-pre-wrap text-[11px] text-emerald-600/80 bg-emerald-500/5 rounded p-1.5 overflow-x-auto">{opp.afterCode}</pre>
+                              </div>
+                            )}
+                            {opp.impact && (
+                              <div className="px-2.5 py-1 text-[10px] text-muted-foreground border-t bg-muted/20">
+                                Impact: {opp.impact}
+                              </div>
+                            )}
+                            {onAcceptChange && (
+                              <div className="px-2.5 py-1.5 border-t bg-muted/10 flex justify-end">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAcceptChange(opp.beforeCode!, opp.afterCode!);
+                                  }}
+                                >
+                                  <Check className="w-3 h-3" />
+                                  Accept Change
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {opp.affectedSubquery && (
+                          <span className="inline-flex items-center gap-1 mt-1.5 text-xs text-primary/80">
+                            <Zap className="w-3 h-3" />
+                            Click to see affected subquery
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

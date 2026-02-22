@@ -390,6 +390,37 @@ Every application (template) in Provocations is defined across **three files** t
 - Ownership verified via Clerk userId
 - Each encrypted field gets its own random salt + IV (independent key derivation per field)
 
+## Build & Deployment Environment — Replit
+
+Replit is the **sole build and deployment environment** for this project. The developer workflow is:
+
+1. Develop locally or in Claude Code
+2. Push to GitHub (`git push`)
+3. On Replit: click **Git Sync** to pull latest changes
+4. On Replit: click **Deploy** to ship to production
+
+**Claude's responsibility**: Keep `replit.md` accurate and up to date so that the Replit environment works immediately after a Git Sync — no manual configuration, no extra steps. The user should never need to edit Replit settings by hand.
+
+### What `replit.md` must reflect
+
+| Section | What to maintain |
+|---------|-----------------|
+| **Overview** | Current project description, core philosophy |
+| **Architecture** | Current frontend/backend stack, key components, API surface |
+| **Environment variables** | All required secrets and env vars (names only, never values) |
+| **Build & run** | Current `npm run dev` / `npm run build` / `npm run start` commands |
+| **Database** | PostgreSQL setup, Drizzle ORM, migration commands (`npm run db:push`) |
+| **LLM provider** | Current default provider, how to switch via `LLM_PROVIDER` env var |
+| **Recent changes** | Append a dated entry whenever a significant feature, dependency, or config change is made |
+
+### Rules for maintaining `replit.md`
+
+- **Update `replit.md` whenever you change**: dependencies, environment variables, build commands, database schema, API endpoints, or deployment configuration
+- **Never put secrets or API key values** in `replit.md` — only variable names
+- **Keep the "Recent Changes" section** chronological (newest first) and concise (one line per change)
+- **Match `.replit` config**: if you change ports, build commands, or deployment targets, update both `.replit` and `replit.md`
+- The goal: after Git Sync + Deploy on Replit, the app works. Zero manual steps.
+
 ## Not Yet Implemented
 
 - Testing framework (Jest/Vitest)

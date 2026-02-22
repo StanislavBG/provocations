@@ -102,6 +102,7 @@ export const templateIds = [
   "voice-capture",
   "youtube-to-infographic",
   "text-to-infographic",
+  "email-composer",
 ] as const;
 
 export type TemplateId = typeof templateIds[number];
