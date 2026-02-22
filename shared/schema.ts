@@ -92,7 +92,6 @@ export type Persona = z.infer<typeof personaSchema>;
 
 export const templateIds = [
   "write-a-prompt",
-  "query-editor",
   "product-requirement",
   "new-application",
   "streaming",
@@ -313,16 +312,6 @@ export const writeRequestSchema = z.object({
 });
 
 export type WriteRequest = z.infer<typeof writeRequestSchema>;
-
-// Dedicated query write schema — SQL-focused, no prose generation
-export const queryWriteRequestSchema = z.object({
-  query: z.string().min(1, "SQL query is required"),
-  instruction: z.string().min(1, "Instruction is required"),
-  appType: z.enum(templateIds).optional(),
-  capturedContext: z.array(contextItemSchema).optional(),
-});
-
-export type QueryWriteRequest = z.infer<typeof queryWriteRequestSchema>;
 
 // Change tracking for structured output
 export const changeEntrySchema = z.object({
