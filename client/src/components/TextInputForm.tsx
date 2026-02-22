@@ -500,39 +500,19 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
           {isWritePrompt ? null : (
             <h2 className="shrink-0 text-base font-semibold">
               {activePrebuilt?.id === "streaming"
-                ? "Describe what you're capturing requirements for"
+                ? "Configure capture workspace"
                 : activePrebuilt?.id === "voice-capture"
-                  ? "Describe what you're recording"
+                  ? "Start recording"
                   : activePrebuilt?.id === "youtube-to-infographic"
-                    ? "Enter a YouTube channel to extract insights"
+                    ? "YouTube channel source"
                     : activePrebuilt?.id === "text-to-infographic"
-                      ? "Paste or upload your voice transcript"
+                      ? "Transcript source"
                       : "Provide your starting material"}
             </h2>
           )}
 
           {activePrebuilt?.id === "voice-capture" && onVoiceCaptureMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="Session topic"
-                labelIcon={Target}
-                description="What is this recording session about? Meeting notes, brainstorm, interview, etc."
-                id="voice-capture-objective"
-                placeholder="Team standup meeting... Product brainstorm... User interview..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               <Button
                 onClick={() => onVoiceCaptureMode(
                   objective.trim() || "Voice capture session",
@@ -549,26 +529,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </div>
           ) : activePrebuilt?.id === "youtube-to-infographic" && onYouTubeInfographicMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="What insights are you looking for?"
-                labelIcon={Target}
-                description="Describe the kind of content you want to extract — tips, tutorials, strategies, etc."
-                id="youtube-objective"
-                placeholder="Extract key productivity tips... Summarize tech tutorials... Capture marketing strategies..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Youtube className="w-4 h-4 text-red-500" />
@@ -605,26 +565,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </div>
           ) : activePrebuilt?.id === "text-to-infographic" && onVoiceInfographicMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="What is this transcript about?"
-                labelIcon={Target}
-                description="Describe the session — meeting, lecture, interview — so the summary captures the right focus."
-                id="voice-infographic-objective"
-                placeholder="Team product review meeting... Guest lecture on AI... User research interview..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <FileAudio className="w-4 h-4 text-primary" />
@@ -679,26 +619,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             </div>
           ) : activePrebuilt?.id === "streaming" && onStreamingMode ? (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="container"
-                label="Objective"
-                labelIcon={Target}
-                description="Describe what you're capturing — a feature, a flow, an existing screen you want to improve."
-                id="streaming-objective"
-                placeholder="Capture requirements for a checkout flow... Document enhancements to the dashboard..."
-                className="text-sm leading-relaxed font-serif"
-                value={objective}
-                onChange={setObjective}
-                minRows={2}
-                maxRows={4}
-                autoFocus
-                voice={{ mode: "replace" }}
-                onVoiceTranscript={setObjective}
-                textProcessor={(text, mode) =>
-                  processText(text, mode, mode === "clean" ? "objective" : undefined)
-                }
-              />
-
               {/* Website URL input */}
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
