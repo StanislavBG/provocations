@@ -16,7 +16,7 @@ import type { ProvocationType, TemplateId } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Identifiers for left-panel (toolbox) tabs */
-export type LeftPanelTabId = "provoke" | "website" | "context" | "analyzer" | "model-config";
+export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config";
 
 /** Configuration for a single left-panel tab */
 export interface LeftPanelTabConfig {
@@ -158,25 +158,9 @@ const TAB_CONTEXT: LeftPanelTabConfig = {
   description: "View collected reference materials, templates, and supporting context",
 };
 
-const TAB_ANALYZER: LeftPanelTabConfig = {
-  id: "analyzer",
-  label: "Analyzer",
-  description: "SQL query decomposition, optimization, and metrics extraction",
-};
-
 const RIGHT_DISCUSSION: RightPanelTabConfig = {
   id: "discussion",
   label: "Discussion",
-};
-
-const RIGHT_METRICS: RightPanelTabConfig = {
-  id: "metrics",
-  label: "Metrics",
-};
-
-const RIGHT_DISCOVERIES: RightPanelTabConfig = {
-  id: "discoveries",
-  label: "Discoveries",
 };
 
 const TAB_MODEL_CONFIG: LeftPanelTabConfig = {
@@ -234,31 +218,6 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "AI prompt",
       feedbackTone: "direct and clarity-focused",
-    },
-  },
-
-  "query-editor": {
-    workspaceLayout: "standard",
-    defaultToolboxTab: "analyzer",
-    autoStartInterview: true,
-    autoStartPersonas: ["thinking_bigger" as ProvocationType],
-
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "paste", label: "Paste Query", description: "Paste your SQL and provide schema context" },
-      { id: "analyze", label: "Analyze", description: "Decompose and understand query structure" },
-      { id: "optimize", label: "Optimize", description: "Improve performance, readability, and correctness" },
-    ],
-
-    leftPanelTabs: [TAB_ANALYZER, TAB_PROVOKE, TAB_CONTEXT],
-
-    rightPanelTabs: [RIGHT_DISCOVERIES, RIGHT_DISCUSSION, RIGHT_METRICS],
-
-    writer: {
-      mode: "analyze",
-      outputFormat: "sql",
-      documentType: "SQL query",
-      feedbackTone: "constructive and non-judgmental",
     },
   },
 

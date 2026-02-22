@@ -274,24 +274,33 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                   const Icon = template.icon;
                   const isActive = activePrebuilt?.id === template.id;
                   const isComingSoon = !!template.comingSoon;
+                  const isExternal = !!template.externalUrl;
 
                   return (
                     <button
                       key={template.id}
-                      onClick={() => !isComingSoon && handleSelectPrebuilt(template)}
+                      onClick={() => {
+                        if (isComingSoon) return;
+                        if (isExternal) {
+                          window.open(template.externalUrl, "_blank", "noopener,noreferrer");
+                          return;
+                        }
+                        handleSelectPrebuilt(template);
+                      }}
                       disabled={isComingSoon}
                       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
                         isComingSoon
                           ? "opacity-50 cursor-default border-border"
-                          : isActive
+                          : isActive && !isExternal
                             ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
                             : "border-border hover:border-primary/40 hover:bg-primary/5"
                       }`}
                     >
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive && !isExternal ? "text-primary" : "text-muted-foreground"}`} />
                       <span>{template.title}</span>
                       {isComingSoon && <span className="text-[10px] uppercase tracking-wider text-primary/70 font-semibold ml-1">Soon</span>}
-                      {isActive && !isComingSoon && <Check className="w-3 h-3 text-primary" />}
+                      {isExternal && !isComingSoon && <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-semibold ml-1">External</span>}
+                      {isActive && !isComingSoon && !isExternal && <Check className="w-3 h-3 text-primary" />}
                     </button>
                   );
                 })}

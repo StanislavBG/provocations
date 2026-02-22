@@ -101,11 +101,21 @@ function AppTile({
 }) {
   const Icon = template.icon;
   const isComingSoon = !!template.comingSoon;
+  const isExternal = !!template.externalUrl;
+
+  const handleClick = () => {
+    if (isComingSoon) return;
+    if (isExternal) {
+      window.open(template.externalUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    onSelect(template);
+  };
 
   return (
     <button
       type="button"
-      onClick={() => !isComingSoon && onSelect(template)}
+      onClick={handleClick}
       disabled={isComingSoon}
       className={cn(
         "relative flex flex-col text-left w-full h-full",
@@ -122,6 +132,12 @@ function AppTile({
       {isComingSoon && (
         <span className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-primary/15 text-primary border border-primary/20">
           Coming Soon
+        </span>
+      )}
+      {/* External link badge */}
+      {isExternal && !isComingSoon && (
+        <span className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+          External App
         </span>
       )}
 
