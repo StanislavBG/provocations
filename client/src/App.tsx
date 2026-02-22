@@ -16,6 +16,7 @@ import { LogIn, Sparkles } from "lucide-react";
 import Workspace from "@/pages/Workspace";
 import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
+import { ErrorConsole } from "@/components/ErrorConsole";
 
 function Router() {
   return (
@@ -59,6 +60,7 @@ function App() {
           </SignedOut>
           <SignedIn>
             <Router />
+            <ErrorConsole />
           </SignedIn>
         </ClerkLoaded>
       </TooltipProvider>

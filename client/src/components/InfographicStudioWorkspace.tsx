@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { errorLogStore } from "@/lib/errorLog";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -271,7 +272,9 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
       toast({ title: "Summary Generated", description: "Your text has been expanded into an infographic-ready summary." });
     },
     onError: (error) => {
-      toast({ title: "Summary Failed", description: error instanceof Error ? error.message : "Something went wrong", variant: "destructive" });
+      const msg = error instanceof Error ? error.message : "Something went wrong";
+      errorLogStore.push({ step: "Generate Summary", endpoint: "/api/summarize-intent", message: msg });
+      toast({ title: "Summary Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -299,10 +302,12 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
           ),
         );
       } catch (error) {
+        const msg = error instanceof Error ? error.message : "Generation failed";
+        errorLogStore.push({ step: `Generate Image (${variant.label})`, endpoint: "/api/generate-image", message: msg });
         setVariants((prev) =>
           prev.map((v) =>
             v.id === variantId
-              ? { ...v, error: error instanceof Error ? error.message : "Generation failed", isGenerating: false }
+              ? { ...v, error: msg, isGenerating: false }
               : v,
           ),
         );
