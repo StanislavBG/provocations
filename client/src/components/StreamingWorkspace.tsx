@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { errorLogStore } from "@/lib/errorLog";
 import { generateId } from "@/lib/utils";
 import { ReadingPane } from "./ReadingPane";
 import { StreamingDialogue } from "./StreamingDialogue";
@@ -134,11 +135,9 @@ export function StreamingWorkspace({
       }
     },
     onError: (error) => {
-      toast({
-        title: "Question Error",
-        description: error instanceof Error ? error.message : "Failed to generate question",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Failed to generate question";
+      errorLogStore.push({ step: "Streaming Question", endpoint: "/api/streaming/question", message: msg });
+      toast({ title: "Question Error", description: msg, variant: "destructive" });
     },
   });
 
@@ -159,11 +158,9 @@ export function StreamingWorkspace({
       setIsDialogueActive(true);
     },
     onError: (error) => {
-      toast({
-        title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Failed to analyze website",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Failed to analyze website";
+      errorLogStore.push({ step: "Wireframe Analysis", endpoint: "/api/streaming/wireframe-analysis", message: msg });
+      toast({ title: "Analysis Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -211,11 +208,9 @@ export function StreamingWorkspace({
       });
     },
     onError: (error) => {
-      toast({
-        title: "Refinement Failed",
-        description: error instanceof Error ? error.message : "Failed to refine",
-        variant: "destructive",
-      });
+      const msg = error instanceof Error ? error.message : "Failed to refine";
+      errorLogStore.push({ step: "Refine Requirements", endpoint: "/api/streaming/refine", message: msg });
+      toast({ title: "Refinement Failed", description: msg, variant: "destructive" });
     },
   });
 
