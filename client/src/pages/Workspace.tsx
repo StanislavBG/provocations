@@ -325,6 +325,11 @@ export default function Workspace() {
     clearLaunchParams();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Track page view on mount ──
+  useEffect(() => {
+    trackEvent("page_view", { appSection: "workspace" });
+  }, []);
+
   // ── Query tab state ──
 
   interface TabState {

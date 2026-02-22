@@ -674,6 +674,7 @@ export const trackingEventType = [
   "write_executed",    // Write/edit instruction executed
   "discussion_asked",  // User asked a question in discussion
   "phase_changed",     // Workspace phase changed (input → workspace)
+  "login",             // User signed in / loaded the app
 ] as const;
 
 export type TrackingEventType = typeof trackingEventType[number];
@@ -741,6 +742,7 @@ export interface UserMetricsMatrix {
     userId: string;
     email: string;
     displayName: string;
+    lastSeenAt: string | null;
     metrics: Record<string, number>;
   }[];
 }

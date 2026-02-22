@@ -1547,15 +1547,20 @@ Output only valid JSON, no markdown.`;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
       if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
 
-      // Fetch metrics and ALL known user IDs in parallel
-      const [allMetrics, allKnownUserIds] = await Promise.all([
+      // Fetch metrics, known user IDs, and activity stats in parallel
+      const [allMetrics, allKnownUserIds, activityStats] = await Promise.all([
         storage.getAllUsageMetrics(),
         storage.getAllKnownUserIds(),
+        storage.getUserActivityStats(),
       ]);
+
+      // Build a quick lookup for activity stats by userId
+      const activityByUser = new Map(activityStats.map((a) => [a.userId, a]));
 
       // Merge: users from metrics table + users from other tables (docs, tracking, etc.)
       const userIdSet = new Set(allKnownUserIds);
       allMetrics.forEach((m) => userIdSet.add(m.userId));
+      activityStats.forEach((a) => userIdSet.add(a.userId));
       const userIds = Array.from(userIdSet);
 
       // Resolve user info from Clerk
@@ -1575,7 +1580,10 @@ Output only valid JSON, no markdown.`;
       }
 
       // Collect all metric keys — sorted by importance
+      // Prepend activity-derived keys (logins, page views) before usage metrics
       const METRIC_ORDER = [
+        "logins",
+        "page_views",
         "time_saved_minutes",
         "author_words",
         "documents_saved",
@@ -1583,9 +1591,12 @@ Output only valid JSON, no markdown.`;
         "total_words_produced",
       ];
       const allKeys = Array.from(new Set(allMetrics.map((m) => m.metricKey)));
+      // Always include activity keys even if no usage metrics row exists for them
+      const activityKeys = ["logins", "page_views"];
+      const combinedKeys = new Set([...activityKeys, ...allKeys]);
       const sortedKeys = [
-        ...METRIC_ORDER.filter((k) => allKeys.includes(k)),
-        ...allKeys.filter((k) => !METRIC_ORDER.includes(k)).sort(),
+        ...METRIC_ORDER.filter((k) => combinedKeys.has(k)),
+        ...Array.from(combinedKeys).filter((k) => !METRIC_ORDER.includes(k)).sort(),
       ];
 
       // Build per-user rows — includes users with zero metrics
@@ -1595,10 +1606,17 @@ Output only valid JSON, no markdown.`;
         for (const m of userMetrics) {
           metrics[m.metricKey] = m.metricValue;
         }
+        // Merge login/page-view counts from activity stats
+        const activity = activityByUser.get(uid);
+        if (activity) {
+          metrics["logins"] = activity.loginCount;
+          metrics["page_views"] = activity.pageViewCount;
+        }
         return {
           userId: uid,
           email: userInfoMap[uid]?.email || "unknown",
           displayName: userInfoMap[uid]?.displayName || uid,
+          lastSeenAt: activity?.lastSeenAt ?? null,
           metrics,
         };
       });
