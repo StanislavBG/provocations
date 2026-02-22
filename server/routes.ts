@@ -1250,8 +1250,14 @@ Output only valid JSON, no markdown.`;
         return res.status(403).json({ error: "Admin access required" });
       }
 
-      const overrides = await storage.getAllAgentPromptOverrides();
-      const overrideMap = new Map(overrides.map((o) => [o.taskType, o]));
+      // Fetch DB overrides — gracefully degrade if table doesn't exist yet
+      let overrideMap = new Map<string, { systemPrompt: string; humanCurated: boolean; curatedBy: string | null; curatedAt: Date | null }>();
+      try {
+        const overrides = await storage.getAllAgentPromptOverrides();
+        overrideMap = new Map(overrides.map((o) => [o.taskType, o]));
+      } catch (dbError) {
+        console.warn("agent_prompt_overrides table may not exist yet — returning code defaults only:", dbError);
+      }
 
       const prompts = TASK_TYPES.map((taskType) => {
         const base = BASE_PROMPTS[taskType];
