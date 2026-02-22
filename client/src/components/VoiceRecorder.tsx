@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Square } from "lucide-react";
+import { Mic, MicOff, Square, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useWhisperRecorder } from "@/hooks/use-whisper";
 
 interface VoiceRecorderProps {
   onTranscript: (text: string) => void;
@@ -15,35 +16,6 @@ interface VoiceRecorderProps {
   autoStart?: boolean;
 }
 
-interface SpeechRecognitionEvent {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent {
-  error: string;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
-  }
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  onstart: (() => void) | null;
-}
-
 export function VoiceRecorder({
   onTranscript,
   onInterimTranscript,
@@ -55,144 +27,36 @@ export function VoiceRecorder({
   autoStart,
 }: VoiceRecorderProps) {
   const { toast } = useToast();
-  const [isRecording, setIsRecording] = useState(false);
-  const [isSupported, setIsSupported] = useState(true);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const transcriptRef = useRef("");
-  const isRecordingRef = useRef(false);
 
-  // Store callbacks in refs to avoid re-initializing recognition
-  const onTranscriptRef = useRef(onTranscript);
-  const onInterimTranscriptRef = useRef(onInterimTranscript);
-  const onRecordingChangeRef = useRef(onRecordingChange);
-
-  // Keep refs in sync with props
-  useEffect(() => {
-    onTranscriptRef.current = onTranscript;
-  }, [onTranscript]);
-
-  useEffect(() => {
-    onInterimTranscriptRef.current = onInterimTranscript;
-  }, [onInterimTranscript]);
-
-  useEffect(() => {
-    onRecordingChangeRef.current = onRecordingChange;
-  }, [onRecordingChange]);
-
-  // Initialize speech recognition only once
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setIsSupported(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = "";
-      let interimTranscript = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript;
-        } else {
-          interimTranscript += result[0].transcript;
-        }
-      }
-
-      if (finalTranscript) {
-        transcriptRef.current += finalTranscript + " ";
-      }
-
-      // Send real-time transcript updates (final + interim)
-      const fullTranscript = transcriptRef.current + interimTranscript;
-      if (fullTranscript && onInterimTranscriptRef.current) {
-        onInterimTranscriptRef.current(fullTranscript);
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error("Speech recognition error:", event.error);
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      onRecordingChangeRef.current?.(false);
-      if (event.error === 'not-allowed') {
+  const {
+    isRecording,
+    isSupported,
+    isTranscribing,
+    startRecording,
+    stopRecording,
+    toggleRecording,
+  } = useWhisperRecorder({
+    onTranscript: (text) => {
+      onTranscript(text);
+    },
+    onInterimTranscript,
+    onRecordingChange: (recording) => {
+      onRecordingChange?.(recording);
+      if (!recording && !isSupported) {
         toast({
           title: "Microphone Access Required",
           description: "Please allow microphone access in your browser to use voice input.",
           variant: "destructive",
         });
-      } else if (event.error === 'no-speech') {
-        toast({
-          title: "No Speech Detected",
-          description: "Please speak into your microphone and try again.",
-        });
-      } else if (event.error !== 'aborted') {
-        toast({
-          title: "Voice Recording Error",
-          description: "Speech recognition failed. Please try again.",
-          variant: "destructive",
-        });
       }
-    };
-
-    recognition.onend = () => {
-      if (transcriptRef.current.trim()) {
-        onTranscriptRef.current(transcriptRef.current.trim());
-      }
-      transcriptRef.current = "";
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      onRecordingChangeRef.current?.(false);
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      recognition.abort();
-    };
-  }, [toast]); // Only toast is needed - callbacks use refs
-
-  const startRecording = useCallback(() => {
-    if (!recognitionRef.current || isRecordingRef.current) return;
-    transcriptRef.current = "";
-    try {
-      recognitionRef.current.start();
-      isRecordingRef.current = true;
-      setIsRecording(true);
-      onRecordingChangeRef.current?.(true);
-    } catch (error) {
-      console.error("Failed to start recording:", error);
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      onRecordingChangeRef.current?.(false);
-    }
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    if (!recognitionRef.current || !isRecordingRef.current) return;
-    recognitionRef.current.stop();
-  }, []);
-
-  const toggleRecording = useCallback(() => {
-    if (isRecordingRef.current) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  }, [startRecording, stopRecording]);
+    },
+  });
 
   // Auto-start recording when requested
   const autoStartedRef = useRef(false);
   useEffect(() => {
-    if (autoStart && !autoStartedRef.current && recognitionRef.current) {
+    if (autoStart && !autoStartedRef.current && isSupported) {
       autoStartedRef.current = true;
-      // Small delay to let the DOM settle after mount
       const timer = setTimeout(() => {
         startRecording();
       }, 300);
@@ -201,7 +65,7 @@ export function VoiceRecorder({
     if (!autoStart) {
       autoStartedRef.current = false;
     }
-  }, [autoStart, startRecording]);
+  }, [autoStart, startRecording, isSupported]);
 
   if (!isSupported) {
     return (
@@ -224,119 +88,50 @@ export function VoiceRecorder({
       size={size}
       variant={isRecording ? "destructive" : variant}
       onClick={toggleRecording}
-      title={isRecording ? "Stop recording" : "Start voice recording"}
+      disabled={isTranscribing}
+      title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Start voice recording"}
       className={`${className} ${isRecording ? "animate-pulse" : ""}`}
     >
-      {isRecording ? (
+      {isTranscribing ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : isRecording ? (
         <Square className="w-4 h-4" />
       ) : (
         <Mic className="w-4 h-4" />
       )}
-      {label && <span>{isRecording ? "Stop" : label}</span>}
+      {label && <span>{isTranscribing ? "..." : isRecording ? "Stop" : label}</span>}
     </Button>
   );
 }
 
 export function LargeVoiceRecorder({
   onTranscript,
-  isRecording,
+  isRecording: externalIsRecording,
   onToggleRecording
 }: {
   onTranscript: (text: string) => void;
   isRecording: boolean;
   onToggleRecording: () => void;
 }) {
-  const { toast } = useToast();
-  const [isSupported, setIsSupported] = useState(true);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const transcriptRef = useRef("");
-  const isActiveRef = useRef(false);
+  const {
+    isSupported,
+    isTranscribing,
+    startRecording,
+    stopRecording,
+  } = useWhisperRecorder({
+    onTranscript,
+  });
 
-  // Store callback in ref to avoid re-initializing recognition
-  const onTranscriptRef = useRef(onTranscript);
+  // Sync external recording state
+  const prevRecordingRef = useRef(false);
   useEffect(() => {
-    onTranscriptRef.current = onTranscript;
-  }, [onTranscript]);
-
-  // Initialize speech recognition only once
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setIsSupported(false);
-      return;
+    if (externalIsRecording && !prevRecordingRef.current) {
+      startRecording();
+    } else if (!externalIsRecording && prevRecordingRef.current) {
+      stopRecording();
     }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onstart = () => {
-      isActiveRef.current = true;
-    };
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript;
-        }
-      }
-
-      if (finalTranscript) {
-        transcriptRef.current += finalTranscript + " ";
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error("Speech recognition error:", event.error);
-      isActiveRef.current = false;
-      if (event.error === 'not-allowed') {
-        toast({
-          title: "Microphone Access Required",
-          description: "Please allow microphone access in your browser to use voice input.",
-          variant: "destructive",
-        });
-      } else if (event.error === 'no-speech') {
-        toast({
-          title: "No Speech Detected",
-          description: "Please speak into your microphone and try again.",
-        });
-      }
-    };
-
-    recognition.onend = () => {
-      isActiveRef.current = false;
-      if (transcriptRef.current.trim()) {
-        onTranscriptRef.current(transcriptRef.current.trim());
-      }
-      transcriptRef.current = "";
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      recognition.abort();
-    };
-  }, [toast]);
-
-  // Handle external isRecording state changes
-  useEffect(() => {
-    if (!recognitionRef.current) return;
-
-    if (isRecording && !isActiveRef.current) {
-      transcriptRef.current = "";
-      try {
-        recognitionRef.current.start();
-      } catch (error) {
-        console.error("Failed to start recording:", error);
-      }
-    } else if (!isRecording && isActiveRef.current) {
-      recognitionRef.current.stop();
-    }
-  }, [isRecording]);
+    prevRecordingRef.current = externalIsRecording;
+  }, [externalIsRecording, startRecording, stopRecording]);
 
   if (!isSupported) {
     return (
@@ -357,22 +152,29 @@ export function LargeVoiceRecorder({
       <button
         data-testid="button-large-voice-record"
         onClick={onToggleRecording}
+        disabled={isTranscribing}
         className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-300 ${
-          isRecording 
-            ? "bg-destructive animate-pulse shadow-lg shadow-destructive/50" 
-            : "bg-primary hover-elevate"
+          isTranscribing
+            ? "bg-muted"
+            : externalIsRecording
+              ? "bg-destructive animate-pulse shadow-lg shadow-destructive/50"
+              : "bg-primary hover-elevate"
         }`}
       >
-        {isRecording ? (
+        {isTranscribing ? (
+          <Loader2 className="w-12 h-12 text-muted-foreground animate-spin" />
+        ) : externalIsRecording ? (
           <Square className="w-12 h-12 text-destructive-foreground" />
         ) : (
           <Mic className="w-12 h-12 text-primary-foreground" />
         )}
       </button>
       <p className="text-muted-foreground text-center text-lg">
-        {isRecording 
-          ? "Listening... Click to stop and process your draft" 
-          : "Click the microphone to start speaking your first draft"
+        {isTranscribing
+          ? "Transcribing your audio..."
+          : externalIsRecording
+            ? "Listening... Click to stop and process your draft"
+            : "Click the microphone to start speaking your first draft"
         }
       </p>
     </div>
