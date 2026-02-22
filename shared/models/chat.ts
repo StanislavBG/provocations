@@ -16,6 +16,8 @@ export const folders = pgTable("folders", {
   nameSalt: varchar("name_salt", { length: 64 }),
   nameIv: varchar("name_iv", { length: 32 }),
   parentFolderId: integer("parent_folder_id"),
+  // When true, folder cannot be renamed, moved, or deleted (system-managed structure)
+  locked: boolean("locked").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -63,6 +65,9 @@ export const documents = pgTable("documents", {
   folderId: integer("folder_id"),
   // Optional key version for encryption key rotation
   keyVersionId: integer("key_version_id"),
+  // When true, document cannot be renamed, moved, or deleted (system-managed structure).
+  // Content updates are still allowed so admins can edit details.
+  locked: boolean("locked").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

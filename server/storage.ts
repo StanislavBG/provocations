@@ -27,6 +27,7 @@ interface StoredDocument {
   salt: string;
   iv: string;
   folderId: number | null;
+  locked: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +44,7 @@ export interface IStorage {
     salt: string;
     iv: string;
     folderId?: number | null;
+    locked?: boolean;
   }): Promise<{ id: number; createdAt: string }>;
   listDocuments(userId: string, folderId?: number | null): Promise<DocumentListItem[]>;
   getDocument(id: number): Promise<StoredDocument | null>;
@@ -66,12 +68,12 @@ export interface IStorage {
   moveDocument(id: number, folderId: number | null): Promise<{ id: number; updatedAt: string } | null>;
   deleteDocument(id: number): Promise<void>;
   // Folder operations
-  createFolder(userId: string, name: string, parentFolderId?: number | null, encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string }): Promise<FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }>;
+  createFolder(userId: string, name: string, parentFolderId?: number | null, encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string }, locked?: boolean): Promise<FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }>;
   listFolders(userId: string, parentFolderId?: number | null): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null })[]>;
   renameFolder(id: number, name: string, encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string }): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }) | null>;
   moveFolder(id: number, parentFolderId: number | null): Promise<{ id: number; parentFolderId: number | null; updatedAt: string } | null>;
   deleteFolder(id: number): Promise<void>;
-  getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null } | null>;
+  getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null; locked: boolean } | null>;
   // User preferences
   getUserPreferences(userId: string): Promise<{ autoDictate: boolean }>;
   setUserPreferences(userId: string, prefs: { autoDictate: boolean }): Promise<{ autoDictate: boolean }>;
@@ -125,6 +127,7 @@ export class DatabaseStorage implements IStorage {
     salt: string;
     iv: string;
     folderId?: number | null;
+    locked?: boolean;
   }): Promise<{ id: number; createdAt: string }> {
     const [row] = await db
       .insert(documents)
@@ -138,6 +141,7 @@ export class DatabaseStorage implements IStorage {
         salt: data.salt,
         iv: data.iv,
         folderId: data.folderId ?? null,
+        locked: data.locked ?? false,
       })
       .returning({ id: documents.id, createdAt: documents.createdAt });
 
@@ -159,6 +163,7 @@ export class DatabaseStorage implements IStorage {
         titleSalt: documents.titleSalt,
         titleIv: documents.titleIv,
         folderId: documents.folderId,
+        locked: documents.locked,
         createdAt: documents.createdAt,
         updatedAt: documents.updatedAt,
       })
@@ -173,6 +178,7 @@ export class DatabaseStorage implements IStorage {
       titleSalt: r.titleSalt,
       titleIv: r.titleIv,
       folderId: r.folderId,
+      locked: r.locked,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
@@ -198,6 +204,7 @@ export class DatabaseStorage implements IStorage {
       salt: row.salt,
       iv: row.iv,
       folderId: row.folderId,
+      locked: row.locked,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -284,6 +291,7 @@ export class DatabaseStorage implements IStorage {
     name: string,
     parentFolderId?: number | null,
     encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string },
+    locked?: boolean,
   ): Promise<FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }> {
     const [row] = await db
       .insert(folders)
@@ -294,6 +302,7 @@ export class DatabaseStorage implements IStorage {
         nameSalt: encrypted?.nameSalt ?? null,
         nameIv: encrypted?.nameIv ?? null,
         parentFolderId: parentFolderId ?? null,
+        locked: locked ?? false,
       })
       .returning();
 
@@ -304,6 +313,7 @@ export class DatabaseStorage implements IStorage {
       nameSalt: row.nameSalt,
       nameIv: row.nameIv,
       parentFolderId: row.parentFolderId,
+      locked: row.locked,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -329,12 +339,13 @@ export class DatabaseStorage implements IStorage {
       nameSalt: r.nameSalt,
       nameIv: r.nameIv,
       parentFolderId: r.parentFolderId,
+      locked: r.locked,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
   }
 
-  async getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null } | null> {
+  async getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null; locked: boolean } | null> {
     const [row] = await db
       .select()
       .from(folders)
@@ -350,6 +361,7 @@ export class DatabaseStorage implements IStorage {
       nameSalt: row.nameSalt,
       nameIv: row.nameIv,
       parentFolderId: row.parentFolderId,
+      locked: row.locked,
     };
   }
 
@@ -380,6 +392,7 @@ export class DatabaseStorage implements IStorage {
       nameSalt: r.nameSalt,
       nameIv: r.nameIv,
       parentFolderId: r.parentFolderId,
+      locked: r.locked,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     };
@@ -845,6 +858,16 @@ export class DatabaseStorage implements IStorage {
       pageViewCount: Number(r.pageViewCount ?? 0),
       lastSeenAt: r.lastSeenAt ?? null,
     }));
+  }
+
+  /** Set the locked flag on a folder */
+  async setFolderLocked(id: number, locked: boolean): Promise<void> {
+    await db.update(folders).set({ locked, updatedAt: new Date() }).where(eq(folders.id, id));
+  }
+
+  /** Set the locked flag on a document */
+  async setDocumentLocked(id: number, locked: boolean): Promise<void> {
+    await db.update(documents).set({ locked, updatedAt: new Date() }).where(eq(documents.id, id));
   }
 
   /** Collect all distinct user IDs from documents, tracking events, and usage metrics */
