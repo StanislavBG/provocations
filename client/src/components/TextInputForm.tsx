@@ -9,7 +9,6 @@ import {
   PenLine,
   PencilLine,
   Check,
-  ChevronDown,
   Crosshair,
   Radio,
   NotebookPen,
@@ -85,7 +84,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
-  const [cardsExpanded, setCardsExpanded] = useState(false);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
 
   // Storage quick-load state
@@ -185,24 +183,13 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     setIsCustomObjective(false);
     setActiveCategory(template.category);
     onTemplateSelect?.(template.id);
-
-    setCardsExpanded(false);
   };
 
   const handleSelectCustom = () => {
     setActivePrebuilt(null);
     setIsCustomObjective(true);
     onTemplateSelect?.("custom");
-
     setObjective("");
-    setCardsExpanded(false);
-  };
-
-  const handleChangeType = () => {
-    setCardsExpanded(true);
-    requestAnimationFrame(() => {
-      stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
   };
 
   const handleDraftQuestionResponse = (question: string, response: string) => {
@@ -320,96 +307,11 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
         {/* ── STEP ONE: Your objective (template already selected) ── */}
         <div className="shrink-0 space-y-2" ref={stepOneRef}>
-          {/* Hide heading when write-a-prompt is selected (AIM description replaces it below) */}
-          {!(isWritePrompt && !cardsExpanded) && (
+          {/* Heading — hidden for write-a-prompt (AIM description replaces it) */}
+          {!isWritePrompt && (
             <h2 className="text-base font-semibold">
               What do <em>you</em> want to create?
             </h2>
-          )}
-
-          {/* Category tab bar + filtered template chips (expanded change-type mode) */}
-          {cardsExpanded && (
-            <div className="space-y-2">
-              {/* Category tabs */}
-              <div className="flex items-center gap-1 border-b">
-                {TEMPLATE_CATEGORIES.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      activeCategory === cat.id
-                        ? "border-primary text-primary"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                    title={cat.description}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Filtered template chips */}
-              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                {prebuiltTemplates
-                  .filter((t) => t.category === activeCategory)
-                  .map((template) => {
-                    const Icon = template.icon;
-                    const isActive = activePrebuilt?.id === template.id;
-
-                    return (
-                      <button
-                        key={template.id}
-                        onClick={() => handleSelectPrebuilt(template)}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
-                          isActive
-                            ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                            : "border-border hover:border-primary/40 hover:bg-primary/5"
-                        }`}
-                      >
-                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                        <span>{template.title}</span>
-                        {isActive && <Check className="w-3 h-3 text-primary" />}
-                      </button>
-                    );
-                  })}
-
-                {/* "Custom" chip — shown in every category */}
-                <button
-                  onClick={handleSelectCustom}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed text-sm transition-all duration-150 ${
-                    isCustomObjective
-                      ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                      : "border-border hover:border-primary/40 hover:bg-primary/5"
-                  }`}
-                >
-                  <PenLine className={`w-4 h-4 shrink-0 ${isCustomObjective ? "text-primary" : "text-muted-foreground"}`} />
-                  <span>Custom</span>
-                  {isCustomObjective && <Check className="w-3 h-3 text-primary" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Collapsed selection indicator */}
-          {!cardsExpanded && (
-            <button
-              onClick={handleChangeType}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 transition-colors"
-            >
-              {activePrebuilt ? (
-                <>
-                  {(() => { const I = activePrebuilt.icon; return <I className="w-4 h-4 text-primary" />; })()}
-                  <span className="font-medium">{activePrebuilt.title}</span>
-                </>
-              ) : (
-                <>
-                  <PenLine className="w-4 h-4 text-primary" />
-                  <span className="font-medium">Custom</span>
-                  {objective && <span className="text-muted-foreground truncate max-w-[200px]">&mdash; {objective}</span>}
-                </>
-              )}
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
-            </button>
           )}
 
           {/* Objective input — always visible when a template or custom is selected */}
