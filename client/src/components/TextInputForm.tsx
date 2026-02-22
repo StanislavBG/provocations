@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -52,6 +52,8 @@ interface TextInputFormProps {
   onCapturedContextChange: (items: ContextItem[]) => void;
   /** Notifies parent when a template is selected (for StepTracker) */
   onTemplateSelect?: (templateId: string | null) => void;
+  /** Parent-controlled template ID — when set to null the form resets to the carousel */
+  selectedTemplateId?: string | null;
 }
 
 /**
@@ -73,7 +75,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
@@ -85,6 +87,21 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   // Prebuilt template state
   const [activePrebuilt, setActivePrebuilt] = useState<PrebuiltTemplate | null>(null);
   const [isCustomObjective, setIsCustomObjective] = useState(false);
+
+  // Reset internal form state when parent clears the template (e.g. "New" button)
+  useEffect(() => {
+    if (selectedTemplateId === null) {
+      setActivePrebuilt(null);
+      setIsCustomObjective(false);
+      setText("");
+      setObjective("");
+      setSecondaryObjective("");
+      setCaptureUrl("");
+      setYoutubeChannelUrl("");
+      setVoiceTranscript("");
+      setActiveCategory("build");
+    }
+  }, [selectedTemplateId]);
 
   // Storage quick-load state
   const [storageOpen, setStorageOpen] = useState(false);
