@@ -697,8 +697,31 @@ function ResearchTriggerCard() {
   );
 }
 
+/** Format a timestamp as a human-readable relative time string */
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 /** Human-readable labels and descriptions for metric keys */
 const METRIC_META: Record<string, { label: string; description: string; unit?: string }> = {
+  logins: {
+    label: "Logins",
+    description: "Number of times the user signed in or loaded the app",
+  },
+  page_views: {
+    label: "Page Views",
+    description: "Number of workspace page loads (front page visits)",
+  },
   time_saved_minutes: {
     label: "Time Saved",
     description: "Estimated minutes saved through AI collaboration vs. writing from scratch (19 WPM composition speed + reading time)",
@@ -731,6 +754,9 @@ function UserMetricsTable({ data }: { data: UserMetricsMatrix }) {
             <th className="text-left px-4 py-2.5 font-semibold sticky left-0 bg-card z-10 min-w-[180px]">
               User
             </th>
+            <th className="text-right px-3 py-2.5 font-medium whitespace-nowrap" title="Most recent activity timestamp">
+              <span className="cursor-help border-b border-dotted border-muted-foreground/40">Last Seen</span>
+            </th>
             {data.metricKeys.map((key) => {
               const meta = METRIC_META[key];
               return (
@@ -757,6 +783,15 @@ function UserMetricsTable({ data }: { data: UserMetricsMatrix }) {
                 <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
                   {user.email}
                 </div>
+              </td>
+              <td className="text-right px-3 py-2 tabular-nums whitespace-nowrap text-xs">
+                {user.lastSeenAt ? (
+                  <span title={new Date(user.lastSeenAt).toLocaleString()}>
+                    {formatRelativeTime(user.lastSeenAt)}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground/40">—</span>
+                )}
               </td>
               {data.metricKeys.map((key) => {
                 const val = user.metrics[key] ?? 0;
@@ -852,6 +887,7 @@ function PersonaDefinitionList() {
 
 interface AgentPromptInfo {
   taskType: string;
+  group: string;
   description: string;
   currentPrompt: string;
   isOverridden: boolean;
@@ -929,69 +965,91 @@ function AgentPromptList() {
     );
   }
 
+  // Group prompts by their functional category
+  const grouped = prompts.reduce<Record<string, AgentPromptInfo[]>>((acc, p) => {
+    const g = p.group || "Other";
+    (acc[g] ??= []).push(p);
+    return acc;
+  }, {});
+
+  // Stable group ordering
+  const groupOrder = ["Document Writing", "Persona Interactions", "Interview", "Requirements Discovery", "Utilities"];
+  const orderedGroups = groupOrder.filter((g) => grouped[g]?.length);
+
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-muted-foreground mb-4">
-        All LLM task types used across Provocations. Edit the system prompt to customize behavior.
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        All LLM task types used across Provocations, grouped by function. Edit the system prompt to customize behavior.
       </p>
-      {prompts.map((prompt) => {
-        const editUrl = buildAppLaunchUrl({
-          app: "agent-editor",
-          intent: "edit",
-          entityType: "agent-prompt",
-          entityId: prompt.taskType,
-          source: "admin",
-        });
-
+      {orderedGroups.map((groupName) => {
+        const groupPrompts = grouped[groupName];
         return (
-          <div
-            key={prompt.taskType}
-            className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/30 transition-colors"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm font-mono">{prompt.taskType}</span>
-                {prompt.isOverridden && (
-                  <Badge variant="secondary" className="text-[9px]">DB Override</Badge>
-                )}
-                {prompt.humanCurated && (
-                  <Lock className="w-3 h-3 text-amber-600 shrink-0" />
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">{prompt.description}</p>
-              <p className="text-[11px] text-muted-foreground/70 mt-1 font-mono truncate max-w-[500px]">
-                {prompt.currentPrompt.slice(0, 120)}...
-              </p>
+          <div key={groupName} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold">{groupName}</h4>
+              <Badge variant="outline" className="text-[10px]">{groupPrompts.length}</Badge>
             </div>
+            {groupPrompts.map((prompt) => {
+              const editUrl = buildAppLaunchUrl({
+                app: "agent-editor",
+                intent: "edit",
+                entityType: "agent-prompt",
+                entityId: prompt.taskType,
+                source: "admin",
+              });
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <a href={editUrl}>
-                <Button size="sm" variant="outline" className="gap-1 text-xs h-7">
-                  <Pencil className="w-3 h-3" />
-                  Edit
-                </Button>
-              </a>
-              <Button
-                size="sm"
-                variant={prompt.humanCurated ? "default" : "outline"}
-                className={`gap-1 text-xs h-7 ${prompt.humanCurated ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
-                onClick={() => lockMutation.mutate({ taskType: prompt.taskType, humanCurated: !prompt.humanCurated })}
-                disabled={lockMutation.isPending}
-              >
-                {prompt.humanCurated ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-              </Button>
-              {prompt.isOverridden && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1 text-xs h-7 text-muted-foreground"
-                  onClick={() => revertMutation.mutate(prompt.taskType)}
-                  disabled={revertMutation.isPending}
+              return (
+                <div
+                  key={prompt.taskType}
+                  className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/30 transition-colors"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                </Button>
-              )}
-            </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm font-mono">{prompt.taskType}</span>
+                      {prompt.isOverridden && (
+                        <Badge variant="secondary" className="text-[9px]">DB Override</Badge>
+                      )}
+                      {prompt.humanCurated && (
+                        <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{prompt.description}</p>
+                    <p className="text-[11px] text-muted-foreground/70 mt-1 font-mono truncate max-w-[500px]">
+                      {prompt.currentPrompt.slice(0, 120)}...
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <a href={editUrl}>
+                      <Button size="sm" variant="outline" className="gap-1 text-xs h-7">
+                        <Pencil className="w-3 h-3" />
+                        Edit
+                      </Button>
+                    </a>
+                    <Button
+                      size="sm"
+                      variant={prompt.humanCurated ? "default" : "outline"}
+                      className={`gap-1 text-xs h-7 ${prompt.humanCurated ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
+                      onClick={() => lockMutation.mutate({ taskType: prompt.taskType, humanCurated: !prompt.humanCurated })}
+                      disabled={lockMutation.isPending}
+                    >
+                      {prompt.humanCurated ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                    </Button>
+                    {prompt.isOverridden && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1 text-xs h-7 text-muted-foreground"
+                        onClick={() => revertMutation.mutate(prompt.taskType)}
+                        disabled={revertMutation.isPending}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       })}

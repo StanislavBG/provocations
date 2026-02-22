@@ -59,56 +59,69 @@ export type TaskType = (typeof TASK_TYPES)[number];
 // Admin can override these via the agent_prompt_overrides table.
 // ---------------------------------------------------------------------------
 
-export const BASE_PROMPTS: Record<TaskType, { description: string; basePrompt: string }> = {
+export const BASE_PROMPTS: Record<TaskType, { description: string; basePrompt: string; group: string }> = {
   write: {
+    group: "Document Writing",
     description: "Iteratively evolve a markdown document through user instructions",
     basePrompt: "You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.",
   },
   "query-write": {
+    group: "Document Writing",
     description: "Edit and format SQL queries with precise transformations",
     basePrompt: "You are an expert SQL query writer, formatter, and editor.\n\nABSOLUTE RULES:\n1. Output MUST be valid SQL only\n2. NO code fences, markdown, text, or explanations\n3. Proper indentation and consistent SQL keyword casing\n4. Each major clause on its own line\n5. Preserve comments\n6. Apply changes precisely\n7. Maintain semantic equivalence unless logic change requested",
   },
   challenge: {
+    group: "Persona Interactions",
     description: "Generate thought-provoking challenges from expert personas",
     basePrompt: "You are a critical thinking partner. Your job is to generate thought-provoking challenges from multiple expert perspectives.",
   },
   advice: {
+    group: "Persona Interactions",
     description: "Provide concrete, actionable expert advice for a specific challenge",
     basePrompt: "ADVICE RULES:\n1. Start from the provocation — don't repeat it\n2. Reference the current document\n3. Serve the objective\n4. Build on discussion history if present\n5. Be concrete with actionable steps\n6. Speak from your persona expertise",
   },
   "interview-question": {
+    group: "Interview",
     description: "Generate thought-provoking interview questions for requirement gathering",
     basePrompt: "You are a thought-provoking interviewer helping develop a document.",
   },
   "interview-summary": {
+    group: "Interview",
     description: "Synthesize interview Q&A into structured editing instructions",
     basePrompt: "You are an expert at synthesizing interview responses into clear editing instructions.\n\nGroup related answers by theme. Specify where to add/modify content. Include all key points.\nBe a directive to an editor. Output is valid Markdown.\nOutput only the instruction text, no meta-commentary.",
   },
   "discussion-ask": {
+    group: "Persona Interactions",
     description: "Multi-perspective expert responses to user questions",
     basePrompt: "You are a panel of expert advisors responding to the user's question.",
   },
   "summarize-intent": {
+    group: "Utilities",
     description: "Clean voice transcripts and summarize text content",
     basePrompt: "You are an expert editor. Fix grammar/spelling, clean speech artifacts, improve clarity, organize into paragraphs. Keep same approximate length.",
   },
   "extract-metrics": {
+    group: "Utilities",
     description: "Extract metrics, KPIs, and aggregations from SQL or prose",
     basePrompt: "You are a senior data analyst. Extract metrics and KPIs from SQL or prose.\nLook for: Aggregations, calculated fields, ratios, window functions, CASE expressions, column aliases.",
   },
   "analyze-query": {
+    group: "Utilities",
     description: "Comprehensive SQL query analysis across multiple dimensions",
     basePrompt: "You are a Senior SQL Architect and QA SQL Engineer.\n\nAnalyze the SQL query across these dimensions:\n1. Correctness & Logic\n2. Performance & Efficiency\n3. Readability & Maintainability\n4. Best Practices & Standards\n5. Security & Safety\n6. Portability & Compatibility",
   },
   "streaming-question": {
+    group: "Requirements Discovery",
     description: "Iteratively discover requirements through guided dialogue",
     basePrompt: "You are a requirements discovery agent.",
   },
   "wireframe-analysis": {
+    group: "Requirements Discovery",
     description: "Analyze website structure, components, and content from wireframes",
     basePrompt: "You are a website/application analysis expert.\n\nPerform:\n1. STRUCTURAL ANALYSIS: UI components, navigation, page structure\n2. CONTENT DISCOVERY: Site map, video, audio, RSS, images, primary content",
   },
   "streaming-refine": {
+    group: "Requirements Discovery",
     description: "Extract clear, implementable requirements from dialogue",
     basePrompt: "You are an expert requirements writer.\n\nGiven dialogue, extract clear, implementable requirements.\nEach requirement specific enough to implement without ambiguity.",
   },
