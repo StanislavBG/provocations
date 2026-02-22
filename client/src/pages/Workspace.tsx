@@ -74,6 +74,10 @@ import {
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
 import { serializePersonaToMarkdown, buildPersonaEditObjective } from "@/lib/personaSerializer";
+import { createAdminPromptEditorState } from "@/lib/agentSerializer";
+import StepBuilder from "@/components/StepBuilder";
+import StepEditor from "@/components/StepEditor";
+import AgentRunner from "@/components/AgentRunner";
 import type {
   Document,
   ProvocationType,
@@ -90,6 +94,7 @@ import type {
   DiscussionMessage,
   AskQuestionResponse,
   Advice,
+  AgentStep,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -144,6 +149,13 @@ export default function Workspace() {
 
   // Model configuration state — used by text-to-infographic
   const [modelConfig, setModelConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
+
+  // Agent editor state
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  const [agentPersona, setAgentPersona] = useState("");
+  const [agentName, setAgentName] = useState("");
+  const [agentDescription, setAgentDescription] = useState("");
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
   // Mobile workspace tab — controls which panel is visible on mobile
   type MobileTab = "document" | "toolbox" | "discussion";
@@ -254,6 +266,41 @@ export default function Workspace() {
           description: `${persona.domain} domain persona loaded from admin`,
         });
       }
+    }
+
+    // Handle agent-prompt edit intent (admin editing LLM task type system prompts)
+    if (params.intent === "edit" && params.entityType === "agent-prompt" && params.entityId) {
+      const taskType = params.entityId;
+      // Fetch the current prompt for this task type from the admin endpoint
+      apiRequest("GET", "/api/admin/agent-prompts")
+        .then((res) => res.json())
+        .then((data: { taskType: string; description: string; currentPrompt: string; hasOverride: boolean }[]) => {
+          const entry = data.find((p: { taskType: string }) => p.taskType === taskType);
+          if (entry) {
+            const state = createAdminPromptEditorState(taskType, entry.description, entry.currentPrompt);
+            setAgentSteps(state.steps);
+            setAgentName(state.name);
+            setAgentDescription(state.description);
+            setAgentPersona(state.persona);
+            setSelectedStepId(state.steps[0]?.id ?? null);
+            setObjective(
+              `Edit the system prompt for the "${entry.description}" LLM task type. ` +
+              `Changes will be saved as admin overrides.`,
+            );
+            setIsObjectiveCollapsed(false);
+            toast({
+              title: `Editing: ${entry.description}`,
+              description: `System prompt loaded for "${taskType}" task type`,
+            });
+          }
+        })
+        .catch(() => {
+          toast({
+            title: "Failed to load prompt",
+            description: `Could not fetch system prompt for task type "${taskType}"`,
+            variant: "destructive",
+          });
+        });
     }
 
     clearLaunchParams();
@@ -1774,6 +1821,18 @@ RULES:
       modelConfig={modelConfig}
       onModelConfigChange={setModelConfig}
       provokeMode={selectedTemplateId === "text-to-infographic" ? "suggest" : "challenge"}
+      customTabContent={selectedTemplateId === "agent-editor" ? {
+        steps: (
+          <StepBuilder
+            steps={agentSteps}
+            onStepsChange={setAgentSteps}
+            selectedStepId={selectedStepId}
+            onSelectStep={setSelectedStepId}
+            persona={agentPersona}
+            agentName={agentName}
+          />
+        ),
+      } : undefined}
     />
   );
 
@@ -1797,7 +1856,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "metrics" ? BarChart3 : tab.id === "image-preview" ? ImageIcon : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "metrics" ? BarChart3 : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : Zap;
           return (
             <button
               key={tab.id}
@@ -1872,6 +1931,11 @@ RULES:
           documentText={document.rawText}
           onCaptureAsContext={handleCaptureMetrics}
         />
+      ) : rightPanelMode === "execution" ? (
+        <AgentRunner
+          steps={agentSteps}
+          persona={agentPersona}
+        />
       ) : (
         <QueryDiscoveriesPanel
           analysis={queryAnalysis}
@@ -1922,7 +1986,25 @@ RULES:
         />
       )}
 
-      {showDiffView && previousVersion && currentVersion ? (
+      {selectedTemplateId === "agent-editor" ? (
+        <div className="h-full overflow-y-auto">
+          <StepEditor
+            step={agentSteps.find((s) => s.id === selectedStepId) ?? null}
+            allSteps={agentSteps}
+            onStepChange={(updated) => {
+              setAgentSteps((prev) =>
+                prev.map((s) => (s.id === updated.id ? updated : s)),
+              );
+            }}
+            agentName={agentName}
+            onAgentNameChange={setAgentName}
+            agentDescription={agentDescription}
+            onAgentDescriptionChange={setAgentDescription}
+            persona={agentPersona}
+            onPersonaChange={setAgentPersona}
+          />
+        </div>
+      ) : showDiffView && previousVersion && currentVersion ? (
         <Suspense fallback={
           <div className="h-full flex flex-col p-4 space-y-4">
             <Skeleton className="h-8 w-48" />
