@@ -18,6 +18,7 @@ import { ImagePreviewPanel } from "@/components/ImagePreviewPanel";
 import { DEFAULT_MODEL_CONFIG, type ModelConfig } from "@/components/ModelConfigPanel";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
 import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
+import { InfographicStudioWorkspace } from "@/components/InfographicStudioWorkspace";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -1728,6 +1729,25 @@ RULES:
     </>
   ) : null;
 
+  // Infographic studio content — 3-panel pipeline (raw text | summary | gallery)
+  const isInfographicStudio = !isInputPhase && appFlowConfig.workspaceLayout === "infographic-studio";
+  const infographicStudioContent = isInfographicStudio ? (
+    <>
+      <InfographicStudioWorkspace
+        rawText={document.rawText}
+        onRawTextChange={(text) => setDocument({ ...document, rawText: text })}
+        objective={objective}
+      />
+
+      <StepTracker
+        currentPhase="edit"
+        selectedTemplate={selectedTemplateName}
+        appFlowSteps={appFlowConfig.flowSteps}
+        appLeftPanelTabs={appFlowConfig.leftPanelTabs}
+      />
+    </>
+  ) : null;
+
   // ── Panel contents (shared between mobile and desktop layouts) ──
 
   const toolboxPanel = (
@@ -1966,7 +1986,7 @@ RULES:
 
   // ── Unified Layout — persistent sidebar + global bar ──
 
-  const isStandardWorkspace = !isInputPhase && !isVoiceCapture;
+  const isStandardWorkspace = !isInputPhase && !isVoiceCapture && !isInfographicStudio;
 
   return (
     <div className="h-screen flex flex-col">
@@ -2172,6 +2192,7 @@ RULES:
       {/* ── Phase-specific content ── */}
       {inputPhaseContent}
       {voiceCaptureContent}
+      {infographicStudioContent}
 
       {/* ── Standard workspace content ── */}
       {isStandardWorkspace && (
