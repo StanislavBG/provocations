@@ -1702,12 +1702,14 @@ Output only valid JSON, no markdown.`;
 
   /**
    * Find an existing folder by decrypting names and matching, or create a new one.
+   * When locked=true, the folder is system-managed and cannot be renamed/moved/deleted.
    */
   async function findOrCreateFolder(
     userId: string,
     folderName: string,
     parentFolderId: number | null,
     encryptionKey: string,
+    locked = false,
   ): Promise<number> {
     const existing = await storage.listFolders(userId, parentFolderId);
     for (const f of existing) {
@@ -1717,7 +1719,13 @@ Output only valid JSON, no markdown.`;
           name = decrypt({ ciphertext: f.nameCiphertext, salt: f.nameSalt, iv: f.nameIv }, encryptionKey);
         } catch { /* fall through to legacy name */ }
       }
-      if (name === folderName) return f.id;
+      if (name === folderName) {
+        // Ensure existing folder has correct locked state
+        if (locked && !f.locked) {
+          await storage.setFolderLocked(f.id, true);
+        }
+        return f.id;
+      }
     }
     // Create the folder
     const encryptedName = encrypt(folderName, encryptionKey);
@@ -1726,6 +1734,7 @@ Output only valid JSON, no markdown.`;
       "[encrypted]",
       parentFolderId,
       { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
+      locked,
     );
     return folder.id;
   }
@@ -1742,9 +1751,9 @@ Output only valid JSON, no markdown.`;
       const key = getEncryptionKey();
       const appsDir = path.resolve(process.cwd(), "apps");
 
-      // Build folder hierarchy: Applications → Provocations
-      const applicationsFolderId = await findOrCreateFolder(userId, "Applications", null, key);
-      const provocationsFolderId = await findOrCreateFolder(userId, "Provocations", applicationsFolderId, key);
+      // Build folder hierarchy: Applications → Provocations (locked — system-managed structure)
+      const applicationsFolderId = await findOrCreateFolder(userId, "Applications", null, key, true);
+      const provocationsFolderId = await findOrCreateFolder(userId, "Provocations", applicationsFolderId, key, true);
 
       const results: { templateId: string; action: string; docId?: number }[] = [];
 
@@ -1769,8 +1778,8 @@ Output only valid JSON, no markdown.`;
         const appTitle = APP_TITLES[templateId] || templateId;
         const docTitle = `${appTitle} — App Guide`;
 
-        // Find or create the app subfolder under Provocations
-        const appFolderId = await findOrCreateFolder(userId, appTitle, provocationsFolderId, key);
+        // Find or create the app subfolder under Provocations (locked)
+        const appFolderId = await findOrCreateFolder(userId, appTitle, provocationsFolderId, key, true);
 
         // Check if a document already exists in this folder
         const existingDocs = await storage.listDocuments(userId, appFolderId);
@@ -1792,7 +1801,7 @@ Output only valid JSON, no markdown.`;
         const encryptedTitle = encrypt(docTitle, key);
 
         if (existingDocId) {
-          // Update existing document
+          // Update existing document content (locked docs allow content updates)
           await storage.updateDocument(existingDocId, {
             title: "[encrypted]",
             titleCiphertext: encryptedTitle.ciphertext,
@@ -1803,9 +1812,11 @@ Output only valid JSON, no markdown.`;
             iv: encryptedContent.iv,
             folderId: appFolderId,
           });
+          // Ensure locked
+          await storage.setDocumentLocked(existingDocId, true);
           results.push({ templateId, action: "updated", docId: existingDocId });
         } else {
-          // Create new document
+          // Create new locked document
           const doc = await storage.saveDocument({
             userId,
             title: "[encrypted]",
@@ -1816,6 +1827,7 @@ Output only valid JSON, no markdown.`;
             salt: encryptedContent.salt,
             iv: encryptedContent.iv,
             folderId: appFolderId,
+            locked: true,
           });
           results.push({ templateId, action: "created", docId: doc.id });
         }
@@ -1825,6 +1837,160 @@ Output only valid JSON, no markdown.`;
     } catch (error) {
       console.error("Sync app docs error:", error);
       res.status(500).json({ error: "Failed to sync app docs" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ADMIN: SYNC PERSONA DOCS — reads built-in personas and upserts them
+  // as encrypted documents in the admin's folder hierarchy:
+  //   Personas / <Domain> / <Persona Label>
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Map domain → human-readable folder name
+  const DOMAIN_TITLES: Record<string, string> = {
+    root: "Root",
+    business: "Business",
+    technology: "Technology",
+    marketing: "Marketing",
+  };
+
+  /**
+   * Generate a rich markdown document from a persona definition.
+   */
+  function personaToMarkdown(persona: Persona): string {
+    const lines: string[] = [];
+    lines.push(`# ${persona.label}`);
+    lines.push("");
+    lines.push(`**ID:** \`${persona.id}\``);
+    lines.push(`**Domain:** ${persona.domain}`);
+    lines.push(`**Icon:** ${persona.icon}`);
+    lines.push(`**Parent:** ${persona.parentId ?? "none (root)"}`);
+    lines.push(`**Last Researched:** ${persona.lastResearchedAt ?? "never"}`);
+    lines.push(`**Human Curated:** ${persona.humanCurated ? "Yes" : "No"}`);
+    if (persona.curatedBy) lines.push(`**Curated By:** ${persona.curatedBy}`);
+    if (persona.curatedAt) lines.push(`**Curated At:** ${persona.curatedAt}`);
+    lines.push("");
+    lines.push("## Role");
+    lines.push("");
+    lines.push(persona.role);
+    lines.push("");
+    lines.push("## Description");
+    lines.push("");
+    lines.push(persona.description);
+    lines.push("");
+    lines.push("## Color Scheme");
+    lines.push("");
+    lines.push(`- **Text:** \`${persona.color.text}\``);
+    lines.push(`- **Background:** \`${persona.color.bg}\``);
+    lines.push(`- **Accent:** \`${persona.color.accent}\``);
+    lines.push("");
+    lines.push("## Challenge Prompt");
+    lines.push("");
+    lines.push(persona.prompts.challenge);
+    lines.push("");
+    lines.push("## Advice Prompt");
+    lines.push("");
+    lines.push(persona.prompts.advice);
+    lines.push("");
+    lines.push("## Summary");
+    lines.push("");
+    lines.push(`**Challenge:** ${persona.summary.challenge}`);
+    lines.push("");
+    lines.push(`**Advice:** ${persona.summary.advice}`);
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  app.post("/api/admin/sync-persona-docs", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const key = getEncryptionKey();
+
+      // Resolve effective personas (code defaults merged with DB overrides)
+      const effectivePersonas = await getEffectivePersonas();
+
+      // Build folder hierarchy: Personas (locked — system-managed structure)
+      const personasFolderId = await findOrCreateFolder(userId, "Personas", null, key, true);
+
+      const results: { personaId: string; domain: string; action: string; docId?: number }[] = [];
+
+      // Group personas by domain
+      const byDomain = new Map<string, Persona[]>();
+      for (const persona of Object.values(effectivePersonas)) {
+        const domain = persona.domain || "root";
+        if (!byDomain.has(domain)) byDomain.set(domain, []);
+        byDomain.get(domain)!.push(persona);
+      }
+
+      for (const [domain, personas] of Array.from(byDomain.entries())) {
+        const domainTitle = DOMAIN_TITLES[domain] || domain;
+        // Create locked domain subfolder under Personas
+        const domainFolderId = await findOrCreateFolder(userId, domainTitle, personasFolderId, key, true);
+
+        for (const persona of personas) {
+          const content = personaToMarkdown(persona);
+          const docTitle = `${persona.label} — Persona`;
+
+          // Check if a document already exists in this folder
+          const existingDocs = await storage.listDocuments(userId, domainFolderId);
+          let existingDocId: number | null = null;
+          for (const doc of existingDocs) {
+            let title = doc.title;
+            if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+              try {
+                title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key);
+              } catch { /* fall through */ }
+            }
+            if (title === docTitle) {
+              existingDocId = doc.id;
+              break;
+            }
+          }
+
+          const encryptedContent = encrypt(content, key);
+          const encryptedTitle = encrypt(docTitle, key);
+
+          if (existingDocId) {
+            // Update existing document content (locked docs allow content updates)
+            await storage.updateDocument(existingDocId, {
+              title: "[encrypted]",
+              titleCiphertext: encryptedTitle.ciphertext,
+              titleSalt: encryptedTitle.salt,
+              titleIv: encryptedTitle.iv,
+              ciphertext: encryptedContent.ciphertext,
+              salt: encryptedContent.salt,
+              iv: encryptedContent.iv,
+              folderId: domainFolderId,
+            });
+            // Ensure locked
+            await storage.setDocumentLocked(existingDocId, true);
+            results.push({ personaId: persona.id, domain, action: "updated", docId: existingDocId });
+          } else {
+            // Create new locked document
+            const doc = await storage.saveDocument({
+              userId,
+              title: "[encrypted]",
+              titleCiphertext: encryptedTitle.ciphertext,
+              titleSalt: encryptedTitle.salt,
+              titleIv: encryptedTitle.iv,
+              ciphertext: encryptedContent.ciphertext,
+              salt: encryptedContent.salt,
+              iv: encryptedContent.iv,
+              folderId: domainFolderId,
+              locked: true,
+            });
+            results.push({ personaId: persona.id, domain, action: "created", docId: doc.id });
+          }
+        }
+      }
+
+      res.json({ success: true, synced: results });
+    } catch (error) {
+      console.error("Sync persona docs error:", error);
+      res.status(500).json({ error: "Failed to sync persona docs" });
     }
   });
 
@@ -2287,6 +2453,60 @@ Output only the evolved markdown document. No explanations.`;
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.write(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`);
       res.end();
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // WHISPER TRANSCRIPTION — translate any-language audio to English text
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /** Check if Whisper transcription is available (requires OpenAI API key) */
+  app.get("/api/transcribe/status", (_req, res) => {
+    const hasKey = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY);
+    res.json({ available: hasKey });
+  });
+
+  /** Accept base64-encoded audio, translate+transcribe to English via Whisper */
+  app.post("/api/transcribe", async (req, res) => {
+    try {
+      const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (!openaiKey) {
+        return res.status(503).json({ error: "Whisper transcription not available — no OpenAI API key configured" });
+      }
+
+      const { audio, mimeType } = req.body;
+      if (!audio || typeof audio !== "string") {
+        return res.status(400).json({ error: "audio (base64) is required" });
+      }
+
+      const buffer = Buffer.from(audio, "base64");
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: "Empty audio data" });
+      }
+      if (buffer.length > 25 * 1024 * 1024) {
+        return res.status(400).json({ error: "Audio exceeds 25MB limit" });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const { toFile } = await import("openai");
+      const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      const client = new OpenAI({ apiKey: openaiKey, ...(baseURL ? { baseURL } : {}) });
+
+      // Determine file extension from MIME type
+      const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
+      const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
+
+      // Use "translations" endpoint — always outputs English regardless of input language
+      const result = await client.audio.translations.create({
+        file,
+        model: "whisper-1",
+      });
+
+      res.json({ text: result.text });
+    } catch (error) {
+      console.error("Transcribe error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Transcription failed", details: errorMessage });
     }
   });
 
@@ -3013,6 +3233,7 @@ Output only valid JSON, no markdown.`,
         id: item.id,
         title: decryptField(item.title, item.titleCiphertext, item.titleSalt, item.titleIv, key),
         folderId: item.folderId,
+        locked: item.locked,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));
@@ -3067,6 +3288,7 @@ Output only valid JSON, no markdown.`,
         title,
         content,
         folderId: doc.folderId,
+        locked: doc.locked,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
       });
@@ -3099,6 +3321,9 @@ Output only valid JSON, no markdown.`,
       }
       if (existing.userId !== userId) {
         return res.status(403).json({ error: "Not authorized to rename this document" });
+      }
+      if (existing.locked) {
+        return res.status(403).json({ error: "This document is locked and cannot be renamed" });
       }
 
       const key = getEncryptionKey();
@@ -3138,6 +3363,7 @@ Output only valid JSON, no markdown.`,
       const existing = await storage.getDocument(id);
       if (!existing) return res.status(404).json({ error: "Document not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+      if (existing.locked) return res.status(403).json({ error: "This document is locked and cannot be moved" });
 
       const result = await storage.moveDocument(id, parsed.data.folderId);
       if (!result) return res.status(404).json({ error: "Document not found" });
@@ -3167,6 +3393,9 @@ Output only valid JSON, no markdown.`,
       }
       if (existing.userId !== userId) {
         return res.status(403).json({ error: "Not authorized to delete this document" });
+      }
+      if (existing.locked) {
+        return res.status(403).json({ error: "This document is locked and cannot be deleted" });
       }
 
       await storage.deleteDocument(id);
@@ -3198,6 +3427,7 @@ Output only valid JSON, no markdown.`,
         id: item.id,
         name: decryptField(item.name, item.nameCiphertext, item.nameSalt, item.nameIv, key),
         parentFolderId: item.parentFolderId,
+        locked: item.locked,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));
@@ -3262,6 +3492,7 @@ Output only valid JSON, no markdown.`,
       const existing = await storage.getFolder(id);
       if (!existing) return res.status(404).json({ error: "Folder not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+      if (existing.locked) return res.status(403).json({ error: "This folder is locked and cannot be renamed" });
 
       const key = getEncryptionKey();
       const encryptedName = encrypt(parsed.data.name, key);
@@ -3324,6 +3555,7 @@ Output only valid JSON, no markdown.`,
       const existing = await storage.getFolder(id);
       if (!existing) return res.status(404).json({ error: "Folder not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+      if (existing.locked) return res.status(403).json({ error: "This folder is locked and cannot be moved" });
 
       const result = await storage.moveFolder(id, parsed.data.parentFolderId);
       if (!result) return res.status(404).json({ error: "Folder not found" });
@@ -3348,6 +3580,7 @@ Output only valid JSON, no markdown.`,
       const existing = await storage.getFolder(id);
       if (!existing) return res.status(404).json({ error: "Folder not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
+      if (existing.locked) return res.status(403).json({ error: "This folder is locked and cannot be deleted" });
 
       await storage.deleteFolder(id);
       res.json({ success: true });
