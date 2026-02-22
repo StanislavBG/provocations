@@ -5,7 +5,7 @@
 **Provocations** is an AI-augmented document workspace where users iteratively shape ideas into polished documents through voice, text, and thought-provoking AI interactions.
 
 Think of it as a **smarter Google Docs** — the document is the output, and the AI helps you create and refine it through:
-- **Multiple personas** (8 expert perspectives) that challenge your thinking
+- **Multiple personas** (14 expert perspectives) that challenge your thinking
 - **Provocations** that push you to address gaps, assumptions, and alternatives
 - **Voice input** for natural ideation and feedback
 - **Iterative shaping** where each interaction evolves the document
@@ -42,56 +42,88 @@ npm run db:push  # Push Drizzle schema to database
 
 ```
 provocations/
+├── apps/                            # Per-app CLAUDE.md documentation
+│   ├── write-a-prompt/CLAUDE.md
+│   ├── product-requirement/CLAUDE.md
+│   ├── new-application/CLAUDE.md
+│   ├── streaming/CLAUDE.md          # Screen Capture app
+│   ├── research-paper/CLAUDE.md
+│   ├── persona-definition/CLAUDE.md
+│   ├── research-context/CLAUDE.md
+│   ├── voice-capture/CLAUDE.md
+│   ├── youtube-to-infographic/CLAUDE.md
+│   ├── text-to-infographic/CLAUDE.md
+│   ├── email-composer/CLAUDE.md
+│   └── agent-editor/CLAUDE.md
 ├── client/src/
 │   ├── pages/
 │   │   ├── Workspace.tsx           # Main app orchestrator
 │   │   └── not-found.tsx           # 404 page
 │   ├── components/
 │   │   ├── ui/                     # 47 shadcn/ui primitives (Radix-based)
+│   │   ├── ProvokeText.tsx          # Smart text area with voice + processing (ADR: all text must use this)
 │   │   ├── TextInputForm.tsx       # Landing page input (template selection + URL)
 │   │   ├── ProvocationsDisplay.tsx  # Challenge cards with voice response
 │   │   ├── ProvocationToolbox.tsx   # Mode selector (challenge/advise/interview)
 │   │   ├── ReadingPane.tsx          # Editable document canvas
 │   │   ├── InterviewPanel.tsx       # Multi-turn interview Q&A flow
-│   │   ├── StreamingWorkspace.tsx   # Requirement discovery workspace
-│   │   ├── StreamingDialogue.tsx    # Agent dialogue for requirements
-│   │   ├── StreamingWireframePanel.tsx # Wireframe analysis display
-│   │   ├── BrowserExplorer.tsx      # Embedded iframe for website browsing
-│   │   ├── ScreenCaptureButton.tsx  # Screenshot + annotation workflow
-│   │   ├── VoiceRecorder.tsx        # Web Speech API recording
-│   │   ├── TranscriptOverlay.tsx    # Live transcript during recording
-│   │   ├── ProvokeText.tsx          # Smart text area with voice + processing
-│   │   ├── ContextCapturePanel.tsx  # Capture text/images/links as context
-│   │   ├── ContextStatusPanel.tsx   # Display captured context status
-│   │   ├── DraftQuestionsPanel.tsx  # Guided questions for templates
-│   │   ├── DiffView.tsx             # Side-by-side version comparison
-│   │   ├── MarkdownRenderer.tsx     # Markdown → HTML rendering
-│   │   ├── OutlineBuilder.tsx       # Document outline with sections
-│   │   ├── LogStatsPanel.tsx        # Edit statistics and logs
-│   │   └── AutoDictateToggle.tsx    # Continuous voice recording toggle
+│   │   └── ...                     # See apps/*/CLAUDE.md for app-specific components
 │   ├── hooks/
-│   │   ├── use-auto-dictate.ts      # Voice recording preference
-│   │   ├── use-mobile.tsx           # Mobile viewport detection
-│   │   └── use-toast.ts            # Toast notification system
 │   ├── lib/
 │   │   ├── queryClient.ts          # React Query config + apiRequest helper
-│   │   ├── prebuiltTemplates.ts    # Template definitions (8 prebuilt types)
+│   │   ├── prebuiltTemplates.ts    # Template definitions (12 app types)
+│   │   ├── appWorkspaceConfig.ts   # App workspace behavior configs
 │   │   └── utils.ts                # Tailwind merge utilities
 │   ├── App.tsx                     # Router setup
 │   └── main.tsx                    # Entry point
 ├── server/
 │   ├── index.ts                    # Express app setup
-│   ├── routes.ts                   # All API endpoints (21 routes)
-│   ├── llm.ts                      # Configurable LLM provider (Gemini/Anthropic)
+│   ├── routes.ts                   # All API endpoints
+│   ├── llm.ts                      # Configurable LLM provider (OpenAI/Gemini/Anthropic)
+│   ├── context-builder.ts          # Per-app LLM system prompts & output config
 │   ├── storage.ts                  # Database operations (Drizzle ORM)
 │   ├── crypto.ts                   # AES-256-GCM encryption/decryption (zero-knowledge)
+│   ├── agent-executor.ts           # Agent workflow execution engine
 │   └── db.ts                       # Database connection
 ├── shared/
-│   ├── schema.ts                   # Zod schemas & TypeScript types
-│   ├── personas.ts                 # 8 built-in persona definitions
+│   ├── schema.ts                   # Zod schemas & TypeScript types (templateIds source of truth)
+│   ├── personas.ts                 # 14 built-in persona definitions
 │   └── models/chat.ts             # Drizzle ORM table definitions
 └── script/build.ts                 # Production build configuration
 ```
+
+## Per-App Documentation
+
+Each of the 12 applications has its own `apps/<templateId>/CLAUDE.md` containing:
+- **Identity**: Purpose, category, philosophy, user workflow
+- **Three-layer definition**: Exact config from prebuiltTemplates, appWorkspaceConfig, context-builder
+- **App-specific components**: Components unique to that app
+- **App-specific API endpoints**: Endpoints only that app uses
+- **Key behaviors**: What makes this app different from others
+
+**See `apps/<templateId>/CLAUDE.md` for app-specific guidance.**
+
+| Template ID | Title | Category | Layout | Writer Mode |
+|-------------|-------|----------|--------|-------------|
+| `write-a-prompt` | Write a Prompt | write | standard | edit |
+| `product-requirement` | Product Requirement | build | standard | edit |
+| `new-application` | New Application | build | standard | edit |
+| `streaming` | Screen Capture | analyze | standard | edit |
+| `research-paper` | Research Paper | write | standard | edit |
+| `persona-definition` | Persona / Agent | write | standard | edit |
+| `research-context` | Research into Context | capture | standard | aggregate |
+| `voice-capture` | Voice Capture | capture | voice-capture | aggregate |
+| `youtube-to-infographic` | YouTube to Infographic | capture | standard | edit |
+| `text-to-infographic` | Text to Infographic | capture | infographic-studio | edit |
+| `email-composer` | Email Composer | write | standard | edit |
+| `agent-editor` | Agent Editor | build | standard | edit |
+
+### Context Store Sync
+
+Admin users can sync all per-app CLAUDE.md files into the document store:
+- `POST /api/admin/sync-app-docs` — Reads `apps/*/CLAUDE.md` from disk, creates/updates encrypted documents in the admin's `Applications/Provocations/` folder hierarchy
+- Auto-syncs on server startup for the admin user
+- Each app's documentation becomes available as context when using any app via the Context Manager
 
 ## Path Aliases
 
@@ -122,9 +154,9 @@ Configured in `tsconfig.json`:
 
 ## API Endpoints
 
-All endpoints use Zod validation. Document endpoints require Clerk authentication.
+All endpoints use Zod validation. Document endpoints require Clerk authentication. App-specific endpoints are documented in each app's `apps/<templateId>/CLAUDE.md`.
 
-### AI-Powered Endpoints
+### Shared AI Endpoints (used by all apps)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -136,23 +168,29 @@ All endpoints use Zod validation. Document endpoints require Clerk authenticatio
 | `/api/interview/question` | POST | Generate next interview question |
 | `/api/interview/summary` | POST | Synthesize interview entries into instructions |
 | `/api/discussion/ask` | POST | Multi-persona response to user questions |
-| `/api/streaming/question` | POST | Requirement discovery dialogue |
-| `/api/streaming/wireframe-analysis` | POST | Analyze website structure & content |
-| `/api/streaming/refine` | POST | Refine requirements from dialogue |
 
-### Data Endpoints
+### Shared Data Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/personas` | GET | List all 8 built-in personas |
-| `/api/documents` | POST | Save new document (encrypted) |
-| `/api/documents/:id` | PUT | Update document |
-| `/api/documents` | GET | List user's documents |
-| `/api/documents/:id` | GET | Load document (decrypted) |
-| `/api/documents/:id` | PATCH | Rename document |
-| `/api/documents/:id` | DELETE | Delete document |
+| `/api/personas` | GET | List all 14 built-in personas |
+| `/api/documents` | POST/GET | Save new document (encrypted) / List user's documents |
+| `/api/documents/:id` | GET/PUT/PATCH/DELETE | Load, update, rename, delete document |
+| `/api/folders` | POST/GET | Create folder / List user's folders |
 | `/api/preferences` | GET/PUT | User preferences (auto-dictate) |
-| `/api/screenshot` | POST | Server-side screenshot via Playwright |
+| `/api/tracking/event` | POST | Record usage tracking event |
+| `/api/metrics` | POST | Record productivity metrics |
+
+### Admin Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/auth/role` | GET | Check if current user is admin |
+| `/api/admin/dashboard` | GET | Analytics dashboard data |
+| `/api/admin/user-metrics` | GET | User metrics matrix |
+| `/api/admin/sync-app-docs` | POST | Sync per-app CLAUDE.md files to document store |
+| `/api/admin/persona-overrides` | GET | List persona DB overrides |
+| `/api/admin/agent-prompts` | GET | List LLM task prompt overrides |
 
 ## Domain Concepts
 
@@ -226,33 +264,31 @@ The `/api/write` endpoint classifies instructions before processing:
 ### Tone Options
 - `inspirational`, `practical`, `analytical`, `persuasive`, `cautious`
 
-## Key Components
+## Key Shared Components
 
 ### Workspace.tsx (Orchestrator)
-Central hub managing:
-- **Phases**: `input` → `workspace` (with streaming/capture variant)
+Central hub managing all apps:
+- **Phases**: `input` → `workspace` (layout determined by `AppFlowConfig.workspaceLayout`)
 - **State**: document, personas, challenges, interview entries, versions
 - **Versioning**: Full history with diff comparison
-- **Toolbox apps**: interview, website/capture, discussion
+- **Layout routing**: Routes to standard, voice-capture, or infographic-studio layout based on app config
 
 ### ReadingPane.tsx
-The document canvas:
+The document canvas (used by all standard-layout apps):
 - Editable mode (pencil toggle)
 - Text selection → voice/edit actions
 - Markdown rendering and download
 
 ### ProvocationsDisplay.tsx
-Challenge cards that drive iteration:
+Challenge cards that drive iteration (used by all apps):
 - Voice recording on each card
 - Status: pending, addressed, rejected, highlighted
 - Context passed to write endpoint for intelligent integration
 
-### StreamingWorkspace.tsx
-Requirement discovery through:
-- Agent-guided dialogue
-- Website wireframe analysis
-- Screenshot annotations
-- Requirement extraction and refinement
+### ProvokeText.tsx (ADR-mandated)
+Universal text component — see ADR below. All text display/editing must use this.
+
+App-specific components are documented in each app's `apps/<templateId>/CLAUDE.md`.
 
 ## Design System
 
@@ -364,7 +400,8 @@ Every application (template) in Provocations is defined across **three files** t
    - `systemGuidance` (full system prompt injected into every LLM call for this app)
    - `feedbackTone` (how challenges/advice should sound)
    - `outputFormat` (`"markdown"` or `"sql"`)
-5. **Run `npm run check`** — TypeScript will verify all three layers have the new ID
+5. **Create `apps/<templateId>/CLAUDE.md`** with app-specific documentation (identity, three-layer definition, components, endpoints, key behaviors)
+6. **Run `npm run check`** — TypeScript will verify all three layers have the new ID
 
 **Type enforcement:**
 - `templateIds` in `shared/schema.ts` is the single source of truth (`as const` array)

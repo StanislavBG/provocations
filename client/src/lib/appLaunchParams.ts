@@ -12,16 +12,21 @@ const KNOWN_KEYS: (keyof AppLaunchParams)[] = ["app", "intent", "entityType", "e
 
 /**
  * Parse URL query string into AppLaunchParams.
- * Returns null if the `app` param is missing (minimum required).
+ * Returns params if either `app` or `intent` is present.
+ * With path-based routing (/app/:templateId), `app` may be absent from the
+ * query string while intent params are still present.
  */
 export function parseAppLaunchParams(search: string): AppLaunchParams | null {
   const params = new URLSearchParams(search);
   const app = params.get("app");
-  if (!app) return null;
+  const intent = (params.get("intent") as AppLaunchParams["intent"]) ?? undefined;
+
+  // Need either an app or an intent to have actionable params
+  if (!app && !intent) return null;
 
   return {
-    app,
-    intent: (params.get("intent") as AppLaunchParams["intent"]) ?? undefined,
+    app: app ?? undefined,
+    intent,
     entityType: params.get("entityType") ?? undefined,
     entityId: params.get("entityId") ?? undefined,
     step: params.get("step") ?? undefined,

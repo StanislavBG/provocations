@@ -1264,6 +1264,7 @@ Output only valid JSON, no markdown.`;
         const override = overrideMap.get(taskType);
         return {
           taskType,
+          group: base.group,
           description: base.description,
           currentPrompt: override?.systemPrompt ?? base.basePrompt,
           isOverridden: !!override,
@@ -1546,15 +1547,20 @@ Output only valid JSON, no markdown.`;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
       if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
 
-      // Fetch metrics and ALL known user IDs in parallel
-      const [allMetrics, allKnownUserIds] = await Promise.all([
+      // Fetch metrics, known user IDs, and activity stats in parallel
+      const [allMetrics, allKnownUserIds, activityStats] = await Promise.all([
         storage.getAllUsageMetrics(),
         storage.getAllKnownUserIds(),
+        storage.getUserActivityStats(),
       ]);
+
+      // Build a quick lookup for activity stats by userId
+      const activityByUser = new Map(activityStats.map((a) => [a.userId, a]));
 
       // Merge: users from metrics table + users from other tables (docs, tracking, etc.)
       const userIdSet = new Set(allKnownUserIds);
       allMetrics.forEach((m) => userIdSet.add(m.userId));
+      activityStats.forEach((a) => userIdSet.add(a.userId));
       const userIds = Array.from(userIdSet);
 
       // Resolve user info from Clerk
@@ -1574,7 +1580,10 @@ Output only valid JSON, no markdown.`;
       }
 
       // Collect all metric keys — sorted by importance
+      // Prepend activity-derived keys (logins, page views) before usage metrics
       const METRIC_ORDER = [
+        "logins",
+        "page_views",
         "time_saved_minutes",
         "author_words",
         "documents_saved",
@@ -1582,9 +1591,12 @@ Output only valid JSON, no markdown.`;
         "total_words_produced",
       ];
       const allKeys = Array.from(new Set(allMetrics.map((m) => m.metricKey)));
+      // Always include activity keys even if no usage metrics row exists for them
+      const activityKeys = ["logins", "page_views"];
+      const combinedKeys = new Set([...activityKeys, ...allKeys]);
       const sortedKeys = [
-        ...METRIC_ORDER.filter((k) => allKeys.includes(k)),
-        ...allKeys.filter((k) => !METRIC_ORDER.includes(k)).sort(),
+        ...METRIC_ORDER.filter((k) => combinedKeys.has(k)),
+        ...Array.from(combinedKeys).filter((k) => !METRIC_ORDER.includes(k)).sort(),
       ];
 
       // Build per-user rows — includes users with zero metrics
@@ -1594,10 +1606,17 @@ Output only valid JSON, no markdown.`;
         for (const m of userMetrics) {
           metrics[m.metricKey] = m.metricValue;
         }
+        // Merge login/page-view counts from activity stats
+        const activity = activityByUser.get(uid);
+        if (activity) {
+          metrics["logins"] = activity.loginCount;
+          metrics["page_views"] = activity.pageViewCount;
+        }
         return {
           userId: uid,
           email: userInfoMap[uid]?.email || "unknown",
           displayName: userInfoMap[uid]?.displayName || uid,
+          lastSeenAt: activity?.lastSeenAt ?? null,
           metrics,
         };
       });
@@ -1657,6 +1676,156 @@ Output only valid JSON, no markdown.`;
   // Public endpoint — clients fetch the config to use at runtime
   app.get("/api/voice-capture-config", (_req, res) => {
     res.json(voiceCaptureConfig);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ADMIN: SYNC APP DOCS — reads apps/*/CLAUDE.md from disk and upserts
+  // them as encrypted documents in the admin's folder hierarchy:
+  //   Applications / Provocations / <App Title>
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Map templateId → human-readable title for folder names
+  const APP_TITLES: Record<string, string> = {
+    "write-a-prompt": "Write a Prompt",
+    "product-requirement": "Product Requirement",
+    "new-application": "New Application",
+    "streaming": "Screen Capture",
+    "research-paper": "Research Paper",
+    "persona-definition": "Persona Agent",
+    "research-context": "Research into Context",
+    "voice-capture": "Voice Capture",
+    "youtube-to-infographic": "YouTube to Infographic",
+    "text-to-infographic": "Text to Infographic",
+    "email-composer": "Email Composer",
+    "agent-editor": "Agent Editor",
+  };
+
+  /**
+   * Find an existing folder by decrypting names and matching, or create a new one.
+   */
+  async function findOrCreateFolder(
+    userId: string,
+    folderName: string,
+    parentFolderId: number | null,
+    encryptionKey: string,
+  ): Promise<number> {
+    const existing = await storage.listFolders(userId, parentFolderId);
+    for (const f of existing) {
+      let name = f.name;
+      if (f.nameCiphertext && f.nameSalt && f.nameIv) {
+        try {
+          name = decrypt({ ciphertext: f.nameCiphertext, salt: f.nameSalt, iv: f.nameIv }, encryptionKey);
+        } catch { /* fall through to legacy name */ }
+      }
+      if (name === folderName) return f.id;
+    }
+    // Create the folder
+    const encryptedName = encrypt(folderName, encryptionKey);
+    const folder = await storage.createFolder(
+      userId,
+      "[encrypted]",
+      parentFolderId,
+      { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
+    );
+    return folder.id;
+  }
+
+  app.post("/api/admin/sync-app-docs", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const fs = await import("fs");
+      const path = await import("path");
+
+      const key = getEncryptionKey();
+      const appsDir = path.resolve(process.cwd(), "apps");
+
+      // Build folder hierarchy: Applications → Provocations
+      const applicationsFolderId = await findOrCreateFolder(userId, "Applications", null, key);
+      const provocationsFolderId = await findOrCreateFolder(userId, "Provocations", applicationsFolderId, key);
+
+      const results: { templateId: string; action: string; docId?: number }[] = [];
+
+      // Read all app directories
+      let appDirs: string[];
+      try {
+        appDirs = fs.readdirSync(appsDir).filter((d: string) => {
+          try { return fs.statSync(path.join(appsDir, d)).isDirectory(); } catch { return false; }
+        });
+      } catch {
+        return res.status(404).json({ error: "apps/ directory not found" });
+      }
+
+      for (const templateId of appDirs) {
+        const claudeMdPath = path.join(appsDir, templateId, "CLAUDE.md");
+        if (!fs.existsSync(claudeMdPath)) {
+          results.push({ templateId, action: "skipped — no CLAUDE.md" });
+          continue;
+        }
+
+        const content = fs.readFileSync(claudeMdPath, "utf-8");
+        const appTitle = APP_TITLES[templateId] || templateId;
+        const docTitle = `${appTitle} — App Guide`;
+
+        // Find or create the app subfolder under Provocations
+        const appFolderId = await findOrCreateFolder(userId, appTitle, provocationsFolderId, key);
+
+        // Check if a document already exists in this folder
+        const existingDocs = await storage.listDocuments(userId, appFolderId);
+        let existingDocId: number | null = null;
+        for (const doc of existingDocs) {
+          let title = doc.title;
+          if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+            try {
+              title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key);
+            } catch { /* fall through */ }
+          }
+          if (title === docTitle) {
+            existingDocId = doc.id;
+            break;
+          }
+        }
+
+        const encryptedContent = encrypt(content, key);
+        const encryptedTitle = encrypt(docTitle, key);
+
+        if (existingDocId) {
+          // Update existing document
+          await storage.updateDocument(existingDocId, {
+            title: "[encrypted]",
+            titleCiphertext: encryptedTitle.ciphertext,
+            titleSalt: encryptedTitle.salt,
+            titleIv: encryptedTitle.iv,
+            ciphertext: encryptedContent.ciphertext,
+            salt: encryptedContent.salt,
+            iv: encryptedContent.iv,
+            folderId: appFolderId,
+          });
+          results.push({ templateId, action: "updated", docId: existingDocId });
+        } else {
+          // Create new document
+          const doc = await storage.saveDocument({
+            userId,
+            title: "[encrypted]",
+            titleCiphertext: encryptedTitle.ciphertext,
+            titleSalt: encryptedTitle.salt,
+            titleIv: encryptedTitle.iv,
+            ciphertext: encryptedContent.ciphertext,
+            salt: encryptedContent.salt,
+            iv: encryptedContent.iv,
+            folderId: appFolderId,
+          });
+          results.push({ templateId, action: "created", docId: doc.id });
+        }
+      }
+
+      res.json({ success: true, synced: results });
+    } catch (error) {
+      console.error("Sync app docs error:", error);
+      res.status(500).json({ error: "Failed to sync app docs" });
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════

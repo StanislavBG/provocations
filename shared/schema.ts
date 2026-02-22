@@ -674,6 +674,7 @@ export const trackingEventType = [
   "write_executed",    // Write/edit instruction executed
   "discussion_asked",  // User asked a question in discussion
   "phase_changed",     // Workspace phase changed (input → workspace)
+  "login",             // User signed in / loaded the app
 ] as const;
 
 export type TrackingEventType = typeof trackingEventType[number];
@@ -741,6 +742,7 @@ export interface UserMetricsMatrix {
     userId: string;
     email: string;
     displayName: string;
+    lastSeenAt: string | null;
     metrics: Record<string, number>;
   }[];
 }
@@ -883,7 +885,7 @@ export interface PipelineStatus {
 // Any app can invoke another by constructing: /?app=...&intent=...&entityType=...&entityId=...
 
 export const appLaunchParamsSchema = z.object({
-  app: z.string(),                                        // template ID (e.g. "persona-definition")
+  app: z.string().optional(),                              // template ID — optional with path-based routing (/app/:templateId)
   intent: z.enum(["create", "edit", "view"]).optional(),   // action to take
   entityType: z.string().optional(),                       // what we're operating on (e.g. "persona")
   entityId: z.string().optional(),                         // specific entity ID (e.g. "architect")
