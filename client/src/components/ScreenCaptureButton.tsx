@@ -1004,7 +1004,7 @@ export function ScreenCaptureButton({
                       </div>
                       <ProvokeText
                         variant="textarea"
-                        chrome="bare"
+                        chrome="inline"
                         value={annotation.narration}
                         onChange={(val) => updateNarration(idx, val)}
                         placeholder={

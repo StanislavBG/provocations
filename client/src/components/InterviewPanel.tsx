@@ -364,7 +364,7 @@ export function InterviewPanel({
                     ) : adviceText ? (
                       <>
                         <ProvokeText
-                          chrome="bare"
+                          chrome="inline"
                           variant="editor"
                           value={editableAdvice}
                           onChange={setEditableAdvice}
