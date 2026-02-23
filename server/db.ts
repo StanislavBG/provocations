@@ -27,7 +27,11 @@ export async function ensureTables(): Promise<void> {
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(128) NOT NULL,
         name VARCHAR(200) NOT NULL,
+        name_ciphertext TEXT,
+        name_salt VARCHAR(64),
+        name_iv VARCHAR(32),
         parent_folder_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+        locked BOOLEAN DEFAULT FALSE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
@@ -44,11 +48,15 @@ export async function ensureTables(): Promise<void> {
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(128) NOT NULL,
         title TEXT NOT NULL,
+        title_ciphertext TEXT,
+        title_salt VARCHAR(64),
+        title_iv VARCHAR(32),
         ciphertext TEXT NOT NULL,
         salt VARCHAR(64) NOT NULL,
         iv VARCHAR(32) NOT NULL,
         folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL,
         key_version_id INTEGER REFERENCES key_versions(id),
+        locked BOOLEAN DEFAULT FALSE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
@@ -61,10 +69,18 @@ export async function ensureTables(): Promise<void> {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
 
-      -- Add folder_id and key_version_id to existing documents tables (idempotent)
+      -- Add columns that were added after initial schema (idempotent)
       DO $$ BEGIN
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL;
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS key_version_id INTEGER REFERENCES key_versions(id);
+        ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_ciphertext TEXT;
+        ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_salt VARCHAR(64);
+        ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_iv VARCHAR(32);
+        ALTER TABLE documents ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE NOT NULL;
+        ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_ciphertext TEXT;
+        ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_salt VARCHAR(64);
+        ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_iv VARCHAR(32);
+        ALTER TABLE folders ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE NOT NULL;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
 
@@ -117,12 +133,50 @@ export async function ensureTables(): Promise<void> {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS persona_overrides (
+        id SERIAL PRIMARY KEY,
+        persona_id VARCHAR(64) NOT NULL UNIQUE,
+        definition TEXT NOT NULL,
+        human_curated BOOLEAN DEFAULT FALSE NOT NULL,
+        curated_by VARCHAR(128),
+        curated_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_definitions (
+        id SERIAL PRIMARY KEY,
+        agent_id VARCHAR(128) NOT NULL UNIQUE,
+        user_id VARCHAR(128) NOT NULL,
+        name VARCHAR(256) NOT NULL,
+        description TEXT,
+        persona TEXT,
+        steps TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_prompt_overrides (
+        id SERIAL PRIMARY KEY,
+        task_type VARCHAR(64) NOT NULL UNIQUE,
+        system_prompt TEXT NOT NULL,
+        human_curated BOOLEAN DEFAULT FALSE NOT NULL,
+        curated_by VARCHAR(128),
+        curated_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_tracking_events_user ON tracking_events(user_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_type ON tracking_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_session ON tracking_events(session_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_created ON tracking_events(created_at);
       CREATE INDEX IF NOT EXISTS idx_persona_versions_persona ON persona_versions(persona_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_metrics_user_key ON usage_metrics(user_id, metric_key);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_persona_overrides_persona_id ON persona_overrides(persona_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_definitions_user_id ON agent_definitions(user_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_definitions_agent_id ON agent_definitions(agent_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_prompt_overrides_task_type ON agent_prompt_overrides(task_type);
     `);
     console.log("Database tables verified.");
   } catch (err) {
