@@ -230,3 +230,23 @@ export const agentPromptOverrides = pgTable("agent_prompt_overrides", {
 
 export type StoredAgentPromptOverride = typeof agentPromptOverrides.$inferSelect;
 
+// Error logs — global error tracking visible to admins and the originating user.
+// Normal users see only their own errors; admins see all errors.
+export const errorLogs = pgTable("error_logs", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  sessionId: varchar("session_id", { length: 64 }),
+  tag: varchar("tag", { length: 64 }).notNull(),       // e.g. "api", "client", "voice", "llm"
+  message: text("message").notNull(),
+  stack: text("stack"),                                  // error stack trace
+  url: text("url"),                                      // page URL or API endpoint
+  metadata: text("metadata"),                            // JSON string of extra context
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_error_logs_user").on(table.userId),
+  index("idx_error_logs_created").on(table.createdAt),
+  index("idx_error_logs_tag").on(table.tag),
+]);
+
+export type StoredErrorLog = typeof errorLogs.$inferSelect;
+

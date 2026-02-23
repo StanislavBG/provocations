@@ -19,10 +19,13 @@ import {
   Check,
   Loader2,
   Upload,
+  Folder,
+  Lock,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { ContextItem, ContextItemType } from "@shared/schema";
+import type { ContextItem, ContextItemType, FolderItem } from "@shared/schema";
 import { generateId } from "@/lib/utils";
 
 interface ContextCapturePanelProps {
@@ -45,7 +48,7 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
   const pasteAreaRef = useRef<HTMLDivElement>(null);
 
   // Fetch saved documents for Context Store picker
-  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
+  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; folderId?: number | null; locked?: boolean; updatedAt: string }[] }>({
     queryKey: ["/api/documents"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/documents");
@@ -54,6 +57,20 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
     enabled: showStorePicker,
     staleTime: 30_000,
   });
+
+  // Fetch folders for grouped view
+  const { data: foldersData } = useQuery<{ folders: FolderItem[] }>({
+    queryKey: ["/api/folders/all"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/folders");
+      return res.json();
+    },
+    enabled: showStorePicker,
+    staleTime: 30_000,
+  });
+
+  // Expanded folders in the store picker
+  const [expandedPickerFolders, setExpandedPickerFolders] = useState<Set<number>>(new Set());
 
   const handleLoadStoreDoc = useCallback(async (docId: number, docTitle: string) => {
     setLoadingStoreDocId(docId);
@@ -240,7 +257,7 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">Select documents to attach as context</p>
-          <ScrollArea className="max-h-48">
+          <ScrollArea className="max-h-64">
             {isLoadingDocs ? (
               <div className="py-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -251,27 +268,82 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
                 No saved documents yet
               </div>
             ) : (
-              <div className="space-y-1">
-                {savedDocs.documents.map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => handleLoadStoreDoc(doc.id, doc.title)}
-                    disabled={loadingStoreDocId !== null || loadedStoreDocIds.has(doc.id)}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 text-left text-sm rounded-md hover:bg-muted/50 transition-colors disabled:opacity-50"
-                  >
-                    {loadingStoreDocId === doc.id ? (
-                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
-                    ) : loadedStoreDocIds.has(doc.id) ? (
-                      <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
-                    ) : (
-                      <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="truncate flex-1">{doc.title}</span>
-                    {loadedStoreDocIds.has(doc.id) && (
-                      <span className="text-[10px] text-primary font-medium shrink-0">Added</span>
-                    )}
-                  </button>
-                ))}
+              <div className="space-y-0.5">
+                {(() => {
+                  const allDocs = savedDocs.documents;
+                  const allFolders = foldersData?.folders || [];
+
+                  // Root-level docs (no folder)
+                  const rootDocs = allDocs.filter((d) => !d.folderId);
+                  // Root-level folders
+                  const rootFolders = allFolders.filter((f) => f.parentFolderId === null);
+                  const getChildren = (parentId: number) => allFolders.filter((f) => f.parentFolderId === parentId);
+                  const getDocsInFolder = (folderId: number) => allDocs.filter((d) => d.folderId === folderId);
+
+                  const renderDoc = (doc: typeof allDocs[0]) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => handleLoadStoreDoc(doc.id, doc.title)}
+                      disabled={loadingStoreDocId !== null || loadedStoreDocIds.has(doc.id)}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm rounded-md hover:bg-muted/50 transition-colors disabled:opacity-50"
+                    >
+                      {loadingStoreDocId === doc.id ? (
+                        <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
+                      ) : loadedStoreDocIds.has(doc.id) ? (
+                        <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
+                      ) : (
+                        <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="truncate flex-1">{doc.title}</span>
+                      {loadedStoreDocIds.has(doc.id) && (
+                        <span className="text-[10px] text-primary font-medium shrink-0">Added</span>
+                      )}
+                    </button>
+                  );
+
+                  const renderFolder = (folder: FolderItem, depth: number): React.ReactNode => {
+                    const children = getChildren(folder.id);
+                    const docs = getDocsInFolder(folder.id);
+                    const hasContent = children.length > 0 || docs.length > 0;
+                    if (!hasContent) return null;
+                    const isExpanded = expandedPickerFolders.has(folder.id);
+                    return (
+                      <div key={folder.id}>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedPickerFolders((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id);
+                            return next;
+                          })}
+                          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-xs rounded-md hover:bg-muted/50 transition-colors"
+                          style={{ paddingLeft: `${8 + depth * 12}px` }}
+                        >
+                          {isExpanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+                          {folder.locked ? (
+                            <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
+                          ) : null}
+                          <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                          <span className="font-medium truncate">{folder.name}</span>
+                        </button>
+                        {isExpanded && (
+                          <div style={{ paddingLeft: `${depth * 8}px` }}>
+                            {children.map((c) => renderFolder(c, depth + 1))}
+                            {docs.map(renderDoc)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <>
+                      {rootFolders.map((f) => renderFolder(f, 0))}
+                      {rootDocs.length > 0 && rootFolders.length > 0 && <div className="border-t my-1" />}
+                      {rootDocs.map(renderDoc)}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </ScrollArea>
