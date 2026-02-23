@@ -23,6 +23,8 @@ import {
   HardDrive,
   FileText,
   Loader2,
+  Save,
+  Search,
 } from "lucide-react";
 import { ProvokeText, type ProvokeAction } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -46,6 +48,7 @@ interface TextInputFormProps {
   onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
   onYouTubeInfographicMode?: (objective: string, channelUrl: string, templateId: string) => void;
   onVoiceInfographicMode?: (objective: string, transcript: string, templateId: string) => void;
+  onResearchChatMode?: (objective: string, templateId: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -75,7 +78,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, onResearchChatMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
@@ -106,8 +109,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   // Storage quick-load state
   const [storageOpen, setStorageOpen] = useState(false);
   const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
+  const [secondaryStoreOpen, setSecondaryStoreOpen] = useState(false);
   const [transcriptStoreOpen, setTranscriptStoreOpen] = useState(false);
   const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
+  const [savingField, setSavingField] = useState<string | null>(null);
 
   // Objective config for current template
   const objConfig = getObjectiveConfig(activePrebuilt?.id);
@@ -134,7 +139,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       const res = await apiRequest("GET", "/api/documents");
       return res.json();
     },
-    enabled: storageOpen || objectiveStoreOpen || transcriptStoreOpen, // fetch when any popover opens
+    enabled: storageOpen || objectiveStoreOpen || secondaryStoreOpen || transcriptStoreOpen, // fetch when any picker opens
     staleTime: 30_000,
   });
 
@@ -206,6 +211,86 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     };
     reader.readAsText(file);
   }, [toast]);
+
+  /** Load a document from Context Store into the secondary objective field (replace) */
+  const handleLoadSecondaryFromStore = useCallback(async (docId: number, docTitle: string) => {
+    setLoadingDocId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        setSecondaryObjective(data.content);
+        setSecondaryStoreOpen(false);
+        toast({ title: "Loaded", description: `"${docTitle}" loaded into ${objConfig.secondaryLabel?.toLowerCase() ?? "secondary objective"}.` });
+      }
+    } catch (error) {
+      console.error("Failed to load document:", error);
+      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
+    } finally {
+      setLoadingDocId(null);
+    }
+  }, [toast, objConfig.secondaryLabel]);
+
+  /** Save field content to Context Store as a new document */
+  const handleSaveFieldToStore = useCallback(async (content: string, fieldLabel: string) => {
+    if (!content.trim()) {
+      toast({ title: "Nothing to save", description: "The field is empty.", variant: "destructive" });
+      return;
+    }
+    setSavingField(fieldLabel);
+    try {
+      const title = `${fieldLabel}: ${content.trim().slice(0, 80).replace(/\n/g, " ")}`;
+      await apiRequest("POST", "/api/documents", { title, content: content.trim() });
+      toast({ title: "Saved to Context Store", description: `"${title.slice(0, 60)}${title.length > 60 ? "..." : ""}" saved.` });
+    } catch (error) {
+      console.error("Failed to save to store:", error);
+      toast({ title: "Save failed", description: "Could not save to Context Store.", variant: "destructive" });
+    } finally {
+      setSavingField(null);
+    }
+  }, [toast]);
+
+  /** Render an inline document picker for Load actions inside ProvokeText children slot */
+  const renderInlineDocPicker = (
+    isOpen: boolean,
+    onClose: () => void,
+    onSelect: (docId: number, docTitle: string) => void,
+  ) => {
+    if (!isOpen) return null;
+    return (
+      <div className="mx-4 mb-2 rounded-lg border bg-muted/30 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20">
+          <span className="text-xs font-medium text-muted-foreground">Load from Context Store</span>
+          <Button variant="ghost" size="sm" className="h-5 text-xs px-1.5" onClick={onClose}>Done</Button>
+        </div>
+        <ScrollArea className="max-h-40">
+          <div className="p-1">
+            {isLoadingDocs ? (
+              <div className="flex items-center justify-center py-4 gap-2 text-xs text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Loading...
+              </div>
+            ) : !savedDocs?.documents?.length ? (
+              <p className="px-3 py-4 text-xs text-muted-foreground text-center">No saved documents yet</p>
+            ) : (
+              savedDocs.documents.map((doc) => (
+                <button
+                  key={doc.id}
+                  onClick={() => onSelect(doc.id, doc.title)}
+                  disabled={loadingDocId === doc.id}
+                  className="w-full text-left px-3 py-1.5 rounded-md text-xs hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                >
+                  <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+                  <span className="truncate flex-1">{doc.title}</span>
+                  {loadingDocId === doc.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                </button>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  };
 
   const handleSubmit = () => {
     if (text.trim() || loadedDocIds.size > 0) {
@@ -406,41 +491,28 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 showCharCount
                 maxCharCount={10000}
                 maxAudioDuration="2min"
-                headerActions={
-                  <Popover open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
-                        <HardDrive className="w-3.5 h-3.5" />
-                        Load
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-72 p-0">
-                      <div className="px-3 py-2 border-b">
-                        <p className="text-sm font-medium">Load from Context Store</p>
-                        <p className="text-xs text-muted-foreground">Replace {objConfig.primaryLabel.toLowerCase()} with saved content</p>
-                      </div>
-                      <ScrollArea className="max-h-60">
-                        <div className="p-1">
-                          {savedDocs?.documents?.length ? savedDocs.documents.map((doc) => (
-                            <button
-                              key={doc.id}
-                              onClick={() => handleLoadObjectiveFromStore(doc.id, doc.title)}
-                              disabled={loadingDocId === doc.id}
-                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 flex items-center gap-2 transition-colors"
-                            >
-                              <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <span className="truncate flex-1">{doc.title}</span>
-                              {loadingDocId === doc.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                            </button>
-                          )) : (
-                            <p className="px-3 py-4 text-sm text-muted-foreground text-center">No saved documents yet</p>
-                          )}
-                        </div>
-                      </ScrollArea>
-                    </PopoverContent>
-                  </Popover>
-                }
-              />
+                actions={[
+                  {
+                    key: "save",
+                    label: "Save",
+                    description: "Save this content to the Context Store for reuse.",
+                    icon: Save,
+                    onClick: () => handleSaveFieldToStore(objective, objConfig.primaryLabel),
+                    disabled: !objective.trim(),
+                    loading: savingField === objConfig.primaryLabel,
+                    loadingLabel: "Saving...",
+                  },
+                  {
+                    key: "load",
+                    label: "Load",
+                    description: "Load content from the Context Store.",
+                    icon: HardDrive,
+                    onClick: () => { setObjectiveStoreOpen((v) => !v); },
+                  },
+                ]}
+              >
+                {renderInlineDocPicker(objectiveStoreOpen, () => setObjectiveStoreOpen(false), handleLoadObjectiveFromStore)}
+              </ProvokeText>
 
               {/* Secondary objective — shown when the app defines a meaningful secondary label */}
               {objConfig.secondaryDescription && (
@@ -459,7 +531,34 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                   maxRows={3}
                   voice={{ mode: "replace" }}
                   onVoiceTranscript={setSecondaryObjective}
-                />
+                  textProcessor={(t, mode) =>
+                    processText(t, mode, mode === "clean" ? "objective" : undefined)
+                  }
+                  showCharCount
+                  maxCharCount={10000}
+                  maxAudioDuration="2min"
+                  actions={[
+                    {
+                      key: "save",
+                      label: "Save",
+                      description: "Save this content to the Context Store for reuse.",
+                      icon: Save,
+                      onClick: () => handleSaveFieldToStore(secondaryObjective, objConfig.secondaryLabel ?? "Secondary"),
+                      disabled: !secondaryObjective.trim(),
+                      loading: savingField === (objConfig.secondaryLabel ?? "Secondary"),
+                      loadingLabel: "Saving...",
+                    },
+                    {
+                      key: "load",
+                      label: "Load",
+                      description: "Load content from the Context Store.",
+                      icon: HardDrive,
+                      onClick: () => { setSecondaryStoreOpen((v) => !v); },
+                    },
+                  ]}
+                >
+                  {renderInlineDocPicker(secondaryStoreOpen, () => setSecondaryStoreOpen(false), handleLoadSecondaryFromStore)}
+                </ProvokeText>
               )}
             </div>
           )}
@@ -696,110 +795,51 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 showCharCount
                 maxCharCount={500000}
                 maxAudioDuration="5min"
+                actions={[
+                  {
+                    key: "save",
+                    label: "Save",
+                    description: "Save this content to the Context Store for reuse.",
+                    icon: Save,
+                    onClick: () => handleSaveFieldToStore(text, "Your Draft"),
+                    disabled: !text.trim(),
+                    loading: savingField === "Your Draft",
+                    loadingLabel: "Saving...",
+                  },
+                  {
+                    key: "load",
+                    label: "Load",
+                    description: "Load content from the Context Store.",
+                    icon: HardDrive,
+                    onClick: () => { setStorageOpen((v) => !v); },
+                  },
+                ]}
                 headerActions={
-                  <div className="flex items-center gap-1">
-                    <Popover open={storageOpen} onOpenChange={setStorageOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs h-7"
-                          title="Load context from saved documents"
-                        >
-                          <HardDrive className="w-3.5 h-3.5" />
-                          Load
-                          {loadedDocIds.size > 0 && (
-                            <span className="ml-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
-                              {loadedDocIds.size}
-                            </span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-72 p-0">
-                        <div className="px-3 py-2 border-b">
-                          <p className="text-sm font-medium">Load from Context Store</p>
-                          <p className="text-xs text-muted-foreground">Select documents or upload files</p>
-                        </div>
-                        <ScrollArea className="max-h-60">
-                          {isLoadingDocs ? (
-                            <div className="px-3 py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Loading...
-                            </div>
-                          ) : !savedDocs?.documents?.length ? (
-                            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                              No saved documents yet
-                            </div>
-                          ) : (
-                            <div className="py-1">
-                              {savedDocs.documents.map((doc) => (
-                                <button
-                                  key={doc.id}
-                                  onClick={() => handleLoadStorageDoc(doc.id, doc.title)}
-                                  disabled={loadingDocId !== null || loadedDocIds.has(doc.id)}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
-                                >
-                                  {loadingDocId === doc.id ? (
-                                    <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
-                                  ) : loadedDocIds.has(doc.id) ? (
-                                    <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
-                                  ) : (
-                                    <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                                  )}
-                                  <span className="truncate flex-1">{doc.title}</span>
-                                  {loadedDocIds.has(doc.id) && (
-                                    <span className="text-[10px] text-primary font-medium shrink-0">Loaded</span>
-                                  )}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </ScrollArea>
-                        <div className="flex items-center justify-between px-3 py-2 border-t">
-                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                            <Upload className="w-3.5 h-3.5" />
-                            Upload file
-                            <input
-                              type="file"
-                              accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleFileUpload(file);
-                                e.target.value = "";
-                              }}
-                            />
-                          </label>
-                          <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setStorageOpen(false)}>
-                            Done
-                          </Button>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs h-7"
-                      onClick={() => {
-                        const starter = [
-                          "## Actor",
-                          "You are a [role — e.g. Senior Software Engineer, Professional Chef, Marketing Strategist].",
-                          "",
-                          "## Input",
-                          "[Paste or describe the context here — the longer and more specific, the better the output.]",
-                          "",
-                          "## Mission",
-                          "Create a [specific output — e.g. step-by-step guide, code review, meal plan] that [key quality — e.g. is beginner-friendly, follows best practices, fits a 30-minute time limit].",
-                        ].join("\n");
-                        setText(starter);
-                      }}
-                    >
-                      <Wand2 className="w-3.5 h-3.5" />
-                      Practice
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-7"
+                    onClick={() => {
+                      const starter = [
+                        "## Actor",
+                        "You are a [role — e.g. Senior Software Engineer, Professional Chef, Marketing Strategist].",
+                        "",
+                        "## Input",
+                        "[Paste or describe the context here — the longer and more specific, the better the output.]",
+                        "",
+                        "## Mission",
+                        "Create a [specific output — e.g. step-by-step guide, code review, meal plan] that [key quality — e.g. is beginner-friendly, follows best practices, fits a 30-minute time limit].",
+                      ].join("\n");
+                      setText(starter);
+                    }}
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Practice
+                  </Button>
                 }
-              />
+              >
+                {renderInlineDocPicker(storageOpen, () => setStorageOpen(false), handleLoadStorageDoc)}
+              </ProvokeText>
             ) : (
               <ProvokeText
                 chrome="container"
@@ -831,87 +871,28 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 showCharCount
                 maxCharCount={500000}
                 maxAudioDuration="5min"
-                headerActions={
-                  <Popover open={storageOpen} onOpenChange={setStorageOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs h-7"
-                        title="Load context from saved documents"
-                      >
-                        <HardDrive className="w-3.5 h-3.5" />
-                        Load
-                        {loadedDocIds.size > 0 && (
-                          <span className="ml-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
-                            {loadedDocIds.size}
-                          </span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-72 p-0">
-                      <div className="px-3 py-2 border-b">
-                        <p className="text-sm font-medium">Load from Context Store</p>
-                        <p className="text-xs text-muted-foreground">Select documents or upload files</p>
-                      </div>
-                      <ScrollArea className="max-h-60">
-                        {isLoadingDocs ? (
-                          <div className="px-3 py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Loading...
-                          </div>
-                        ) : !savedDocs?.documents?.length ? (
-                          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                            No saved documents yet
-                          </div>
-                        ) : (
-                          <div className="py-1">
-                            {savedDocs.documents.map((doc) => (
-                              <button
-                                key={doc.id}
-                                onClick={() => handleLoadStorageDoc(doc.id, doc.title)}
-                                disabled={loadingDocId !== null || loadedDocIds.has(doc.id)}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
-                              >
-                                {loadingDocId === doc.id ? (
-                                  <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
-                                ) : loadedDocIds.has(doc.id) ? (
-                                  <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
-                                ) : (
-                                  <FileText className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                                )}
-                                <span className="truncate flex-1">{doc.title}</span>
-                                {loadedDocIds.has(doc.id) && (
-                                  <span className="text-[10px] text-primary font-medium shrink-0">Loaded</span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </ScrollArea>
-                      <div className="flex items-center justify-between px-3 py-2 border-t">
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                          <Upload className="w-3.5 h-3.5" />
-                          Upload file
-                          <input
-                            type="file"
-                            accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleFileUpload(file);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setStorageOpen(false)}>
-                          Done
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                }
-              />
+                actions={[
+                  {
+                    key: "save",
+                    label: "Save",
+                    description: "Save this content to the Context Store for reuse.",
+                    icon: Save,
+                    onClick: () => handleSaveFieldToStore(text, "Your context"),
+                    disabled: !text.trim(),
+                    loading: savingField === "Your context",
+                    loadingLabel: "Saving...",
+                  },
+                  {
+                    key: "load",
+                    label: "Load",
+                    description: "Load content from the Context Store.",
+                    icon: HardDrive,
+                    onClick: () => { setStorageOpen((v) => !v); },
+                  },
+                ]}
+              >
+                {renderInlineDocPicker(storageOpen, () => setStorageOpen(false), handleLoadStorageDoc)}
+              </ProvokeText>
             )}
 
             {/* Right column: context (only for write-a-prompt) — desktop only */}
@@ -951,25 +932,43 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               steps={activePrebuilt?.steps ?? [{ id: "context", label: "Share your context" }]}
               currentStep={0}
             />
-            <Button
-              data-testid="button-analyze"
-              onClick={handleSubmit}
-              disabled={!(text.trim() || loadedDocIds.size > 0) || isLoading}
-              size="lg"
-              className="gap-2 shrink-0 w-full sm:w-auto"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  {isWritePrompt ? "Formatting with AIM..." : "Creating first draft..."}
-                </>
-              ) : (
-                <>
-                  {isWritePrompt ? "Format as AIM" : "Create First Draft"}
-                  {isWritePrompt ? <Crosshair className="w-4 h-4" /> : <PenLine className="w-4 h-4" />}
-                </>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Dual action buttons for GPT to Context (write-a-prompt) */}
+              {isWritePrompt && onResearchChatMode && (
+                <Button
+                  onClick={() => onResearchChatMode(
+                    objective.trim() || "Research and data gathering session",
+                    activePrebuilt!.id,
+                  )}
+                  disabled={isLoading}
+                  size="lg"
+                  variant="outline"
+                  className="gap-2 shrink-0 w-full sm:w-auto border-primary/40 hover:bg-primary/5"
+                >
+                  <Search className="w-4 h-4" />
+                  Start Research Session
+                </Button>
               )}
-            </Button>
+              <Button
+                data-testid="button-analyze"
+                onClick={handleSubmit}
+                disabled={!(text.trim() || loadedDocIds.size > 0) || isLoading}
+                size="lg"
+                className="gap-2 shrink-0 w-full sm:w-auto"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    {isWritePrompt ? "Formatting with AIM..." : "Creating first draft..."}
+                  </>
+                ) : (
+                  <>
+                    {isWritePrompt ? "Convert Prompt to AIM" : "Create First Draft"}
+                    {isWritePrompt ? <Crosshair className="w-4 h-4" /> : <PenLine className="w-4 h-4" />}
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}

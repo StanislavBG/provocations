@@ -31,6 +31,7 @@ import {
   GripVertical,
   FolderInput,
   Lock,
+  Upload,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
@@ -302,6 +303,31 @@ export function StoragePanel({
       toast({ title: "Failed to move folder", variant: "destructive" });
     },
   });
+
+  // ── File upload handler ──
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const content = ev.target?.result;
+      if (typeof content !== "string" || !content.trim()) return;
+      try {
+        const title = file.name.replace(/\.[^.]+$/, "");
+        await apiRequest("POST", "/api/documents", {
+          title,
+          content: content.trim(),
+          folderId: currentFolderId,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+        toast({ title: "File uploaded", description: `"${file.name}" saved to Context Store.` });
+      } catch {
+        toast({ title: "Upload failed", description: "Could not save the file.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  }, [currentFolderId, queryClient, toast]);
 
   // ── Expand/collapse helpers ──
 
@@ -678,6 +704,27 @@ export function StoragePanel({
                 <FolderPlus className="w-3 h-3" />
                 New Folder
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 text-xs px-2"
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload a file as a new document"
+              >
+                <Upload className="w-3 h-3" />
+                Upload
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml,.html"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUpload(file);
+                  e.target.value = "";
+                }}
+              />
             </div>
           </div>
 

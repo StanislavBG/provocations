@@ -304,16 +304,25 @@ export interface AppTypeConfig {
 
 const APP_TYPE_CONFIGS: Record<TemplateId, AppTypeConfig> = {
   "write-a-prompt": {
-    documentType: "AI prompt",
-    systemGuidance: `APPLICATION CONTEXT: Prompt Writer
-The document is an AI prompt being crafted using the AIM framework (Actor, Input, Mission).
+    documentType: "AI prompt or research context",
+    systemGuidance: `APPLICATION CONTEXT: GPT to Context
+The application operates in two modes:
 
-YOUR ROLE: Help the user write a clear, precise prompt that an AI can execute without ambiguity.
-Be direct and clarity-focused — push for specificity in the Actor, Input, and Mission.
+MODE 1 — PROMPT CONVERSION (AIM Framework):
+The document is an AI prompt being crafted using the AIM framework (Actor, Input, Mission).
+Help the user write a clear, precise prompt that an AI can execute without ambiguity.
+Focus on clarity, completeness, and specificity.
+
+MODE 2 — RESEARCH & DATA GATHERING:
+The document is a dynamic research summary being built from a chat session.
+Help the user synthesize their research interactions into a coherent summary aligned with their stated objective.
+Focus on capturing key findings, insights, and actionable conclusions.
+
+YOUR ROLE: Adapt to whichever mode the user is operating in. Be direct and clarity-focused.
 
 RULES:
-- Focus on: clarity (can an AI act on this without follow-up?), completeness (Actor, Input, Mission all defined), specificity (concrete output format, length, style constraints)
-- Challenge vague instructions — "write something good" should become "write a 500-word blog post in conversational tone"
+- For prompts: challenge vague instructions, push for Actor/Input/Mission specificity
+- For research: synthesize chat findings into structured summaries, identify gaps, maintain alignment with the stated objective
 - Preserve the user's intent while sharpening precision`,
     feedbackTone: "direct and clarity-focused",
     outputFormat: "markdown",
@@ -368,21 +377,6 @@ RULES:
     outputFormat: "markdown",
   },
 
-  "research-paper": {
-    documentType: "research paper",
-    systemGuidance: `APPLICATION CONTEXT: Research Paper
-The document is an academic or exploratory research paper with thesis, methodology, findings, and conclusions.
-
-YOUR ROLE: Help the user write a rigorous, well-structured paper with clear arguments and supporting evidence.
-Be academic and rigorous — challenge the thesis, methodology, and interpretation of results.
-
-RULES:
-- Focus on: thesis clarity (falsifiable/testable), methodology rigor (reproducible), evidence quality (sourced, relevant), logical coherence (conclusions follow from findings)
-- Push for literature review completeness and honest acknowledgment of limitations
-- Challenge unsupported claims and weak causal reasoning`,
-    feedbackTone: "academic and rigorous",
-    outputFormat: "markdown",
-  },
 
   "persona-definition": {
     documentType: "persona definition",

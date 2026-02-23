@@ -16,6 +16,8 @@ import { DEFAULT_MODEL_CONFIG, type ModelConfig } from "@/components/ModelConfig
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
 import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
 import { InfographicStudioWorkspace } from "@/components/InfographicStudioWorkspace";
+import { ChatSessionPanel } from "@/components/ChatSessionPanel";
+import { DynamicSummaryPanel } from "@/components/DynamicSummaryPanel";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
@@ -96,6 +98,7 @@ import type {
   Advice,
   AgentStep,
   FolderItem,
+  ChatMessage,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -144,9 +147,20 @@ export default function Workspace() {
     }
   }, []);
 
+  // Layout override — set when research-chat mode is activated within a standard-layout app
+  const [layoutOverride, setLayoutOverride] = useState<"research-chat" | null>(null);
+
   // Computed flow config — the single source of truth for app-specific behavior
-  const appFlowConfig: AppFlowConfig = getAppFlowConfig(selectedTemplateId);
+  const baseAppFlowConfig: AppFlowConfig = getAppFlowConfig(selectedTemplateId);
+  const appFlowConfig: AppFlowConfig = layoutOverride
+    ? { ...baseAppFlowConfig, workspaceLayout: layoutOverride }
+    : baseAppFlowConfig;
   const objectiveConfig = getObjectiveConfig(selectedTemplateId);
+
+  // Valid appType for API calls — "custom" is not a real templateId, so treat it as undefined
+  const validAppType = selectedTemplateId && (templateIds as readonly string[]).includes(selectedTemplateId)
+    ? selectedTemplateId
+    : undefined;
 
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
@@ -204,6 +218,14 @@ export default function Workspace() {
   // ── Discussion state (enhanced advice + ask question) ──
   const [discussionMessages, setDiscussionMessages] = useState<DiscussionMessage[]>([]);
   const [currentAdviceText, setCurrentAdviceText] = useState<string | null>(null);
+
+  // ── Research chat state (GPT to Context research mode) ──
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatStreamingContent, setChatStreamingContent] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [researchSummary, setResearchSummary] = useState("");
+  const [isSummaryUpdating, setIsSummaryUpdating] = useState(false);
+  const summaryDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Context collection data (captured from input phase for read-only toolbox tab)
   const [contextCollectionData, setContextCollectionData] = useState<{
@@ -515,7 +537,7 @@ RULES:
           document: document.rawText,
           objective,
           secondaryObjective: secondaryObjective.trim() || undefined,
-          appType: selectedTemplateId || undefined,
+          appType: validAppType,
           referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
           capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
           editHistory: editHistory.length > 0 ? editHistory : undefined,
@@ -530,7 +552,7 @@ RULES:
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
@@ -602,7 +624,7 @@ RULES:
       const response = await apiRequest("POST", "/api/write", {
         document: context,
         objective: obj,
-        appType: templateId || undefined,
+        appType: templateId && (templateIds as readonly string[]).includes(templateId) ? templateId : undefined,
         instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
         referenceDocuments: refs.length > 0 ? refs : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -656,7 +678,7 @@ RULES:
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         document: document.rawText,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         template: templateDoc?.content,
         previousEntries: entries.length > 0 ? entries : undefined,
         directionMode: dir?.mode,
@@ -704,7 +726,7 @@ RULES:
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
@@ -718,7 +740,7 @@ RULES:
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         instruction: effectiveInstruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -778,7 +800,7 @@ RULES:
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
@@ -790,7 +812,7 @@ RULES:
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         instruction: effectiveInstruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -860,7 +882,7 @@ RULES:
       const response = await apiRequest("POST", "/api/generate-advice", {
         document: document.rawText,
         objective,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         challengeId: `interview-${Date.now()}`,
         challengeTitle: topic,
         challengeContent: question,
@@ -888,7 +910,7 @@ RULES:
         question,
         document: document.rawText,
         objective,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         secondaryObjective: secondaryObjective.trim() || undefined,
         activePersonas: interviewDirection?.personas || [],
         previousMessages: discussionMessages.length > 0 ? discussionMessages.slice(-10) : undefined,
@@ -1090,6 +1112,106 @@ RULES:
     askQuestionMutation.mutate(`${context}${response}`);
   }, [discussionMessages, askQuestionMutation]);
 
+  // ── Research chat handlers ──
+
+  const updateResearchSummary = useCallback(async (messages: ChatMessage[]) => {
+    if (messages.length < 2) return; // Need at least one exchange
+    setIsSummaryUpdating(true);
+    try {
+      const res = await apiRequest("POST", "/api/chat/summarize", {
+        objective,
+        chatHistory: messages,
+        currentSummary: researchSummary || undefined,
+      });
+      const data = await res.json();
+      if (data.summary) {
+        setResearchSummary(data.summary);
+        // Also update the document so it can be saved
+        setDocument(prev => ({ ...prev, rawText: data.summary }));
+      }
+    } catch (error) {
+      console.error("Failed to update research summary:", error);
+    } finally {
+      setIsSummaryUpdating(false);
+    }
+  }, [objective, researchSummary]);
+
+  const handleChatSendMessage = useCallback(async (message: string) => {
+    // Add user message to chat
+    const userMsg: ChatMessage = { role: "user", content: message };
+    const updatedMessages = [...chatMessages, userMsg];
+    setChatMessages(updatedMessages);
+    setIsChatLoading(true);
+    setChatStreamingContent("");
+
+    try {
+      // Use streaming endpoint for real-time feedback
+      const response = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          objective,
+          history: chatMessages,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Chat stream failed");
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream reader");
+
+      const decoder = new TextDecoder();
+      let fullContent = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = decoder.decode(value, { stream: true });
+        const lines = text.split("\n").filter(l => l.startsWith("data: "));
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === "content") {
+              fullContent += data.content;
+              setChatStreamingContent(fullContent);
+            }
+          } catch {
+            // Skip malformed lines
+          }
+        }
+      }
+
+      // Finalize the assistant message
+      const assistantMsg: ChatMessage = { role: "assistant", content: fullContent };
+      const finalMessages = [...updatedMessages, assistantMsg];
+      setChatMessages(finalMessages);
+      setChatStreamingContent("");
+      setIsChatLoading(false);
+
+      // Debounce summary update — trigger after a short delay
+      if (summaryDebounceRef.current) clearTimeout(summaryDebounceRef.current);
+      summaryDebounceRef.current = setTimeout(() => {
+        updateResearchSummary(finalMessages);
+      }, 1500);
+    } catch (error) {
+      console.error("Chat error:", error);
+      setIsChatLoading(false);
+      setChatStreamingContent("");
+      // Add error message
+      setChatMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I encountered an error. Please try again." },
+      ]);
+    }
+  }, [chatMessages, objective, updateResearchSummary]);
+
+  const handleRefreshSummary = useCallback(() => {
+    updateResearchSummary(chatMessages);
+  }, [chatMessages, updateResearchSummary]);
+
   // ── Browser expanded state (for full-screen capture flow) ──
   const [browserExpanded, setBrowserExpanded] = useState(false);
 
@@ -1136,6 +1258,13 @@ RULES:
     setDiscussionMessages([]);
     setCurrentAdviceText(null);
     setContextCollectionData(null);
+    // Reset research chat state
+    setChatMessages([]);
+    setChatStreamingContent("");
+    setIsChatLoading(false);
+    setResearchSummary("");
+    setIsSummaryUpdating(false);
+    if (summaryDebounceRef.current) clearTimeout(summaryDebounceRef.current);
     // Reset website state
     setWebsiteUrl("");
     setWireframeNotes("");
@@ -1157,6 +1286,7 @@ RULES:
     setRightPanelMode("discussion");
     // Reset template selection (so appFlowConfig resets to default)
     setSelectedTemplateId(null);
+    setLayoutOverride(null);
   }, []);
 
   // Show confirmation when there's work in progress, otherwise reset immediately
@@ -1559,6 +1689,23 @@ RULES:
               },
             ]);
           }}
+          onResearchChatMode={(obj, templateId) => {
+            setSelectedTemplateId(templateId);
+            setLayoutOverride("research-chat");
+            setDocument({ id: generateId("doc"), rawText: " " });
+            setObjective(obj);
+            // Reset chat state for a fresh session
+            setChatMessages([]);
+            setChatStreamingContent("");
+            setResearchSummary("");
+            const initialVersion: DocumentVersion = {
+              id: generateId("v"),
+              text: " ",
+              timestamp: Date.now(),
+              description: "Research session initialized",
+            };
+            setVersions([initialVersion]);
+          }}
           capturedContext={capturedContext}
           onCapturedContextChange={setCapturedContext}
           onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
@@ -1612,6 +1759,36 @@ RULES:
         appFlowSteps={appFlowConfig.flowSteps}
         appLeftPanelTabs={appFlowConfig.leftPanelTabs}
       />
+    </>
+  ) : null;
+
+  // Research chat content — 2-panel layout (chat | summary)
+  const isResearchChat = !isInputPhase && appFlowConfig.workspaceLayout === "research-chat";
+  const researchChatContent = isResearchChat ? (
+    <>
+      <div className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal">
+          <ResizablePanel defaultSize={55} minSize={30}>
+            <ChatSessionPanel
+              messages={chatMessages}
+              isLoading={isChatLoading}
+              streamingContent={chatStreamingContent}
+              onSendMessage={handleChatSendMessage}
+              objective={objective}
+            />
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={45} minSize={25}>
+            <DynamicSummaryPanel
+              summary={researchSummary}
+              objective={objective}
+              isUpdating={isSummaryUpdating}
+              messageCount={chatMessages.length}
+              onRefresh={handleRefreshSummary}
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
     </>
   ) : null;
 
@@ -1853,7 +2030,7 @@ RULES:
 
   // ── Unified Layout — persistent sidebar + global bar ──
 
-  const isStandardWorkspace = !isInputPhase && !isVoiceCapture && !isInfographicStudio;
+  const isStandardWorkspace = !isInputPhase && !isVoiceCapture && !isInfographicStudio && !isResearchChat;
 
   return (
     <div className="h-screen flex flex-col">
@@ -2001,6 +2178,17 @@ RULES:
             </span>
           </div>
         )}
+
+        {/* Research chat objective bar */}
+        {isResearchChat && objective && (
+          <div className="border-t px-4 py-2 flex items-center gap-2">
+            <Target className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-xs font-medium text-muted-foreground/70 shrink-0">Research Objective</span>
+            <span className="text-sm text-muted-foreground truncate flex-1">
+              {objective}
+            </span>
+          </div>
+        )}
       </header>
 
       {/* ── New button confirmation dialog ── */}
@@ -2141,6 +2329,7 @@ RULES:
       {inputPhaseContent}
       {voiceCaptureContent}
       {infographicStudioContent}
+      {researchChatContent}
 
       {/* ── Standard workspace content ── */}
       {isStandardWorkspace && (
