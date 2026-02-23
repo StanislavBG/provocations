@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState } from "react";
 import { Star, Heart, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { PrebuiltTemplate } from "@/lib/prebuiltTemplates";
+import { sortTemplatesByUsage, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -256,6 +256,7 @@ interface AppTileCarouselProps {
   templates: PrebuiltTemplate[];
   favorites: Set<string>;
   ratings: Record<string, number>;
+  usage: Record<string, number>;
   onSelect: (template: PrebuiltTemplate) => void;
   onToggleFavorite: (templateId: string) => void;
   onRate: (templateId: string, value: number) => void;
@@ -265,6 +266,7 @@ export function AppTileCarousel({
   templates,
   favorites,
   ratings,
+  usage,
   onSelect,
   onToggleFavorite,
   onRate,
@@ -272,9 +274,8 @@ export function AppTileCarousel({
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const ordered = useMemo(
-    () => orderTemplates(templates, favorites),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [templates.length, favorites.size],
+    () => sortTemplatesByUsage(templates, usage),
+    [templates, usage],
   );
 
   const totalSlides = ordered.length;

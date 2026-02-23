@@ -1,18 +1,14 @@
-import { useState, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   prebuiltTemplates,
-  TEMPLATE_CATEGORIES,
+  sortTemplatesByUsage,
   type PrebuiltTemplate,
-  type TemplateCategory,
 } from "@/lib/prebuiltTemplates";
 import {
   Sparkles,
-  ChevronLeft,
-  ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -22,6 +18,7 @@ interface AppSidebarProps {
   onSelectApp: (template: PrebuiltTemplate) => void;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  usage?: Record<string, number>;
 }
 
 export function AppSidebar({
@@ -29,16 +26,12 @@ export function AppSidebar({
   onSelectApp,
   collapsed = false,
   onCollapsedChange,
+  usage = {},
 }: AppSidebarProps) {
-  const [activeCategory, setActiveCategory] = useState<TemplateCategory>("build");
-
-  const templatesByCategory = useMemo(() => {
-    const map = new Map<TemplateCategory, PrebuiltTemplate[]>();
-    for (const cat of TEMPLATE_CATEGORIES) {
-      map.set(cat.id, prebuiltTemplates.filter((t) => t.category === cat.id));
-    }
-    return map;
-  }, []);
+  const sortedTemplates = useMemo(
+    () => sortTemplatesByUsage(prebuiltTemplates, usage),
+    [usage],
+  );
 
   const handleSelect = useCallback(
     (template: PrebuiltTemplate) => {
@@ -47,7 +40,7 @@ export function AppSidebar({
     [onSelectApp],
   );
 
-  // Collapsed sidebar — just icons
+  // Collapsed sidebar — app icons
   if (collapsed) {
     return (
       <div className="h-full flex flex-col bg-card border-r w-12 shrink-0">
@@ -56,35 +49,34 @@ export function AppSidebar({
           <Sparkles className="w-5 h-5 text-primary" />
         </div>
 
-        {/* Category icons as vertical tabs */}
+        {/* Top app icons */}
         <div className="flex flex-col items-center gap-1 py-2">
-          {TEMPLATE_CATEGORIES.map((cat) => {
-            const catTemplates = templatesByCategory.get(cat.id) ?? [];
-            const hasSelected = catTemplates.some((t) => t.id === selectedAppId);
-            return (
-              <Tooltip key={cat.id}>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => {
-                      setActiveCategory(cat.id);
-                      onCollapsedChange?.(false);
-                    }}
-                    className={`w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold transition-colors ${
-                      hasSelected
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    {cat.label[0]}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p className="text-xs font-medium">{cat.label}</p>
-                  <p className="text-xs text-muted-foreground">{cat.description}</p>
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
+          {sortedTemplates
+            .filter((t) => !t.comingSoon && !t.externalUrl)
+            .slice(0, 6)
+            .map((template) => {
+              const Icon = template.icon;
+              const isActive = template.id === selectedAppId;
+              return (
+                <Tooltip key={template.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => handleSelect(template)}
+                      className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p className="text-xs font-medium">{template.shortLabel}</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
         </div>
 
         {/* Expand button */}
@@ -119,37 +111,32 @@ export function AppSidebar({
         </Button>
       </div>
 
-      {/* Category tabs */}
-      <div className="flex items-center border-b px-1 shrink-0">
-        {TEMPLATE_CATEGORIES.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveCategory(cat.id)}
-            className={`flex-1 py-2 text-[11px] font-medium text-center transition-colors border-b-2 ${
-              activeCategory === cat.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* App list */}
+      {/* App list — sorted by usage, comingSoon/external at bottom */}
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-0.5">
-          {(templatesByCategory.get(activeCategory) ?? []).map((template) => {
+          {sortedTemplates.map((template) => {
             const Icon = template.icon;
             const isActive = template.id === selectedAppId;
+            const isComingSoon = !!template.comingSoon;
+            const isExternal = !!template.externalUrl;
             return (
               <button
                 key={template.id}
-                onClick={() => handleSelect(template)}
+                onClick={() => {
+                  if (isComingSoon) return;
+                  if (isExternal) {
+                    window.open(template.externalUrl, "_blank", "noopener,noreferrer");
+                    return;
+                  }
+                  handleSelect(template);
+                }}
+                disabled={isComingSoon}
                 className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left transition-colors ${
-                  isActive
-                    ? "bg-primary/10 text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  isComingSoon
+                    ? "opacity-40 cursor-default"
+                    : isActive
+                      ? "bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : ""}`} />
@@ -158,7 +145,10 @@ export function AppSidebar({
                     {template.shortLabel}
                   </p>
                 </div>
-                {isActive && (
+                {isComingSoon && (
+                  <span className="text-[9px] uppercase tracking-wider text-primary/70 font-semibold">Soon</span>
+                )}
+                {isActive && !isComingSoon && (
                   <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                 )}
               </button>
