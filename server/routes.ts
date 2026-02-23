@@ -3417,12 +3417,20 @@ Output only valid JSON, no markdown.`,
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const parentFolderId = req.query.parentFolderId != null
-        ? parseInt(req.query.parentFolderId as string, 10)
-        : undefined;
+      // Parse parentFolderId: "null" → null (root), numeric string → number, absent → undefined (all)
+      const rawParent = req.query.parentFolderId as string | undefined;
+      let parentFolderFilter: number | null | undefined;
+      if (rawParent === undefined) {
+        parentFolderFilter = undefined; // no filter — return all folders
+      } else if (rawParent === "null") {
+        parentFolderFilter = null; // root-level folders only
+      } else {
+        const parsed = parseInt(rawParent, 10);
+        parentFolderFilter = isNaN(parsed) ? undefined : parsed;
+      }
 
       const key = getEncryptionKey();
-      const items = await storage.listFolders(userId, parentFolderId === undefined ? undefined : (isNaN(parentFolderId!) ? undefined : parentFolderId));
+      const items = await storage.listFolders(userId, parentFolderFilter);
       const decrypted = items.map((item) => ({
         id: item.id,
         name: decryptField(item.name, item.nameCiphertext, item.nameSalt, item.nameIv, key),

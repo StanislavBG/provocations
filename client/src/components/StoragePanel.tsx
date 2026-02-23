@@ -142,30 +142,13 @@ export function StoragePanel({
 
   // ── Queries ──
 
-  // Fetch ALL folders (flat) so we can build the tree
+  // Fetch ALL folders in a single request (no parentFolderId param = all folders)
   const allFoldersQuery = useQuery({
     queryKey: ["/api/folders/all"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/folders?parentFolderId=null");
-      const rootData = await res.json();
-      const rootFolders = (rootData.folders || []) as FolderItem[];
-
-      // Recursively fetch children for deeper hierarchy
-      const allFolders: FolderItem[] = [...rootFolders];
-      const queue = [...rootFolders];
-      while (queue.length > 0) {
-        const folder = queue.shift()!;
-        try {
-          const childRes = await apiRequest("GET", `/api/folders?parentFolderId=${folder.id}`);
-          const childData = await childRes.json();
-          const children = (childData.folders || []) as FolderItem[];
-          allFolders.push(...children);
-          queue.push(...children);
-        } catch {
-          // Folder has no children or error — continue
-        }
-      }
-      return allFolders;
+      const res = await apiRequest("GET", "/api/folders");
+      const data = await res.json();
+      return (data.folders || []) as FolderItem[];
     },
     enabled: isOpen,
   });
