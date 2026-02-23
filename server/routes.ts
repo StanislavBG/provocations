@@ -2462,16 +2462,30 @@ Output only the evolved markdown document. No explanations.`;
 
   /** Check if Whisper transcription is available (requires OpenAI API key) */
   app.get("/api/transcribe/status", (_req, res) => {
-    const hasKey = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY);
-    res.json({ available: hasKey });
+    // Audio endpoints are NOT supported through the Replit proxy —
+    // only direct OpenAI keys work for Whisper.  Accept OPENAI_API_KEY
+    // or the Replit-injected key but only when NOT proxied.
+    const directKey = process.env.OPENAI_API_KEY;
+    const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+    const hasProxy = !!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+    // Available when: a direct key exists, OR the integration key exists without a proxy
+    const available = !!directKey || (!!integrationKey && !hasProxy);
+    res.json({ available });
   });
 
   /** Accept base64-encoded audio, translate+transcribe to English via Whisper */
   app.post("/api/transcribe", async (req, res) => {
     try {
-      const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      if (!openaiKey) {
-        return res.status(503).json({ error: "Whisper transcription not available — no OpenAI API key configured" });
+      // Audio endpoints require a direct OpenAI connection (not the Replit proxy)
+      const directKey = process.env.OPENAI_API_KEY;
+      const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      const hasProxy = !!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      const apiKey = directKey || (!hasProxy ? integrationKey : null);
+
+      if (!apiKey) {
+        return res.status(503).json({
+          error: "Whisper transcription not available — audio endpoints require a direct OpenAI API key (OPENAI_API_KEY), not the Replit proxy",
+        });
       }
 
       const { audio, mimeType } = req.body;
@@ -2489,8 +2503,8 @@ Output only the evolved markdown document. No explanations.`;
 
       const OpenAI = (await import("openai")).default;
       const { toFile } = await import("openai");
-      const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-      const client = new OpenAI({ apiKey: openaiKey, ...(baseURL ? { baseURL } : {}) });
+      // Never use the Replit proxy for audio — connect directly to OpenAI
+      const client = new OpenAI({ apiKey });
 
       // Determine file extension from MIME type
       const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
