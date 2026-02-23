@@ -167,6 +167,22 @@ export async function ensureTables(): Promise<void> {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS error_logs (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        session_id VARCHAR(64),
+        tag VARCHAR(64) NOT NULL,
+        message TEXT NOT NULL,
+        stack TEXT,
+        url TEXT,
+        metadata TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_error_logs_user ON error_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at);
+      CREATE INDEX IF NOT EXISTS idx_error_logs_tag ON error_logs(tag);
+
       CREATE INDEX IF NOT EXISTS idx_tracking_events_user ON tracking_events(user_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_type ON tracking_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_session ON tracking_events(session_id);
