@@ -22,5 +22,9 @@ export default defineConfig({
     "tracking_events",
     "usage_metrics",
     "pipeline_artifacts",
+    "persona_overrides",
+    "agent_definitions",
+    "agent_prompt_overrides",
+    "error_logs",
   ],
 });
