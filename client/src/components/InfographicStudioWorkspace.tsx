@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { errorLogStore } from "@/lib/errorLog";
+import { generateId } from "@/lib/utils";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -33,9 +34,15 @@ import {
   Info,
   Palette,
   LayoutGrid,
-  Type,
   Sparkles,
   Upload,
+  BookOpen,
+  PaintBucket,
+  Library,
+  SlidersHorizontal,
+  Shuffle,
+  Check,
+  Plus,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -60,18 +67,19 @@ interface EnrichmentOptions {
   includeCallToAction: boolean;
 }
 
-/** Controls the LLM behaviour for the summary panel */
-interface SummaryControls {
-  tone: string;
-  length: string;
-  detailLevel: string;
+/** Fine-tunable image generation parameters */
+interface ImageParams {
+  aspectRatio: string;
+  colorScheme: string;
+  complexity: string;
+  temperature: number;
 }
 
 /** One generated variant in the gallery */
 interface InfographicVariant {
   id: string;
   label: string;
-  temperature: number;
+  params: ImageParams;
   imageUrl: string | null;
   revisedPrompt: string | null;
   isGenerating: boolean;
@@ -83,47 +91,59 @@ interface InfographicVariant {
 // ---------------------------------------------------------------------------
 
 const AUDIENCE_OPTIONS = [
-  { value: "general", label: "General Public" },
-  { value: "executive", label: "Executives / C-Suite" },
-  { value: "technical", label: "Technical Team" },
-  { value: "marketing", label: "Marketing / Sales" },
-  { value: "students", label: "Students / Educators" },
+  { value: "general", label: "General" },
+  { value: "executive", label: "Executive" },
+  { value: "technical", label: "Technical" },
+  { value: "marketing", label: "Marketing" },
+  { value: "students", label: "Students" },
 ];
 
 const VISUAL_STYLE_OPTIONS = [
-  { value: "modern-minimal", label: "Modern Minimal" },
-  { value: "corporate", label: "Corporate / Professional" },
-  { value: "playful", label: "Playful / Colorful" },
-  { value: "data-heavy", label: "Data-Heavy / Charts" },
-  { value: "editorial", label: "Editorial / Magazine" },
+  { value: "modern-minimal", label: "Minimal" },
+  { value: "corporate", label: "Corporate" },
+  { value: "playful", label: "Playful" },
+  { value: "data-heavy", label: "Data-Heavy" },
+  { value: "editorial", label: "Editorial" },
 ];
 
 const EMPHASIS_OPTIONS = [
-  { value: "key-stats", label: "Key Statistics" },
-  { value: "process-flow", label: "Process / Flow" },
-  { value: "comparison", label: "Comparison" },
+  { value: "key-stats", label: "Stats" },
+  { value: "process-flow", label: "Process" },
+  { value: "comparison", label: "Compare" },
   { value: "timeline", label: "Timeline" },
   { value: "hierarchy", label: "Hierarchy" },
 ];
 
-const TONE_OPTIONS = [
-  { value: "neutral", label: "Neutral" },
-  { value: "persuasive", label: "Persuasive" },
-  { value: "analytical", label: "Analytical" },
-  { value: "inspirational", label: "Inspirational" },
-  { value: "urgent", label: "Urgent" },
+/** Predefined artistic interpretation presets */
+const ARTISTIC_PRESETS = [
+  { value: "whiteboard", label: "Whiteboard", description: "Hand-drawn sketch style on white background" },
+  { value: "education", label: "Education", description: "Clean educational diagrams with clear labels" },
+  { value: "business", label: "Business", description: "Professional corporate infographic style" },
+  { value: "professional", label: "Professional", description: "Polished, magazine-quality design" },
+  { value: "creative", label: "Creative", description: "Bold colors, artistic flair, abstract elements" },
+  { value: "technical", label: "Technical", description: "Blueprint-style with precise technical detail" },
 ];
 
-const LENGTH_OPTIONS = [
-  { value: "concise", label: "Concise" },
-  { value: "balanced", label: "Balanced" },
+const ASPECT_RATIO_OPTIONS = [
+  { value: "1:1", label: "1:1 Square" },
+  { value: "16:9", label: "16:9 Wide" },
+  { value: "9:16", label: "9:16 Tall" },
+  { value: "4:3", label: "4:3 Standard" },
+];
+
+const COLOR_SCHEME_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "warm", label: "Warm" },
+  { value: "cool", label: "Cool" },
+  { value: "monochrome", label: "Mono" },
+  { value: "vibrant", label: "Vibrant" },
+  { value: "pastel", label: "Pastel" },
+];
+
+const COMPLEXITY_OPTIONS = [
+  { value: "simple", label: "Simple" },
+  { value: "moderate", label: "Moderate" },
   { value: "detailed", label: "Detailed" },
-];
-
-const DETAIL_OPTIONS = [
-  { value: "high-level", label: "High-Level Overview" },
-  { value: "moderate", label: "Moderate Detail" },
-  { value: "granular", label: "Granular / In-depth" },
 ];
 
 const DEFAULT_ENRICHMENT: EnrichmentOptions = {
@@ -134,25 +154,44 @@ const DEFAULT_ENRICHMENT: EnrichmentOptions = {
   includeCallToAction: false,
 };
 
-const DEFAULT_CONTROLS: SummaryControls = {
-  tone: "neutral",
-  length: "balanced",
-  detailLevel: "moderate",
+const DEFAULT_PARAMS: ImageParams = {
+  aspectRatio: "1:1",
+  colorScheme: "auto",
+  complexity: "moderate",
+  temperature: 0.7,
 };
 
-function makeVariants(): InfographicVariant[] {
+function randomizeParams(base: ImageParams): ImageParams {
+  const ratios = ASPECT_RATIO_OPTIONS.map((o) => o.value);
+  const colors = COLOR_SCHEME_OPTIONS.map((o) => o.value);
+  const complexities = COMPLEXITY_OPTIONS.map((o) => o.value);
+
+  const pick = <T,>(arr: T[], exclude: T): T => {
+    const filtered = arr.filter((x) => x !== exclude);
+    return filtered[Math.floor(Math.random() * filtered.length)] ?? exclude;
+  };
+
+  return {
+    aspectRatio: pick(ratios, base.aspectRatio),
+    colorScheme: pick(colors, base.colorScheme),
+    complexity: pick(complexities, base.complexity),
+    temperature: Math.round((Math.random() * 1.4 + 0.3) * 10) / 10,
+  };
+}
+
+function makeVariants(userParams: ImageParams): InfographicVariant[] {
   return [
-    { id: "conservative", label: "Conservative", temperature: 0.3, imageUrl: null, revisedPrompt: null, isGenerating: false, error: null },
-    { id: "balanced", label: "Balanced", temperature: 0.7, imageUrl: null, revisedPrompt: null, isGenerating: false, error: null },
-    { id: "creative", label: "Creative", temperature: 1.2, imageUrl: null, revisedPrompt: null, isGenerating: false, error: null },
+    { id: "primary", label: "Your Config", params: { ...userParams }, imageUrl: null, revisedPrompt: null, isGenerating: false, error: null },
+    { id: "variation-a", label: "Variation A", params: randomizeParams(userParams), imageUrl: null, revisedPrompt: null, isGenerating: false, error: null },
+    { id: "variation-b", label: "Variation B", params: randomizeParams(userParams), imageUrl: null, revisedPrompt: null, isGenerating: false, error: null },
   ];
 }
 
 // ---------------------------------------------------------------------------
-// Selector row helper
+// Compact inline select helper
 // ---------------------------------------------------------------------------
 
-function OptionSelect({
+function CompactSelect({
   label,
   tooltip,
   value,
@@ -166,22 +205,17 @@ function OptionSelect({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-1.5">
-        <Label className="text-xs font-medium">{label}</Label>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="cursor-help">
-              <Info className="w-3 h-3 text-muted-foreground/60 hover:text-primary transition-colors" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="max-w-[240px]">
-            <p className="text-xs">{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
+    <div className="flex items-center gap-1.5 min-w-0">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Label className="text-[10px] font-medium text-muted-foreground shrink-0 cursor-help">{label}</Label>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[200px]">
+          <p className="text-xs">{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-7 text-xs">
+        <SelectTrigger className="h-6 text-[10px] min-w-0 px-1.5">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -201,10 +235,8 @@ function OptionSelect({
 // ---------------------------------------------------------------------------
 
 interface InfographicStudioWorkspaceProps {
-  /** Current raw text (synced with Workspace.tsx document) */
   rawText: string;
   onRawTextChange: (text: string) => void;
-  /** The user's objective */
   objective: string;
 }
 
@@ -218,15 +250,54 @@ export function InfographicStudioWorkspace({
   // ── Left panel state: enrichment options ──
   const [enrichment, setEnrichment] = useState<EnrichmentOptions>(DEFAULT_ENRICHMENT);
 
-  // ── Middle panel state: summary + controls ──
-  const [summaryText, setSummaryText] = useState("");
-  const [controls, setControls] = useState<SummaryControls>(DEFAULT_CONTROLS);
+  // ── Panel 2 state: Clean summary + context ──
+  const [cleanSummary, setCleanSummary] = useState("");
+  const [summaryContext, setSummaryContext] = useState("");
+  const [showStorePicker, setShowStorePicker] = useState(false);
+  const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
+  const [loadedDocIds, setLoadedDocIds] = useState<Set<number>>(new Set());
 
-  // ── Right panel state: 3 image variants ──
-  const [variants, setVariants] = useState<InfographicVariant[]>(makeVariants);
+  // ── Panel 3 state: Artistic summary + presets ──
+  const [artisticSummary, setArtisticSummary] = useState("");
+  const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set(["business"]));
+  const [artisticContext, setArtisticContext] = useState("");
 
-  // ── Summary generation mutation ──
-  const summarizeMutation = useMutation({
+  // ── Right panel state: image params + 3 variants ──
+  const [userParams, setUserParams] = useState<ImageParams>(DEFAULT_PARAMS);
+  const [variants, setVariants] = useState<InfographicVariant[]>(() => makeVariants(DEFAULT_PARAMS));
+
+  // ── Context store documents ──
+  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
+    queryKey: ["/api/documents"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/documents");
+      return res.json();
+    },
+    enabled: showStorePicker,
+    staleTime: 30_000,
+  });
+
+  // ── Load document from store into summary context ──
+  const handleLoadStoreDoc = useCallback(async (docId: number, docTitle: string) => {
+    setLoadingDocId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        const prefix = summaryContext ? summaryContext + "\n\n---\n\n" : "";
+        setSummaryContext(prefix + `[Context from "${docTitle}"]\n${data.content}`);
+        setLoadedDocIds((prev) => new Set(prev).add(docId));
+        toast({ title: "Context loaded", description: `"${docTitle}" added to summary context.` });
+      }
+    } catch {
+      toast({ title: "Failed to load", description: "Could not load the document.", variant: "destructive" });
+    } finally {
+      setLoadingDocId(null);
+    }
+  }, [summaryContext, toast]);
+
+  // ── Clean summary generation (Panel 2) ──
+  const cleanSummaryMutation = useMutation({
     mutationFn: async () => {
       if (!rawText.trim()) throw new Error("No raw text to summarize");
 
@@ -240,41 +311,85 @@ export function InfographicStudioWorkspace({
         .filter(Boolean)
         .join(". ");
 
-      const controlPrompt = [
-        `Tone: ${TONE_OPTIONS.find((o) => o.value === controls.tone)?.label}`,
-        `Length: ${LENGTH_OPTIONS.find((o) => o.value === controls.length)?.label}`,
-        `Detail: ${DETAIL_OPTIONS.find((o) => o.value === controls.detailLevel)?.label}`,
-      ].join(". ");
+      const contextBlock = summaryContext.trim()
+        ? `\n\nADDITIONAL CONTEXT (use this to focus and enrich the summary):\n${summaryContext}`
+        : "";
 
       const response = await apiRequest("POST", "/api/summarize-intent", {
         transcript: rawText,
-        context: `infographic-summary`,
-        systemOverride: `You are an infographic content specialist. Given the user's raw text, create a rich, expanded summary optimized for visual infographic generation.
+        context: "infographic-clean-summary",
+        systemOverride: `You are a precise journalistic summarizer. Given the user's raw text, create a clean, factual summary that highlights the main points, key data, and core narrative.
 
 ENRICHMENT CONTEXT: ${enrichmentPrompt}
-OUTPUT CONTROLS: ${controlPrompt}
-${objective ? `USER OBJECTIVE: ${objective}` : ""}
+${objective ? `USER OBJECTIVE: ${objective}` : ""}${contextBlock}
 
 Your output should:
-- Expand abbreviations and add context where the original is terse
-- Organize content into clear sections with headers
-- Highlight key statistics, quotes, and data points
-- Structure the information for visual hierarchy (hero insight first, supporting details after)
-- Include specific visual direction: suggested layout, color notes, icon suggestions
-- Be detailed enough to generate a compelling infographic
+- Provide a clean, journalistic description of the content
+- Highlight main points, key facts, statistics, and quotes
+- Organize information in logical narrative order
+- Be factual and objective — no artistic interpretation yet
+- Use clear section headers and bullet points where helpful
+- Preserve all important data points and relationships
 
-Format as clean markdown with sections, bullet points, and emphasized key figures.`,
+Format as clean markdown. This summary will be used as the factual foundation for artistic infographic generation.`,
       });
       return (await response.json()) as SummarizeResponse;
     },
     onSuccess: (data) => {
-      setSummaryText(data.summary);
-      toast({ title: "Summary Generated", description: "Your text has been expanded into an infographic-ready summary." });
+      setCleanSummary(data.summary);
+      toast({ title: "Clean Summary Generated", description: "Factual summary ready. Now generate the artistic interpretation." });
     },
     onError: (error) => {
       const msg = error instanceof Error ? error.message : "Something went wrong";
-      errorLogStore.push({ step: "Generate Summary", endpoint: "/api/summarize-intent", message: msg });
+      errorLogStore.push({ step: "Clean Summary", endpoint: "/api/summarize-intent", message: msg });
       toast({ title: "Summary Failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  // ── Artistic summary generation (Panel 3) ──
+  const artisticSummaryMutation = useMutation({
+    mutationFn: async () => {
+      if (!cleanSummary.trim()) throw new Error("Generate a clean summary first");
+
+      const presetNames = Array.from(selectedPresets)
+        .map((p) => ARTISTIC_PRESETS.find((a) => a.value === p))
+        .filter(Boolean)
+        .map((p) => `${p!.label}: ${p!.description}`)
+        .join("\n- ");
+
+      const artisticBlock = artisticContext.trim()
+        ? `\n\nCUSTOM ARTISTIC DIRECTION:\n${artisticContext}`
+        : "";
+
+      const response = await apiRequest("POST", "/api/summarize-intent", {
+        transcript: cleanSummary,
+        context: "infographic-artistic-summary",
+        systemOverride: `You are an expert infographic art director. Transform the provided factual summary into a vivid, visually-descriptive infographic specification.
+
+ARTISTIC STYLE PRESETS:
+- ${presetNames || "Business: Professional corporate infographic style"}${artisticBlock}
+
+Your output should:
+- Rewrite the factual content with visual storytelling language
+- Describe specific visual elements: layout sections, icon suggestions, color notes
+- Add visual hierarchy direction (hero insight first, supporting details after)
+- Include suggested infographic sections (4-7) with visual treatment for each
+- Specify visual flow, emphasis areas, and decorative elements
+- Blend the factual data with the artistic style direction
+- Make the description detailed enough for an image generation model
+
+Format as rich markdown with visual direction embedded throughout. This output will be sent directly to an image generation model.`,
+      });
+      return (await response.json()) as SummarizeResponse;
+    },
+    onSuccess: (data) => {
+      setArtisticSummary(data.summary);
+      toast({ title: "Artistic Summary Generated", description: "Visual specification ready for infographic generation." });
+    },
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : "Something went wrong";
+      errorLogStore.push({ step: "Artistic Summary", endpoint: "/api/summarize-intent", message: msg });
+      toast({ title: "Artistic Summary Failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -282,16 +397,17 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
   const generateVariant = useCallback(
     async (variantId: string) => {
       const variant = variants.find((v) => v.id === variantId);
-      if (!variant || !summaryText.trim()) return;
+      if (!variant || !artisticSummary.trim()) return;
 
       setVariants((prev) =>
         prev.map((v) => (v.id === variantId ? { ...v, isGenerating: true, error: null } : v)),
       );
 
       try {
+        const paramDesc = `Style: ${variant.params.colorScheme} colors, ${variant.params.complexity} complexity, ${variant.params.aspectRatio} aspect ratio.`;
         const response = await apiRequest("POST", "/api/generate-image", {
-          description: summaryText,
-          temperature: variant.temperature,
+          description: `${artisticSummary}\n\n${paramDesc}`,
+          temperature: variant.params.temperature,
         });
         const data = (await response.json()) as GenerateImageResponse;
         setVariants((prev) =>
@@ -313,26 +429,34 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
         );
       }
     },
-    [variants, summaryText],
+    [variants, artisticSummary],
   );
 
-  // ── Generate all 3 variants in parallel ──
+  // ── Generate all 3 variants: primary uses user params, others get randomized ──
   const generateAllVariants = useCallback(() => {
-    if (!summaryText.trim()) {
-      toast({ title: "No summary", description: "Generate a summary first before creating infographics.", variant: "destructive" });
+    if (!artisticSummary.trim()) {
+      toast({ title: "No artistic summary", description: "Generate an artistic summary first.", variant: "destructive" });
       return;
     }
-    variants.forEach((v) => generateVariant(v.id));
-  }, [summaryText, variants, generateVariant, toast]);
+    const newVariants = [
+      { ...variants[0], params: { ...userParams } },
+      { ...variants[1], params: randomizeParams(userParams) },
+      { ...variants[2], params: randomizeParams(userParams) },
+    ];
+    setVariants(newVariants);
+    // Trigger generation after state update
+    setTimeout(() => {
+      newVariants.forEach((v) => generateVariant(v.id));
+    }, 0);
+  }, [artisticSummary, variants, userParams, generateVariant, toast]);
 
   const handleDownload = useCallback((imageUrl: string, label: string) => {
     const link = document.createElement("a");
     link.href = imageUrl;
-    link.download = `infographic-${label.toLowerCase()}-${Date.now()}.png`;
+    link.download = `infographic-${label.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.png`;
     link.click();
   }, []);
 
-  /** Upload a text file and append its content to the raw text panel */
   const handleFileUpload = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -345,8 +469,21 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
     reader.readAsText(file);
   }, [rawText, onRawTextChange, toast]);
 
+  const togglePreset = useCallback((preset: string) => {
+    setSelectedPresets((prev) => {
+      const next = new Set(prev);
+      if (next.has(preset)) {
+        next.delete(preset);
+      } else {
+        next.add(preset);
+      }
+      return next;
+    });
+  }, []);
+
   const hasRawText = rawText.trim().length > 0;
-  const hasSummary = summaryText.trim().length > 0;
+  const hasCleanSummary = cleanSummary.trim().length > 0;
+  const hasArtisticSummary = artisticSummary.trim().length > 0;
   const anyGenerating = variants.some((v) => v.isGenerating);
 
   // =====================================================================
@@ -356,17 +493,17 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
   return (
     <div className="flex-1 overflow-hidden">
       <ResizablePanelGroup direction="horizontal">
-        {/* ── LEFT PANEL: Raw Text + Enrichment Options ── */}
-        <ResizablePanel defaultSize={30} minSize={20}>
+        {/* ── PANEL 1: Raw Text + Compact Enrichment ── */}
+        <ResizablePanel defaultSize={22} minSize={15}>
           <div className="h-full flex flex-col border-r">
-            {/* Header with enrichment options */}
+            {/* Compact header with enrichment inline */}
             <div className="shrink-0 border-b bg-muted/20">
-              <div className="flex items-center gap-2 px-4 py-2.5">
-                <FileText className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-semibold">Raw Text</h3>
-                <div className="ml-auto flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                    <Upload className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2 px-3 py-1.5">
+                <FileText className="w-3.5 h-3.5 text-primary" />
+                <h3 className="text-xs font-semibold">Raw Text</h3>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                    <Upload className="w-3 h-3" />
                     Upload
                     <input
                       type="file"
@@ -379,56 +516,57 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
                       }}
                     />
                   </label>
-                  <Badge variant="outline" className="text-[10px]">
-                    {rawText.length} chars
+                  <Badge variant="outline" className="text-[9px] px-1 py-0">
+                    {rawText.length}
                   </Badge>
                 </div>
               </div>
 
-              {/* Enrichment options — collapsed into a compact grid */}
-              <div className="px-3 pb-3 space-y-2">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3" />
-                  Enrichment Options
+              {/* Compact enrichment — single row of selects + checkboxes */}
+              <div className="px-2 pb-2 space-y-1.5">
+                <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Enrichment
                 </p>
-                <div className="grid grid-cols-1 gap-2">
-                  <OptionSelect
-                    label="Audience"
-                    tooltip="Who will view this infographic? Affects language complexity and focus."
+                <div className="grid grid-cols-3 gap-1">
+                  <CompactSelect
+                    label="Aud"
+                    tooltip="Target audience"
                     value={enrichment.audience}
                     options={AUDIENCE_OPTIONS}
                     onChange={(v) => setEnrichment((e) => ({ ...e, audience: v }))}
                   />
-                  <OptionSelect
-                    label="Visual Style"
-                    tooltip="The aesthetic direction for the infographic layout and color palette."
+                  <CompactSelect
+                    label="Style"
+                    tooltip="Visual style direction"
                     value={enrichment.visualStyle}
                     options={VISUAL_STYLE_OPTIONS}
                     onChange={(v) => setEnrichment((e) => ({ ...e, visualStyle: v }))}
                   />
-                  <OptionSelect
-                    label="Emphasis"
-                    tooltip="What type of information should be most prominent in the infographic?"
+                  <CompactSelect
+                    label="Focus"
+                    tooltip="Information emphasis"
                     value={enrichment.emphasis}
                     options={EMPHASIS_OPTIONS}
                     onChange={(v) => setEnrichment((e) => ({ ...e, emphasis: v }))}
                   />
                 </div>
-
-                <div className="flex flex-col gap-2 pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1 cursor-pointer">
                     <Checkbox
+                      className="h-3 w-3"
                       checked={enrichment.includeDataPoints}
                       onCheckedChange={(v) => setEnrichment((e) => ({ ...e, includeDataPoints: !!v }))}
                     />
-                    <span className="text-xs text-muted-foreground">Highlight data points</span>
+                    <span className="text-[9px] text-muted-foreground">Data points</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-1 cursor-pointer">
                     <Checkbox
+                      className="h-3 w-3"
                       checked={enrichment.includeCallToAction}
                       onCheckedChange={(v) => setEnrichment((e) => ({ ...e, includeCallToAction: !!v }))}
                     />
-                    <span className="text-xs text-muted-foreground">Include call to action</span>
+                    <span className="text-[9px] text-muted-foreground">CTA</span>
                   </label>
                 </div>
               </div>
@@ -441,7 +579,7 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
                 variant="editor"
                 value={rawText}
                 onChange={onRawTextChange}
-                placeholder="Paste or type your raw content here — notes, bullet points, paragraphs, data dumps. The messier the better; the AI will structure it."
+                placeholder="Paste or type raw content — notes, transcripts, data dumps. The messier the better."
                 showCopy
                 showClear
                 voice={{ mode: "append" }}
@@ -452,93 +590,116 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
 
         <ResizableHandle withHandle />
 
-        {/* ── MIDDLE PANEL: Summary + LLM Controls ── */}
-        <ResizablePanel defaultSize={35} minSize={20}>
+        {/* ── PANEL 2: Clean Summary + Context ── */}
+        <ResizablePanel defaultSize={26} minSize={18}>
           <div className="h-full flex flex-col">
-            {/* Header — mirrors the right panel header layout */}
+            {/* Header with generate button */}
             <div className="shrink-0 border-b bg-muted/20">
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <Wand2 className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-semibold">Summary & Description</h3>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-primary" />
+                  <h3 className="text-xs font-semibold">Clean Summary</h3>
                 </div>
                 <Button
                   size="sm"
-                  className="gap-1.5 text-xs h-7"
-                  onClick={() => summarizeMutation.mutate()}
-                  disabled={!hasRawText || summarizeMutation.isPending}
+                  className="gap-1 text-[10px] h-6 px-2"
+                  onClick={() => cleanSummaryMutation.mutate()}
+                  disabled={!hasRawText || cleanSummaryMutation.isPending}
                 >
-                  {summarizeMutation.isPending ? (
+                  {cleanSummaryMutation.isPending ? (
                     <>
                       <Loader2 className="w-3 h-3 animate-spin" />
                       Generating...
                     </>
-                  ) : hasSummary ? (
+                  ) : hasCleanSummary ? (
                     <>
                       <RefreshCw className="w-3 h-3" />
-                      Regenerate Summary
+                      Regenerate
                     </>
                   ) : (
                     <>
                       <Wand2 className="w-3 h-3" />
-                      Generate Summary
+                      Summarize
                     </>
                   )}
                 </Button>
               </div>
             </div>
 
-            {/* Controls bar */}
-            <div className="shrink-0 border-b px-3 py-3 space-y-2 bg-muted/10">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
-                <Type className="w-3 h-3" />
-                LLM Output Controls
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <OptionSelect
-                  label="Tone"
-                  tooltip="The overall voice of the expanded summary."
-                  value={controls.tone}
-                  options={TONE_OPTIONS}
-                  onChange={(v) => setControls((c) => ({ ...c, tone: v }))}
-                />
-                <OptionSelect
-                  label="Length"
-                  tooltip="How verbose the summary should be."
-                  value={controls.length}
-                  options={LENGTH_OPTIONS}
-                  onChange={(v) => setControls((c) => ({ ...c, length: v }))}
-                />
-                <OptionSelect
-                  label="Detail"
-                  tooltip="How deep into specifics the summary should go."
-                  value={controls.detailLevel}
-                  options={DETAIL_OPTIONS}
-                  onChange={(v) => setControls((c) => ({ ...c, detailLevel: v }))}
+            {/* Context input area */}
+            <div className="shrink-0 border-b bg-muted/10">
+              <div className="px-3 py-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    Focus Context (optional)
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 text-[10px] px-1.5 gap-1"
+                    onClick={() => setShowStorePicker(!showStorePicker)}
+                  >
+                    <Library className="w-3 h-3" />
+                    Store
+                  </Button>
+                </div>
+                {showStorePicker && (
+                  <div className="border rounded-md bg-background p-1.5 max-h-24 overflow-y-auto space-y-0.5">
+                    {isLoadingDocs && (
+                      <p className="text-[10px] text-muted-foreground px-1">Loading documents...</p>
+                    )}
+                    {savedDocs?.documents?.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground px-1">No saved documents</p>
+                    )}
+                    {savedDocs?.documents?.map((doc) => (
+                      <button
+                        key={doc.id}
+                        className="w-full text-left px-1.5 py-0.5 rounded text-[10px] hover:bg-muted/50 flex items-center justify-between gap-1"
+                        onClick={() => handleLoadStoreDoc(doc.id, doc.title)}
+                        disabled={loadingDocId === doc.id}
+                      >
+                        <span className="truncate">{doc.title}</span>
+                        {loadedDocIds.has(doc.id) ? (
+                          <Check className="w-3 h-3 text-green-500 shrink-0" />
+                        ) : loadingDocId === doc.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                        ) : (
+                          <Plus className="w-3 h-3 text-muted-foreground shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  className="w-full text-[11px] bg-transparent border rounded-md px-2 py-1 resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  rows={2}
+                  placeholder="Add context to focus the summary (e.g. 'focus on revenue metrics' or 'highlight team decisions')..."
+                  value={summaryContext}
+                  onChange={(e) => setSummaryContext(e.target.value)}
                 />
               </div>
             </div>
 
-            {/* Summary text display */}
+            {/* Clean summary display */}
             <div className="flex-1 min-h-0">
-              {hasSummary ? (
+              {hasCleanSummary ? (
                 <ProvokeText
                   chrome="bare"
                   variant="editor"
-                  value={summaryText}
-                  onChange={setSummaryText}
-                  placeholder="Summary will appear here..."
+                  value={cleanSummary}
+                  onChange={setCleanSummary}
+                  placeholder="Clean summary will appear here..."
                   showCopy
                   showClear={false}
                 />
               ) : (
-                <div className="h-full flex items-center justify-center p-6">
-                  <div className="text-center space-y-3 max-w-xs">
-                    <Wand2 className="w-10 h-10 text-muted-foreground/20 mx-auto" />
-                    <p className="text-sm text-muted-foreground">
+                <div className="h-full flex items-center justify-center p-4">
+                  <div className="text-center space-y-2 max-w-[180px]">
+                    <BookOpen className="w-8 h-8 text-muted-foreground/15 mx-auto" />
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
                       {hasRawText
-                        ? "Click \"Generate Summary\" to transform your raw text into a rich, infographic-ready description."
-                        : "Enter raw text in the left panel, then generate a summary here."}
+                        ? 'Click "Summarize" to extract a clean, factual summary from your raw text.'
+                        : "Enter raw text in the left panel first."}
                     </p>
                   </div>
                 </div>
@@ -549,21 +710,124 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
 
         <ResizableHandle withHandle />
 
-        {/* ── RIGHT PANEL: Infographic Gallery (3 variants) ── */}
-        <ResizablePanel defaultSize={35} minSize={20}>
+        {/* ── PANEL 3: Artistic Summary + Presets ── */}
+        <ResizablePanel defaultSize={26} minSize={18}>
           <div className="h-full flex flex-col">
-            {/* Header */}
+            {/* Header with generate button */}
             <div className="shrink-0 border-b bg-muted/20">
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <Palette className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-semibold">Infographic Gallery</h3>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <PaintBucket className="w-3.5 h-3.5 text-primary" />
+                  <h3 className="text-xs font-semibold">Artistic Summary</h3>
                 </div>
                 <Button
                   size="sm"
-                  className="gap-1.5 text-xs h-7"
+                  className="gap-1 text-[10px] h-6 px-2"
+                  onClick={() => artisticSummaryMutation.mutate()}
+                  disabled={!hasCleanSummary || artisticSummaryMutation.isPending}
+                >
+                  {artisticSummaryMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Generating...
+                    </>
+                  ) : hasArtisticSummary ? (
+                    <>
+                      <RefreshCw className="w-3 h-3" />
+                      Regenerate
+                    </>
+                  ) : (
+                    <>
+                      <PaintBucket className="w-3 h-3" />
+                      Artify
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Artistic presets + custom context */}
+            <div className="shrink-0 border-b bg-muted/10">
+              <div className="px-3 py-2 space-y-1.5">
+                <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Artistic Interpretation
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {ARTISTIC_PRESETS.map((preset) => (
+                    <Tooltip key={preset.value}>
+                      <TooltipTrigger asChild>
+                        <button
+                          className={`px-2 py-0.5 rounded-full text-[10px] border transition-colors ${
+                            selectedPresets.has(preset.value)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                          }`}
+                          onClick={() => togglePreset(preset.value)}
+                        >
+                          {preset.label}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[200px]">
+                        <p className="text-xs">{preset.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+                <textarea
+                  className="w-full text-[11px] bg-transparent border rounded-md px-2 py-1 resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  rows={2}
+                  placeholder="Custom artistic direction (e.g. 'use warm earth tones, hand-drawn icons, emphasize human connection')..."
+                  value={artisticContext}
+                  onChange={(e) => setArtisticContext(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Artistic summary display */}
+            <div className="flex-1 min-h-0">
+              {hasArtisticSummary ? (
+                <ProvokeText
+                  chrome="bare"
+                  variant="editor"
+                  value={artisticSummary}
+                  onChange={setArtisticSummary}
+                  placeholder="Artistic summary will appear here..."
+                  showCopy
+                  showClear={false}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center p-4">
+                  <div className="text-center space-y-2 max-w-[180px]">
+                    <PaintBucket className="w-8 h-8 text-muted-foreground/15 mx-auto" />
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {hasCleanSummary
+                        ? 'Select artistic presets and click "Artify" to create a visual specification.'
+                        : "Generate a clean summary in Panel 2 first."}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* ── PANEL 4: Infographic Gallery with Fine-tune Params ── */}
+        <ResizablePanel defaultSize={26} minSize={18}>
+          <div className="h-full flex flex-col">
+            {/* Header */}
+            <div className="shrink-0 border-b bg-muted/20">
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-primary" />
+                  <h3 className="text-xs font-semibold">Gallery</h3>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1 text-[10px] h-6 px-2"
                   onClick={generateAllVariants}
-                  disabled={!hasSummary || anyGenerating}
+                  disabled={!hasArtisticSummary || anyGenerating}
                 >
                   {anyGenerating ? (
                     <>
@@ -580,79 +844,138 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
               </div>
             </div>
 
+            {/* Fine-tune parameters (user controls for primary image) */}
+            <div className="shrink-0 border-b bg-muted/10">
+              <div className="px-3 py-2 space-y-1.5">
+                <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                  <SlidersHorizontal className="w-2.5 h-2.5" />
+                  Image Parameters
+                </p>
+                <div className="grid grid-cols-3 gap-1">
+                  <CompactSelect
+                    label="Ratio"
+                    tooltip="Image aspect ratio"
+                    value={userParams.aspectRatio}
+                    options={ASPECT_RATIO_OPTIONS}
+                    onChange={(v) => setUserParams((p) => ({ ...p, aspectRatio: v }))}
+                  />
+                  <CompactSelect
+                    label="Color"
+                    tooltip="Color scheme"
+                    value={userParams.colorScheme}
+                    options={COLOR_SCHEME_OPTIONS}
+                    onChange={(v) => setUserParams((p) => ({ ...p, colorScheme: v }))}
+                  />
+                  <CompactSelect
+                    label="Detail"
+                    tooltip="Visual complexity level"
+                    value={userParams.complexity}
+                    options={COMPLEXITY_OPTIONS}
+                    onChange={(v) => setUserParams((p) => ({ ...p, complexity: v }))}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-[9px] text-muted-foreground shrink-0">Temp</Label>
+                  <Slider
+                    value={[userParams.temperature]}
+                    min={0}
+                    max={2}
+                    step={0.1}
+                    onValueChange={([v]) => setUserParams((p) => ({ ...p, temperature: v }))}
+                    className="flex-1"
+                  />
+                  <span className="text-[9px] font-mono text-muted-foreground w-6 text-right">{userParams.temperature}</span>
+                </div>
+                <p className="text-[9px] text-muted-foreground/60 flex items-center gap-1">
+                  <Shuffle className="w-2.5 h-2.5" />
+                  Variations B & C auto-randomize from your settings
+                </p>
+              </div>
+            </div>
+
             {/* Gallery */}
             <ScrollArea className="flex-1">
-              <div className="p-3 space-y-4">
-                {!hasSummary && (
-                  <div className="text-center py-10 space-y-3">
-                    <ImageIcon className="w-12 h-12 text-muted-foreground/20 mx-auto" />
-                    <p className="text-sm text-muted-foreground">
-                      Generate a summary in the middle panel first, then create 3 infographic variants here.
+              <div className="p-2 space-y-3">
+                {!hasArtisticSummary && (
+                  <div className="text-center py-8 space-y-2">
+                    <ImageIcon className="w-10 h-10 text-muted-foreground/15 mx-auto" />
+                    <p className="text-[11px] text-muted-foreground">
+                      Generate an artistic summary first, then create infographics here.
                     </p>
                   </div>
                 )}
 
-                {hasSummary &&
-                  variants.map((variant) => (
+                {hasArtisticSummary &&
+                  variants.map((variant, idx) => (
                     <div
                       key={variant.id}
-                      className="rounded-xl border bg-card/80 overflow-hidden"
+                      className="rounded-lg border bg-card/80 overflow-hidden"
                     >
                       {/* Variant header */}
-                      <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-semibold">{variant.label}</h4>
-                          <Badge variant="outline" className="text-[10px]">
-                            temp {variant.temperature}
-                          </Badge>
+                      <div className="flex items-center justify-between px-2.5 py-1.5 border-b bg-muted/30">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-[10px] font-semibold">{variant.label}</h4>
+                          {idx === 0 ? (
+                            <Badge variant="outline" className="text-[8px] px-1 py-0">
+                              Your config
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[8px] px-1 py-0">
+                              <Shuffle className="w-2 h-2 mr-0.5" />
+                              Randomized
+                            </Badge>
+                          )}
+                          <span className="text-[8px] font-mono text-muted-foreground">
+                            t={variant.params.temperature}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5">
                           {variant.imageUrl && (
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6"
+                              className="h-5 w-5"
                               onClick={() => handleDownload(variant.imageUrl!, variant.label)}
                               title="Download"
                             >
-                              <Download className="w-3 h-3" />
+                              <Download className="w-2.5 h-2.5" />
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
+                            className="h-5 w-5"
                             onClick={() => generateVariant(variant.id)}
                             disabled={variant.isGenerating}
                             title="Regenerate"
                           >
                             {variant.isGenerating ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
                             ) : (
-                              <RefreshCw className="w-3 h-3" />
+                              <RefreshCw className="w-2.5 h-2.5" />
                             )}
                           </Button>
                         </div>
                       </div>
 
                       {/* Variant content */}
-                      <div className="p-2">
+                      <div className="p-1.5">
                         {variant.isGenerating && (
-                          <div className="flex flex-col items-center justify-center py-8 gap-2">
-                            <Loader2 className="w-8 h-8 animate-spin text-primary/40" />
-                            <p className="text-xs text-muted-foreground">
-                              Generating {variant.label.toLowerCase()} variant...
+                          <div className="flex flex-col items-center justify-center py-6 gap-1.5">
+                            <Loader2 className="w-6 h-6 animate-spin text-primary/40" />
+                            <p className="text-[10px] text-muted-foreground">
+                              Generating {variant.label.toLowerCase()}...
                             </p>
                           </div>
                         )}
 
                         {variant.error && (
-                          <div className="py-4 text-center">
-                            <p className="text-xs text-destructive">{variant.error}</p>
+                          <div className="py-3 text-center">
+                            <p className="text-[10px] text-destructive">{variant.error}</p>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="mt-2 text-xs h-7"
+                              className="mt-1.5 text-[10px] h-6"
                               onClick={() => generateVariant(variant.id)}
                             >
                               Retry
@@ -661,8 +984,8 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
                         )}
 
                         {variant.imageUrl && !variant.isGenerating && (
-                          <div className="space-y-2">
-                            <div className="rounded-lg overflow-hidden border bg-muted/10">
+                          <div className="space-y-1">
+                            <div className="rounded overflow-hidden border bg-muted/10">
                               <img
                                 src={variant.imageUrl}
                                 alt={`${variant.label} infographic variant`}
@@ -670,7 +993,7 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
                               />
                             </div>
                             {variant.revisedPrompt && (
-                              <p className="text-[10px] text-muted-foreground/70 leading-relaxed line-clamp-2 px-1">
+                              <p className="text-[9px] text-muted-foreground/60 leading-relaxed line-clamp-2 px-0.5">
                                 {variant.revisedPrompt}
                               </p>
                             )}
@@ -678,34 +1001,23 @@ Format as clean markdown with sections, bullet points, and emphasized key figure
                         )}
 
                         {!variant.imageUrl && !variant.isGenerating && !variant.error && (
-                          <div className="flex flex-col items-center justify-center py-6 gap-2">
-                            <ImageIcon className="w-6 h-6 text-muted-foreground/20" />
-                            <p className="text-[10px] text-muted-foreground">
-                              Click generate to create this variant
+                          <div className="flex flex-col items-center justify-center py-4 gap-1.5">
+                            <ImageIcon className="w-5 h-5 text-muted-foreground/15" />
+                            <p className="text-[9px] text-muted-foreground">
+                              Click generate to create
                             </p>
                           </div>
                         )}
                       </div>
 
-                      {/* Temperature slider for this variant */}
-                      <div className="px-3 pb-2 pt-1 border-t">
-                        <div className="flex items-center justify-between mb-1">
-                          <Label className="text-[10px] text-muted-foreground">Temperature</Label>
-                          <span className="text-[10px] font-mono text-muted-foreground">{variant.temperature}</span>
+                      {/* Param summary for non-primary variants */}
+                      {idx > 0 && (
+                        <div className="px-2.5 pb-1.5 pt-0.5 border-t">
+                          <p className="text-[8px] text-muted-foreground/60">
+                            {variant.params.aspectRatio} · {variant.params.colorScheme} · {variant.params.complexity}
+                          </p>
                         </div>
-                        <Slider
-                          value={[variant.temperature]}
-                          min={0}
-                          max={2}
-                          step={0.1}
-                          onValueChange={([v]) =>
-                            setVariants((prev) =>
-                              prev.map((p) => (p.id === variant.id ? { ...p, temperature: v } : p)),
-                            )
-                          }
-                          className="w-full"
-                        />
-                      </div>
+                      )}
                     </div>
                   ))}
               </div>
