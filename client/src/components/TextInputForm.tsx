@@ -24,6 +24,7 @@ import {
   FileText,
   Loader2,
   Save,
+  Search,
 } from "lucide-react";
 import { ProvokeText, type ProvokeAction } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -47,6 +48,7 @@ interface TextInputFormProps {
   onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
   onYouTubeInfographicMode?: (objective: string, channelUrl: string, templateId: string) => void;
   onVoiceInfographicMode?: (objective: string, transcript: string, templateId: string) => void;
+  onResearchChatMode?: (objective: string, templateId: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -76,7 +78,7 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, onResearchChatMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
@@ -930,25 +932,43 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               steps={activePrebuilt?.steps ?? [{ id: "context", label: "Share your context" }]}
               currentStep={0}
             />
-            <Button
-              data-testid="button-analyze"
-              onClick={handleSubmit}
-              disabled={!(text.trim() || loadedDocIds.size > 0) || isLoading}
-              size="lg"
-              className="gap-2 shrink-0 w-full sm:w-auto"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  {isWritePrompt ? "Formatting with AIM..." : "Creating first draft..."}
-                </>
-              ) : (
-                <>
-                  {isWritePrompt ? "Format as AIM" : "Create First Draft"}
-                  {isWritePrompt ? <Crosshair className="w-4 h-4" /> : <PenLine className="w-4 h-4" />}
-                </>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Dual action buttons for GPT to Context (write-a-prompt) */}
+              {isWritePrompt && onResearchChatMode && (
+                <Button
+                  onClick={() => onResearchChatMode(
+                    objective.trim() || "Research and data gathering session",
+                    activePrebuilt!.id,
+                  )}
+                  disabled={isLoading}
+                  size="lg"
+                  variant="outline"
+                  className="gap-2 shrink-0 w-full sm:w-auto border-primary/40 hover:bg-primary/5"
+                >
+                  <Search className="w-4 h-4" />
+                  Start Research Session
+                </Button>
               )}
-            </Button>
+              <Button
+                data-testid="button-analyze"
+                onClick={handleSubmit}
+                disabled={!(text.trim() || loadedDocIds.size > 0) || isLoading}
+                size="lg"
+                className="gap-2 shrink-0 w-full sm:w-auto"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    {isWritePrompt ? "Formatting with AIM..." : "Creating first draft..."}
+                  </>
+                ) : (
+                  <>
+                    {isWritePrompt ? "Convert Prompt to AIM" : "Create First Draft"}
+                    {isWritePrompt ? <Crosshair className="w-4 h-4" /> : <PenLine className="w-4 h-4" />}
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}
