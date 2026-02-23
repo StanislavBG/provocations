@@ -820,3 +820,29 @@ export const TEMPLATE_CATEGORIES: TemplateCategoryMeta[] = [
   { id: "analyze", label: "Analyze", description: "SQL queries and screen capture analysis" },
   { id: "capture", label: "Capture", description: "Research, context collection, and voice input" },
 ];
+
+/**
+ * Sort templates by usage count descending.
+ * Usable apps come first (sorted by usage desc, ties preserve original array order).
+ * comingSoon and externalUrl apps go to the bottom.
+ */
+export function sortTemplatesByUsage(
+  templates: PrebuiltTemplate[],
+  usage: Record<string, number>,
+): PrebuiltTemplate[] {
+  const usable: PrebuiltTemplate[] = [];
+  const bottom: PrebuiltTemplate[] = [];
+
+  for (const t of templates) {
+    if (t.comingSoon || t.externalUrl) {
+      bottom.push(t);
+    } else {
+      usable.push(t);
+    }
+  }
+
+  // Stable sort: usage desc, original array order as tiebreaker
+  usable.sort((a, b) => (usage[b.id] ?? 0) - (usage[a.id] ?? 0));
+
+  return [...usable, ...bottom];
+}
