@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRole } from "@/hooks/use-role";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -29,6 +30,7 @@ import {
   Eye,
   GripVertical,
   FolderInput,
+  Lock,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
@@ -101,6 +103,8 @@ export function StoragePanel({
 }: StoragePanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isAdmin } = useRole();
+  const hasSyncedRef = useRef(false);
 
   // Navigation state
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
@@ -177,6 +181,27 @@ export function StoragePanel({
     },
     enabled: isOpen,
   });
+
+  // ── Auto-sync locked folders for admin ──
+  // When an admin opens the storage panel, sync Personas and Applications
+  // folders from disk / persona definitions into the context store.
+  useEffect(() => {
+    if (!isOpen || !isAdmin || hasSyncedRef.current) return;
+    hasSyncedRef.current = true;
+    (async () => {
+      try {
+        await Promise.all([
+          apiRequest("POST", "/api/admin/sync-app-docs"),
+          apiRequest("POST", "/api/admin/sync-persona-docs"),
+        ]);
+        queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      } catch {
+        // Non-critical — folders may already exist or user isn't admin
+      }
+    })();
+  }, [isOpen, isAdmin, queryClient]);
 
   // ── Mutations ──
 
@@ -1037,14 +1062,17 @@ function FolderTreeBranch({
   const isDragOver = dragOverFolderId === folder.id;
   const totalDocs = getTotalDocCount(folder.id);
 
+  const isLocked = !!folder.locked;
+
   const handleDragStart = (e: React.DragEvent) => {
+    if (isLocked) { e.preventDefault(); return; }
     e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "folder", id: folder.id, title: folder.name }));
     e.dataTransfer.effectAllowed = "move";
   };
 
   return (
     <>
-      {isRenaming ? (
+      {isRenaming && !isLocked ? (
         <div
           className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/30"
           style={{ paddingLeft: `${treeIndent(depth)}px` }}
@@ -1064,7 +1092,7 @@ function FolderTreeBranch({
       ) : (
         <div
           className="group relative"
-          draggable
+          draggable={!isLocked}
           onDragStart={handleDragStart}
           onDragOver={(e) => {
             e.preventDefault();
@@ -1105,8 +1133,12 @@ function FolderTreeBranch({
               )}
             </button>
 
-            {/* Drag grip (subtle) */}
-            <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+            {/* Lock icon for system-managed folders, drag grip for user folders */}
+            {isLocked ? (
+              <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
+            ) : (
+              <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+            )}
 
             {/* Folder icon + label */}
             <button
@@ -1129,36 +1161,38 @@ function FolderTreeBranch({
             )}
           </div>
 
-          {/* Hover actions */}
-          <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-5 w-5"
-              title="Move to..."
-              onClick={(e) => { e.stopPropagation(); onMoveTo({ type: "folder", id: folder.id, title: folder.name }); }}
-            >
-              <FolderInput className="w-2.5 h-2.5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-5 w-5"
-              title="Rename folder"
-              onClick={(e) => { e.stopPropagation(); onStartRename(folder.id, folder.name); }}
-            >
-              <Pencil className="w-2.5 h-2.5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-5 w-5 text-destructive"
-              title="Delete folder"
-              onClick={(e) => { e.stopPropagation(); onDelete(folder.id); }}
-            >
-              <Trash2 className="w-2.5 h-2.5" />
-            </Button>
-          </div>
+          {/* Hover actions — hidden for locked folders */}
+          {!isLocked && (
+            <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                title="Move to..."
+                onClick={(e) => { e.stopPropagation(); onMoveTo({ type: "folder", id: folder.id, title: folder.name }); }}
+              >
+                <FolderInput className="w-2.5 h-2.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                title="Rename folder"
+                onClick={(e) => { e.stopPropagation(); onStartRename(folder.id, folder.name); }}
+              >
+                <Pencil className="w-2.5 h-2.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 text-destructive"
+                title="Delete folder"
+                onClick={(e) => { e.stopPropagation(); onDelete(folder.id); }}
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1239,7 +1273,10 @@ function MiddlePanelFolder({
   onRename: () => void;
   onCancelRename: () => void;
 }) {
+  const isLocked = !!folder.locked;
+
   const handleDragStart = (e: React.DragEvent) => {
+    if (isLocked) { e.preventDefault(); return; }
     e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "folder", id: folder.id, title: folder.name }));
     e.dataTransfer.effectAllowed = "move";
   };
@@ -1247,15 +1284,19 @@ function MiddlePanelFolder({
   return (
     <div
       className="group w-full flex items-start gap-2 px-3 py-2.5 rounded-lg transition-colors hover:bg-muted/40 border border-transparent cursor-pointer"
-      draggable={!isRenaming}
+      draggable={!isRenaming && !isLocked}
       onDragStart={handleDragStart}
       onClick={onNavigate}
       onDoubleClick={onNavigate}
     >
-      <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+      {isLocked ? (
+        <span title="System-managed"><Lock className="w-3.5 h-3.5 mt-1 text-muted-foreground/50 shrink-0" /></span>
+      ) : (
+        <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+      )}
       <Folder className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
       <div className="flex-1 min-w-0">
-        {isRenaming ? (
+        {isRenaming && !isLocked ? (
           <Input
             value={renameText}
             onChange={(e) => onRenameTextChange(e.target.value)}
@@ -1272,14 +1313,16 @@ function MiddlePanelFolder({
           <>
             <div className="flex items-start gap-1">
               <p className="text-sm font-medium break-words leading-snug flex-1">{folder.name}</p>
-              <button
-                type="button"
-                className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                title="Rename folder"
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
-              >
-                <Pencil className="w-3 h-3" />
-              </button>
+              {!isLocked && (
+                <button
+                  type="button"
+                  className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                  title="Rename folder"
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               {docCount} item{docCount !== 1 ? "s" : ""}
@@ -1288,36 +1331,38 @@ function MiddlePanelFolder({
         )}
       </div>
 
-      {/* Actions — always visible */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6"
-          title="Move to..."
-          onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
-        >
-          <FolderInput className="w-3 h-3" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6"
-          title="Rename"
-          onClick={(e) => { e.stopPropagation(); onStartRename(); }}
-        >
-          <Pencil className="w-3 h-3" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 text-destructive/60 hover:text-destructive"
-          title="Delete"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
-      </div>
+      {/* Actions — hidden for locked folders */}
+      {!isLocked && (
+        <div className="flex items-center gap-0.5 shrink-0">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            title="Move to..."
+            onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
+          >
+            <FolderInput className="w-3 h-3" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            title="Rename"
+            onClick={(e) => { e.stopPropagation(); onStartRename(); }}
+          >
+            <Pencil className="w-3 h-3" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-destructive/60 hover:text-destructive"
+            title="Delete"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1355,7 +1400,10 @@ function DocumentRow({
   onDelete: () => void;
   onMoveTo: () => void;
 }) {
+  const isLocked = !!doc.locked;
+
   const handleDragStart = (e: React.DragEvent) => {
+    if (isLocked) { e.preventDefault(); return; }
     e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "document", id: doc.id, title: doc.title }));
     e.dataTransfer.effectAllowed = "move";
   };
@@ -1369,11 +1417,15 @@ function DocumentRow({
             ? "bg-muted/50 border border-muted"
             : "hover:bg-muted/40 border border-transparent"
       }`}
-      draggable={!isRenaming}
+      draggable={!isRenaming && !isLocked}
       onDragStart={handleDragStart}
     >
-      {/* Drag grip */}
-      <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+      {/* Lock icon for system docs, drag grip for user docs */}
+      {isLocked ? (
+        <span title="System-managed"><Lock className="w-3.5 h-3.5 mt-1 text-muted-foreground/50 shrink-0" /></span>
+      ) : (
+        <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+      )}
 
       {/* Click area — file icon + title/date */}
       <button
@@ -1384,7 +1436,7 @@ function DocumentRow({
       >
         <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
         <div className="flex-1 min-w-0">
-          {isRenaming ? (
+          {isRenaming && !isLocked ? (
             <Input
               value={renameText}
               onChange={(e) => onRenameTextChange(e.target.value)}
@@ -1401,14 +1453,16 @@ function DocumentRow({
             <>
               <div className="flex items-start gap-1">
                 <p className="text-sm font-medium break-words leading-snug flex-1">{doc.title}</p>
-                <button
-                  type="button"
-                  className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                  title="Rename document"
-                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
+                {!isLocked && (
+                  <button
+                    type="button"
+                    className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    title="Rename document"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
               </div>
               <p className="text-[10px] text-muted-foreground mt-0.5">
                 {new Date(doc.updatedAt).toLocaleDateString(undefined, {
@@ -1423,38 +1477,42 @@ function DocumentRow({
         </div>
       </button>
 
-      {/* Actions — always visible so users discover rename/move/delete */}
+      {/* Actions — hidden for locked documents */}
       <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
         {isCurrent && (
           <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
         )}
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6"
-          title="Move to..."
-          onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
-        >
-          <FolderInput className="w-3 h-3" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6"
-          title="Rename"
-          onClick={(e) => { e.stopPropagation(); onStartRename(); }}
-        >
-          <Pencil className="w-3 h-3" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 text-destructive/60 hover:text-destructive"
-          title="Delete"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
+        {!isLocked && (
+          <>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              title="Move to..."
+              onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
+            >
+              <FolderInput className="w-3 h-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              title="Rename"
+              onClick={(e) => { e.stopPropagation(); onStartRename(); }}
+            >
+              <Pencil className="w-3 h-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-destructive/60 hover:text-destructive"
+              title="Delete"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
