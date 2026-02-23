@@ -17,7 +17,7 @@ import { LogIn, Sparkles } from "lucide-react";
 import Workspace from "@/pages/Workspace";
 import Admin from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
-import { ErrorConsole } from "@/components/ErrorConsole";
+import { DebugButton } from "@/components/DebugButton";
 import { trackEvent } from "@/lib/tracking";
 
 /** Fires a "login" tracking event once when the signed-in shell mounts. */
@@ -72,7 +72,7 @@ function App() {
           <SignedIn>
             <LoginTracker />
             <Router />
-            <ErrorConsole />
+            <DebugButton />
           </SignedIn>
         </ClerkLoaded>
       </TooltipProvider>
