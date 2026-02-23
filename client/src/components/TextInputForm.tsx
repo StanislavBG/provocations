@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,7 +33,7 @@ import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { ContextCapturePanel } from "@/components/ContextCapturePanel";
 import { ContextStatusPanel } from "@/components/ContextStatusPanel";
 import { StepProgressBar } from "@/components/StepProgressBar";
-import { prebuiltTemplates, TEMPLATE_CATEGORIES, type PrebuiltTemplate, type TemplateCategory } from "@/lib/prebuiltTemplates";
+import { prebuiltTemplates, sortTemplatesByUsage, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import { getObjectiveConfig } from "@/lib/appWorkspaceConfig";
 import { AppTileCarousel } from "@/components/AppTileCarousel";
 import { useAppFavorites } from "@/hooks/use-app-favorites";
@@ -102,7 +102,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       setCaptureUrl("");
       setYoutubeChannelUrl("");
       setVoiceTranscript("");
-      setActiveCategory("build");
     }
   }, [selectedTemplateId]);
 
@@ -117,14 +116,17 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   // Objective config for current template
   const objConfig = getObjectiveConfig(activePrebuilt?.id);
 
-  // Category tab state for grouping templates
-  const [activeCategory, setActiveCategory] = useState<TemplateCategory>("build");
-
   // Auto-record flag: set when user clicks mic in context area
   const [autoRecordDraft, setAutoRecordDraft] = useState(false);
 
-  // App favorites & ratings (localStorage)
-  const { favorites, ratings, toggleFavorite, setRating } = useAppFavorites();
+  // App favorites, ratings & usage (localStorage)
+  const { favorites, ratings, usage, toggleFavorite, setRating, incrementUsage } = useAppFavorites();
+
+  // Templates sorted by usage, comingSoon/external at bottom
+  const sortedTemplates = useMemo(
+    () => sortTemplatesByUsage(prebuiltTemplates, usage),
+    [usage],
+  );
 
   // Ref for scrolling back to top on selection
   const stepOneRef = useRef<HTMLDivElement>(null);
@@ -319,7 +321,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     }
     setActivePrebuilt(template);
     setIsCustomObjective(false);
-    setActiveCategory(template.category);
+    incrementUsage(template.id);
     onTemplateSelect?.(template.id);
   };
 
@@ -363,70 +365,50 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       {/* ── LANDING PAGE: horizontal layout when no template selected ── */}
       {!hasObjectiveType ? (
         <div className="w-full h-full flex flex-col md:flex-row overflow-x-auto overflow-y-hidden">
-          {/* Left panel: heading + category tabs + template chips */}
+          {/* Left panel: heading + all template chips sorted by usage */}
           <div className="shrink-0 w-full md:w-80 lg:w-96 flex flex-col gap-3 px-4 md:px-6 py-4 md:border-r overflow-y-auto" ref={stepOneRef}>
             <h2 className="text-base font-semibold">
               What do <em>you</em> want to create?
             </h2>
 
-            {/* Category tabs */}
-            <div className="flex items-center gap-1 border-b">
-              {TEMPLATE_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeCategory === cat.id
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                  title={cat.description}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Filtered template chips */}
+            {/* All templates sorted by usage, comingSoon/external at bottom */}
             <div className="flex flex-col gap-2">
-              {prebuiltTemplates
-                .filter((t) => t.category === activeCategory)
-                .map((template) => {
-                  const Icon = template.icon;
-                  const isActive = activePrebuilt?.id === template.id;
-                  const isComingSoon = !!template.comingSoon;
-                  const isExternal = !!template.externalUrl;
+              {sortedTemplates.map((template) => {
+                const Icon = template.icon;
+                const isActive = activePrebuilt?.id === template.id;
+                const isComingSoon = !!template.comingSoon;
+                const isExternal = !!template.externalUrl;
 
-                  return (
-                    <button
-                      key={template.id}
-                      onClick={() => {
-                        if (isComingSoon) return;
-                        if (isExternal) {
-                          window.open(template.externalUrl, "_blank", "noopener,noreferrer");
-                          return;
-                        }
-                        handleSelectPrebuilt(template);
-                      }}
-                      disabled={isComingSoon}
-                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
-                        isComingSoon
-                          ? "opacity-50 cursor-default border-border"
-                          : isActive && !isExternal
-                            ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
-                            : "border-border hover:border-primary/40 hover:bg-primary/5"
-                      }`}
-                    >
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive && !isExternal ? "text-primary" : "text-muted-foreground"}`} />
-                      <span>{template.title}</span>
-                      {isComingSoon && <span className="text-[10px] uppercase tracking-wider text-primary/70 font-semibold ml-1">Soon</span>}
-                      {isExternal && !isComingSoon && <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-semibold ml-1">External</span>}
-                      {isActive && !isComingSoon && !isExternal && <Check className="w-3 h-3 text-primary" />}
-                    </button>
-                  );
-                })}
+                return (
+                  <button
+                    key={template.id}
+                    onClick={() => {
+                      if (isComingSoon) return;
+                      if (isExternal) {
+                        window.open(template.externalUrl, "_blank", "noopener,noreferrer");
+                        return;
+                      }
+                      handleSelectPrebuilt(template);
+                    }}
+                    disabled={isComingSoon}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all duration-150 ${
+                      isComingSoon
+                        ? "opacity-50 cursor-default border-border"
+                        : isActive && !isExternal
+                          ? "border-primary bg-primary/10 ring-1 ring-primary/30 font-medium"
+                          : "border-border hover:border-primary/40 hover:bg-primary/5"
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive && !isExternal ? "text-primary" : "text-muted-foreground"}`} />
+                    <span>{template.title}</span>
+                    {isComingSoon && <span className="text-[10px] uppercase tracking-wider text-primary/70 font-semibold ml-1">Soon</span>}
+                    {isExternal && !isComingSoon && <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-semibold ml-1">External</span>}
+                    {isActive && !isComingSoon && !isExternal && <Check className="w-3 h-3 text-primary" />}
+                  </button>
+                );
+              })}
 
-              {/* "Custom" chip — shown in every category */}
+              {/* "Custom" chip — always last */}
               <button
                 onClick={handleSelectCustom}
                 className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed text-sm transition-all duration-150 ${
@@ -448,6 +430,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               templates={prebuiltTemplates}
               favorites={favorites}
               ratings={ratings}
+              usage={usage}
               onSelect={handleSelectPrebuilt}
               onToggleFavorite={toggleFavorite}
               onRate={setRating}
