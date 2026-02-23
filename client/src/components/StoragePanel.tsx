@@ -44,16 +44,16 @@ const DRAG_MIME = "application/x-provocations-drag";
 
 /**
  * Compute left-padding for folder tree items at a given depth.
- * Uses a diminishing scale so levels 1-4 get full 14px increments,
- * levels 5-7 get 10px, and levels 8-10 get 6px.
- * This keeps the tree readable up to 10 levels inside a w-56 (224px) panel.
+ * Uses a diminishing scale so levels 1-4 get full 12px increments,
+ * levels 5-7 get 8px, and levels 8-10 get 5px.
+ * This keeps the tree readable up to 10 levels inside the left panel.
  */
 function treeIndent(depth: number): number {
   let px = 4; // base padding
   for (let i = 1; i <= depth; i++) {
-    if (i <= 4) px += 14;
-    else if (i <= 7) px += 10;
-    else px += 6;
+    if (i <= 4) px += 12;
+    else if (i <= 7) px += 8;
+    else px += 5;
   }
   return px;
 }
@@ -522,7 +522,7 @@ export function StoragePanel({
       <div className="flex-1 flex overflow-hidden">
 
         {/* ── LEFT PANEL: Folder tree ── */}
-        <div className="w-56 shrink-0 border-r flex flex-col overflow-hidden bg-card">
+        <div className="w-64 shrink-0 border-r flex flex-col overflow-hidden bg-card">
           <div className="px-3 py-2.5 border-b flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Folders</span>
             <Button
@@ -537,8 +537,8 @@ export function StoragePanel({
             </Button>
           </div>
 
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="p-2 space-y-0.5">
+          <ScrollArea className="flex-1 min-h-0" type="auto">
+            <div className="p-2 space-y-0.5 min-w-fit">
               {/* Root / My Documents — drop target */}
               <RootDropTarget
                 isActive={currentFolderId === null}
@@ -635,7 +635,7 @@ export function StoragePanel({
             }
           }}
         >
-          {/* Breadcrumb */}
+          {/* Breadcrumb + actions bar */}
           <div className="flex items-center gap-1 px-4 py-2 border-b text-xs overflow-x-auto shrink-0 bg-card/60">
             {folderPath.map((entry, idx) => (
               <span key={idx} className="flex items-center gap-1 shrink-0">
@@ -650,12 +650,25 @@ export function StoragePanel({
                 </button>
               </span>
             ))}
-            <span className="ml-auto text-muted-foreground/60">
-              {currentSubfolders.length > 0 && (
-                <span className="mr-2">{currentSubfolders.length} folder{currentSubfolders.length !== 1 ? "s" : ""}</span>
-              )}
-              {documentsList.length} document{documentsList.length !== 1 ? "s" : ""}
-            </span>
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <span className="text-muted-foreground/60">
+                {currentSubfolders.length > 0 && (
+                  <span className="mr-2">{currentSubfolders.length} folder{currentSubfolders.length !== 1 ? "s" : ""}</span>
+                )}
+                {documentsList.length} doc{documentsList.length !== 1 ? "s" : ""}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 text-xs px-2"
+                onClick={() => setIsCreatingFolder(true)}
+                disabled={isCreatingFolder}
+                title="Create a new folder here"
+              >
+                <FolderPlus className="w-3 h-3" />
+                New Folder
+              </Button>
+            </div>
           </div>
 
           {/* Document & subfolder list */}
@@ -664,6 +677,41 @@ export function StoragePanel({
               {isLoading && (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+
+              {/* Inline folder creation in middle panel */}
+              {!isLoading && isCreatingFolder && (
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-primary/30 bg-primary/5">
+                  <FolderOpen className="w-4 h-4 shrink-0 text-amber-500" />
+                  <Input
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder="New folder name..."
+                    className="h-7 text-sm flex-1"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newFolderName.trim()) createFolderMutation.mutate(newFolderName.trim());
+                      if (e.key === "Escape") { setIsCreatingFolder(false); setNewFolderName(""); }
+                    }}
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    disabled={!newFolderName.trim()}
+                    onClick={() => newFolderName.trim() && createFolderMutation.mutate(newFolderName.trim())}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => { setIsCreatingFolder(false); setNewFolderName(""); }}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               )}
 
@@ -754,7 +802,7 @@ export function StoragePanel({
             )}
             <div className="flex-1" />
             <p className="text-[10px] text-muted-foreground/50">
-              Drag items to move. Click to preview, double-click to open.
+              Drag items to move between folders. Click to preview, double-click to open.
             </p>
           </div>
         </div>
@@ -770,7 +818,7 @@ export function StoragePanel({
               {/* Preview header with metadata */}
               <div className="px-4 py-3 border-b shrink-0 space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-semibold leading-tight flex-1">{previewDoc.title}</h3>
+                  <h3 className="text-sm font-semibold leading-tight flex-1 break-words">{previewDoc.title}</h3>
                   <Button
                     size="sm"
                     onClick={() => handleOpenDocument(previewDoc.id)}
@@ -1082,13 +1130,14 @@ function FolderTreeBranch({
               type="button"
               className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
               onClick={() => onNavigate(folder.id, folder.name)}
+              title={folder.name}
             >
               {isExpanded ? (
                 <FolderOpen className={`w-4 h-4 shrink-0 ${isActive || isDragOver ? "text-primary" : "text-amber-500"}`} />
               ) : (
                 <Folder className={`w-4 h-4 shrink-0 ${isActive || isDragOver ? "text-primary" : "text-amber-500"}`} />
               )}
-              <span className="flex-1 truncate text-xs">{folder.name}</span>
+              <span className="flex-1 truncate text-xs whitespace-nowrap">{folder.name}</span>
             </button>
 
             {/* Doc count */}
@@ -1214,15 +1263,15 @@ function MiddlePanelFolder({
 
   return (
     <div
-      className="group w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors overflow-hidden hover:bg-muted/40 border border-transparent cursor-pointer"
+      className="group w-full flex items-start gap-2 px-3 py-2.5 rounded-lg transition-colors hover:bg-muted/40 border border-transparent cursor-pointer"
       draggable={!isRenaming}
       onDragStart={handleDragStart}
       onClick={onNavigate}
       onDoubleClick={onNavigate}
     >
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
-      <Folder className="w-4 h-4 shrink-0 text-amber-500" />
-      <div className="flex-1 min-w-0 overflow-hidden">
+      <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+      <Folder className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+      <div className="flex-1 min-w-0">
         {isRenaming ? (
           <Input
             value={renameText}
@@ -1238,7 +1287,17 @@ function MiddlePanelFolder({
           />
         ) : (
           <>
-            <p className="text-sm font-medium truncate">{folder.name}</p>
+            <div className="flex items-start gap-1">
+              <p className="text-sm font-medium break-words leading-snug flex-1">{folder.name}</p>
+              <button
+                type="button"
+                className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                title="Rename folder"
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               {docCount} item{docCount !== 1 ? "s" : ""}
             </p>
@@ -1320,7 +1379,7 @@ function DocumentRow({
 
   return (
     <div
-      className={`group w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors overflow-hidden ${
+      className={`group w-full flex items-start gap-2 px-3 py-2.5 rounded-lg transition-colors ${
         isSelected
           ? "bg-primary/10 border border-primary/30"
           : isCurrent
@@ -1331,17 +1390,17 @@ function DocumentRow({
       onDragStart={handleDragStart}
     >
       {/* Drag grip */}
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+      <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
 
       {/* Click area — file icon + title/date */}
       <button
         type="button"
         onClick={onPreview}
         onDoubleClick={onOpen}
-        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+        className="flex items-start gap-2 flex-1 min-w-0 text-left"
       >
-        <FileText className={`w-4 h-4 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
-        <div className="flex-1 min-w-0 overflow-hidden">
+        <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
+        <div className="flex-1 min-w-0">
           {isRenaming ? (
             <Input
               value={renameText}
@@ -1357,7 +1416,17 @@ function DocumentRow({
             />
           ) : (
             <>
-              <p className="text-sm font-medium truncate">{doc.title}</p>
+              <div className="flex items-start gap-1">
+                <p className="text-sm font-medium break-words leading-snug flex-1">{doc.title}</p>
+                <button
+                  type="button"
+                  className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                  title="Rename document"
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              </div>
               <p className="text-[10px] text-muted-foreground mt-0.5">
                 {new Date(doc.updatedAt).toLocaleDateString(undefined, {
                   month: "short",
@@ -1372,7 +1441,7 @@ function DocumentRow({
       </button>
 
       {/* Actions — always visible so users discover rename/move/delete */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
         {isCurrent && (
           <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
         )}
@@ -1564,6 +1633,7 @@ function MoveToFolderItem({
           type="button"
           disabled={disabled}
           onClick={() => !disabled && onSelect(folder.id)}
+          title={folder.name}
           className={`flex items-center gap-2 flex-1 px-2 py-1.5 rounded-md text-left text-sm transition-colors ${
             isSelected
               ? "bg-primary/10 text-primary font-medium ring-1 ring-primary/30"
@@ -1579,7 +1649,7 @@ function MoveToFolderItem({
           )}
           <span className="truncate">{folder.name}</span>
           {isSelf && (
-            <span className="text-[10px] text-muted-foreground ml-auto">(this item)</span>
+            <span className="text-[10px] text-muted-foreground ml-auto shrink-0">(this item)</span>
           )}
         </button>
       </div>
