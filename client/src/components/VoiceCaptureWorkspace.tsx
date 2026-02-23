@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useWhisperRecorder } from "@/hooks/use-whisper";
 import { ProvokeText } from "@/components/ProvokeText";
 import {
   Mic,
@@ -22,28 +23,6 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface SpeechRecognitionEvent {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent {
-  error: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  onstart: (() => void) | null;
-}
 
 interface VoiceCaptureWorkspaceProps {
   objective: string;
@@ -144,17 +123,58 @@ export function VoiceCaptureWorkspace({
   // ── Recording state ──
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [isSupported, setIsSupported] = useState(true);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   // Accumulated transcript buffer (unflushed text since last auto-save)
   const transcriptBufferRef = useRef("");
-  // Interim transcript for live display
-  const [interimText, setInterimText] = useState("");
   // Total accumulated text (everything flushed + buffer)
   const [totalTranscript, setTotalTranscript] = useState("");
   // Ref mirror so interval callbacks always read the latest transcript
   const totalTranscriptRef = useRef("");
+  // Tracks how much text we've already consumed from the hook's accumulated output
+  const lastWhisperLengthRef = useRef(0);
+
+  const isRecordingRef = useRef(false);
+
+  // ── Whisper recorder (with 10s chunked updates for progressive transcription) ──
+  const {
+    isSupported,
+    isTranscribing,
+    startRecording: whisperStart,
+    stopRecording: whisperStop,
+  } = useWhisperRecorder({
+    onTranscript: (accumulatedText) => {
+      // Final delivery — extract only the new text we haven't consumed yet
+      const newText = accumulatedText.slice(lastWhisperLengthRef.current);
+      if (newText.trim()) {
+        transcriptBufferRef.current += newText + " ";
+        setTotalTranscript((prev) => {
+          const next = prev + newText + " ";
+          totalTranscriptRef.current = next;
+          return next;
+        });
+      }
+      lastWhisperLengthRef.current = 0; // Reset for next segment
+    },
+    onInterimTranscript: (accumulatedText) => {
+      // Progressive updates within a segment — extract only what's new
+      const newText = accumulatedText.slice(lastWhisperLengthRef.current);
+      if (newText.trim()) {
+        lastWhisperLengthRef.current = accumulatedText.length;
+        transcriptBufferRef.current += newText + " ";
+        setTotalTranscript((prev) => {
+          const next = prev + newText + " ";
+          totalTranscriptRef.current = next;
+          return next;
+        });
+      }
+    },
+    onRecordingChange: (recording) => {
+      if (!recording && isRecordingRef.current && !isPaused) {
+        // Unexpected stop — don't update UI state (let pause/stop handlers manage it)
+      }
+    },
+    chunkIntervalMs: 10000,
+  });
 
   // ── Timer ──
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -184,10 +204,6 @@ export function VoiceCaptureWorkspace({
   });
   const summarySchedule = serverConfig?.summarySchedule ?? DEFAULT_SUMMARY_SCHEDULE;
 
-  // ── Intentional stop vs auto-restart ──
-  const intentionalStopRef = useRef(false);
-  const isRecordingRef = useRef(false);
-
   // ── AI Summary + Questions ──
   const [summary, setSummary] = useState("");
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -198,10 +214,8 @@ export function VoiceCaptureWorkspace({
   // Word count
   const wordCount = totalTranscript.trim() ? totalTranscript.trim().split(/\s+/).length : 0;
 
-  // Display transcript with interim text appended
-  const displayTranscript = interimText
-    ? totalTranscript + interimText
-    : totalTranscript;
+  // Display transcript (no separate interim with Whisper — text arrives as final chunks)
+  const displayTranscript = totalTranscript;
 
   // Format questions as copyable text for ProvokeText
   const questionsText = questions.length > 0
@@ -216,90 +230,6 @@ export function VoiceCaptureWorkspace({
 
   // Current summary interval label for status display
   const currentSummaryInterval = getSummaryInterval(elapsedSeconds, summarySchedule);
-
-  // ── Initialize speech recognition ──
-  useEffect(() => {
-    const SpeechRecognitionCtor =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) {
-      setIsSupported(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = "";
-      let interim = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript;
-        } else {
-          interim += result[0].transcript;
-        }
-      }
-
-      if (finalTranscript) {
-        transcriptBufferRef.current += finalTranscript + " ";
-        setTotalTranscript((prev) => {
-          const next = prev + finalTranscript + " ";
-          totalTranscriptRef.current = next;
-          return next;
-        });
-      }
-
-      setInterimText(interim);
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error("Voice capture recognition error:", event.error);
-      if (event.error === "not-allowed") {
-        toast({
-          title: "Microphone Access Required",
-          description:
-            "Please allow microphone access in your browser to use voice capture.",
-          variant: "destructive",
-        });
-        intentionalStopRef.current = true;
-        stopRecording();
-      } else if (event.error === "no-speech") {
-        // Silence — do nothing, will auto-restart
-      } else if (event.error !== "aborted") {
-        // Non-fatal: let onend handle restart
-      }
-    };
-
-    recognition.onend = () => {
-      // Auto-restart unless intentionally stopped
-      if (!intentionalStopRef.current && isRecordingRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          // Already started or other issue — retry after delay
-          setTimeout(() => {
-            if (isRecordingRef.current && !intentionalStopRef.current) {
-              try {
-                recognition.start();
-              } catch {
-                // Give up on restart
-              }
-            }
-          }, 500);
-        }
-      }
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      recognition.abort();
-    };
-  }, [toast]);
 
   // ── Flush buffer to document ──
   const flushBuffer = useCallback(() => {
@@ -489,64 +419,49 @@ export function VoiceCaptureWorkspace({
   // ── Auto-scroll transcript ──
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [totalTranscript, interimText]);
+  }, [totalTranscript]);
 
   // ── Start recording ──
   const startRecording = useCallback(() => {
-    if (!recognitionRef.current) return;
-    intentionalStopRef.current = false;
     isRecordingRef.current = true;
     transcriptBufferRef.current = "";
     lastSummaryTimeRef.current = elapsedSecondsRef.current;
+    lastWhisperLengthRef.current = 0;
 
-    try {
-      recognitionRef.current.start();
-      setIsRecording(true);
-      setIsPaused(false);
-    } catch {
-      isRecordingRef.current = false;
-    }
-  }, []);
+    whisperStart();
+    setIsRecording(true);
+    setIsPaused(false);
+  }, [whisperStart]);
 
   // ── Stop recording ──
   const stopRecording = useCallback(() => {
-    intentionalStopRef.current = true;
     isRecordingRef.current = false;
-
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
+    whisperStop();
 
     setIsRecording(false);
     setIsPaused(false);
-    setInterimText("");
 
     // Final flush
     flushBuffer();
-  }, [flushBuffer]);
+  }, [flushBuffer, whisperStop]);
 
   // ── Pause / resume ──
   const togglePause = useCallback(() => {
     if (isPaused) {
-      // Resume
+      // Resume — start a new recording segment
       setIsPaused(false);
-      intentionalStopRef.current = false;
       isRecordingRef.current = true;
       lastSummaryTimeRef.current = elapsedSecondsRef.current;
-      try {
-        recognitionRef.current?.start();
-      } catch {
-        // Already started
-      }
+      lastWhisperLengthRef.current = 0;
+      whisperStart();
     } else {
-      // Pause
+      // Pause — stop recording and flush
       setIsPaused(true);
-      intentionalStopRef.current = true;
       isRecordingRef.current = false;
-      recognitionRef.current?.stop();
+      whisperStop();
       flushBuffer();
     }
-  }, [isPaused, flushBuffer]);
+  }, [isPaused, flushBuffer, whisperStart, whisperStop]);
 
   // ── Manual save ──
   const handleManualSave = useCallback(async () => {
@@ -670,9 +585,11 @@ export function VoiceCaptureWorkspace({
             showCopy
             showClear={false}
             placeholder={
-              isRecording
-                ? "Listening... transcript will appear here"
-                : "Start recording to see transcript"
+              isTranscribing
+                ? "Transcribing audio..."
+                : isRecording
+                  ? "Listening... transcript will appear here"
+                  : "Start recording to see transcript"
             }
             className="text-sm leading-relaxed font-serif"
             containerClassName="flex-1 min-h-0"
