@@ -172,12 +172,14 @@ export function StoragePanel({
   });
 
   // All documents (for sidebar counts)
-  const allDocsQuery = useQuery({
+  // NOTE: Returns { documents: [...] } to match the cache shape used by
+  // Workspace, TextInputForm, ContextCapturePanel, InfographicStudioWorkspace.
+  // All share queryKey ["/api/documents"] so the return shape MUST be identical.
+  const allDocsQuery = useQuery<{ documents: DocumentListItem[] }>({
     queryKey: ["/api/documents"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/documents");
-      const data = await res.json();
-      return (data.documents || []) as DocumentListItem[];
+      return res.json();
     },
     enabled: isOpen,
   });
@@ -441,7 +443,7 @@ export function StoragePanel({
   const isLoading = allFoldersQuery.isLoading || documentsQuery.isLoading;
   const allFolders = allFoldersQuery.data || [];
   const documentsList = documentsQuery.data || [];
-  const allDocs = allDocsQuery.data || [];
+  const allDocs = allDocsQuery.data?.documents || [];
 
   // Build folder tree structure
   const rootFolders = allFolders.filter((f) => f.parentFolderId === null);

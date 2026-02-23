@@ -59,11 +59,14 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
   });
 
   // Fetch folders for grouped view
-  const { data: foldersData } = useQuery<{ folders: FolderItem[] }>({
+  // NOTE: Returns FolderItem[] to match the cache shape used by
+  // Workspace.tsx and StoragePanel.tsx (shared queryKey ["/api/folders/all"]).
+  const { data: foldersData } = useQuery<FolderItem[]>({
     queryKey: ["/api/folders/all"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/folders");
-      return res.json();
+      const data = await res.json();
+      return (data.folders || []) as FolderItem[];
     },
     enabled: showStorePicker,
     staleTime: 30_000,
@@ -271,7 +274,7 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
               <div className="space-y-0.5">
                 {(() => {
                   const allDocs = savedDocs.documents;
-                  const allFolders = foldersData?.folders || [];
+                  const allFolders = foldersData || [];
 
                   // Root-level docs (no folder)
                   const rootDocs = allDocs.filter((d) => !d.folderId);
