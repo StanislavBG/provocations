@@ -4,7 +4,6 @@ import {
   ClipboardList,
   Rocket,
   Radio,
-  GraduationCap,
   UserRoundCog,
   DatabaseZap,
   BookOpenCheck,
@@ -51,20 +50,20 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "write-a-prompt",
     category: "write",
-    title: "Write a Prompt",
-    shortLabel: "Prompt",
-    subtitle: "AIM framework, any format",
+    title: "GPT to Context",
+    shortLabel: "GPT Context",
+    subtitle: "Convert prompts to AIM or start a research session",
     description:
-      "For when you need to write a clear, high-quality prompt for an AI tool. Uses the AIM framework (Actor, Input, Mission) to structure your thinking. Write in whatever format feels natural — the AI will push you on clarity and structure so the resulting prompt gets the best possible output.",
-    howTo: "Type or dictate what you need an AI to do. The system will organize your words into three sections: Actor (who the AI should be), Input (the context it needs), and Mission (what it should produce). Answer the guided questions on the left to fill in each section.",
+      "A dual-mode workspace for transforming GPT interactions into structured context. Convert prompts into the AIM framework (Actor, Input, Mission) or start a focused research and data gathering session with a clean-context chat and dynamic summary generation.",
+    howTo: "Choose your mode: 'Convert Prompt to AIM' structures your prompt into Actor, Input, and Mission sections. 'Start Research Session' launches a focused chat with dynamic summary generation based on your research objective.",
     useCases: [
-      "Writing a ChatGPT prompt that gives consistent results",
-      "Creating a reusable prompt template for your team",
-      "Turning a vague idea into a specific AI instruction",
+      "Converting a rough prompt into a structured AIM instruction",
+      "Running a focused research session with real-time summary generation",
+      "Gathering and synthesizing data through iterative chat interactions",
     ],
     icon: PencilLine,
     objective:
-      "Write a clear, structured prompt using the AIM framework (Actor, Input, Mission) that an AI can execute with precision",
+      "Transform GPT interactions into structured, actionable context through prompt conversion or focused research sessions",
     starterText: "",
     draftQuestions: [
       "Who should I pretend to be? Think about who would be best at this task. If you want a recipe, the AI should be a \"Professional Chef.\" If you want to fix a bug, it should be a \"Senior Software Engineer.\"",
@@ -72,11 +71,12 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
       "What are we making? Be specific about the final product. Do you want a 5-paragraph essay, a list of 10 ideas, or a friendly text message to a friend?",
     ],
     templateContent: "", // No template — freeform is the point
-    provocationSources: ["Clarity Coach", "Intent Detector"],
+    provocationSources: ["Clarity Coach", "Intent Detector", "Research Analyst"],
     provocationExamples: [
       "Is it clear enough for an AI to act on without asking follow-up questions?",
       "Who is the Actor here? You haven't defined what role the AI should take.",
       "What's the Mission? I see context but no clear task or expected output.",
+      "What is your research objective? Define what you want to learn or discover.",
     ],
     steps: [{ id: "write", label: "Write your prompt" }],
   },
@@ -296,110 +296,6 @@ Key endpoints the backend needs:
       "The wireframe shows a search bar but the requirements don't mention search. Is it functional or decorative? — Developer",
     ],
     steps: [{ id: "capture", label: "Capture & annotate" }],
-  },
-  {
-    id: "research-paper",
-    category: "write",
-    title: "Research Paper",
-    shortLabel: "Research Paper",
-    subtitle: "Structured academic or exploratory writing",
-    description:
-      "For writing a research paper or structured analysis. Guides you through defining a thesis, reviewing existing work, presenting methodology and findings, and drawing conclusions. Provocations come from reviewers and peers who will challenge your rigor, originality, and clarity.",
-    howTo: "Start with your research question or thesis. Answer questions about existing literature, your methodology, and your findings. The system builds a structured paper with Abstract, Introduction, Literature Review, Methodology, Findings, Discussion, and Conclusion — then peer reviewers challenge your rigor.",
-    useCases: [
-      "Writing an academic paper with proper structure",
-      "Organizing research findings into a coherent argument",
-      "Preparing a structured analysis or white paper for work",
-    ],
-    icon: GraduationCap,
-    objective:
-      "Write a well-structured research paper with a clear thesis, supporting evidence, methodology, findings, and conclusions",
-    starterText: "",
-    draftQuestions: [
-      "What is your research question or thesis?",
-      "What existing work or literature is this building on?",
-      "What methodology or approach are you using?",
-      "What are your key findings or arguments?",
-    ],
-    templateContent: `# Research Paper
-
-## Abstract
-A concise summary (150–300 words) of the research question, methodology, key findings, and conclusions.
-
-## Introduction
-### Background
-What is the broader context? Why does this topic matter?
-
-### Problem Statement
-What specific gap, question, or problem does this paper address?
-
-### Thesis / Research Question
-State your central argument or the question you are investigating.
-
-### Scope
-What is covered in this paper and what is explicitly excluded?
-
-## Literature Review
-### Existing Work
-Summarize relevant prior research, theories, or frameworks.
-
-### Gaps in Current Knowledge
-What has not been adequately addressed by existing work?
-
-### How This Paper Contributes
-How does your work advance the field or fill the identified gaps?
-
-## Methodology
-### Approach
-Describe the research method (qualitative, quantitative, mixed, theoretical, experimental, etc.).
-
-### Data Sources
-Where does the data or evidence come from?
-
-### Limitations of the Method
-What are the known constraints of your chosen approach?
-
-## Findings / Results
-### Key Findings
-Present the main results, organized logically.
-
-### Supporting Evidence
-Data, examples, or analysis that back up each finding.
-
-## Discussion
-### Interpretation
-What do the findings mean in the context of the research question?
-
-### Implications
-What are the practical or theoretical consequences?
-
-### Limitations
-What should the reader keep in mind when interpreting results?
-
-## Conclusion
-### Summary
-Restate the key contributions in 2–3 sentences.
-
-### Future Work
-What questions remain open? What should be explored next?
-
-## References
-- List of cited works`,
-    provocationSources: [
-      "Peer Reviewer",
-      "Subject Matter Expert",
-      "Methodology Critic",
-      "Devil's Advocate",
-      "Curious Student",
-    ],
-    provocationExamples: [
-      "Your thesis is broad. Can you narrow it to something testable or falsifiable? — Peer Reviewer",
-      "You cite three sources but the field has dozens of competing frameworks. What are you leaving out? — Subject Matter Expert",
-      "How would someone reproduce your methodology? There's not enough detail here. — Methodology Critic",
-      "What if the opposite of your thesis is true? What evidence would you expect to see? — Devil's Advocate",
-      "I don't understand why this matters. Can you explain the real-world impact in plain language? — Curious Student",
-    ],
-    steps: [{ id: "context", label: "Share your context" }],
   },
   {
     id: "persona-definition",
