@@ -1459,6 +1459,78 @@ Output only valid JSON, no markdown.`;
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // ERROR LOGS — global error tracking visible to admins + originating user
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.post("/api/errors", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { tag, message, stack, url, metadata, sessionId } = req.body;
+      if (!tag || !message) {
+        return res.status(400).json({ error: "tag and message are required" });
+      }
+
+      const { errorLogs } = await import("../shared/models/chat");
+      const { db } = await import("./db");
+      await db.insert(errorLogs).values({
+        userId,
+        sessionId: sessionId || null,
+        tag: String(tag).slice(0, 64),
+        message: String(message).slice(0, 5000),
+        stack: stack ? String(stack).slice(0, 10000) : null,
+        url: url ? String(url).slice(0, 2000) : null,
+        metadata: metadata ? JSON.stringify(metadata).slice(0, 5000) : null,
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error log write failed:", error);
+      res.json({ ok: false });
+    }
+  });
+
+  // Get errors for the current user (their own errors only)
+  app.get("/api/errors", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { errorLogs } = await import("../shared/models/chat");
+      const { db } = await import("./db");
+      const { eq, desc } = await import("drizzle-orm");
+      const rows = await db.select().from(errorLogs)
+        .where(eq(errorLogs.userId, userId))
+        .orderBy(desc(errorLogs.createdAt))
+        .limit(100);
+      res.json({ errors: rows });
+    } catch (error) {
+      console.error("Error log read failed:", error);
+      res.status(500).json({ error: "Failed to read error logs" });
+    }
+  });
+
+  // Admin: get ALL errors from all users
+  app.get("/api/admin/errors", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const { errorLogs } = await import("../shared/models/chat");
+      const { db } = await import("./db");
+      const { desc } = await import("drizzle-orm");
+      const rows = await db.select().from(errorLogs)
+        .orderBy(desc(errorLogs.createdAt))
+        .limit(500);
+      res.json({ errors: rows });
+    } catch (error) {
+      console.error("Admin error log read failed:", error);
+      res.status(500).json({ error: "Failed to read error logs" });
+    }
+  });
+
   // ── Auth: role check ──
   app.get("/api/auth/role", async (req, res) => {
     try {
