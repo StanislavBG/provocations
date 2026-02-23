@@ -131,7 +131,7 @@ export function MarkdownRenderer({
   return (
     <ScrollArea className="h-full" ref={scrollRef}>
       <div
-        className={`prose prose-stone dark:prose-invert max-w-none px-8 py-6 ${className}`}
+        className={`prose prose-stone dark:prose-invert max-w-none px-8 py-6 [--tw-prose-body:hsl(var(--foreground))] [--tw-prose-headings:hsl(var(--foreground))] [--tw-prose-bold:hsl(var(--foreground))] [--tw-prose-links:hsl(var(--primary))] ${className}`}
         onMouseUp={handleMouseUp}
       >
         {chunks.map((chunk, idx) => {
