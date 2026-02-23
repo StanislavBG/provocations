@@ -86,6 +86,9 @@ export function useWhisperRecorder({
   useEffect(() => { onInterimTranscriptRef.current = onInterimTranscript; }, [onInterimTranscript]);
   useEffect(() => { onRecordingChangeRef.current = onRecordingChange; }, [onRecordingChange]);
 
+  // Runtime Whisper failure → fall back to Web Speech API
+  const whisperFailedRef = useRef(false);
+
   // Whisper state
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -146,6 +149,10 @@ export function useWhisperRecorder({
       }
     } catch (err) {
       console.error("Whisper chunk transcription failed:", err);
+      // Mark Whisper as failed for future recordings
+      whisperFailedRef.current = true;
+      whisperAvailable = false;
+      setIsWhisper(false);
     } finally {
       setIsTranscribing(false);
     }
@@ -183,6 +190,10 @@ export function useWhisperRecorder({
               }
             } catch (err) {
               console.error("Whisper final transcription failed:", err);
+              // Mark Whisper as failed so future recordings use Web Speech fallback
+              whisperFailedRef.current = true;
+              whisperAvailable = false;
+              setIsWhisper(false);
             } finally {
               setIsTranscribing(false);
             }
@@ -306,7 +317,8 @@ export function useWhisperRecorder({
   // ── Public API ──
   const startRecording = useCallback(() => {
     if (isRecordingRef.current) return;
-    if (isWhisper) {
+    // If Whisper failed at runtime, always use Web Speech fallback
+    if (isWhisper && !whisperFailedRef.current) {
       startWhisper();
     } else {
       startSpeechFallback();
@@ -315,7 +327,7 @@ export function useWhisperRecorder({
 
   const stopRecording = useCallback(() => {
     if (!isRecordingRef.current) return;
-    if (isWhisper) {
+    if (isWhisper && !whisperFailedRef.current) {
       stopWhisper();
     } else {
       stopSpeechFallback();
