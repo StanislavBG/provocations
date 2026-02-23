@@ -583,6 +583,7 @@ Format as rich markdown with visual direction embedded throughout. This output w
                 showCopy
                 showClear
                 voice={{ mode: "append" }}
+                onVoiceTranscript={(transcript) => onRawTextChange(rawText ? `${rawText}\n\n${transcript}` : transcript)}
               />
             </div>
           </div>
