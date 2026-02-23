@@ -106,6 +106,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   // Storage quick-load state
   const [storageOpen, setStorageOpen] = useState(false);
   const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
+  const [transcriptStoreOpen, setTranscriptStoreOpen] = useState(false);
   const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
 
   // Objective config for current template
@@ -133,7 +134,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       const res = await apiRequest("GET", "/api/documents");
       return res.json();
     },
-    enabled: storageOpen || objectiveStoreOpen, // fetch when either popover opens
+    enabled: storageOpen || objectiveStoreOpen || transcriptStoreOpen, // fetch when any popover opens
     staleTime: 30_000,
   });
 
@@ -155,6 +156,25 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       setLoadingDocId(null);
     }
   }, [toast, objConfig.primaryLabel]);
+
+  /** Load a document from Context Store into the voice transcript field (replace) */
+  const handleLoadTranscriptFromStore = useCallback(async (docId: number, docTitle: string) => {
+    setLoadingDocId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        setVoiceTranscript(data.content);
+        setTranscriptStoreOpen(false);
+        toast({ title: "Loaded", description: `"${docTitle}" loaded into voice transcript.` });
+      }
+    } catch (error) {
+      console.error("Failed to load document:", error);
+      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
+    } finally {
+      setLoadingDocId(null);
+    }
+  }, [toast]);
 
   const handleLoadStorageDoc = useCallback(async (docId: number, docTitle: string) => {
     setLoadingDocId(docId);
@@ -386,7 +406,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 showCharCount
                 maxCharCount={10000}
                 maxAudioDuration="2min"
-                headerActions={objConfig.showLoadFromStore ? (
+                headerActions={
                   <Popover open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
@@ -419,7 +439,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                       </ScrollArea>
                     </PopoverContent>
                   </Popover>
-                ) : undefined}
+                }
               />
 
               {/* Secondary objective — shown when the app defines a meaningful secondary label */}
@@ -507,9 +527,41 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <FileAudio className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex-1">
                     Voice Transcript
                   </span>
+                  <Popover open={transcriptStoreOpen} onOpenChange={setTranscriptStoreOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
+                        <HardDrive className="w-3.5 h-3.5" />
+                        Load
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-72 p-0">
+                      <div className="px-3 py-2 border-b">
+                        <p className="text-sm font-medium">Load from Context Store</p>
+                        <p className="text-xs text-muted-foreground">Replace transcript with saved content</p>
+                      </div>
+                      <ScrollArea className="max-h-60">
+                        <div className="p-1">
+                          {savedDocs?.documents?.length ? savedDocs.documents.map((doc) => (
+                            <button
+                              key={doc.id}
+                              onClick={() => handleLoadTranscriptFromStore(doc.id, doc.title)}
+                              disabled={loadingDocId === doc.id}
+                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <span className="truncate flex-1">{doc.title}</span>
+                              {loadingDocId === doc.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            </button>
+                          )) : (
+                            <p className="px-3 py-4 text-sm text-muted-foreground text-center">No saved documents yet</p>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Paste the transcript from your voice capture session, or upload a .txt file. The system will summarize key points and generate an infographic specification.
