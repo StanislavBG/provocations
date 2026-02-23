@@ -148,6 +148,11 @@ export default function Workspace() {
   const appFlowConfig: AppFlowConfig = getAppFlowConfig(selectedTemplateId);
   const objectiveConfig = getObjectiveConfig(selectedTemplateId);
 
+  // Valid appType for API calls — "custom" is not a real templateId, so treat it as undefined
+  const validAppType = selectedTemplateId && (templateIds as readonly string[]).includes(selectedTemplateId)
+    ? selectedTemplateId
+    : undefined;
+
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
 
@@ -515,7 +520,7 @@ RULES:
           document: document.rawText,
           objective,
           secondaryObjective: secondaryObjective.trim() || undefined,
-          appType: selectedTemplateId || undefined,
+          appType: validAppType,
           referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
           capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
           editHistory: editHistory.length > 0 ? editHistory : undefined,
@@ -530,7 +535,7 @@ RULES:
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
@@ -602,7 +607,7 @@ RULES:
       const response = await apiRequest("POST", "/api/write", {
         document: context,
         objective: obj,
-        appType: templateId || undefined,
+        appType: templateId && (templateIds as readonly string[]).includes(templateId) ? templateId : undefined,
         instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
         referenceDocuments: refs.length > 0 ? refs : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -656,7 +661,7 @@ RULES:
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         document: document.rawText,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         template: templateDoc?.content,
         previousEntries: entries.length > 0 ? entries : undefined,
         directionMode: dir?.mode,
@@ -704,7 +709,7 @@ RULES:
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
@@ -718,7 +723,7 @@ RULES:
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         instruction: effectiveInstruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -778,7 +783,7 @@ RULES:
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
       });
       const { instruction } = await summaryResponse.json() as { instruction: string };
 
@@ -790,7 +795,7 @@ RULES:
         document: document.rawText,
         objective,
         secondaryObjective: secondaryObjective.trim() || undefined,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         instruction: effectiveInstruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
@@ -860,7 +865,7 @@ RULES:
       const response = await apiRequest("POST", "/api/generate-advice", {
         document: document.rawText,
         objective,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         challengeId: `interview-${Date.now()}`,
         challengeTitle: topic,
         challengeContent: question,
@@ -888,7 +893,7 @@ RULES:
         question,
         document: document.rawText,
         objective,
-        appType: selectedTemplateId || undefined,
+        appType: validAppType,
         secondaryObjective: secondaryObjective.trim() || undefined,
         activePersonas: interviewDirection?.personas || [],
         previousMessages: discussionMessages.length > 0 ? discussionMessages.slice(-10) : undefined,
