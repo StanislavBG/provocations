@@ -95,7 +95,6 @@ export const templateIds = [
   "product-requirement",
   "new-application",
   "streaming",
-  "research-paper",
   "persona-definition",
   "research-context",
   "voice-capture",
@@ -881,6 +880,41 @@ export interface PipelineStatus {
     summaryUuid?: string;
     infographicUuid?: string;
   };
+}
+
+// ── Clean-context chat schemas (research session) ──
+
+export const chatMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+});
+
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+
+export const chatRequestSchema = z.object({
+  message: z.string().min(1, "Message is required"),
+  objective: z.string().min(1, "Objective is required"),
+  history: z.array(chatMessageSchema).optional(),
+  appType: z.enum(templateIds).optional(),
+});
+
+export type ChatRequest = z.infer<typeof chatRequestSchema>;
+
+export interface ChatResponse {
+  response: string;
+}
+
+export const summarizeSessionRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+  chatHistory: z.array(chatMessageSchema).min(1, "At least one message is required"),
+  currentSummary: z.string().optional(),
+  appType: z.enum(templateIds).optional(),
+});
+
+export type SummarizeSessionRequest = z.infer<typeof summarizeSessionRequestSchema>;
+
+export interface SummarizeSessionResponse {
+  summary: string;
 }
 
 // ── App Launch Params ──

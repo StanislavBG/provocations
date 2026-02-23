@@ -44,6 +44,8 @@ import {
   processVideoRequestSchema,
   generateSummaryRequestSchema,
   generateInfographicRequestSchema,
+  chatRequestSchema,
+  summarizeSessionRequestSchema,
   type YouTubeChannelResponse,
   type GenerateSummaryResponse,
   type InfographicSpec,
@@ -1758,11 +1760,10 @@ Output only valid JSON, no markdown.`;
 
   // Map templateId → human-readable title for folder names
   const APP_TITLES: Record<string, string> = {
-    "write-a-prompt": "Write a Prompt",
+    "write-a-prompt": "GPT to Context",
     "product-requirement": "Product Requirement",
     "new-application": "New Application",
     "streaming": "Screen Capture",
-    "research-paper": "Research Paper",
     "persona-definition": "Persona Agent",
     "research-context": "Research into Context",
     "voice-capture": "Voice Capture",
@@ -3210,6 +3211,150 @@ Output only valid JSON, no markdown.`,
       console.error("Discussion ask error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to generate response", details: errorMessage });
+    }
+  });
+
+  // ==========================================
+  // Clean-context chat (Research & Data Gathering)
+  // Minimal-context LLM interaction — only the user's
+  // message and objective are sent. No personas, no
+  // stored document context.
+  // ==========================================
+
+  app.post("/api/chat", async (req, res) => {
+    try {
+      const parsed = chatRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { message, objective, history } = parsed.data;
+
+      const systemPrompt = `You are a focused research assistant. The user's research objective is:\n\n${objective}\n\nProvide clear, actionable, research-focused responses. Emphasize facts, structured data, procedural guides, and actionable insights. Keep responses concise and relevant to the objective.`;
+
+      const messages: { role: "user" | "assistant"; content: string }[] = [];
+
+      // Include conversation history for context continuity
+      if (history?.length) {
+        for (const msg of history.slice(-20)) {
+          messages.push({ role: msg.role, content: msg.content });
+        }
+      }
+
+      messages.push({ role: "user", content: message });
+
+      const result = await llm.generate({
+        system: systemPrompt,
+        messages,
+        maxTokens: 4096,
+        temperature: 0.7,
+      });
+
+      res.json({ response: result.text });
+    } catch (error) {
+      console.error("Chat error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate chat response", details: errorMessage });
+    }
+  });
+
+  // Streaming chat endpoint (SSE)
+  app.post("/api/chat/stream", async (req, res) => {
+    try {
+      const parsed = chatRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { message, objective, history } = parsed.data;
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      const systemPrompt = `You are a focused research assistant. The user's research objective is:\n\n${objective}\n\nProvide clear, actionable, research-focused responses. Emphasize facts, structured data, procedural guides, and actionable insights. Keep responses concise and relevant to the objective.`;
+
+      const messages: { role: "user" | "assistant"; content: string }[] = [];
+
+      if (history?.length) {
+        for (const msg of history.slice(-20)) {
+          messages.push({ role: msg.role, content: msg.content });
+        }
+      }
+
+      messages.push({ role: "user", content: message });
+
+      const stream = llm.stream({
+        system: systemPrompt,
+        messages,
+        maxTokens: 4096,
+        temperature: 0.7,
+      });
+
+      for await (const chunk of stream) {
+        res.write(`data: ${JSON.stringify({ type: "content", content: chunk })}\n\n`);
+      }
+
+      res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Chat stream error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to stream chat response" });
+      } else {
+        res.write(`data: ${JSON.stringify({ type: "error", error: "Stream failed" })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
+  // Summarize a research session — generates/updates a dynamic summary
+  app.post("/api/chat/summarize", async (req, res) => {
+    try {
+      const parsed = summarizeSessionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, chatHistory, currentSummary } = parsed.data;
+
+      const historyText = chatHistory
+        .map((m) => `[${m.role.toUpperCase()}]: ${m.content}`)
+        .join("\n\n");
+
+      const existingSummaryContext = currentSummary
+        ? `\n\nPREVIOUS SUMMARY (update and extend, do not start from scratch):\n${currentSummary}`
+        : "";
+
+      const result = await llm.generate({
+        system: `You are a research summarizer. Generate a clear, structured summary of the research session below, aligned with the user's stated objective.${existingSummaryContext}
+
+OBJECTIVE: ${objective}
+
+RULES:
+- Structure the summary with clear markdown headings
+- Focus on key findings, insights, and actionable conclusions
+- Group related information under thematic headings
+- Highlight any gaps or areas needing further research
+- If updating an existing summary, integrate new findings without losing previous content
+- Keep the summary concise but comprehensive`,
+        messages: [
+          {
+            role: "user",
+            content: `Summarize this research session:\n\n${historyText}`,
+          },
+        ],
+        maxTokens: 4096,
+        temperature: 0.5,
+      });
+
+      res.json({ summary: result.text });
+    } catch (error) {
+      console.error("Session summarize error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to summarize session", details: errorMessage });
     }
   });
 

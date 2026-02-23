@@ -107,8 +107,9 @@ const DEFAULT_OBJECTIVE_CONFIG: ObjectiveConfig = {
  * "standard"            — Default 3-panel layout (toolbox | document | discussion).
  * "voice-capture"       — Single-page voice recording workspace with auto-save.
  * "infographic-studio"  — 3-panel infographic pipeline (raw text | summary + controls | image gallery).
+ * "research-chat"       — 2-panel research session (chat panel | dynamic summary panel).
  */
-export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio";
+export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio" | "research-chat";
 
 export interface AppFlowConfig {
   /** Top-level workspace layout. Defaults to "standard" (3-panel). */
@@ -299,21 +300,6 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     },
   },
 
-  "research-paper": {
-    ...DEFAULT_CONFIG,
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "thesis", label: "Define Thesis", description: "State your research question and scope" },
-      { id: "draft", label: "Research & Write", description: "Build the paper with evidence and methodology" },
-      { id: "review", label: "Peer Review", description: "Expert personas challenge rigor and originality" },
-    ],
-    writer: {
-      mode: "edit",
-      outputFormat: "markdown",
-      documentType: "research paper",
-      feedbackTone: "academic and rigorous",
-    },
-  },
 
   "persona-definition": {
     ...DEFAULT_CONFIG,
