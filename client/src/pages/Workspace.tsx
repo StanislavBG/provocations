@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useCallback, useEffect, useRef, lazy, Suspense, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -21,7 +21,6 @@ import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { StoragePanel } from "@/components/StoragePanel";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { UserButton } from "@clerk/clerk-react";
 import { useRole } from "@/hooks/use-role";
@@ -31,7 +30,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertDialog,
@@ -68,6 +67,8 @@ import {
   Wrench,
   Shield,
   ImageIcon,
+  FolderOpen,
+  Lock,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -94,6 +95,7 @@ import type {
   AskQuestionResponse,
   Advice,
   AgentStep,
+  FolderItem,
 } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -215,8 +217,6 @@ export default function Workspace() {
   const [showLogPanel, setShowLogPanel] = useState(false);
   const lastAnalyzedUrl = useRef<string>("");
 
-  // Storage panel state
-  const [showStoragePanel, setShowStoragePanel] = useState(false);
   // New button confirmation
   const [showNewConfirm, setShowNewConfirm] = useState(false);
   const [savedDocId, setSavedDocId] = useState<number | null>(null);
@@ -229,14 +229,25 @@ export default function Workspace() {
   // Objective panel collapsed state (minimized by default)
   const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
 
-  // Objective "Load from Context Store" popover state
+  // Objective "Load from Context Store" dialog state
   const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
   const [objectiveStoreLoadingId, setObjectiveStoreLoadingId] = useState<number | null>(null);
-  const { data: objectiveStoreDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
+  const [storeExpandedFolders, setStoreExpandedFolders] = useState<Set<number>>(new Set());
+  const { data: objectiveStoreDocs } = useQuery<{ documents: { id: number; title: string; folderId?: number | null; updatedAt: string }[] }>({
     queryKey: ["/api/documents"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/documents");
       return res.json();
+    },
+    enabled: objectiveStoreOpen,
+    staleTime: 30_000,
+  });
+  const { data: objectiveStoreFolders } = useQuery<FolderItem[]>({
+    queryKey: ["/api/folders/all"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/folders");
+      const data = await res.json();
+      return (data.folders || []) as FolderItem[];
     },
     enabled: objectiveStoreOpen,
     staleTime: 30_000,
@@ -1138,7 +1149,6 @@ RULES:
     setActiveToolboxApp("provoke");
     autoStartedRef.current = false;
     // Reset storage state
-    setShowStoragePanel(false);
     setSavedDocId(null);
     setSavedDocTitle("");
     // Reset tab state
@@ -1173,12 +1183,11 @@ RULES:
           setPendingVoiceContext(null);
         }
         if (showLogPanel) setShowLogPanel(false);
-        if (showStoragePanel) setShowStoragePanel(false);
       }
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [showTranscriptOverlay, showLogPanel, showStoragePanel]);
+  }, [showTranscriptOverlay, showLogPanel]);
 
   // Reset all overlay states when returning to input phase (defensive against stuck overlays)
   const prevInputPhase = useRef(isInputPhase);
@@ -1187,7 +1196,6 @@ RULES:
       // Transitioning TO input phase — ensure no overlays are stuck
       setShowTranscriptOverlay(false);
       setShowLogPanel(false);
-      setShowStoragePanel(false);
       setRawTranscript("");
       setCleanedTranscript(undefined);
       setTranscriptSummary("");
@@ -1270,15 +1278,6 @@ RULES:
     }
   }, [objectiveConfig.primaryLabel, toast]);
 
-  const handleStorageLoad = useCallback((doc: { id: number; title: string; content: string }) => {
-    setDocument({ id: generateId("doc"), rawText: doc.content });
-    setSavedDocId(doc.id);
-    setSavedDocTitle(doc.title);
-    // Set objective from title if empty
-    if (!objective) {
-      setObjective(doc.title);
-    }
-  }, [objective]);
 
   const handleDocumentTextChange = useCallback((newText: string) => {
     if (document) {
@@ -1882,16 +1881,17 @@ RULES:
                 <span className="hidden sm:inline">Versions</span> ({versions.length})
               </Button>
             )}
-            <Button
-              data-testid="button-context-store"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowStoragePanel(true)}
-              className="gap-1.5"
-            >
-              <HardDrive className="w-4 h-4" />
-              <span className="hidden sm:inline">Context Store</span>
-            </Button>
+            <Link href="/store">
+              <Button
+                data-testid="button-context-store"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+              >
+                <HardDrive className="w-4 h-4" />
+                <span className="hidden sm:inline">Context Store</span>
+              </Button>
+            </Link>
             <Button
               data-testid="button-reset"
               variant="ghost"
@@ -1954,38 +1954,10 @@ RULES:
               headerActions={
                 <div className="flex items-center gap-1">
                   {objectiveConfig.showLoadFromStore && (
-                    <Popover open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
-                          <HardDrive className="w-3.5 h-3.5" />
-                          Load
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-72 p-0">
-                        <div className="px-3 py-2 border-b">
-                          <p className="text-sm font-medium">Load from Context Store</p>
-                          <p className="text-xs text-muted-foreground">Replace {objectiveConfig.primaryLabel.toLowerCase()} with saved content</p>
-                        </div>
-                        <ScrollArea className="max-h-60">
-                          <div className="p-1">
-                            {objectiveStoreDocs?.documents?.length ? objectiveStoreDocs.documents.map((doc) => (
-                              <button
-                                key={doc.id}
-                                onClick={() => handleLoadObjectiveFromStore(doc.id, doc.title)}
-                                disabled={objectiveStoreLoadingId === doc.id}
-                                className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 flex items-center gap-2 transition-colors"
-                              >
-                                <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                <span className="truncate flex-1">{doc.title}</span>
-                                {objectiveStoreLoadingId === doc.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                              </button>
-                            )) : (
-                              <p className="px-3 py-4 text-sm text-muted-foreground text-center">No saved documents yet</p>
-                            )}
-                          </div>
-                        </ScrollArea>
-                      </PopoverContent>
-                    </Popover>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7" onClick={() => setObjectiveStoreOpen(true)}>
+                      <HardDrive className="w-3.5 h-3.5" />
+                      Load
+                    </Button>
                   )}
                   <Button
                     variant="ghost"
@@ -2048,6 +2020,114 @@ RULES:
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Load from Context Store dialog ── */}
+      <Dialog open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
+        <DialogContent className="max-w-lg max-h-[70vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-4 py-3 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <HardDrive className="w-4 h-4 text-primary" />
+              Load from Context Store
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Select a document to load into your {objectiveConfig.primaryLabel.toLowerCase()}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="flex-1 min-h-0 max-h-[calc(70vh-80px)]">
+            <div className="p-2">
+              {(() => {
+                const docs = objectiveStoreDocs?.documents || [];
+                const folders = objectiveStoreFolders || [];
+                if (!docs.length && !folders.length) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground/50">
+                      <FolderOpen className="w-8 h-8" />
+                      <p className="text-sm">No saved documents yet</p>
+                      <p className="text-xs">Save content from the workspace to see it here</p>
+                    </div>
+                  );
+                }
+
+                const rootFolders = folders.filter((f) => f.parentFolderId === null);
+                const getChildren = (parentId: number) => folders.filter((f) => f.parentFolderId === parentId);
+                const getDocsInFolder = (folderId: number | null) =>
+                  docs.filter((d) => (folderId === null ? !d.folderId : d.folderId === folderId));
+                const rootDocs = getDocsInFolder(null);
+
+                const toggleStoreFolder = (id: number) => {
+                  setStoreExpandedFolders((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                };
+
+                const renderDoc = (doc: { id: number; title: string }, indent: number) => (
+                  <button
+                    key={`d-${doc.id}`}
+                    onClick={() => handleLoadObjectiveFromStore(doc.id, doc.title)}
+                    disabled={objectiveStoreLoadingId === doc.id}
+                    className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 flex items-center gap-2 transition-colors"
+                    style={{ paddingLeft: `${12 + indent * 16}px` }}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate flex-1">{doc.title}</span>
+                    {objectiveStoreLoadingId === doc.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  </button>
+                );
+
+                const renderFolder = (folder: FolderItem, depth: number): ReactNode => {
+                  const isExpanded = storeExpandedFolders.has(folder.id);
+                  const children = getChildren(folder.id);
+                  const folderDocs = getDocsInFolder(folder.id);
+                  const hasContent = children.length > 0 || folderDocs.length > 0;
+
+                  return (
+                    <div key={`f-${folder.id}`}>
+                      <button
+                        onClick={() => hasContent && toggleStoreFolder(folder.id)}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2 transition-colors ${
+                          hasContent ? "hover:bg-muted/50 cursor-pointer" : "opacity-50 cursor-default"
+                        }`}
+                        style={{ paddingLeft: `${12 + depth * 16}px` }}
+                      >
+                        {isExpanded ? (
+                          <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        ) : (
+                          <FolderOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="truncate flex-1 font-medium">{folder.name}</span>
+                        {folder.locked && (
+                          <span title="System-managed">
+                            <Lock className="w-3 h-3 text-muted-foreground/40" />
+                          </span>
+                        )}
+                      </button>
+                      {isExpanded && (
+                        <div>
+                          {children.map((child) => renderFolder(child, depth + 1))}
+                          {folderDocs.map((doc) => renderDoc(doc, depth + 1))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    {rootFolders.map((folder) => renderFolder(folder, 0))}
+                    {rootDocs.length > 0 && rootFolders.length > 0 && (
+                      <div className="border-t my-1" />
+                    )}
+                    {rootDocs.map((doc) => renderDoc(doc, 0))}
+                  </>
+                );
+              })()}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Main layout: Sidebar + Content ── */}
       <div className="flex-1 flex flex-row overflow-hidden">
@@ -2236,15 +2316,6 @@ RULES:
         </div>{/* end main content area */}
       </div>{/* end sidebar + content row */}
 
-      <StoragePanel
-        isOpen={showStoragePanel}
-        onClose={() => setShowStoragePanel(false)}
-        onLoadDocument={handleStorageLoad}
-        onSave={handleStorageSave}
-        hasContent={!!document.rawText.trim()}
-        currentDocId={savedDocId}
-        currentTitle={savedDocTitle || objective}
-      />
     </div>
   );
 }
