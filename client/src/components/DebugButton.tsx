@@ -1,15 +1,15 @@
 /**
- * DebugButton — floating debug/error button visible to all users.
+ * DebugButton — inline debug/error button for the global header bar.
  *
- * - Shows a small bug icon in the bottom-left corner
+ * - Shows a small bug icon button (styled to match header buttons)
  * - Badge shows error count (red when > 0)
- * - Click opens an error log panel:
- *   - Normal users see their own local errors + server history
- *   - Admin users see ALL errors from all users (server-persisted)
+ * - Click opens an error log panel as a dropdown
+ * - Normal users see their own local errors + server history
+ * - Admin users see ALL errors from all users (server-persisted)
  * - Each error is tagged (api, client, voice, llm, promise, etc.)
  * - Errors include timestamp, message, and expandable stack trace
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Bug, X, ChevronDown, ChevronRight, Copy, Trash2, RefreshCw, Loader2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -137,11 +137,24 @@ export function DebugButton() {
   const { isAdmin } = useRole();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Install global error handlers on mount
   useEffect(() => {
     installGlobalErrorHandlers();
   }, []);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [isOpen]);
 
   // Fetch server errors (admin: all users; normal: own history)
   const { data: serverData, isLoading: isLoadingServer } = useQuery<{ errors: ServerErrorEntry[] }>({
@@ -176,29 +189,26 @@ export function DebugButton() {
   const badgeCount = entries.length;
 
   return (
-    <>
-      {/* Floating button */}
-      <button
-        type="button"
+    <div ref={containerRef} className="relative">
+      {/* Header button */}
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-4 left-4 z-50 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all ${
-          badgeCount > 0
-            ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            : "bg-muted/80 text-muted-foreground hover:bg-muted backdrop-blur-sm"
-        }`}
+        className={`gap-1.5 relative ${badgeCount > 0 ? "text-destructive" : ""}`}
         title={`${badgeCount} error${badgeCount !== 1 ? "s" : ""} logged`}
       >
         <Bug className="w-4 h-4" />
         {badgeCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center font-bold px-0.5">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center font-bold px-0.5">
             {badgeCount > 99 ? "99+" : badgeCount}
           </span>
         )}
-      </button>
+      </Button>
 
-      {/* Error log panel */}
+      {/* Error log dropdown panel */}
       {isOpen && (
-        <div className="fixed bottom-16 left-4 z-50 w-[460px] max-h-[70vh] bg-card border rounded-xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-2 duration-200">
+        <div className="absolute top-full right-0 mt-1 z-50 w-[460px] max-h-[70vh] bg-card border rounded-xl shadow-2xl flex flex-col animate-in slide-in-from-top-2 duration-200">
           {/* Header */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0">
             <Bug className="w-4 h-4 text-muted-foreground" />
@@ -276,6 +286,6 @@ export function DebugButton() {
           </ScrollArea>
         </div>
       )}
-    </>
+    </div>
   );
 }
