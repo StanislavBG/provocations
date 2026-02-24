@@ -364,6 +364,36 @@ The LLM adapter in `server/llm.ts` auto-detects these variables. You can verify 
 - `headerActions`: Slot for extra buttons in the container header
 - `label` / `labelIcon`: Container header label
 
+### ADR: ProvokeText Button Consistency
+
+All ProvokeText panels must provide a **consistent set of capabilities** based on their chrome level. ProvokeText enforces sensible defaults so panels get the right buttons automatically — explicit overrides are only needed for intentional deviations.
+
+**Automatic defaults by chrome level:**
+
+| Feature | Container + textarea/editor | Inline + textarea/editor | Bare / input |
+|---------|----------------------------|--------------------------|--------------|
+| **Top right**: Copy | yes (default) | yes (default) | yes (default) |
+| **Top right**: Clear | yes (default) | yes (default) | yes (default) |
+| **Top right**: Microphone | auto (self-contained voice) | auto (self-contained voice) | manual only |
+| **Bottom left**: Clean / Summarize | auto (built-in textProcessor) | manual only | manual only |
+| **Bottom left**: Save / Load | via `onSave` / `onLoad` props | via `onSave` / `onLoad` props | — |
+| **Bottom right**: Word count | yes (default) | yes (default) | no |
+| **Bottom right**: Reading time | yes (default) | no | no |
+
+**Self-contained voice**: When no explicit `voice` or `onVoiceTranscript` props are provided and the panel is editable (not `readOnly`) and substantial (`chrome !== "bare"`, `variant !== "input"`), ProvokeText auto-enables an "append" voice mode that appends transcripts directly into the value via `onChange`. The mic button always appears.
+
+**Built-in text processor**: When no explicit `textProcessor` is provided and the panel is a container chrome, editable, and not an input variant, ProvokeText provides a default processor that calls `/api/summarize-intent` for Clean and Summarize actions.
+
+**Built-in Save / Load**: Pass `onSave` (and optionally `isSaving`) or `onLoad` callbacks to show Save and Load action buttons in the bottom-left actions row. The parent owns the handler logic (e.g., saving to Context Store); ProvokeText owns the button rendering.
+
+**Rules:**
+1. Never set `showCopy={false}` on container panels — users must always be able to copy.
+2. Never set `showClear={false}` on editable container panels unless there's a specific reason (e.g., read-only summaries).
+3. Container panels get self-contained voice, default textProcessor, word count, and reading time automatically — do not duplicate this logic in parents.
+4. Pass `onSave` and `onLoad` props to container panels that hold user content worth persisting.
+5. Small inline inputs (chat inputs, heading editors) may set `showCopy={false}` and `showClear={false}` — they are intentionally minimal.
+6. To override any default, explicitly pass the prop (e.g., `showWordCount={false}` to suppress word count on a specific panel).
+
 ### ADR: Adding a New Application (Three-Layer Contract)
 
 Every application (template) in Provocations is defined across **three files** that must stay in sync. The `TemplateId` type in `shared/schema.ts` enforces this at build time — if you add a new ID, TypeScript will error until all three layers have a matching entry.
