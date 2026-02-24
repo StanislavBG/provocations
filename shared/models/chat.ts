@@ -250,3 +250,24 @@ export const errorLogs = pgTable("error_logs", {
 
 export type StoredErrorLog = typeof errorLogs.$inferSelect;
 
+// Payments — tracks Stripe payment records per user.
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  stripeSessionId: varchar("stripe_session_id", { length: 256 }).notNull(),
+  stripeCustomerId: varchar("stripe_customer_id", { length: 256 }),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 256 }),
+  productId: varchar("product_id", { length: 256 }),
+  priceId: varchar("price_id", { length: 256 }),
+  amount: integer("amount"),              // in cents
+  currency: varchar("currency", { length: 8 }),
+  status: varchar("status", { length: 32 }).notNull(), // "pending" | "completed" | "failed"
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_payments_user").on(table.userId),
+  index("idx_payments_session").on(table.stripeSessionId),
+]);
+
+export type StoredPayment = typeof payments.$inferSelect;
+
