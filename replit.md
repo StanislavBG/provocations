@@ -87,6 +87,10 @@ Per-app documentation lives in `apps/<templateId>/CLAUDE.md` — synced to the d
 | `CLERK_PUBLISHABLE_KEY` | Clerk frontend auth |
 | `CLERK_SECRET_KEY` | Clerk backend secret |
 | `PLAYWRIGHT_CHROMIUM_PATH` | Path to Chromium for screenshots |
+| `STRIPE_SECRET_KEY_PROD` | Stripe secret key for payment processing |
+| `STRIPE_PUBLISHABLE_KEY_PROD` | Stripe publishable key (not currently used client-side) |
+| `STRIPE_BUY_COFFEE_PRICE_ID` | Stripe Price ID for the "Buy a Coffee" product |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (starts with `whsec_`) |
 
 ## Design System
 - **Primary**: Warm amber (#B35C1E)
@@ -108,6 +112,7 @@ Per-app documentation lives in `apps/<templateId>/CLAUDE.md` — synced to the d
 - Voice: Web Speech API + custom audio worklets
 
 ## Recent Changes
+- February 24, 2026: Added Stripe payment integration — webhook endpoint (`/api/stripe/webhook`), checkout session creation, pricing page (`/pricing`), payments DB table
 - February 22, 2026: Added per-app CLAUDE.md documentation graph — 12 isolated app guides in `apps/<templateId>/CLAUDE.md` with admin sync endpoint to document store
 - February 21, 2026: Added Email Composer application — single-step business email composition with audience-adaptive tone and 'email' output format
 - February 21, 2026: Added persistent app sidebar with global layout for switching between applications

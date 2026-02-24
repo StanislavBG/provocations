@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -882,6 +882,42 @@ export class DatabaseStorage implements IStorage {
     for (const row of trackingUsers) allIds.add(row.userId);
     for (const row of metricUsers) allIds.add(row.userId);
     return Array.from(allIds);
+  }
+  // ── Payments ──────────────────────────────────────────────────────────
+
+  async createPayment(data: {
+    userId: string;
+    stripeSessionId: string;
+    stripeCustomerId?: string;
+    priceId?: string;
+    status: string;
+  }): Promise<StoredPayment> {
+    const [row] = await db.insert(payments).values({
+      userId: data.userId,
+      stripeSessionId: data.stripeSessionId,
+      stripeCustomerId: data.stripeCustomerId ?? null,
+      priceId: data.priceId ?? null,
+      status: data.status,
+    }).returning();
+    return row;
+  }
+
+  async updatePaymentBySessionId(
+    sessionId: string,
+    updates: Partial<Pick<StoredPayment, "status" | "stripeCustomerId" | "stripePaymentIntentId" | "amount" | "currency" | "productId">>,
+  ): Promise<void> {
+    await db
+      .update(payments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(payments.stripeSessionId, sessionId));
+  }
+
+  async getPaymentsByUserId(userId: string): Promise<StoredPayment[]> {
+    return db
+      .select()
+      .from(payments)
+      .where(eq(payments.userId, userId))
+      .orderBy(desc(payments.createdAt));
   }
 }
 

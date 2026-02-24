@@ -17,6 +17,7 @@ import { LogIn, Sparkles } from "lucide-react";
 import Workspace from "@/pages/Workspace";
 import Admin from "@/pages/Admin";
 import ContextStore from "@/pages/ContextStore";
+import Pricing from "@/pages/Pricing";
 import NotFound from "@/pages/not-found";
 import { DebugButton } from "@/components/DebugButton";
 import { trackEvent } from "@/lib/tracking";
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/" component={Workspace} />
       <Route path="/app/:templateId" component={Workspace} />
       <Route path="/store" component={ContextStore} />
+      <Route path="/pricing" component={Pricing} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
