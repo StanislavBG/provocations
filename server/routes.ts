@@ -56,7 +56,8 @@ import { trackingEventSchema } from "@shared/schema";
 import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 import { executeAgent } from "./agent-executor";
-import { agentDefinitionSchema, agentStepSchema } from "@shared/schema";
+import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
+import Stripe from "stripe";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -4489,6 +4490,146 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       res.status(500).json({ error: "Failed to generate questions" });
     }
   });
+
+  // ── Stripe Payments ───────────────────────────────────────────────────
+
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY_PROD;
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (stripeSecretKey) {
+    const stripe = new Stripe(stripeSecretKey);
+
+    // Return available Stripe products to the frontend
+    app.get("/api/stripe/config", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const products = [];
+        const coffeePriceId = process.env.STRIPE_BUY_COFFEE_PRICE_ID;
+        if (coffeePriceId) {
+          products.push({
+            id: "buy-coffee",
+            name: "Buy a Coffee",
+            description: "A small gesture to support the development of Provocations.",
+            priceId: coffeePriceId,
+            amount: 500,   // $5.00 in cents
+            currency: "usd",
+            type: "one_time" as const,
+          });
+        }
+
+        res.json({ products });
+      } catch (error) {
+        console.error("Stripe config error:", error);
+        res.status(500).json({ error: "Failed to load Stripe config" });
+      }
+    });
+
+    // Create a Stripe Checkout Session
+    app.post("/api/stripe/create-checkout-session", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const parsed = createCheckoutSessionSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+        }
+
+        const { priceId } = parsed.data;
+
+        // Determine origin for redirect URLs
+        const origin = `${req.protocol}://${req.get("host")}`;
+
+        const session = await stripe.checkout.sessions.create({
+          mode: "payment",
+          line_items: [{ price: priceId, quantity: 1 }],
+          success_url: `${origin}/pricing?success=true`,
+          cancel_url: `${origin}/pricing?canceled=true`,
+          client_reference_id: userId,
+        });
+
+        // Record a pending payment
+        await storage.createPayment({
+          userId,
+          stripeSessionId: session.id,
+          priceId,
+          status: "pending",
+        });
+
+        res.json({ sessionUrl: session.url });
+      } catch (error) {
+        console.error("Stripe create-checkout-session error:", error);
+        res.status(500).json({ error: "Failed to create checkout session" });
+      }
+    });
+
+    // Stripe webhook — receives events from Stripe servers
+    // NOTE: This endpoint is exempted from Clerk auth and receives raw body
+    app.post("/api/stripe/webhook", async (req, res) => {
+      try {
+        const sig = req.headers["stripe-signature"];
+        if (!sig || !stripeWebhookSecret) {
+          return res.status(400).json({ error: "Missing signature or webhook secret" });
+        }
+
+        let event: Stripe.Event;
+        try {
+          event = stripe.webhooks.constructEvent(req.body, sig, stripeWebhookSecret);
+        } catch (err) {
+          console.error("Stripe webhook signature verification failed:", err);
+          return res.status(400).json({ error: "Invalid signature" });
+        }
+
+        switch (event.type) {
+          case "checkout.session.completed": {
+            const session = event.data.object as Stripe.Checkout.Session;
+            await storage.updatePaymentBySessionId(session.id, {
+              status: "completed",
+              stripeCustomerId: session.customer as string | undefined,
+              stripePaymentIntentId: session.payment_intent as string | undefined,
+              amount: session.amount_total ?? undefined,
+              currency: session.currency ?? undefined,
+            });
+            console.log(`Payment completed for session ${session.id}`);
+            break;
+          }
+          case "checkout.session.expired": {
+            const session = event.data.object as Stripe.Checkout.Session;
+            await storage.updatePaymentBySessionId(session.id, { status: "failed" });
+            console.log(`Payment expired for session ${session.id}`);
+            break;
+          }
+          default:
+            console.log(`Unhandled Stripe event type: ${event.type}`);
+        }
+
+        res.json({ received: true });
+      } catch (error) {
+        console.error("Stripe webhook error:", error);
+        res.status(500).json({ error: "Webhook handler failed" });
+      }
+    });
+
+    // List current user's payments
+    app.get("/api/stripe/payments", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const userPayments = await storage.getPaymentsByUserId(userId);
+        res.json(userPayments);
+      } catch (error) {
+        console.error("Stripe list payments error:", error);
+        res.status(500).json({ error: "Failed to list payments" });
+      }
+    });
+
+    console.log("Stripe payment endpoints registered.");
+  } else {
+    console.warn("STRIPE_SECRET_KEY_PROD not set — Stripe endpoints disabled.");
+  }
 
   return httpServer;
 }

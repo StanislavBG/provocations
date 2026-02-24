@@ -8,7 +8,15 @@ import { ensureTables } from "./db";
 const app = express();
 const httpServer = createServer(app);
 
-app.use(express.json({ limit: "5mb" }));
+// Stripe webhooks need the raw body for signature verification.
+// All other routes get the usual JSON parser.
+app.use((req, res, next) => {
+  if (req.path === "/api/stripe/webhook") {
+    express.raw({ type: "application/json" })(req, res, next);
+  } else {
+    express.json({ limit: "5mb" })(req, res, next);
+  }
+});
 app.use(clerkMiddleware());
 
 app.get("/api/clerk-config", (_req, res) => {
@@ -20,7 +28,7 @@ app.get("/api/clerk-config", (_req, res) => {
 });
 
 app.use("/api", (req, _res, next) => {
-  if (req.path === "/clerk-config") {
+  if (req.path === "/clerk-config" || req.path === "/stripe/webhook") {
     return next();
   }
   return requireAuth()(req, _res, next);
