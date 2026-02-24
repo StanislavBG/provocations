@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, User, Bot } from "lucide-react";
+import { Send, Loader2, User, Bot, BookmarkPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
 
 interface ChatSessionPanelProps {
@@ -10,7 +11,9 @@ interface ChatSessionPanelProps {
   isLoading: boolean;
   streamingContent: string;
   onSendMessage: (message: string) => void;
+  onCaptureToNotes?: (text: string) => void;
   objective: string;
+  researchTopic?: string;
 }
 
 export function ChatSessionPanel({
@@ -18,11 +21,14 @@ export function ChatSessionPanel({
   isLoading,
   streamingContent,
   onSendMessage,
+  onCaptureToNotes,
   objective,
+  researchTopic,
 }: ChatSessionPanelProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -46,14 +52,29 @@ export function ChatSessionPanel({
     [handleSend],
   );
 
+  const handleCapture = useCallback((content: string) => {
+    // Check if user has selected text
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim();
+    const textToCapture = selectedText || content;
+    onCaptureToNotes?.(textToCapture);
+    if (selectedText) selection?.removeAllRanges();
+    toast({
+      title: "Captured to notes",
+      description: selectedText ? "Selected text added to your notes" : "Response added to your notes",
+    });
+  }, [onCaptureToNotes, toast]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="shrink-0 px-4 py-3 border-b bg-card/50">
-        <h3 className="text-sm font-semibold">Research Chat</h3>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-          {objective}
-        </p>
+        <h3 className="text-sm font-semibold">Researcher</h3>
+        {researchTopic && (
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+            {researchTopic}
+          </p>
+        )}
       </div>
 
       {/* Messages area */}
@@ -63,7 +84,7 @@ export function ChatSessionPanel({
             <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground/50">
               <Bot className="w-10 h-10" />
               <p className="text-sm text-center max-w-xs">
-                Start your research session by asking a question. Responses will be focused on your objective.
+                Start your research by asking a question. Capture useful responses into your notes as you go.
               </p>
             </div>
           )}
@@ -79,7 +100,7 @@ export function ChatSessionPanel({
                 </div>
               )}
               <div
-                className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                className={`max-w-[80%] rounded-lg px-3 py-2 text-sm group relative ${
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/50 border"
@@ -88,6 +109,17 @@ export function ChatSessionPanel({
                 <div className="whitespace-pre-wrap break-words leading-relaxed font-serif">
                   {msg.content}
                 </div>
+                {msg.role === "assistant" && onCaptureToNotes && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute -right-2 -top-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-card border shadow-sm"
+                    onClick={() => handleCapture(msg.content)}
+                    title="Capture to notes (or select text first)"
+                  >
+                    <BookmarkPlus className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
               {msg.role === "user" && (
                 <div className="shrink-0 w-7 h-7 rounded-full bg-muted flex items-center justify-center">
@@ -103,7 +135,7 @@ export function ChatSessionPanel({
               <div className="shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
                 <Bot className="w-4 h-4 text-primary" />
               </div>
-              <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-muted/50 border">
+              <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-muted/50 border group relative">
                 <div className="whitespace-pre-wrap break-words leading-relaxed font-serif">
                   {streamingContent}
                   <span className="inline-block w-1.5 h-4 bg-primary/60 animate-pulse ml-0.5 align-text-bottom" />

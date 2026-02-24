@@ -92,6 +92,7 @@ export type Persona = z.infer<typeof personaSchema>;
 
 export const templateIds = [
   "write-a-prompt",
+  "gpt-to-context",
   "product-requirement",
   "new-application",
   "streaming",
@@ -894,6 +895,8 @@ export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export const chatRequestSchema = z.object({
   message: z.string().min(1, "Message is required"),
   objective: z.string().min(1, "Objective is required"),
+  researchTopic: z.string().optional(),
+  notes: z.string().optional(),
   history: z.array(chatMessageSchema).optional(),
   appType: z.enum(templateIds).optional(),
 });
@@ -906,6 +909,8 @@ export interface ChatResponse {
 
 export const summarizeSessionRequestSchema = z.object({
   objective: z.string().min(1, "Objective is required"),
+  researchTopic: z.string().optional(),
+  notes: z.string().optional(),
   chatHistory: z.array(chatMessageSchema).min(1, "At least one message is required"),
   currentSummary: z.string().optional(),
   appType: z.enum(templateIds).optional(),
