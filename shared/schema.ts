@@ -660,24 +660,85 @@ export interface StreamingRefineResponse {
 // ── Tracking event types (no user-inputted text is stored) ──
 
 export const trackingEventType = [
-  "page_view",         // User viewed a page/phase
-  "persona_selected",  // User selected a persona
-  "persona_deselected",// User deselected a persona
-  "template_selected", // User selected a prebuilt template
-  "challenge_generated",// Challenges were generated
-  "challenge_addressed",// User addressed a challenge
-  "challenge_rejected", // User rejected a challenge
-  "advice_requested",  // User requested advice
-  "document_saved",    // Document saved to DB
-  "document_created",  // New document started
-  "interview_started", // Interview flow started
-  "interview_merged",  // Interview entries merged into document
-  "voice_recorded",    // User recorded voice input
-  "app_switched",      // Toolbox app switched (provoke/website/context/analyzer)
-  "write_executed",    // Write/edit instruction executed
-  "discussion_asked",  // User asked a question in discussion
-  "phase_changed",     // Workspace phase changed (input → workspace)
-  "login",             // User signed in / loaded the app
+  // ── Session lifecycle ──
+  "login",                    // User signed in / loaded the app
+  "page_view",                // User viewed a page/phase
+  "phase_changed",            // Workspace phase changed (input → workspace)
+
+  // ── Template & app selection ──
+  "template_selected",        // User selected a prebuilt template
+  "app_switched",             // Toolbox app switched (provoke/website/context/analyzer)
+
+  // ── Persona interactions ──
+  "persona_selected",         // User selected a persona
+  "persona_deselected",       // User deselected a persona
+
+  // ── Challenge / provocation lifecycle ──
+  "challenge_generated",      // Challenges were generated
+  "challenge_addressed",      // User addressed a challenge
+  "challenge_rejected",       // User rejected a challenge
+  "challenge_highlighted",    // User highlighted/starred a challenge
+  "challenge_response_voice", // User responded to challenge via voice
+  "challenge_response_text",  // User responded to challenge via text note
+  "advice_requested",         // User requested advice on a challenge
+  "advice_accepted",          // User incorporated advice into document
+  "suggestion_accepted",      // User accepted an auto-suggestion on a challenge
+  "suggestion_dismissed",     // User dismissed an auto-suggestion
+
+  // ── Interview flow ──
+  "interview_started",        // Interview flow started
+  "interview_answer",         // User submitted an interview answer
+  "interview_skip",           // User skipped an interview question
+  "interview_advice_viewed",  // User viewed advice for interview question
+  "interview_ended",          // User ended the interview
+  "interview_merged",         // Interview entries merged into document
+
+  // ── Discussion ──
+  "discussion_asked",         // User asked a question in discussion
+
+  // ── Document authoring ──
+  "document_created",         // New document started
+  "write_executed",           // Write/edit instruction executed
+  "document_edit_inline",     // User applied inline edit via selection
+  "document_feedback_sent",   // User sent feedback/instruction on document
+
+  // ── Document persistence ──
+  "document_saved",           // Document saved to context store
+  "document_loaded",          // Document loaded from context store
+  "document_deleted",         // Document deleted from context store
+  "document_renamed",         // Document renamed
+
+  // ── Document export ──
+  "document_downloaded",      // User downloaded document (markdown/zip)
+  "document_copied",          // User copied document text to clipboard
+
+  // ── Context store operations ──
+  "folder_created",           // User created a folder
+  "folder_deleted",           // User deleted a folder
+  "folder_renamed",           // User renamed a folder
+  "file_uploaded",            // User uploaded a file to context store
+
+  // ── Voice input ──
+  "voice_recorded",           // User recorded voice input
+  "voice_started",            // Voice recording started
+  "voice_stopped",            // Voice recording stopped
+
+  // ── Smart text actions ──
+  "text_cleaned",             // User used Clean action on text
+  "text_summarized",          // User used Summarize action on text
+  "text_copied",              // User copied text from any panel
+
+  // ── Version management ──
+  "version_diff_viewed",      // User toggled diff/version comparison
+
+  // ── Website/streaming analysis ──
+  "website_analyzed",         // Website URL analysis triggered
+  "screen_captured",          // Screen capture taken
+
+  // ── Tab management ──
+  "tab_created",              // User created a new tab
+  "tab_closed",               // User closed a tab
+  "tab_switched",             // User switched between tabs
 ] as const;
 
 export type TrackingEventType = typeof trackingEventType[number];
@@ -725,6 +786,97 @@ export interface AdminDashboardData {
     maxFolderDepth: number;
     documentCount: number;
   };
+}
+
+// ── Event category mapping for admin dashboard ──
+
+export const EVENT_CATEGORIES: Record<string, { label: string; color: string; events: readonly string[] }> = {
+  session: {
+    label: "Session",
+    color: "#6366f1",
+    events: ["login", "page_view", "phase_changed"],
+  },
+  appSelection: {
+    label: "App Selection",
+    color: "#8b5cf6",
+    events: ["template_selected", "app_switched"],
+  },
+  challenges: {
+    label: "Challenges",
+    color: "#f59e0b",
+    events: [
+      "challenge_generated", "challenge_addressed", "challenge_rejected",
+      "challenge_highlighted", "challenge_response_voice", "challenge_response_text",
+      "advice_requested", "advice_accepted", "suggestion_accepted", "suggestion_dismissed",
+    ],
+  },
+  interview: {
+    label: "Interview",
+    color: "#10b981",
+    events: [
+      "interview_started", "interview_answer", "interview_skip",
+      "interview_advice_viewed", "interview_ended", "interview_merged",
+    ],
+  },
+  authoring: {
+    label: "Authoring",
+    color: "#3b82f6",
+    events: [
+      "document_created", "write_executed", "document_edit_inline",
+      "document_feedback_sent", "discussion_asked",
+    ],
+  },
+  persistence: {
+    label: "Storage",
+    color: "#14b8a6",
+    events: [
+      "document_saved", "document_loaded", "document_deleted", "document_renamed",
+      "folder_created", "folder_deleted", "folder_renamed", "file_uploaded",
+    ],
+  },
+  export: {
+    label: "Export",
+    color: "#ec4899",
+    events: ["document_downloaded", "document_copied"],
+  },
+  voice: {
+    label: "Voice",
+    color: "#f97316",
+    events: ["voice_recorded", "voice_started", "voice_stopped"],
+  },
+  textActions: {
+    label: "Smart Text",
+    color: "#a855f7",
+    events: ["text_cleaned", "text_summarized", "text_copied"],
+  },
+  workspace: {
+    label: "Workspace",
+    color: "#64748b",
+    events: [
+      "version_diff_viewed", "website_analyzed", "screen_captured",
+      "tab_created", "tab_closed", "tab_switched",
+      "persona_selected", "persona_deselected",
+    ],
+  },
+};
+
+/** Categorized event report returned by /api/admin/event-report */
+export interface EventCategoryReport {
+  categories: {
+    id: string;
+    label: string;
+    color: string;
+    totalCount: number;
+    events: { eventType: string; count: number }[];
+  }[];
+  dailyTimeline: {
+    date: string;
+    total: number;
+    byCategory: Record<string, number>;
+  }[];
+  totalEvents: number;
+  totalSessions: number;
+  uniqueUsers: number;
 }
 
 // ── Usage metrics (per-user cumulative) ──

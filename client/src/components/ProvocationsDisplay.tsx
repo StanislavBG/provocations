@@ -1,3 +1,4 @@
+import { trackEvent } from "@/lib/tracking";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -225,7 +226,7 @@ function ProvocationCard({
                   size="sm"
                   variant="outline"
                   className={`gap-1 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-                  onClick={() => onAddToDocument?.(provData)}
+                  onClick={() => { trackEvent("advice_accepted", { personaId: provocation.personaType }); onAddToDocument?.(provData); }}
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Accept Advice
@@ -241,7 +242,7 @@ function ProvocationCard({
                   size="sm"
                   variant="outline"
                   className={`gap-1 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20 ${isMerging ? "opacity-50 pointer-events-none" : ""}`}
-                  onClick={() => onStartResponse?.(provData)}
+                  onClick={() => { trackEvent("challenge_response_voice", { personaId: provocation.personaType }); onStartResponse?.(provData); }}
                 >
                   <Mic className="w-3.5 h-3.5" />
                   Challenge
@@ -257,7 +258,7 @@ function ProvocationCard({
                   size="sm"
                   variant="outline"
                   className="gap-1"
-                  onClick={() => onSendToAuthor?.(provData)}
+                  onClick={() => { trackEvent("challenge_response_text", { personaId: provocation.personaType }); onSendToAuthor?.(provData); }}
                 >
                   <Send className="w-3.5 h-3.5" />
                   Note
@@ -273,7 +274,7 @@ function ProvocationCard({
                   size="sm"
                   variant="ghost"
                   className="gap-1"
-                  onClick={() => onUpdateStatus("highlighted")}
+                  onClick={() => { trackEvent("challenge_highlighted", { personaId: provocation.personaType }); onUpdateStatus("highlighted"); }}
                 >
                   <Star className="w-3.5 h-3.5" />
                 </Button>
@@ -288,7 +289,7 @@ function ProvocationCard({
                   size="sm"
                   variant="ghost"
                   className="gap-1"
-                  onClick={() => onUpdateStatus("addressed")}
+                  onClick={() => { trackEvent("challenge_addressed", { personaId: provocation.personaType }); onUpdateStatus("addressed"); }}
                 >
                   <Check className="w-3.5 h-3.5" />
                 </Button>
@@ -303,7 +304,7 @@ function ProvocationCard({
                   size="sm"
                   variant="ghost"
                   className="gap-1 text-muted-foreground"
-                  onClick={() => onUpdateStatus("rejected")}
+                  onClick={() => { trackEvent("challenge_rejected", { personaId: provocation.personaType }); onUpdateStatus("rejected"); }}
                 >
                   <X className="w-3.5 h-3.5" />
                 </Button>
@@ -334,7 +335,7 @@ function ProvocationCard({
                 size="sm"
                 variant="outline"
                 className="gap-1 text-xs h-7 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40"
-                onClick={() => onAcceptSuggestion?.(provocation.id, provocation.autoSuggestion!, provData)}
+                onClick={() => { trackEvent("suggestion_accepted", { personaId: provocation.personaType }); onAcceptSuggestion?.(provocation.id, provocation.autoSuggestion!, provData); }}
                 disabled={isMerging}
               >
                 <Check className="w-3 h-3" />
@@ -345,6 +346,7 @@ function ProvocationCard({
                 variant="outline"
                 className="gap-1 text-xs h-7 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-950/40"
                 onClick={() => {
+                  trackEvent("suggestion_dismissed", { personaId: provocation.personaType });
                   setIsSuggestionDismissed(true);
                   onStartResponse?.(provData);
                 }}
@@ -854,7 +856,7 @@ function ChallengeInput({
 
       {/* Generate button */}
       <Button
-        onClick={onGenerate}
+        onClick={() => { trackEvent("challenge_generated", { metadata: { personaCount: String(selectedTypes.size) } }); onGenerate(); }}
         disabled={isRegenerating}
         size="sm"
         className="w-full gap-1.5"
