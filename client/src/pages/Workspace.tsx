@@ -2215,7 +2215,7 @@ RULES:
           <div className="border-t px-4 py-2 flex items-center gap-4">
             {researchTopic && (
               <div className="flex items-center gap-2 min-w-0">
-                <Search className="w-4 h-4 text-primary shrink-0" />
+                <Crosshair className="w-4 h-4 text-primary shrink-0" />
                 <span className="text-xs font-medium text-muted-foreground/70 shrink-0">Topic</span>
                 <span className="text-sm text-muted-foreground truncate">
                   {researchTopic}
