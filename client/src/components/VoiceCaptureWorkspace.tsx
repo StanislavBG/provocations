@@ -643,10 +643,8 @@ export function VoiceCaptureWorkspace({
               label="Summary"
               labelIcon={Sparkles}
               value={summary}
-              onChange={() => {}}
-              readOnly
+              onChange={setSummary}
               showCopy
-              showClear={false}
               placeholder={
                 wordCount >= 30
                   ? "Summary will generate automatically..."
@@ -684,7 +682,6 @@ export function VoiceCaptureWorkspace({
               onChange={() => {}}
               readOnly
               showCopy
-              showClear={false}
               placeholder={
                 summary
                   ? "Questions generate with each summary refresh"

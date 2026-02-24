@@ -374,7 +374,7 @@ export function InterviewPanel({
                           placeholder="Edit the advice or dictate changes..."
                           voice={{ mode: "replace" }}
                           onVoiceTranscript={(transcript) => setEditableAdvice(transcript)}
-                          showCopy={false}
+                          showCopy
                           showClear={false}
                         />
                         {/* Accept advice as the answer and move to next question */}
