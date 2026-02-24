@@ -22,6 +22,7 @@ import {
   Folder,
   Lock,
   ChevronRight,
+  ClipboardPaste,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -351,20 +352,48 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
             )}
           </ScrollArea>
           <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <Upload className="w-3.5 h-3.5" />
-              Upload file
-              <input
-                type="file"
-                accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUploadAsContext(file);
-                  e.target.value = "";
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                <Upload className="w-3.5 h-3.5" />
+                Upload file
+                <input
+                  type="file"
+                  accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUploadAsContext(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <button
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    if (!text?.trim()) {
+                      toast({ title: "Clipboard empty", description: "No text found in clipboard." });
+                      return;
+                    }
+                    const newItem: ContextItem = {
+                      id: generateId("ctx"),
+                      type: "text",
+                      content: text.trim(),
+                      annotation: "Pasted from clipboard",
+                      createdAt: Date.now(),
+                    };
+                    onItemsChange([...items, newItem]);
+                    toast({ title: "Text pasted", description: `${text.trim().length} characters added as context.` });
+                  } catch {
+                    toast({ title: "Clipboard access denied", description: "Please paste manually using the Text option.", variant: "destructive" });
+                  }
                 }}
-              />
-            </label>
+                className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+              >
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                Paste text
+              </button>
+            </div>
             <Button variant="outline" size="sm" onClick={() => { setShowStorePicker(false); resetForm(); }}>
               Done
             </Button>

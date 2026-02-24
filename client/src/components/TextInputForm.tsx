@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { StoragePanel } from "@/components/StoragePanel";
 import {
   ArrowRight,
   Target,
@@ -21,8 +20,6 @@ import {
   Upload,
   Sparkles,
   HardDrive,
-  FileText,
-  Loader2,
   Save,
   Search,
   BookOpenCheck,
@@ -106,13 +103,9 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     }
   }, [selectedTemplateId]);
 
-  // Storage quick-load state
-  const [storageOpen, setStorageOpen] = useState(false);
-  const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
-  const [secondaryStoreOpen, setSecondaryStoreOpen] = useState(false);
-  const [transcriptStoreOpen, setTranscriptStoreOpen] = useState(false);
-  const [researchTopicStoreOpen, setResearchTopicStoreOpen] = useState(false);
-  const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
+  // Storage quick-load state — single load target opens the full StoragePanel
+  type LoadTarget = "objective" | "secondary" | "transcript" | "researchTopic" | "storage" | null;
+  const [loadTarget, setLoadTarget] = useState<LoadTarget>(null);
   const [savingField, setSavingField] = useState<string | null>(null);
 
   // Objective config for current template
@@ -143,65 +136,32 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       const res = await apiRequest("GET", "/api/documents");
       return res.json();
     },
-    enabled: storageOpen || objectiveStoreOpen || secondaryStoreOpen || transcriptStoreOpen || researchTopicStoreOpen, // fetch when any picker opens
+    enabled: false, // StoragePanel fetches its own data; keep query for cache sharing
     staleTime: 30_000,
   });
 
-  /** Load a document from Context Store into the objective field (replace) */
-  const handleLoadObjectiveFromStore = useCallback(async (docId: number, docTitle: string) => {
-    setLoadingDocId(docId);
-    try {
-      const res = await apiRequest("GET", `/api/documents/${docId}`);
-      const data = await res.json();
-      if (data.content) {
-        setObjective(data.content);
-        setObjectiveStoreOpen(false);
-        toast({ title: "Loaded", description: `"${docTitle}" loaded into ${objConfig.primaryLabel.toLowerCase()}.` });
-      }
-    } catch (error) {
-      console.error("Failed to load document:", error);
-      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
-    } finally {
-      setLoadingDocId(null);
+  /** Unified handler for loading a document from the full StoragePanel into the active field */
+  const handleStoreLoadDocument = useCallback((doc: { id: number; title: string; content: string }) => {
+    switch (loadTarget) {
+      case "objective":
+        setObjective(doc.content);
+        break;
+      case "secondary":
+        setSecondaryObjective(doc.content);
+        break;
+      case "transcript":
+        setVoiceTranscript(doc.content);
+        break;
+      case "researchTopic":
+        setResearchTopic(doc.content);
+        break;
+      case "storage":
+        setText((prev) => prev ? prev + "\n\n---\n\n" + doc.content : doc.content);
+        setLoadedDocIds((prev) => new Set(prev).add(doc.id));
+        break;
     }
-  }, [toast, objConfig.primaryLabel]);
-
-  /** Load a document from Context Store into the voice transcript field (replace) */
-  const handleLoadTranscriptFromStore = useCallback(async (docId: number, docTitle: string) => {
-    setLoadingDocId(docId);
-    try {
-      const res = await apiRequest("GET", `/api/documents/${docId}`);
-      const data = await res.json();
-      if (data.content) {
-        setVoiceTranscript(data.content);
-        setTranscriptStoreOpen(false);
-        toast({ title: "Loaded", description: `"${docTitle}" loaded into voice transcript.` });
-      }
-    } catch (error) {
-      console.error("Failed to load document:", error);
-      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
-    } finally {
-      setLoadingDocId(null);
-    }
-  }, [toast]);
-
-  const handleLoadStorageDoc = useCallback(async (docId: number, docTitle: string) => {
-    setLoadingDocId(docId);
-    try {
-      const res = await apiRequest("GET", `/api/documents/${docId}`);
-      const data = await res.json();
-      if (data.content) {
-        setText((prev) => prev ? prev + "\n\n---\n\n" + data.content : data.content);
-        setLoadedDocIds((prev) => new Set(prev).add(docId));
-        toast({ title: "Context loaded", description: `"${docTitle}" added as starting material.` });
-      }
-    } catch (error) {
-      console.error("Failed to load document:", error);
-      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
-    } finally {
-      setLoadingDocId(null);
-    }
-  }, [toast]);
+    setLoadTarget(null);
+  }, [loadTarget]);
 
   /** Load a text file (.txt, .md, .csv, .json) from disk into the context textarea */
   const handleFileUpload = useCallback((file: File) => {
@@ -216,43 +176,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     reader.readAsText(file);
   }, [toast]);
 
-  /** Load a document from Context Store into the secondary objective field (replace) */
-  const handleLoadSecondaryFromStore = useCallback(async (docId: number, docTitle: string) => {
-    setLoadingDocId(docId);
-    try {
-      const res = await apiRequest("GET", `/api/documents/${docId}`);
-      const data = await res.json();
-      if (data.content) {
-        setSecondaryObjective(data.content);
-        setSecondaryStoreOpen(false);
-        toast({ title: "Loaded", description: `"${docTitle}" loaded into ${objConfig.secondaryLabel?.toLowerCase() ?? "secondary objective"}.` });
-      }
-    } catch (error) {
-      console.error("Failed to load document:", error);
-      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
-    } finally {
-      setLoadingDocId(null);
-    }
-  }, [toast, objConfig.secondaryLabel]);
-
-  /** Load a document from Context Store into the research topic field (replace) */
-  const handleLoadResearchTopicFromStore = useCallback(async (docId: number, docTitle: string) => {
-    setLoadingDocId(docId);
-    try {
-      const res = await apiRequest("GET", `/api/documents/${docId}`);
-      const data = await res.json();
-      if (data.content) {
-        setResearchTopic(data.content);
-        setResearchTopicStoreOpen(false);
-        toast({ title: "Loaded", description: `"${docTitle}" loaded into research topic.` });
-      }
-    } catch (error) {
-      console.error("Failed to load document:", error);
-      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
-    } finally {
-      setLoadingDocId(null);
-    }
-  }, [toast]);
 
   /** Save field content to Context Store as a new document */
   const handleSaveFieldToStore = useCallback(async (content: string, fieldLabel: string) => {
@@ -272,48 +195,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       setSavingField(null);
     }
   }, [toast]);
-
-  /** Render an inline document picker for Load actions inside ProvokeText children slot */
-  const renderInlineDocPicker = (
-    isOpen: boolean,
-    onClose: () => void,
-    onSelect: (docId: number, docTitle: string) => void,
-  ) => {
-    if (!isOpen) return null;
-    return (
-      <div className="mx-4 mb-2 rounded-lg border bg-muted/30 overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20">
-          <span className="text-xs font-medium text-muted-foreground">Load from Context Store</span>
-          <Button variant="ghost" size="sm" className="h-5 text-xs px-1.5" onClick={onClose}>Done</Button>
-        </div>
-        <ScrollArea className="max-h-40">
-          <div className="p-1">
-            {isLoadingDocs ? (
-              <div className="flex items-center justify-center py-4 gap-2 text-xs text-muted-foreground">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Loading...
-              </div>
-            ) : !savedDocs?.documents?.length ? (
-              <p className="px-3 py-4 text-xs text-muted-foreground text-center">No saved documents yet</p>
-            ) : (
-              savedDocs.documents.map((doc) => (
-                <button
-                  key={doc.id}
-                  onClick={() => onSelect(doc.id, doc.title)}
-                  disabled={loadingDocId === doc.id}
-                  className="w-full text-left px-3 py-1.5 rounded-md text-xs hover:bg-muted/50 flex items-center gap-2 transition-colors"
-                >
-                  <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
-                  <span className="truncate flex-1">{doc.title}</span>
-                  {loadingDocId === doc.id && <Loader2 className="w-3 h-3 animate-spin" />}
-                </button>
-              ))
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-    );
-  };
 
   const handleSubmit = () => {
     if (text.trim() || loadedDocIds.size > 0) {
@@ -515,11 +396,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                     label: "Load",
                     description: "Load content from the Context Store.",
                     icon: HardDrive,
-                    onClick: () => { setObjectiveStoreOpen((v) => !v); },
+                    onClick: () => { setLoadTarget("objective"); },
                   },
                 ]}
               >
-                {renderInlineDocPicker(objectiveStoreOpen, () => setObjectiveStoreOpen(false), handleLoadObjectiveFromStore)}
               </ProvokeText>
 
               {/* Secondary objective — shown when the app defines a meaningful secondary label */}
@@ -561,11 +441,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                       label: "Load",
                       description: "Load content from the Context Store.",
                       icon: HardDrive,
-                      onClick: () => { setSecondaryStoreOpen((v) => !v); },
+                      onClick: () => { setLoadTarget("secondary"); },
                     },
                   ]}
                 >
-                  {renderInlineDocPicker(secondaryStoreOpen, () => setSecondaryStoreOpen(false), handleLoadSecondaryFromStore)}
                 </ProvokeText>
               )}
             </div>
@@ -612,11 +491,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                   label: "Load",
                   description: "Load content from the Context Store.",
                   icon: HardDrive,
-                  onClick: () => { setResearchTopicStoreOpen((v) => !v); },
+                  onClick: () => { setLoadTarget("researchTopic"); },
                 },
               ]}
             >
-              {renderInlineDocPicker(researchTopicStoreOpen, () => setResearchTopicStoreOpen(false), handleLoadResearchTopicFromStore)}
             </ProvokeText>
 
             <ProvokeText
@@ -655,11 +533,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                   label: "Load",
                   description: "Load content from the Context Store.",
                   icon: HardDrive,
-                  onClick: () => { setObjectiveStoreOpen((v) => !v); },
+                  onClick: () => { setLoadTarget("objective"); },
                 },
               ]}
             >
-              {renderInlineDocPicker(objectiveStoreOpen, () => setObjectiveStoreOpen(false), handleLoadObjectiveFromStore)}
             </ProvokeText>
 
             <Button
@@ -776,38 +653,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                       />
                     </label>
                   </Button>
-                  <Popover open={transcriptStoreOpen} onOpenChange={setTranscriptStoreOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
-                        <HardDrive className="w-3.5 h-3.5" />
-                        Load
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-72 p-0">
-                      <div className="px-3 py-2 border-b">
-                        <p className="text-sm font-medium">Load from Context Store</p>
-                        <p className="text-xs text-muted-foreground">Replace transcript with saved content</p>
-                      </div>
-                      <ScrollArea className="max-h-60">
-                        <div className="p-1">
-                          {savedDocs?.documents?.length ? savedDocs.documents.map((doc) => (
-                            <button
-                              key={doc.id}
-                              onClick={() => handleLoadTranscriptFromStore(doc.id, doc.title)}
-                              disabled={loadingDocId === doc.id}
-                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 flex items-center gap-2 transition-colors"
-                            >
-                              <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <span className="truncate flex-1">{doc.title}</span>
-                              {loadingDocId === doc.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                            </button>
-                          )) : (
-                            <p className="px-3 py-4 text-sm text-muted-foreground text-center">No saved documents yet</p>
-                          )}
-                        </div>
-                      </ScrollArea>
-                    </PopoverContent>
-                  </Popover>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7" onClick={() => setLoadTarget("transcript")}>
+                    <HardDrive className="w-3.5 h-3.5" />
+                    Load
+                  </Button>
                 </div>
               </div>
 
@@ -930,7 +779,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                     label: "Load",
                     description: "Load content from the Context Store.",
                     icon: HardDrive,
-                    onClick: () => { setStorageOpen((v) => !v); },
+                    onClick: () => { setLoadTarget("storage"); },
                   },
                 ]}
                 headerActions={
@@ -957,7 +806,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                   </Button>
                 }
               >
-                {renderInlineDocPicker(storageOpen, () => setStorageOpen(false), handleLoadStorageDoc)}
               </ProvokeText>
             ) : (
               <ProvokeText
@@ -1006,11 +854,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                     label: "Load",
                     description: "Load content from the Context Store.",
                     icon: HardDrive,
-                    onClick: () => { setStorageOpen((v) => !v); },
+                    onClick: () => { setLoadTarget("storage"); },
                   },
                 ]}
               >
-                {renderInlineDocPicker(storageOpen, () => setStorageOpen(false), handleLoadStorageDoc)}
               </ProvokeText>
             )}
 
@@ -1075,6 +922,15 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
           </div>
         </div>
       )}
+
+      {/* Full Context Store dialog for Load actions */}
+      <StoragePanel
+        isOpen={!!loadTarget}
+        onClose={() => setLoadTarget(null)}
+        onLoadDocument={handleStoreLoadDocument}
+        onSave={async () => {}}
+        hasContent={false}
+      />
     </div>
   );
 }
