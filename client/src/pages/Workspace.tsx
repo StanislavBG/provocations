@@ -18,6 +18,7 @@ import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
 import { InfographicStudioWorkspace } from "@/components/InfographicStudioWorkspace";
 import { ChatSessionPanel } from "@/components/ChatSessionPanel";
 import { DynamicSummaryPanel } from "@/components/DynamicSummaryPanel";
+import { ResearchNotesPanel } from "@/components/ResearchNotesPanel";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
@@ -71,6 +72,7 @@ import {
   ImageIcon,
   FolderOpen,
   Lock,
+  Search,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -225,6 +227,8 @@ export default function Workspace() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [researchSummary, setResearchSummary] = useState("");
   const [isSummaryUpdating, setIsSummaryUpdating] = useState(false);
+  const [researchNotes, setResearchNotes] = useState("");
+  const [researchTopic, setResearchTopic] = useState("");
   const summaryDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Context collection data (captured from input phase for read-only toolbox tab)
@@ -1115,12 +1119,14 @@ RULES:
   // ── Research chat handlers ──
 
   const updateResearchSummary = useCallback(async (messages: ChatMessage[]) => {
-    if (messages.length < 2) return; // Need at least one exchange
+    if (messages.length === 0 && !researchNotes.trim()) return;
     setIsSummaryUpdating(true);
     try {
       const res = await apiRequest("POST", "/api/chat/summarize", {
         objective,
-        chatHistory: messages,
+        researchTopic: researchTopic || undefined,
+        notes: researchNotes || undefined,
+        chatHistory: messages.length > 0 ? messages : [{ role: "user" as const, content: "No chat messages yet" }],
         currentSummary: researchSummary || undefined,
       });
       const data = await res.json();
@@ -1134,7 +1140,7 @@ RULES:
     } finally {
       setIsSummaryUpdating(false);
     }
-  }, [objective, researchSummary]);
+  }, [objective, researchTopic, researchNotes, researchSummary]);
 
   const handleChatSendMessage = useCallback(async (message: string) => {
     // Add user message to chat
@@ -1152,6 +1158,8 @@ RULES:
         body: JSON.stringify({
           message,
           objective,
+          researchTopic: researchTopic || undefined,
+          notes: researchNotes || undefined,
           history: chatMessages,
         }),
       });
@@ -1190,12 +1198,6 @@ RULES:
       setChatMessages(finalMessages);
       setChatStreamingContent("");
       setIsChatLoading(false);
-
-      // Debounce summary update — trigger after a short delay
-      if (summaryDebounceRef.current) clearTimeout(summaryDebounceRef.current);
-      summaryDebounceRef.current = setTimeout(() => {
-        updateResearchSummary(finalMessages);
-      }, 1500);
     } catch (error) {
       console.error("Chat error:", error);
       setIsChatLoading(false);
@@ -1206,11 +1208,18 @@ RULES:
         { role: "assistant", content: "Sorry, I encountered an error. Please try again." },
       ]);
     }
-  }, [chatMessages, objective, updateResearchSummary]);
+  }, [chatMessages, objective, researchTopic, researchNotes]);
 
   const handleRefreshSummary = useCallback(() => {
     updateResearchSummary(chatMessages);
   }, [chatMessages, updateResearchSummary]);
+
+  const handleCaptureToNotes = useCallback((text: string) => {
+    setResearchNotes(prev => {
+      const separator = prev.trim() ? "\n\n---\n\n" : "";
+      return prev + separator + text;
+    });
+  }, []);
 
   // ── Browser expanded state (for full-screen capture flow) ──
   const [browserExpanded, setBrowserExpanded] = useState(false);
@@ -1263,6 +1272,8 @@ RULES:
     setChatStreamingContent("");
     setIsChatLoading(false);
     setResearchSummary("");
+    setResearchNotes("");
+    setResearchTopic("");
     setIsSummaryUpdating(false);
     if (summaryDebounceRef.current) clearTimeout(summaryDebounceRef.current);
     // Reset website state
@@ -1689,15 +1700,17 @@ RULES:
               },
             ]);
           }}
-          onResearchChatMode={(obj, templateId) => {
+          onResearchChatMode={(obj, topic, templateId) => {
             setSelectedTemplateId(templateId);
             setLayoutOverride("research-chat");
             setDocument({ id: generateId("doc"), rawText: " " });
             setObjective(obj);
+            setResearchTopic(topic);
             // Reset chat state for a fresh session
             setChatMessages([]);
             setChatStreamingContent("");
             setResearchSummary("");
+            setResearchNotes("");
             const initialVersion: DocumentVersion = {
               id: generateId("v"),
               text: " ",
@@ -1762,28 +1775,38 @@ RULES:
     </>
   ) : null;
 
-  // Research chat content — 2-panel layout (chat | summary)
+  // Research chat content — 3-panel layout (notes | chat | summary)
   const isResearchChat = !isInputPhase && appFlowConfig.workspaceLayout === "research-chat";
   const researchChatContent = isResearchChat ? (
     <>
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={55} minSize={30}>
+          <ResizablePanel defaultSize={25} minSize={15}>
+            <ResearchNotesPanel
+              notes={researchNotes}
+              onNotesChange={setResearchNotes}
+            />
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={45} minSize={25}>
             <ChatSessionPanel
               messages={chatMessages}
               isLoading={isChatLoading}
               streamingContent={chatStreamingContent}
               onSendMessage={handleChatSendMessage}
+              onCaptureToNotes={handleCaptureToNotes}
               objective={objective}
+              researchTopic={researchTopic}
             />
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={45} minSize={25}>
+          <ResizablePanel defaultSize={30} minSize={20}>
             <DynamicSummaryPanel
               summary={researchSummary}
               objective={objective}
               isUpdating={isSummaryUpdating}
               messageCount={chatMessages.length}
+              notesLength={researchNotes.length}
               onRefresh={handleRefreshSummary}
             />
           </ResizablePanel>
@@ -2179,14 +2202,18 @@ RULES:
           </div>
         )}
 
-        {/* Research chat objective bar */}
-        {isResearchChat && objective && (
-          <div className="border-t px-4 py-2 flex items-center gap-2">
-            <Target className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-xs font-medium text-muted-foreground/70 shrink-0">Research Objective</span>
-            <span className="text-sm text-muted-foreground truncate flex-1">
-              {objective}
-            </span>
+        {/* Research chat header bar */}
+        {isResearchChat && (researchTopic || objective) && (
+          <div className="border-t px-4 py-2 flex items-center gap-4">
+            {researchTopic && (
+              <div className="flex items-center gap-2 min-w-0">
+                <Search className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-xs font-medium text-muted-foreground/70 shrink-0">Topic</span>
+                <span className="text-sm text-muted-foreground truncate">
+                  {researchTopic}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </header>

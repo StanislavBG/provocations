@@ -50,20 +50,20 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "write-a-prompt",
     category: "write",
-    title: "GPT to Context",
-    shortLabel: "GPT Context",
-    subtitle: "Convert prompts to AIM or start a research session",
+    title: "Write a Prompt",
+    shortLabel: "Prompt",
+    subtitle: "AIM framework, any format",
     description:
-      "A dual-mode workspace for transforming GPT interactions into structured context. Convert prompts into the AIM framework (Actor, Input, Mission) or start a focused research and data gathering session with a clean-context chat and dynamic summary generation.",
-    howTo: "Choose your mode: 'Convert Prompt to AIM' structures your prompt into Actor, Input, and Mission sections. 'Start Research Session' launches a focused chat with dynamic summary generation based on your research objective.",
+      "For when you need to write a clear, high-quality prompt for an AI tool. Uses the AIM framework (Actor, Input, Mission) to structure your thinking. Write in whatever format feels natural — the AI will push you on clarity and structure so the resulting prompt gets the best possible output.",
+    howTo: "Type or dictate what you need an AI to do. The system will organize your words into three sections: Actor (who the AI should be), Input (the context it needs), and Mission (what it should produce). Answer the guided questions on the left to fill in each section.",
     useCases: [
-      "Converting a rough prompt into a structured AIM instruction",
-      "Running a focused research session with real-time summary generation",
-      "Gathering and synthesizing data through iterative chat interactions",
+      "Writing a ChatGPT prompt that gives consistent results",
+      "Creating a reusable prompt template for your team",
+      "Turning a vague idea into a specific AI instruction",
     ],
     icon: PencilLine,
     objective:
-      "Transform GPT interactions into structured, actionable context through prompt conversion or focused research sessions",
+      "Write a clear, structured prompt using the AIM framework (Actor, Input, Mission) that an AI can execute with precision",
     starterText: "",
     draftQuestions: [
       "Who should I pretend to be? Think about who would be best at this task. If you want a recipe, the AI should be a \"Professional Chef.\" If you want to fix a bug, it should be a \"Senior Software Engineer.\"",
@@ -71,14 +71,44 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
       "What are we making? Be specific about the final product. Do you want a 5-paragraph essay, a list of 10 ideas, or a friendly text message to a friend?",
     ],
     templateContent: "", // No template — freeform is the point
-    provocationSources: ["Clarity Coach", "Intent Detector", "Research Analyst"],
+    provocationSources: ["Clarity Coach", "Intent Detector"],
     provocationExamples: [
       "Is it clear enough for an AI to act on without asking follow-up questions?",
       "Who is the Actor here? You haven't defined what role the AI should take.",
       "What's the Mission? I see context but no clear task or expected output.",
-      "What is your research objective? Define what you want to learn or discover.",
     ],
     steps: [{ id: "write", label: "Write your prompt" }],
+  },
+  {
+    id: "gpt-to-context",
+    category: "capture",
+    title: "GPT to Context",
+    shortLabel: "GPT Context",
+    subtitle: "Research with AI, build structured context",
+    description:
+      "A focused research workspace where you converse with an AI researcher to explore a topic, capture key findings into your notes, and generate a clean summary aligned with your objective. Three panels: Notes (left), Researcher Chat (middle), and Objective Summary (right).",
+    howTo: "Define what you want to research and what your objective is. Chat with the AI researcher in the middle panel. As useful insights emerge, capture them into your notes on the left. When ready, generate a summary on the right that distills your notes and conversation into a clean, objective-aligned output you can copy or save.",
+    useCases: [
+      "Exploring a new domain and building structured context for a project",
+      "Gathering and organizing research findings into a reusable summary",
+      "Preparing context before starting a PRD, strategy doc, or implementation plan",
+    ],
+    icon: BookOpenCheck,
+    objective:
+      "Research a topic through iterative conversation and build a clean, structured summary aligned with your objective",
+    starterText: "",
+    draftQuestions: [
+      "What topic or question are you researching?",
+      "What is the end goal — what will this research feed into?",
+    ],
+    templateContent: "",
+    provocationSources: ["Research Analyst", "Synthesis Coach"],
+    provocationExamples: [
+      "What is your research objective? Define what you want to learn or discover.",
+      "You have findings but haven't synthesized them. What does it all mean?",
+      "Your notes cover breadth but lack depth on [topic]. Ask the researcher to go deeper.",
+    ],
+    steps: [{ id: "research", label: "Research & capture" }],
   },
   {
     id: "query-editor",
