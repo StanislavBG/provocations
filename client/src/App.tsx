@@ -10,6 +10,7 @@ import {
   SignInButton,
   ClerkLoaded,
   ClerkLoading,
+  UserButton,
 } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { LogIn, Sparkles } from "lucide-react";

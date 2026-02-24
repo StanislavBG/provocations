@@ -27,7 +27,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { DebugButton } from "@/components/DebugButton";
 import { UserButton } from "@clerk/clerk-react";
-import { PaymentHistory } from "@/components/PaymentHistory";
 import { useRole } from "@/hooks/use-role";
 import { Link, useRoute, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -75,7 +74,6 @@ import {
   FolderOpen,
   Lock,
   CreditCard,
-  Receipt,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -245,9 +243,6 @@ export default function Workspace() {
   const [wireframeAnalysis, setWireframeAnalysis] = useState<WireframeAnalysisResponse | null>(null);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const lastAnalyzedUrl = useRef<string>("");
-
-  // Payment history dialog
-  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
 
   // New button confirmation
   const [showNewConfirm, setShowNewConfirm] = useState(false);
@@ -2100,6 +2095,12 @@ RULES:
                 <span className="hidden sm:inline">Context Store</span>
               </Button>
             </Link>
+            <Link href="/pricing">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <CreditCard className="w-4 h-4" />
+                <span className="hidden sm:inline">Pricing</span>
+              </Button>
+            </Link>
             <Button
               data-testid="button-reset"
               variant="ghost"
@@ -2121,12 +2122,7 @@ RULES:
               </Link>
             )}
             <DebugButton />
-            <UserButton data-testid="button-user-menu-main">
-              <UserButton.MenuItems>
-                <UserButton.Link label="Pricing" labelIcon={<CreditCard className="w-4 h-4" />} href="/pricing" />
-                <UserButton.Action label="Payment History" labelIcon={<Receipt className="w-4 h-4" />} onClick={() => setShowPaymentHistory(true)} />
-              </UserButton.MenuItems>
-            </UserButton>
+            <UserButton data-testid="button-user-menu-main" />
           </div>
         </div>
 
@@ -2233,22 +2229,6 @@ RULES:
       </header>
 
       {/* ── New button confirmation dialog ── */}
-      {/* ── Payment History dialog ── */}
-      <Dialog open={showPaymentHistory} onOpenChange={setShowPaymentHistory}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-primary" />
-              Payment History
-            </DialogTitle>
-            <DialogDescription>
-              Your past payments and transactions.
-            </DialogDescription>
-          </DialogHeader>
-          {showPaymentHistory && <PaymentHistory />}
-        </DialogContent>
-      </Dialog>
-
       <AlertDialog open={showNewConfirm} onOpenChange={setShowNewConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
