@@ -19,7 +19,6 @@ import Admin from "@/pages/Admin";
 import ContextStore from "@/pages/ContextStore";
 import Pricing from "@/pages/Pricing";
 import NotFound from "@/pages/not-found";
-import { DebugButton } from "@/components/DebugButton";
 import { trackEvent } from "@/lib/tracking";
 
 /** Fires a "login" tracking event once when the signed-in shell mounts. */
@@ -76,7 +75,6 @@ function App() {
           <SignedIn>
             <LoginTracker />
             <Router />
-            <DebugButton />
           </SignedIn>
         </ClerkLoaded>
       </TooltipProvider>
