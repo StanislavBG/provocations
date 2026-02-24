@@ -305,11 +305,8 @@ export default function Pricing() {
           <RotatingQuote />
         </div>
 
-        {/* Comic Strip */}
-        <DilbertComicStrip />
-
         {/* Product Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <div className="grid grid-cols-3 gap-6 max-w-4xl mx-auto mb-12">
           {products.map((product, index) => {
             const TierIcon = tierIcons[index % tierIcons.length];
             const perks = tierPerks[index % tierPerks.length];
@@ -403,6 +400,9 @@ export default function Pricing() {
             </div>
           )}
         </div>
+
+        {/* Comic Strip */}
+        <DilbertComicStrip />
 
         {/* Footer quip */}
         <div className="text-center mt-12 text-xs text-muted-foreground font-mono space-y-1">
