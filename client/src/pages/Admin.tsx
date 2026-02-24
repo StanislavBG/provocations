@@ -36,6 +36,7 @@ import type {
   PersonaUsageStat,
   UserMetricsMatrix,
   Persona,
+  EventCategoryReport,
 } from "@shared/schema";
 import { getAllPersonas, getPersonasByDomain } from "@shared/personas";
 import { buildAppLaunchUrl } from "@/lib/appLaunchParams";
@@ -59,6 +60,13 @@ export default function Admin() {
   const { data: userMetrics, isLoading: metricsLoading } = useQuery<UserMetricsMatrix>({
     queryKey: ["/api/admin/user-metrics"],
     queryFn: () => apiRequest("GET", "/api/admin/user-metrics").then((r) => r.json()),
+    refetchInterval: 30_000,
+    enabled: isAdmin,
+  });
+
+  const { data: eventReport, isLoading: reportLoading } = useQuery<EventCategoryReport>({
+    queryKey: ["/api/admin/event-report"],
+    queryFn: () => apiRequest("GET", "/api/admin/event-report").then((r) => r.json()),
     refetchInterval: 30_000,
     enabled: isAdmin,
   });
@@ -136,18 +144,24 @@ export default function Admin() {
           {/* ════════════════════════════════════════ */}
           <TabsContent value="dashboard" className="space-y-6 mt-6">
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <KpiCard
                 icon={<Activity className="w-4 h-4" />}
                 label="Total Events"
-                value={dashboard?.totalEvents ?? 0}
-                loading={dashLoading}
+                value={eventReport?.totalEvents ?? dashboard?.totalEvents ?? 0}
+                loading={dashLoading && reportLoading}
               />
               <KpiCard
                 icon={<Users className="w-4 h-4" />}
+                label="Unique Users"
+                value={eventReport?.uniqueUsers ?? 0}
+                loading={reportLoading}
+              />
+              <KpiCard
+                icon={<Clock className="w-4 h-4" />}
                 label="Total Sessions"
-                value={dashboard?.totalSessions ?? 0}
-                loading={dashLoading}
+                value={eventReport?.totalSessions ?? dashboard?.totalSessions ?? 0}
+                loading={dashLoading && reportLoading}
               />
               <KpiCard
                 icon={<Clock className="w-4 h-4" />}
@@ -162,6 +176,40 @@ export default function Admin() {
                 loading={dashLoading}
               />
             </div>
+
+            {/* 30-Day Activity Timeline */}
+            {eventReport?.dailyTimeline && eventReport.dailyTimeline.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Activity className="w-4 h-4" />
+                    30-Day Activity Timeline
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DailyTimeline data={eventReport.dailyTimeline} categories={eventReport.categories} />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Event Categories */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3 className="w-4 h-4" />
+                  Usage by Category
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {reportLoading ? (
+                  <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                ) : eventReport?.categories?.length ? (
+                  <EventCategoryGrid categories={eventReport.categories} totalEvents={eventReport.totalEvents} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">No events recorded yet.</p>
+                )}
+              </CardContent>
+            </Card>
 
             <div className="grid md:grid-cols-2 gap-6">
               {/* Persona Usage */}
@@ -185,56 +233,32 @@ export default function Admin() {
                 </CardContent>
               </Card>
 
-              {/* Event Breakdown */}
+              {/* Storage Metadata */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <Activity className="w-4 h-4" />
-                    Event Breakdown
+                    <Database className="w-4 h-4" />
+                    Storage Overview
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {dashboard?.eventBreakdown?.length ? (
-                    <div className="space-y-1.5">
-                      {dashboard.eventBreakdown.map((e) => (
-                        <div key={e.eventType} className="flex items-center justify-between text-sm py-1">
-                          <span className="font-mono text-xs">{e.eventType}</span>
-                          <span className="font-medium tabular-nums">{e.count}</span>
-                        </div>
-                      ))}
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold">{dashboard?.storageMetadata?.documentCount ?? 0}</div>
+                      <div className="text-xs text-muted-foreground">Documents</div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No events recorded yet.</p>
-                  )}
+                    <div>
+                      <div className="text-2xl font-bold">{dashboard?.storageMetadata?.folderCount ?? 0}</div>
+                      <div className="text-xs text-muted-foreground">Folders</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">{dashboard?.storageMetadata?.maxFolderDepth ?? 0}</div>
+                      <div className="text-xs text-muted-foreground">Max Folder Depth</div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
-
-            {/* Storage Metadata */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Database className="w-4 h-4" />
-                  Storage Metadata
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-2xl font-bold">{dashboard?.storageMetadata?.documentCount ?? 0}</div>
-                    <div className="text-xs text-muted-foreground">Documents</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">{dashboard?.storageMetadata?.folderCount ?? 0}</div>
-                    <div className="text-xs text-muted-foreground">Folders</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">{dashboard?.storageMetadata?.maxFolderDepth ?? 0}</div>
-                    <div className="text-xs text-muted-foreground">Max Folder Depth</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* ════════════════════════════════════════ */}
@@ -335,6 +359,118 @@ function KpiCard({ icon, label, value, loading }: { icon: React.ReactNode; label
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/** Category grid — shows each event category as a collapsible card */
+function EventCategoryGrid({ categories, totalEvents }: { categories: EventCategoryReport["categories"]; totalEvents: number }) {
+  const [expandedCat, setExpandedCat] = useState<string | null>(null);
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      {categories.map((cat) => {
+        const pct = totalEvents > 0 ? ((cat.totalCount / totalEvents) * 100).toFixed(1) : "0";
+        const isExpanded = expandedCat === cat.id;
+        return (
+          <button
+            key={cat.id}
+            onClick={() => setExpandedCat(isExpanded ? null : cat.id)}
+            className={`text-left p-3 rounded-lg border transition-all hover:shadow-sm ${
+              isExpanded ? "ring-2 ring-offset-1 col-span-2 md:col-span-3 lg:col-span-5" : ""
+            }`}
+            style={{ borderColor: isExpanded ? cat.color : undefined }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+              <span className="text-xs font-semibold truncate">{cat.label}</span>
+              <span className="text-xs text-muted-foreground ml-auto tabular-nums">{pct}%</span>
+            </div>
+            <div className="text-lg font-bold tabular-nums">{cat.totalCount.toLocaleString()}</div>
+            <div className="w-full bg-muted rounded-full h-1 mt-1.5">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${Math.max(Number(pct), 1)}%`, backgroundColor: cat.color }}
+              />
+            </div>
+            {isExpanded && (
+              <div className="mt-3 space-y-1 border-t pt-2">
+                {cat.events.map((evt) => (
+                  <div key={evt.eventType} className="flex items-center justify-between text-xs py-0.5">
+                    <span className="font-mono text-muted-foreground">{evt.eventType}</span>
+                    <span className="font-medium tabular-nums">{evt.count.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Stacked bar chart of daily event volume over last 30 days */
+function DailyTimeline({ data, categories }: { data: EventCategoryReport["dailyTimeline"]; categories: EventCategoryReport["categories"] }) {
+  const maxTotal = Math.max(...data.map((d) => d.total), 1);
+  const catColorMap = new Map(categories.map((c) => [c.id, c.color]));
+  const catOrder = categories.map((c) => c.id);
+
+  return (
+    <div className="space-y-2">
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 text-xs mb-2">
+        {categories.slice(0, 8).map((cat) => (
+          <div key={cat.id} className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+            <span className="text-muted-foreground">{cat.label}</span>
+          </div>
+        ))}
+      </div>
+      {/* Bars */}
+      <div className="flex items-end gap-[2px] h-32">
+        {data.map((day) => {
+          const heightPct = (day.total / maxTotal) * 100;
+          return (
+            <div
+              key={day.date}
+              className="flex-1 min-w-[4px] flex flex-col justify-end group relative"
+              style={{ height: "100%" }}
+              title={`${day.date}: ${day.total} events`}
+            >
+              <div
+                className="w-full rounded-t-sm overflow-hidden flex flex-col-reverse"
+                style={{ height: `${Math.max(heightPct, 2)}%` }}
+              >
+                {catOrder.map((catId) => {
+                  const catCount = day.byCategory[catId] ?? 0;
+                  if (catCount === 0) return null;
+                  const segPct = (catCount / day.total) * 100;
+                  return (
+                    <div
+                      key={catId}
+                      style={{
+                        height: `${segPct}%`,
+                        backgroundColor: catColorMap.get(catId) ?? "#94a3b8",
+                        minHeight: "1px",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              {/* Tooltip on hover */}
+              <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover border rounded px-1.5 py-0.5 text-[10px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-sm">
+                {day.date.slice(5)}: {day.total}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Date labels */}
+      <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+        <span>{data[0]?.date.slice(5)}</span>
+        <span>{data[data.length - 1]?.date.slice(5)}</span>
+      </div>
+    </div>
   );
 }
 

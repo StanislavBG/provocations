@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { trackEvent } from "@/lib/tracking";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRole } from "@/hooks/use-role";
 import { Button } from "@/components/ui/button";
@@ -217,6 +218,7 @@ export function StoragePanel({
       return await res.json();
     },
     onSuccess: () => {
+      trackEvent("folder_created");
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
       setIsCreatingFolder(false);
@@ -230,6 +232,7 @@ export function StoragePanel({
       return await res.json();
     },
     onSuccess: () => {
+      trackEvent("folder_renamed");
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
       setRenamingFolderId(null);
@@ -242,6 +245,7 @@ export function StoragePanel({
       await apiRequest("DELETE", `/api/folders/${id}`);
     },
     onSuccess: () => {
+      trackEvent("folder_deleted");
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
@@ -254,6 +258,7 @@ export function StoragePanel({
       return await res.json();
     },
     onSuccess: () => {
+      trackEvent("document_renamed");
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       setRenamingDocId(null);
       setRenameText("");
@@ -265,6 +270,7 @@ export function StoragePanel({
       await apiRequest("DELETE", `/api/documents/${id}`);
     },
     onSuccess: (_, deletedId) => {
+      trackEvent("document_deleted");
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       if (selectedDocId === deletedId) {
         setSelectedDocId(null);
@@ -321,6 +327,7 @@ export function StoragePanel({
           folderId: currentFolderId,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+        trackEvent("file_uploaded");
         toast({ title: "File uploaded", description: `"${file.name}" saved to Context Store.` });
       } catch {
         toast({ title: "Upload failed", description: "Could not save the file.", variant: "destructive" });
@@ -442,6 +449,7 @@ export function StoragePanel({
     try {
       const res = await apiRequest("GET", `/api/documents/${docId}`);
       const data = await res.json();
+      trackEvent("document_loaded");
       onLoadDocument({ id: data.id, title: data.title, content: data.content });
       onClose();
       toast({ title: "Document loaded", description: data.title });
@@ -455,6 +463,7 @@ export function StoragePanel({
     setIsSaving(true);
     try {
       await onSave(saveTitle.trim(), currentFolderId);
+      trackEvent("document_saved");
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       toast({ title: "Document saved", description: saveTitle.trim() });
     } catch {

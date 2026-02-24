@@ -14,7 +14,9 @@ import type {
   AdminDashboardData,
   PersonaVersion,
   UserMetricRow,
+  EventCategoryReport,
 } from "@shared/schema";
+import { EVENT_CATEGORIES } from "@shared/schema";
 
 interface StoredDocument {
   id: number;
@@ -583,6 +585,96 @@ export class DatabaseStorage implements IStorage {
         maxFolderDepth,
         documentCount: Number(docCountRow?.docCount ?? 0),
       },
+    };
+  }
+
+  async getEventCategoryReport(): Promise<EventCategoryReport> {
+    // Fetch all event counts and daily timeline in parallel
+    const [eventCounts, dailyRows, sessionRow, userRow] = await Promise.all([
+      // Event counts by type
+      db
+        .select({
+          eventType: trackingEvents.eventType,
+          eventCount: count(trackingEvents.id),
+        })
+        .from(trackingEvents)
+        .groupBy(trackingEvents.eventType),
+      // Daily timeline (last 30 days)
+      db.execute(sql`
+        SELECT
+          DATE(created_at) AS date,
+          event_type,
+          COUNT(*) AS cnt
+        FROM tracking_events
+        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+        GROUP BY DATE(created_at), event_type
+        ORDER BY DATE(created_at)
+      `),
+      // Distinct sessions
+      db
+        .select({ sessionCount: sql<number>`COUNT(DISTINCT ${trackingEvents.sessionId})` })
+        .from(trackingEvents),
+      // Distinct users
+      db
+        .select({ userCount: sql<number>`COUNT(DISTINCT ${trackingEvents.userId})` })
+        .from(trackingEvents),
+    ]);
+
+    // Build event count lookup
+    const countMap = new Map<string, number>();
+    for (const r of eventCounts) {
+      countMap.set(r.eventType, Number(r.eventCount));
+    }
+
+    // Build event→category lookup
+    const eventToCat = new Map<string, string>();
+    for (const [catId, cat] of Object.entries(EVENT_CATEGORIES)) {
+      for (const evt of cat.events) {
+        eventToCat.set(evt, catId);
+      }
+    }
+
+    // Build categories
+    const categories = Object.entries(EVENT_CATEGORIES).map(([id, cat]) => {
+      const events = cat.events
+        .map((evt) => ({ eventType: evt, count: countMap.get(evt) ?? 0 }))
+        .filter((e) => e.count > 0)
+        .sort((a, b) => b.count - a.count);
+      return {
+        id,
+        label: cat.label,
+        color: cat.color,
+        totalCount: events.reduce((sum, e) => sum + e.count, 0),
+        events,
+      };
+    }).filter((c) => c.totalCount > 0)
+      .sort((a, b) => b.totalCount - a.totalCount);
+
+    // Build daily timeline
+    const dailyMap = new Map<string, { total: number; byCategory: Record<string, number> }>();
+    const rows = (dailyRows as any).rows || [];
+    for (const row of rows) {
+      const date = typeof row.date === "string" ? row.date.slice(0, 10) : new Date(row.date).toISOString().slice(0, 10);
+      if (!dailyMap.has(date)) {
+        dailyMap.set(date, { total: 0, byCategory: {} });
+      }
+      const entry = dailyMap.get(date)!;
+      const cnt = Number(row.cnt);
+      entry.total += cnt;
+      const catId = eventToCat.get(row.event_type) ?? "workspace";
+      entry.byCategory[catId] = (entry.byCategory[catId] ?? 0) + cnt;
+    }
+
+    const dailyTimeline = Array.from(dailyMap.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      categories,
+      dailyTimeline,
+      totalEvents: eventCounts.reduce((sum, r) => sum + Number(r.eventCount), 0),
+      totalSessions: Number(sessionRow[0]?.sessionCount ?? 0),
+      uniqueUsers: Number(userRow[0]?.userCount ?? 0),
     };
   }
 
