@@ -25,6 +25,7 @@ import {
   Loader2,
   Save,
   Search,
+  BookOpenCheck,
 } from "lucide-react";
 import { ProvokeText, type ProvokeAction } from "@/components/ProvokeText";
 import { apiRequest } from "@/lib/queryClient";
@@ -48,7 +49,7 @@ interface TextInputFormProps {
   onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
   onYouTubeInfographicMode?: (objective: string, channelUrl: string, templateId: string) => void;
   onVoiceInfographicMode?: (objective: string, transcript: string, templateId: string) => void;
-  onResearchChatMode?: (objective: string, templateId: string) => void;
+  onResearchChatMode?: (objective: string, researchTopic: string, templateId: string) => void;
   isLoading?: boolean;
   /** Captured context items (managed by parent for persistence) */
   capturedContext: ContextItem[];
@@ -340,6 +341,10 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   // Whether step 1 is complete (user picked a type)
   const hasObjectiveType = !!(activePrebuilt || isCustomObjective);
   const isWritePrompt = activePrebuilt?.id === "write-a-prompt" && hasObjectiveType;
+  const isGptToContext = activePrebuilt?.id === "gpt-to-context" && hasObjectiveType;
+
+  // Research topic state (used by gpt-to-context)
+  const [researchTopic, setResearchTopic] = useState("");
 
   // Shared context section — rendered in left column (default) or right column (write-a-prompt)
   const renderContextSection = () => (
@@ -442,15 +447,15 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
         {/* ── STEP ONE: Your objective (template already selected) ── */}
         <div className="shrink-0 space-y-2" ref={stepOneRef}>
-          {/* Heading — hidden for write-a-prompt (AIM description replaces it) */}
-          {!isWritePrompt && (
+          {/* Heading — hidden for write-a-prompt and gpt-to-context */}
+          {!isWritePrompt && !isGptToContext && (
             <h2 className="text-base font-semibold">
               What do <em>you</em> want to create?
             </h2>
           )}
 
-          {/* Objective input — always visible when a template or custom is selected */}
-          {hasObjectiveType && (
+          {/* Objective input — always visible when a template or custom is selected (hidden for gpt-to-context which has inline inputs) */}
+          {hasObjectiveType && !isGptToContext && (
             <div className="space-y-2">
               <ProvokeText
                 chrome="container"
@@ -547,8 +552,8 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
           )}
         </div>
 
-        {/* ── STEP TWO: Your context ── */}
-        {hasObjectiveType && (
+        {/* ── STEP TWO: Your context (hidden for gpt-to-context which uses inline inputs) ── */}
+        {hasObjectiveType && !isGptToContext && (
         <div className="flex flex-col flex-1 min-h-0 gap-2">
           {/* Step heading removed — step progress bar in footer provides the context */}
 
@@ -725,6 +730,60 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               >
                 <Radio className="w-4 h-4" />
                 Start Capture Workspace
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : isGptToContext && onResearchChatMode ? (
+            <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full py-4">
+              <ProvokeText
+                chrome="container"
+                label="What to Research"
+                labelIcon={Search}
+                description="Define the topic, domain, or question you want to explore."
+                id="research-topic"
+                placeholder="e.g. Best practices for building AI-powered search systems, or How do top SaaS companies handle onboarding..."
+                className="text-sm leading-relaxed font-serif"
+                value={researchTopic}
+                onChange={setResearchTopic}
+                minRows={2}
+                maxRows={5}
+                autoFocus
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setResearchTopic}
+                showCharCount
+                maxCharCount={5000}
+              />
+
+              <ProvokeText
+                chrome="container"
+                label="What is the Objective"
+                labelIcon={Target}
+                description="What will this research feed into? What outcome are you building toward?"
+                id="research-objective"
+                placeholder="e.g. Write a PRD for a search feature, or Prepare a presentation on onboarding best practices..."
+                className="text-sm leading-relaxed font-serif"
+                value={objective}
+                onChange={setObjective}
+                minRows={2}
+                maxRows={5}
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={setObjective}
+                showCharCount
+                maxCharCount={5000}
+              />
+
+              <Button
+                onClick={() => onResearchChatMode(
+                  objective.trim() || "Research and context gathering",
+                  researchTopic.trim() || "General research",
+                  activePrebuilt!.id,
+                )}
+                disabled={isLoading || (!researchTopic.trim() && !objective.trim())}
+                size="lg"
+                className="w-full gap-2"
+              >
+                <BookOpenCheck className="w-4 h-4" />
+                Start Research
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -906,7 +965,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       )}
 
       {/* Fixed bottom bar: step progress + action */}
-      {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "youtube-to-infographic" && activePrebuilt?.id !== "text-to-infographic" && (
+      {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "youtube-to-infographic" && activePrebuilt?.id !== "text-to-infographic" && activePrebuilt?.id !== "gpt-to-context" && (
         <div className="shrink-0 border-t bg-card">
           <div className={`w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 px-3 md:px-6 py-2 ${
             isWritePrompt ? "" : "max-w-6xl"
@@ -916,22 +975,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               currentStep={0}
             />
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              {/* Dual action buttons for GPT to Context (write-a-prompt) */}
-              {isWritePrompt && onResearchChatMode && (
-                <Button
-                  onClick={() => onResearchChatMode(
-                    objective.trim() || "Research and data gathering session",
-                    activePrebuilt!.id,
-                  )}
-                  disabled={isLoading}
-                  size="lg"
-                  variant="outline"
-                  className="gap-2 shrink-0 w-full sm:w-auto border-primary/40 hover:bg-primary/5"
-                >
-                  <Search className="w-4 h-4" />
-                  Start Research Session
-                </Button>
-              )}
               <Button
                 data-testid="button-analyze"
                 onClick={handleSubmit}
