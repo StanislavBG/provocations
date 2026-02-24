@@ -3261,7 +3261,8 @@ Output only valid JSON, no markdown.`,
 
       messages.push({ role: "user", content: message });
 
-      const result = await llm.generate({
+      // GPT-to-Context chat always uses Gemini 2.5 Flash for research
+      const result = await llm.gemini.generate({
         system: systemPrompt,
         messages,
         maxTokens: 4096,
@@ -3307,7 +3308,8 @@ Output only valid JSON, no markdown.`,
 
       messages.push({ role: "user", content: message });
 
-      const stream = llm.stream({
+      // GPT-to-Context chat always uses Gemini 2.5 Flash for research
+      const stream = llm.gemini.stream({
         system: systemPrompt,
         messages,
         maxTokens: 4096,
@@ -3352,7 +3354,8 @@ Output only valid JSON, no markdown.`,
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES:\n${notes}` : "";
 
-      const result = await llm.generate({
+      // GPT-to-Context summarize always uses Gemini 2.5 Flash for research
+      const result = await llm.gemini.generate({
         system: `You are a research summarizer. Generate a clear, structured summary that fulfills the user's stated objective, drawing from their research chat and notes.${existingSummaryContext}${topicContext}
 
 OBJECTIVE: ${objective}
