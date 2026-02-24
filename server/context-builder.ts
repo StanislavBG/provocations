@@ -304,30 +304,45 @@ export interface AppTypeConfig {
 
 const APP_TYPE_CONFIGS: Record<TemplateId, AppTypeConfig> = {
   "write-a-prompt": {
-    documentType: "AI prompt or research context",
-    systemGuidance: `APPLICATION CONTEXT: GPT to Context
-The application operates in two modes:
-
-MODE 1 — PROMPT CONVERSION (AIM Framework):
+    documentType: "AI prompt",
+    systemGuidance: `APPLICATION CONTEXT: Prompt Writer
 The document is an AI prompt being crafted using the AIM framework (Actor, Input, Mission).
-Help the user write a clear, precise prompt that an AI can execute without ambiguity.
-Focus on clarity, completeness, and specificity.
 
-MODE 2 — RESEARCH & DATA GATHERING:
-The document is a dynamic research summary being built from a chat session.
-Help the user synthesize their research interactions into a coherent summary aligned with their stated objective.
-Focus on capturing key findings, insights, and actionable conclusions.
-
-YOUR ROLE: Adapt to whichever mode the user is operating in. Be direct and clarity-focused.
+YOUR ROLE: Help the user write a clear, precise prompt that an AI can execute without ambiguity.
+Be direct and clarity-focused — push for specificity in the Actor, Input, and Mission.
 
 RULES:
-- For prompts: challenge vague instructions, push for Actor/Input/Mission specificity
-- For research: synthesize chat findings into structured summaries, identify gaps, maintain alignment with the stated objective
+- Focus on: clarity (can an AI act on this without follow-up?), completeness (Actor, Input, Mission all defined), specificity (concrete output format, length, style constraints)
+- Challenge vague instructions — "write something good" should become "write a 500-word blog post in conversational tone"
 - Preserve the user's intent while sharpening precision`,
     feedbackTone: "direct and clarity-focused",
     outputFormat: "markdown",
   },
 
+  "gpt-to-context": {
+    documentType: "research summary",
+    systemGuidance: `APPLICATION CONTEXT: GPT to Context — Research Workspace
+
+The user is conducting iterative research through a chat-based interface. They have:
+- A research topic (what they want to explore)
+- An objective (what the research feeds into)
+- Notes they are building as they discover useful information
+- A conversation history with you
+
+YOUR ROLE: You are a focused research assistant. Help the user explore their topic deeply and thoroughly.
+Be knowledgeable, concise, and probing — surface insights, challenge assumptions, and suggest angles the user hasn't considered.
+
+RULES:
+- Stay focused on the stated research topic and objective
+- Provide substantive, well-structured responses with concrete details
+- When the user asks a question, answer it thoroughly but also suggest follow-up angles
+- Reference the user's notes and prior conversation to avoid repeating ground already covered
+- Identify gaps in the research — what hasn't been explored yet?
+- Keep responses focused and scannable (use bullet points, headers when helpful)
+- Do NOT write summaries unprompted — the user controls when to generate a summary`,
+    feedbackTone: "analytical and synthesis-focused",
+    outputFormat: "markdown",
+  },
 
   "product-requirement": {
     documentType: "product requirement document",

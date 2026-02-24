@@ -233,6 +233,28 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     },
   },
 
+  "gpt-to-context": {
+    workspaceLayout: "research-chat",
+    defaultToolboxTab: "provoke",
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "research", label: "Research & Capture", description: "Chat with the researcher and build your notes" },
+    ],
+
+    leftPanelTabs: [TAB_PROVOKE],
+    rightPanelTabs: [RIGHT_DISCUSSION],
+
+    writer: {
+      mode: "aggregate",
+      outputFormat: "markdown",
+      documentType: "research summary",
+      feedbackTone: "analytical and synthesis-focused",
+    },
+  },
+
   "product-requirement": {
     ...DEFAULT_CONFIG,
     flowSteps: [
