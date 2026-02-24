@@ -980,3 +980,25 @@ export type AgentDefinition = z.infer<typeof agentDefinitionSchema>;
 export type AgentStepInput = z.infer<typeof agentStepInputSchema>;
 export type AgentStepActor = z.infer<typeof agentStepActorSchema>;
 export type AgentStepOutput = z.infer<typeof agentStepOutputSchema>;
+
+// ── Stripe / Payments ──────────────────────────────────────────────────
+
+export const createCheckoutSessionSchema = z.object({
+  priceId: z.string().min(1),
+});
+
+export const paymentRecordSchema = z.object({
+  id: z.number(),
+  userId: z.string(),
+  stripeSessionId: z.string(),
+  stripeCustomerId: z.string().nullable(),
+  stripePaymentIntentId: z.string().nullable(),
+  productId: z.string().nullable(),
+  priceId: z.string().nullable(),
+  amount: z.number().nullable(),
+  currency: z.string().nullable(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+
+export type PaymentRecord = z.infer<typeof paymentRecordSchema>;
