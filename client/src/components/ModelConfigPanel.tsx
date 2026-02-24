@@ -35,7 +35,7 @@ const AVAILABLE_MODELS = [
   { value: "gpt-4o", label: "GPT-4o" },
   { value: "gpt-4o-mini", label: "GPT-4o Mini" },
   { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
 ];
 
 // ---------------------------------------------------------------------------
