@@ -223,7 +223,6 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
       { id: "draft", label: "Write Prompt", description: "Draft your prompt using the AIM framework" },
-      { id: "edit", label: "Refine", description: "Sharpen clarity, structure, and specificity" },
     ],
     writer: {
       mode: "edit",
