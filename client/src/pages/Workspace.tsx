@@ -340,6 +340,8 @@ export default function Workspace() {
             setAgentDescription(state.description);
             setAgentPersona(state.persona);
             setSelectedStepId(state.steps[0]?.id ?? null);
+            // Set document so workspace transitions past the input phase
+            setDocument({ id: generateId("doc"), rawText: entry.currentPrompt });
             setObjective(
               `Edit the system prompt for the "${entry.description}" LLM task type. ` +
               `Changes will be saved as admin overrides.`,
