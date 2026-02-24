@@ -415,6 +415,7 @@ export default function Workspace() {
 
   const handleTabSelect = useCallback((tabId: string) => {
     if (tabId === activeTabId) return;
+    trackEvent("tab_switched");
     // Save current tab state
     setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
     // Restore target tab
@@ -423,6 +424,7 @@ export default function Workspace() {
   }, [activeTabId, tabs, saveCurrentTabState, restoreTabState]);
 
   const handleNewTab = useCallback(() => {
+    trackEvent("tab_created");
     // Save current tab before creating new
     if (activeTabId) {
       setTabs(prev => prev.map(t => t.id === activeTabId ? saveCurrentTabState() : t));
@@ -443,6 +445,7 @@ export default function Workspace() {
 
   const handleTabClose = useCallback((tabId: string) => {
     if (tabs.length <= 1) return;
+    trackEvent("tab_closed");
     const idx = tabs.findIndex(t => t.id === tabId);
     const remaining = tabs.filter(t => t.id !== tabId);
     setTabs(remaining);
@@ -783,6 +786,8 @@ RULES:
         setCurrentInterviewQuestion(null);
         setCurrentInterviewTopic(null);
 
+        trackEvent("interview_merged", { metadata: { entryCount: String(interviewEntries.length) } });
+
         toast({
           title: appFlowConfig.writer.mode === "aggregate" ? "Interview Insights Added" : "Interview Merged",
           description: `${interviewEntries.length} answers integrated into your document.`,
@@ -988,6 +993,7 @@ RULES:
 
     const timer = setTimeout(() => {
       lastAnalyzedUrl.current = trimmedUrl;
+      trackEvent("website_analyzed");
       streamingAnalysisMutation.mutate();
     }, 800);
 
@@ -1051,8 +1057,9 @@ RULES:
   }, [currentInterviewQuestion, currentInterviewTopic, interviewEntries, interviewQuestionMutation]);
 
   const handleEndInterview = useCallback(() => {
+    trackEvent("interview_ended", { metadata: { entryCount: String(interviewEntries.length) } });
     interviewSummaryMutation.mutate();
-  }, [interviewSummaryMutation]);
+  }, [interviewSummaryMutation, interviewEntries.length]);
 
   // Merge discussion content to draft without ending the session
   const handleMergeToDraft = useCallback(() => {
@@ -1514,7 +1521,10 @@ RULES:
   }, [toast]);
 
   const toggleDiffView = useCallback(() => {
-    setShowDiffView(prev => !prev);
+    setShowDiffView(prev => {
+      if (!prev) trackEvent("version_diff_viewed");
+      return !prev;
+    });
   }, []);
 
   // Handle document-level voice feedback from mic button in ReadingPane

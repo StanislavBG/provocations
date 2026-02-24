@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { trackEvent } from "@/lib/tracking";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -116,6 +117,7 @@ export function InterviewPanel({
 
   const handleSubmitAnswer = () => {
     if (answerText.trim()) {
+      trackEvent("interview_answer", { metadata: { inputMethod: "text" } });
       onAnswer(answerText.trim());
       setAnswerText("");
       setShowAdvice(false);
@@ -124,6 +126,8 @@ export function InterviewPanel({
 
   const handleVoiceAnswer = (transcript: string) => {
     if (transcript.trim()) {
+      trackEvent("interview_answer", { metadata: { inputMethod: "voice" } });
+      trackEvent("voice_recorded");
       onAnswer(transcript.trim());
       setAnswerText("");
       setShowAdvice(false);
@@ -132,12 +136,14 @@ export function InterviewPanel({
 
   const handleViewAdvice = () => {
     if (currentQuestion && currentTopic && onViewAdvice) {
+      trackEvent("interview_advice_viewed");
       setShowAdvice(true);
       onViewAdvice(currentQuestion, currentTopic);
     }
   };
 
   const handleDismiss = () => {
+    trackEvent("interview_skip");
     setShowAdvice(false);
     onDismissQuestion?.();
   };
