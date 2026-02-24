@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState } from "react";
 import { Star, Heart, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { sortTemplatesByUsage, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
+import { sortTemplatesByUsage, STATUS_LABEL_CONFIG, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -138,6 +138,18 @@ function AppTile({
       {isExternal && !isComingSoon && (
         <span className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20">
           External App
+        </span>
+      )}
+      {/* Status label badge */}
+      {!isComingSoon && !isExternal && template.statusLabel && (
+        <span className={cn(
+          "absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full border",
+          template.statusLabel === "try-it" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+          template.statusLabel === "beta" && "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+          template.statusLabel === "broken" && "bg-red-500/15 text-red-500 dark:text-red-400 border-red-500/20",
+          template.statusLabel === "untested" && "bg-muted text-muted-foreground border-border",
+        )}>
+          {STATUS_LABEL_CONFIG[template.statusLabel].text}
         </span>
       )}
 
