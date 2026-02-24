@@ -3233,13 +3233,13 @@ Output only valid JSON, no markdown.`,
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = `You are a focused research assistant. Help the user explore their topic deeply and thoroughly.${topicContext}\nOBJECTIVE: ${objective}${notesContext}\n\nProvide clear, substantive, research-focused responses. Be knowledgeable and probing — surface insights, challenge assumptions, and suggest angles the user hasn't considered. Reference the user's notes and prior conversation to avoid repeating ground already covered. Keep responses structured and scannable.`;
+      const systemPrompt = `You are an expert research assistant acting as an internet researcher. Help the user explore their topic deeply and thoroughly.${topicContext}\nOBJECTIVE: ${objective}${notesContext}\n\nCRITICAL RULES:\n1. ALWAYS follow the user's explicit instructions about response length, format, and scope. If the user asks for a short list, give a short list — not a long one. If they ask for brief answers, be brief. User instructions override your default behavior.\n2. Prioritize recent developments and official/authoritative sources. When information may be outdated, note it.\n3. Be knowledgeable and probing — surface insights, challenge assumptions, and suggest angles the user hasn't considered.\n4. Reference the user's notes and prior conversation to avoid repeating ground already covered.\n5. Match your response length and detail to what the user requests. Default to concise, structured responses unless the user asks for depth.`;
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
-      // Include conversation history for context continuity
+      // Include full conversation history for context continuity
       if (history?.length) {
-        for (const msg of history.slice(-20)) {
+        for (const msg of history.slice(-50)) {
           messages.push({ role: msg.role, content: msg.content });
         }
       }
@@ -3279,12 +3279,13 @@ Output only valid JSON, no markdown.`,
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = `You are a focused research assistant. Help the user explore their topic deeply and thoroughly.${topicContext}\nOBJECTIVE: ${objective}${notesContext}\n\nProvide clear, substantive, research-focused responses. Be knowledgeable and probing — surface insights, challenge assumptions, and suggest angles the user hasn't considered. Reference the user's notes and prior conversation to avoid repeating ground already covered. Keep responses structured and scannable.`;
+      const systemPrompt = `You are an expert research assistant acting as an internet researcher. Help the user explore their topic deeply and thoroughly.${topicContext}\nOBJECTIVE: ${objective}${notesContext}\n\nCRITICAL RULES:\n1. ALWAYS follow the user's explicit instructions about response length, format, and scope. If the user asks for a short list, give a short list — not a long one. If they ask for brief answers, be brief. User instructions override your default behavior.\n2. Prioritize recent developments and official/authoritative sources. When information may be outdated, note it.\n3. Be knowledgeable and probing — surface insights, challenge assumptions, and suggest angles the user hasn't considered.\n4. Reference the user's notes and prior conversation to avoid repeating ground already covered.\n5. Match your response length and detail to what the user requests. Default to concise, structured responses unless the user asks for depth.`;
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
+      // Include full conversation history for context continuity
       if (history?.length) {
-        for (const msg of history.slice(-20)) {
+        for (const msg of history.slice(-50)) {
           messages.push({ role: msg.role, content: msg.content });
         }
       }

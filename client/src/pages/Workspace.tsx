@@ -231,6 +231,7 @@ export default function Workspace() {
   const [researchNotes, setResearchNotes] = useState("");
   const [researchTopic, setResearchTopic] = useState("");
   const summaryDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoResearchRef = useRef<{ topic: string; objective: string } | null>(null);
 
   // Context collection data (captured from input phase for read-only toolbox tab)
   const [contextCollectionData, setContextCollectionData] = useState<{
@@ -1224,6 +1225,20 @@ RULES:
     });
   }, []);
 
+  // Auto-trigger initial research when entering research-chat mode
+  // so the chat is never empty after submitting topic + objective
+  useEffect(() => {
+    if (!autoResearchRef.current) return;
+    if (layoutOverride !== "research-chat") return;
+
+    const pending = autoResearchRef.current;
+    autoResearchRef.current = null;
+
+    handleChatSendMessage(
+      `Provide a concise initial overview of this research topic. Prioritize the most recent and authoritative information. Keep it structured and scannable.`
+    );
+  }, [layoutOverride, handleChatSendMessage]);
+
   // ── Browser expanded state (for full-screen capture flow) ──
   const [browserExpanded, setBrowserExpanded] = useState(false);
 
@@ -1721,6 +1736,8 @@ RULES:
               description: "Research session initialized",
             };
             setVersions([initialVersion]);
+            // Trigger auto-research so the chat is not empty on start
+            autoResearchRef.current = { topic, objective: obj };
           }}
           capturedContext={capturedContext}
           onCapturedContextChange={setCapturedContext}
