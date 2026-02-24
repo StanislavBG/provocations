@@ -211,14 +211,14 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       }
       const effectiveObjective = isWritePrompt
         ? "Reformat and structure this draft into a clear, effective prompt using the AIM framework (Actor, Input, Mission). Preserve the user's intent while organizing it into the three AIM sections."
-        : (objective.trim() || text.trim().slice(0, 500) || "Create a compelling, well-structured document");
+        : (objective.trim() || activePrebuilt?.objective || text.trim().slice(0, 500) || "Create a compelling, well-structured document");
       onSubmit(text.trim(), effectiveObjective, referenceDocuments, activePrebuilt?.id, secondaryObjective.trim() || undefined);
     }
   };
 
   const handleSelectPrebuilt = (template: PrebuiltTemplate) => {
     trackEvent("template_selected", { templateId: template.id });
-    setObjective(template.objective);
+    setObjective("");
     if (!template.draftQuestions?.length) {
       setText(template.starterText);
     } else {
@@ -373,7 +373,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 description={objConfig.primaryDescription ?? "Describe what you're creating — this is your intent, in your words."}
                 id="objective"
                 data-testid="input-objective"
-                placeholder={objConfig.primaryPlaceholder}
+                placeholder={activePrebuilt?.objective || objConfig.primaryPlaceholder}
                 className="text-sm leading-relaxed font-serif"
                 value={objective}
                 onChange={setObjective}
@@ -511,7 +511,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               labelIcon={Target}
               description="What will this research feed into? What outcome are you building toward?"
               id="research-objective"
-              placeholder="e.g. Write a PRD for a search feature, or Prepare a presentation on onboarding best practices..."
+              placeholder={activePrebuilt?.objective || "e.g. Write a PRD for a search feature, or Prepare a presentation on onboarding best practices..."}
               className="text-sm leading-relaxed font-serif"
               value={objective}
               onChange={setObjective}
@@ -549,7 +549,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
 
             <Button
               onClick={() => onResearchChatMode(
-                objective.trim() || "Research and context gathering",
+                objective.trim() || activePrebuilt?.objective || "Research and context gathering",
                 researchTopic.trim() || "General research",
                 activePrebuilt!.id,
               )}
