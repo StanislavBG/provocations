@@ -4,10 +4,11 @@ import { Input } from "@/components/ui/input";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Copy, Eraser, Loader2, Wand2, ListCollapse, Eye, EyeOff, RotateCcw } from "lucide-react";
+import { Copy, Eraser, Loader2, Wand2, ListCollapse, Eye, EyeOff, RotateCcw, Save, HardDrive } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAutoDictate } from "@/hooks/use-auto-dictate";
 import { cn } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
 import type { LucideIcon } from "lucide-react";
 
 /* ══════════════════════════════════════════════════════════════
@@ -145,13 +146,31 @@ export interface ProvokeTextProps {
   /* ── Custom actions ── */
   actions?: ProvokeAction[];
 
+  /* ── Load / Save (built-in) ──
+   *
+   * When provided, ProvokeText renders **Save** and/or **Load** buttons in
+   * the actions row alongside Clean / Summarize. The parent supplies the
+   * handler; ProvokeText owns only the button rendering.
+   */
+  onSave?: () => void;
+  isSaving?: boolean;
+  onLoad?: () => void;
+
   /* ── Submit ── */
   onSubmit?: () => void;
   submitIcon?: LucideIcon;
 
   /* ── Metrics ── */
   showCharCount?: boolean;
+  /**
+   * Show word count in the footer. Defaults to `true` for container chrome
+   * with textarea/editor variant.
+   */
   showWordCount?: boolean;
+  /**
+   * Show reading time in the footer. Defaults to `true` for container chrome
+   * with textarea/editor variant.
+   */
   showReadingTime?: boolean;
   maxCharCount?: number;
   maxAudioDuration?: string;
@@ -244,12 +263,16 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
       actions,
 
+      onSave,
+      isSaving,
+      onLoad,
+
       onSubmit,
       submitIcon: SubmitIcon,
 
       showCharCount,
-      showWordCount,
-      showReadingTime,
+      showWordCount: showWordCountProp,
+      showReadingTime: showReadingTimeProp,
       maxCharCount,
       maxAudioDuration,
 
@@ -282,9 +305,50 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     const [rawSnapshot, setRawSnapshot] = useState<string | null>(null);
     const [showRawSnapshot, setShowRawSnapshot] = useState(false);
 
-    const voiceMode = voice?.mode ?? "append";
-    const voiceInline = voice?.inline !== false;
-    const hasVoice = !!voice && !!onVoiceTranscript;
+    /* ── Effective defaults ──
+     * Container + textarea/editor panels get metrics, voice, and
+     * textProcessor automatically unless explicitly overridden.
+     */
+    const isSubstantialPanel = chrome !== "bare" && variant !== "input";
+    const isContainerPanel = chrome === "container" && variant !== "input";
+
+    const showWordCount = showWordCountProp ?? isSubstantialPanel;
+    const showReadingTime = showReadingTimeProp ?? isContainerPanel;
+
+    // Self-contained voice: when no explicit voice props are given and the
+    // panel is editable and substantial, auto-enable "append" voice mode so
+    // the mic button always appears.
+    const selfContainedVoice =
+      !voice && !onVoiceTranscript && !readOnly && isSubstantialPanel;
+    const effectiveVoice = voice ?? (selfContainedVoice ? { mode: "append" as const } : undefined);
+    const effectiveOnVoiceTranscript =
+      onVoiceTranscript ??
+      (selfContainedVoice
+        ? (transcript: string) => {
+            onChange(value ? value + " " + transcript : transcript);
+          }
+        : undefined);
+
+    // Default text processor: calls /api/summarize-intent for clean/summarize.
+    // Only auto-enabled for editable container panels.
+    const defaultTextProcessor = useCallback(
+      async (text: string, mode: string) => {
+        const response = await apiRequest("POST", "/api/summarize-intent", {
+          transcript: text,
+          context: "source",
+          mode,
+        });
+        const data = await response.json();
+        return data.summary ?? text;
+      },
+      [],
+    );
+    const effectiveTextProcessor =
+      textProcessor ?? (isContainerPanel && !readOnly ? defaultTextProcessor : undefined);
+
+    const voiceMode = effectiveVoice?.mode ?? "append";
+    const voiceInline = effectiveVoice?.inline !== false;
+    const hasVoice = !!effectiveVoice && !!effectiveOnVoiceTranscript;
 
     /* ── Auto-dictate on focus ── */
     const handleFocus = useCallback(() => {
@@ -319,9 +383,9 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     const handleTranscript = useCallback(
       (transcript: string) => {
         setInterimText("");
-        onVoiceTranscript?.(transcript);
+        effectiveOnVoiceTranscript?.(transcript);
       },
-      [onVoiceTranscript],
+      [effectiveOnVoiceTranscript],
     );
 
     /* ── Smart action handler ──
@@ -331,14 +395,14 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
     const handleSmartAction = useCallback(
       async (mode: string) => {
-        if (!value.trim() || !textProcessor || processingMode) return;
+        if (!value.trim() || !effectiveTextProcessor || processingMode) return;
         setProcessingMode(mode);
         try {
           // Save snapshot before the first processing operation
           if (!rawSnapshot) {
             setRawSnapshot(value);
           }
-          const result = await textProcessor(value, mode);
+          const result = await effectiveTextProcessor(value, mode);
           onChange(result);
         } catch (error) {
           console.error(`ProvokeText: "${mode}" action failed:`, error);
@@ -351,7 +415,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           setProcessingMode(null);
         }
       },
-      [value, textProcessor, processingMode, rawSnapshot, onChange, toast],
+      [value, effectiveTextProcessor, processingMode, rawSnapshot, onChange, toast],
     );
 
     /* ── Restore snapshot ── */
@@ -409,7 +473,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     /* ── Display value during recording ── */
 
     let displayValue = value;
-    if (isRecording && voiceInline && interimText) {
+    if (isRecording && hasVoice && voiceInline && interimText) {
       if (voiceMode === "replace") {
         displayValue = interimText;
       } else {
@@ -431,7 +495,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
      * Order: Clean → Summarize → Show/Restore original → custom actions
      */
 
-    const builtInSmartActions: ProvokeAction[] = textProcessor
+    const builtInSmartActions: ProvokeAction[] = effectiveTextProcessor
       ? [
           {
             key: "_smart-clean",
@@ -459,7 +523,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       : [];
 
     const extraSmartActions: ProvokeAction[] =
-      textProcessor && extraSmartModes
+      effectiveTextProcessor && extraSmartModes
         ? extraSmartModes.map((def) => ({
             key: `_smart-${def.mode}`,
             label: def.label,
@@ -473,6 +537,30 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
         : [];
 
     const smartActions = [...builtInSmartActions, ...extraSmartActions];
+
+    /* ── Built-in Save / Load actions ── */
+    const saveLoadActions: ProvokeAction[] = [];
+    if (onSave) {
+      saveLoadActions.push({
+        key: "_builtin-save",
+        label: "Save",
+        description: "Save this content to the Context Store for reuse.",
+        icon: Save,
+        onClick: onSave,
+        disabled: !hasContent || isSaving,
+        loading: isSaving,
+        loadingLabel: "Saving...",
+      });
+    }
+    if (onLoad) {
+      saveLoadActions.push({
+        key: "_builtin-load",
+        label: "Load",
+        description: "Load content from the Context Store.",
+        icon: HardDrive,
+        onClick: onLoad,
+      });
+    }
 
     const snapshotActions: ProvokeAction[] =
       hasSnapshot && !isRecording
@@ -496,7 +584,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           ]
         : [];
 
-    const allActions = [...smartActions, ...snapshotActions, ...visibleActions];
+    const allActions = [...smartActions, ...saveLoadActions, ...snapshotActions, ...visibleActions];
 
     /* ── Metrics badge ── */
 
