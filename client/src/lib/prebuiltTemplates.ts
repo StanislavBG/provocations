@@ -21,6 +21,29 @@ export interface TemplateStep {
 
 export type TemplateCategory = "build" | "write" | "analyze" | "capture";
 
+/** Status label shown next to each template in the sidebar and landing page */
+export type TemplateStatusLabel = "try-it" | "beta" | "broken" | "untested";
+
+/** Display config for each status label */
+export const STATUS_LABEL_CONFIG: Record<TemplateStatusLabel, { text: string; className: string }> = {
+  "try-it": {
+    text: "Try it",
+    className: "text-emerald-600 dark:text-emerald-400",
+  },
+  beta: {
+    text: "Beta",
+    className: "text-amber-600 dark:text-amber-400",
+  },
+  broken: {
+    text: "Broken",
+    className: "text-red-500 dark:text-red-400",
+  },
+  untested: {
+    text: "Untested",
+    className: "text-muted-foreground",
+  },
+};
+
 export interface PrebuiltTemplate {
   id: string;
   title: string;
@@ -44,12 +67,15 @@ export interface PrebuiltTemplate {
   comingSoon?: boolean;
   /** When set, clicking the tile opens this URL in a new tab instead of entering the workspace */
   externalUrl?: string;
+  /** Status label indicating readiness (try-it, beta, broken, untested). Omit for comingSoon/external apps. */
+  statusLabel?: TemplateStatusLabel;
 }
 
 export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "write-a-prompt",
     category: "write",
+    statusLabel: "beta",
     title: "Write a Prompt",
     shortLabel: "Prompt",
     subtitle: "AIM framework, any format",
@@ -82,6 +108,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "gpt-to-context",
     category: "capture",
+    statusLabel: "try-it",
     title: "GPT to Context",
     shortLabel: "GPT Context",
     subtitle: "Research with AI, build structured context",
@@ -137,6 +164,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "product-requirement",
     category: "build",
+    statusLabel: "try-it",
     title: "Product Requirement",
     shortLabel: "Feature PRD",
     subtitle: "Incremental feature, enterprise-grade",
@@ -205,6 +233,7 @@ What specifically changes for the user? Walk through the new flow step by step.
   {
     id: "new-application",
     category: "build",
+    statusLabel: "try-it",
     title: "New Application",
     shortLabel: "App from Scratch",
     subtitle: "Full SaaS spec from scratch",
@@ -296,6 +325,7 @@ Key endpoints the backend needs:
   {
     id: "streaming",
     category: "analyze",
+    statusLabel: "try-it",
     title: "Screen Capture",
     shortLabel: "Capture",
     subtitle: "Screenshots & annotations to requirements",
@@ -330,6 +360,7 @@ Key endpoints the backend needs:
   {
     id: "persona-definition",
     category: "write",
+    statusLabel: "broken",
     title: "Persona / Agent",
     shortLabel: "Persona",
     subtitle: "Character, role, or AI agent profile",
@@ -535,6 +566,7 @@ Organized collection of reusable context items that can be shared with other pro
   {
     id: "voice-capture",
     category: "capture",
+    statusLabel: "broken",
     title: "Voice Capture",
     shortLabel: "Voice",
     subtitle: "Speak your ideas, structure them later",
@@ -684,6 +716,7 @@ How sections are ordered — most impactful insight first, supporting details be
   {
     id: "text-to-infographic",
     category: "capture",
+    statusLabel: "beta",
     title: "Text to Infographic",
     shortLabel: "Text → Visual",
     subtitle: "Text descriptions to visual infographics",
@@ -762,6 +795,7 @@ How sections are ordered — most impactful insight first, supporting details be
   {
     id: "email-composer",
     category: "write",
+    statusLabel: "try-it",
     title: "Email Composer",
     shortLabel: "Email",
     subtitle: "Business professional emails, fast",
@@ -798,6 +832,7 @@ How sections are ordered — most impactful insight first, supporting details be
   {
     id: "agent-editor",
     category: "build",
+    statusLabel: "untested",
     title: "Agent Editor",
     shortLabel: "Agent",
     subtitle: "Design multi-step AI workflows",

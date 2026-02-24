@@ -32,7 +32,7 @@ import { DraftQuestionsPanel } from "@/components/DraftQuestionsPanel";
 import { ContextCapturePanel } from "@/components/ContextCapturePanel";
 import { ContextStatusPanel } from "@/components/ContextStatusPanel";
 import { StepProgressBar } from "@/components/StepProgressBar";
-import { prebuiltTemplates, sortTemplatesByUsage, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
+import { prebuiltTemplates, sortTemplatesByUsage, STATUS_LABEL_CONFIG, type PrebuiltTemplate } from "@/lib/prebuiltTemplates";
 import { getObjectiveConfig } from "@/lib/appWorkspaceConfig";
 import { AppTileCarousel } from "@/components/AppTileCarousel";
 import { useAppFavorites } from "@/hooks/use-app-favorites";
@@ -309,10 +309,15 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                     }`}
                   >
                     <Icon className={`w-4 h-4 shrink-0 ${isActive && !isExternal ? "text-primary" : "text-muted-foreground"}`} />
-                    <span>{template.title}</span>
-                    {isComingSoon && <span className="text-[10px] uppercase tracking-wider text-primary/70 font-semibold ml-1">Soon</span>}
-                    {isExternal && !isComingSoon && <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-semibold ml-1">External</span>}
-                    {isActive && !isComingSoon && !isExternal && <Check className="w-3 h-3 text-primary" />}
+                    <span className="flex-1">{template.title}</span>
+                    {isComingSoon && <span className="text-[10px] uppercase tracking-wider text-primary/70 font-semibold ml-auto">Soon</span>}
+                    {isExternal && !isComingSoon && <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-semibold ml-auto">External</span>}
+                    {!isComingSoon && !isExternal && template.statusLabel && (
+                      <span className={`text-[10px] uppercase tracking-wider font-semibold ml-auto ${STATUS_LABEL_CONFIG[template.statusLabel].className}`}>
+                        {STATUS_LABEL_CONFIG[template.statusLabel].text}
+                      </span>
+                    )}
+                    {isActive && !isComingSoon && !isExternal && <Check className="w-3 h-3 text-primary shrink-0" />}
                   </button>
                 );
               })}

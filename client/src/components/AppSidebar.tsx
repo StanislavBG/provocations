@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   prebuiltTemplates,
   sortTemplatesByUsage,
+  STATUS_LABEL_CONFIG,
   type PrebuiltTemplate,
 } from "@/lib/prebuiltTemplates";
 import {
@@ -146,9 +147,17 @@ export function AppSidebar({
                   </p>
                 </div>
                 {isComingSoon && (
-                  <span className="text-[9px] uppercase tracking-wider text-primary/70 font-semibold">Soon</span>
+                  <span className="text-[9px] uppercase tracking-wider text-primary/70 font-semibold shrink-0">Soon</span>
                 )}
-                {isActive && !isComingSoon && (
+                {isExternal && !isComingSoon && (
+                  <span className="text-[9px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-semibold shrink-0">External</span>
+                )}
+                {!isComingSoon && !isExternal && template.statusLabel && (
+                  <span className={`text-[9px] uppercase tracking-wider font-semibold shrink-0 ${STATUS_LABEL_CONFIG[template.statusLabel].className}`}>
+                    {STATUS_LABEL_CONFIG[template.statusLabel].text}
+                  </span>
+                )}
+                {isActive && !isComingSoon && !isExternal && !template.statusLabel && (
                   <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                 )}
               </button>
