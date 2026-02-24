@@ -25,6 +25,7 @@ import { errorLogStore } from "@/lib/errorLog";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
+import { DebugButton } from "@/components/DebugButton";
 import { UserButton } from "@clerk/clerk-react";
 import { useRole } from "@/hooks/use-role";
 import { Link, useRoute, useLocation } from "wouter";
@@ -2118,6 +2119,7 @@ RULES:
                 </Button>
               </Link>
             )}
+            <DebugButton />
             <UserButton data-testid="button-user-menu-main" />
           </div>
         </div>
