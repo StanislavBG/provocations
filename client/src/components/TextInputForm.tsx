@@ -111,6 +111,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
   const [secondaryStoreOpen, setSecondaryStoreOpen] = useState(false);
   const [transcriptStoreOpen, setTranscriptStoreOpen] = useState(false);
+  const [researchTopicStoreOpen, setResearchTopicStoreOpen] = useState(false);
   const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
   const [savingField, setSavingField] = useState<string | null>(null);
 
@@ -142,7 +143,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       const res = await apiRequest("GET", "/api/documents");
       return res.json();
     },
-    enabled: storageOpen || objectiveStoreOpen || secondaryStoreOpen || transcriptStoreOpen, // fetch when any picker opens
+    enabled: storageOpen || objectiveStoreOpen || secondaryStoreOpen || transcriptStoreOpen || researchTopicStoreOpen, // fetch when any picker opens
     staleTime: 30_000,
   });
 
@@ -233,6 +234,25 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       setLoadingDocId(null);
     }
   }, [toast, objConfig.secondaryLabel]);
+
+  /** Load a document from Context Store into the research topic field (replace) */
+  const handleLoadResearchTopicFromStore = useCallback(async (docId: number, docTitle: string) => {
+    setLoadingDocId(docId);
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        setResearchTopic(data.content);
+        setResearchTopicStoreOpen(false);
+        toast({ title: "Loaded", description: `"${docTitle}" loaded into research topic.` });
+      }
+    } catch (error) {
+      console.error("Failed to load document:", error);
+      toast({ title: "Load failed", description: "Could not load the document.", variant: "destructive" });
+    } finally {
+      setLoadingDocId(null);
+    }
+  }, [toast]);
 
   /** Save field content to Context Store as a new document */
   const handleSaveFieldToStore = useCallback(async (content: string, fieldLabel: string) => {
@@ -570,9 +590,34 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               autoFocus
               voice={{ mode: "replace" }}
               onVoiceTranscript={setResearchTopic}
+              textProcessor={(text, mode) =>
+                processText(text, mode, mode === "clean" ? "objective" : undefined)
+              }
               showCharCount
               maxCharCount={5000}
-            />
+              maxAudioDuration="2min"
+              actions={[
+                {
+                  key: "save",
+                  label: "Save",
+                  description: "Save this content to the Context Store for reuse.",
+                  icon: Save,
+                  onClick: () => handleSaveFieldToStore(researchTopic, "What to Research"),
+                  disabled: !researchTopic.trim(),
+                  loading: savingField === "What to Research",
+                  loadingLabel: "Saving...",
+                },
+                {
+                  key: "load",
+                  label: "Load",
+                  description: "Load content from the Context Store.",
+                  icon: HardDrive,
+                  onClick: () => { setResearchTopicStoreOpen((v) => !v); },
+                },
+              ]}
+            >
+              {renderInlineDocPicker(researchTopicStoreOpen, () => setResearchTopicStoreOpen(false), handleLoadResearchTopicFromStore)}
+            </ProvokeText>
 
             <ProvokeText
               chrome="container"
@@ -588,9 +633,34 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               maxRows={5}
               voice={{ mode: "replace" }}
               onVoiceTranscript={setObjective}
+              textProcessor={(text, mode) =>
+                processText(text, mode, mode === "clean" ? "objective" : undefined)
+              }
               showCharCount
               maxCharCount={5000}
-            />
+              maxAudioDuration="2min"
+              actions={[
+                {
+                  key: "save",
+                  label: "Save",
+                  description: "Save this content to the Context Store for reuse.",
+                  icon: Save,
+                  onClick: () => handleSaveFieldToStore(objective, "What is the Objective"),
+                  disabled: !objective.trim(),
+                  loading: savingField === "What is the Objective",
+                  loadingLabel: "Saving...",
+                },
+                {
+                  key: "load",
+                  label: "Load",
+                  description: "Load content from the Context Store.",
+                  icon: HardDrive,
+                  onClick: () => { setObjectiveStoreOpen((v) => !v); },
+                },
+              ]}
+            >
+              {renderInlineDocPicker(objectiveStoreOpen, () => setObjectiveStoreOpen(false), handleLoadObjectiveFromStore)}
+            </ProvokeText>
 
             <Button
               onClick={() => onResearchChatMode(
