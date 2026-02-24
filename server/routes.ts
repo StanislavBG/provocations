@@ -3229,9 +3229,11 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, history } = parsed.data;
+      const { message, objective, researchTopic, notes, history } = parsed.data;
 
-      const systemPrompt = `You are a focused research assistant. The user's research objective is:\n\n${objective}\n\nProvide clear, actionable, research-focused responses. Emphasize facts, structured data, procedural guides, and actionable insights. Keep responses concise and relevant to the objective.`;
+      const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
+      const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
+      const systemPrompt = `You are a focused research assistant. Help the user explore their topic deeply and thoroughly.${topicContext}\nOBJECTIVE: ${objective}${notesContext}\n\nProvide clear, substantive, research-focused responses. Be knowledgeable and probing — surface insights, challenge assumptions, and suggest angles the user hasn't considered. Reference the user's notes and prior conversation to avoid repeating ground already covered. Keep responses structured and scannable.`;
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -3267,7 +3269,7 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, history } = parsed.data;
+      const { message, objective, researchTopic, notes, history } = parsed.data;
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -3275,7 +3277,9 @@ Output only valid JSON, no markdown.`,
         Connection: "keep-alive",
       });
 
-      const systemPrompt = `You are a focused research assistant. The user's research objective is:\n\n${objective}\n\nProvide clear, actionable, research-focused responses. Emphasize facts, structured data, procedural guides, and actionable insights. Keep responses concise and relevant to the objective.`;
+      const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
+      const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
+      const systemPrompt = `You are a focused research assistant. Help the user explore their topic deeply and thoroughly.${topicContext}\nOBJECTIVE: ${objective}${notesContext}\n\nProvide clear, substantive, research-focused responses. Be knowledgeable and probing — surface insights, challenge assumptions, and suggest angles the user hasn't considered. Reference the user's notes and prior conversation to avoid repeating ground already covered. Keep responses structured and scannable.`;
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -3319,7 +3323,7 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, chatHistory, currentSummary } = parsed.data;
+      const { objective, researchTopic, notes, chatHistory, currentSummary } = parsed.data;
 
       const historyText = chatHistory
         .map((m) => `[${m.role.toUpperCase()}]: ${m.content}`)
@@ -3329,22 +3333,27 @@ Output only valid JSON, no markdown.`,
         ? `\n\nPREVIOUS SUMMARY (update and extend, do not start from scratch):\n${currentSummary}`
         : "";
 
+      const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
+      const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES:\n${notes}` : "";
+
       const result = await llm.generate({
-        system: `You are a research summarizer. Generate a clear, structured summary of the research session below, aligned with the user's stated objective.${existingSummaryContext}
+        system: `You are a research summarizer. Generate a clear, structured summary that fulfills the user's stated objective, drawing from their research chat and notes.${existingSummaryContext}${topicContext}
 
 OBJECTIVE: ${objective}
 
 RULES:
+- The summary should directly address the stated objective
 - Structure the summary with clear markdown headings
-- Focus on key findings, insights, and actionable conclusions
+- Synthesize key findings from both the chat conversation and the user's notes
 - Group related information under thematic headings
 - Highlight any gaps or areas needing further research
 - If updating an existing summary, integrate new findings without losing previous content
-- Keep the summary concise but comprehensive`,
+- Keep the summary concise but comprehensive
+- The output should be clean and ready to copy/save as structured context`,
         messages: [
           {
             role: "user",
-            content: `Summarize this research session:\n\n${historyText}`,
+            content: `Summarize this research session:\n\nCHAT HISTORY:\n${historyText}${notesContext}`,
           },
         ],
         maxTokens: 4096,
