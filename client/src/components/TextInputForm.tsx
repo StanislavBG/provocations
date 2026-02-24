@@ -671,9 +671,41 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <FileAudio className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex-1">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Voice Transcript
                   </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Paste the transcript from your voice capture session, or upload a .txt file. The system will summarize key points and generate an infographic specification.
+                </p>
+                <textarea
+                  value={voiceTranscript}
+                  onChange={(e) => setVoiceTranscript(e.target.value)}
+                  placeholder="Paste your transcript here..."
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono min-h-[120px] resize-y"
+                />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7" asChild>
+                    <label className="cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload File
+                      <input
+                        type="file"
+                        accept=".txt,.md,.text"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const content = ev.target?.result;
+                            if (typeof content === "string") setVoiceTranscript(content);
+                          };
+                          reader.readAsText(file);
+                        }}
+                      />
+                    </label>
+                  </Button>
                   <Popover open={transcriptStoreOpen} onOpenChange={setTranscriptStoreOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
@@ -681,7 +713,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                         Load
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" className="w-72 p-0">
+                    <PopoverContent align="start" className="w-72 p-0">
                       <div className="px-3 py-2 border-b">
                         <p className="text-sm font-medium">Load from Context Store</p>
                         <p className="text-xs text-muted-foreground">Replace transcript with saved content</p>
@@ -707,34 +739,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                     </PopoverContent>
                   </Popover>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Paste the transcript from your voice capture session, or upload a .txt file. The system will summarize key points and generate an infographic specification.
-                </p>
-                <textarea
-                  value={voiceTranscript}
-                  onChange={(e) => setVoiceTranscript(e.target.value)}
-                  placeholder="Paste your transcript here..."
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono min-h-[120px] resize-y"
-                />
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                  <Upload className="w-3.5 h-3.5" />
-                  Upload .txt file
-                  <input
-                    type="file"
-                    accept=".txt,.md,.text"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (ev) => {
-                        const content = ev.target?.result;
-                        if (typeof content === "string") setVoiceTranscript(content);
-                      };
-                      reader.readAsText(file);
-                    }}
-                  />
-                </label>
               </div>
 
               <Button
