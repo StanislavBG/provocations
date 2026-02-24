@@ -1591,6 +1591,21 @@ Output only valid JSON, no markdown.`;
     }
   });
 
+  // ── Admin: categorized event report (protected) ──
+  app.get("/api/admin/event-report", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const report = await storage.getEventCategoryReport();
+      res.json(report);
+    } catch (error) {
+      console.error("Admin event report error:", error);
+      res.status(500).json({ error: "Failed to load event report" });
+    }
+  });
+
   // ── Usage metrics: record (authenticated, fire-and-forget) ──
   app.post("/api/metrics", async (req, res) => {
     try {

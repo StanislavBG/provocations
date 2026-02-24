@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { trackEvent } from "@/lib/tracking";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { StoragePanel } from "@/components/StoragePanel";
@@ -187,6 +188,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
     try {
       const title = `${fieldLabel}: ${content.trim().slice(0, 80).replace(/\n/g, " ")}`;
       await apiRequest("POST", "/api/documents", { title, content: content.trim() });
+      trackEvent("document_saved", { metadata: { source: "field-save" } });
       toast({ title: "Saved to Context Store", description: `"${title.slice(0, 60)}${title.length > 60 ? "..." : ""}" saved.` });
     } catch (error) {
       console.error("Failed to save to store:", error);
@@ -215,6 +217,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
   };
 
   const handleSelectPrebuilt = (template: PrebuiltTemplate) => {
+    trackEvent("template_selected", { templateId: template.id });
     setObjective(template.objective);
     if (!template.draftQuestions?.length) {
       setText(template.starterText);

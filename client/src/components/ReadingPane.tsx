@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { trackEvent } from "@/lib/tracking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -197,6 +198,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   // Handle voice feedback submission
   const handleSubmitFeedback = useCallback(() => {
     if (feedbackText.trim() && onSendFeedback) {
+      trackEvent("document_feedback_sent");
       onSendFeedback(feedbackText.trim());
       setFeedbackText("");
       setShowFeedbackInput(false);
@@ -212,6 +214,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const handleSubmitEdit = useCallback(async () => {
     if (!promptText.trim() || !selectedText) return;
 
+    trackEvent("document_edit_inline");
     setIsProcessingEdit(true);
     try {
       const response = await apiRequest("POST", "/api/write", {
@@ -284,6 +287,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const [copyingImage, setCopyingImage] = useState(false);
 
   const handleCopyImage = useCallback(async (src: string, alt: string) => {
+    trackEvent("document_copied", { metadata: { type: "image" } });
     setCopyingImage(true);
     try {
       const blob = await fetchImageAsBlob(src);
@@ -326,6 +330,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
 
   /** Download as individual files (markdown + each image separately) */
   const handleDownloadIndividual = async () => {
+    trackEvent("document_downloaded", { metadata: { format: "individual" } });
     const dateStr = new Date().toISOString().split("T")[0];
     const images = extractMarkdownImages(text);
 
@@ -370,6 +375,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
 
   /** Download everything as a single ZIP file */
   const handleDownloadZip = async () => {
+    trackEvent("document_downloaded", { metadata: { format: "zip" } });
     const dateStr = new Date().toISOString().split("T")[0];
     const images = extractMarkdownImages(text);
 
@@ -513,6 +519,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={() => {
+              trackEvent("document_copied", { metadata: { type: "text" } });
               const textOnly = text.replace(/!\[[^\]]*\]\([^)]+\)/g, "").replace(/\n{3,}/g, "\n\n").trim();
               navigator.clipboard.writeText(textOnly);
               onDocumentCopy?.();
