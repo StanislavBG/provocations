@@ -112,6 +112,7 @@ Per-app documentation lives in `apps/<templateId>/CLAUDE.md` — synced to the d
 - Voice: Web Speech API + custom audio worklets
 
 ## Recent Changes
+- February 24, 2026: GPT-to-Context chat endpoints now always use Gemini 2.5 Flash via GEMINI_API_KEY, independent of global LLM_PROVIDER
 - February 24, 2026: Added Stripe payment integration — webhook endpoint (`/api/stripe/webhook`), checkout session creation, pricing page (`/pricing`), payments DB table
 - February 22, 2026: Added per-app CLAUDE.md documentation graph — 12 isolated app guides in `apps/<templateId>/CLAUDE.md` with admin sync endpoint to document store
 - February 21, 2026: Added Email Composer application — single-step business email composition with audience-adaptive tone and 'email' output format

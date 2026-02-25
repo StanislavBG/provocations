@@ -231,7 +231,7 @@ function getGemini(): OpenAI {
   return _geminiClient;
 }
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 async function geminiGenerate(req: LLMRequest): Promise<LLMResponse> {
   const client = getGemini();
@@ -330,4 +330,18 @@ export const llm = {
 
   /** Currently active provider name */
   provider: activeProvider,
+
+  /**
+   * Direct Gemini access — use for endpoints that must always call Gemini
+   * regardless of the global LLM_PROVIDER setting.
+   * Used by GPT-to-Context chat/research endpoints.
+   */
+  gemini: {
+    async generate(req: LLMRequest): Promise<LLMResponse> {
+      return geminiGenerate(req);
+    },
+    stream(req: LLMRequest): AsyncGenerator<string, void, unknown> {
+      return geminiStream(req);
+    },
+  },
 };
