@@ -46,6 +46,7 @@ import {
   generateInfographicRequestSchema,
   chatRequestSchema,
   summarizeSessionRequestSchema,
+  saveChatSessionRequestSchema,
   type YouTubeChannelResponse,
   type GenerateSummaryResponse,
   type InfographicSpec,
@@ -3397,6 +3398,93 @@ RULES:
       console.error("Session summarize error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize session", details: errorMessage });
+    }
+  });
+
+  // ── Save Chat-to-Context session ──
+  // Persists a research chat session into a locked "Chat to Context" system folder.
+  // Creates the folder on first save. Stores session summary as the primary document,
+  // and optionally stores the full chat log as a separate document (pointer-friendly:
+  // the summary references the session rather than duplicating content).
+  app.post("/api/chat/save-session", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = saveChatSessionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { title, researchTopic, objective, summary, notes, chatHistory } = parsed.data;
+      const key = getEncryptionKey();
+
+      // 1. Ensure the locked "Chat to Context" system folder exists
+      const chatToContextFolderId = await findOrCreateFolder(userId, "Chat to Context", null, key, true);
+
+      // 2. Build the primary document content (session summary + metadata)
+      const sections: string[] = [];
+      sections.push(`# ${title}\n`);
+      if (researchTopic) sections.push(`**Research Topic:** ${researchTopic}\n`);
+      sections.push(`**Objective:** ${objective}\n`);
+      sections.push(`**Saved:** ${new Date().toISOString()}\n`);
+
+      if (summary) {
+        sections.push(`---\n\n## Summary\n\n${summary}`);
+      }
+      if (notes) {
+        sections.push(`\n\n## Research Notes\n\n${notes}`);
+      }
+
+      const primaryContent = sections.join("\n");
+      const encryptedContent = encrypt(primaryContent, key);
+      const encryptedTitle = encrypt(title, key);
+
+      const primaryDoc = await storage.saveDocument({
+        userId,
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
+        folderId: chatToContextFolderId,
+      });
+
+      // 3. Optionally store the full chat log as a separate document
+      let chatLogDocId: number | undefined;
+      if (chatHistory && chatHistory.length > 0) {
+        const chatLogContent = chatHistory
+          .map((m) => `**${m.role === "user" ? "You" : "Researcher"}:**\n${m.content}`)
+          .join("\n\n---\n\n");
+        const chatLogTitle = `${title} — Chat Log`;
+        const encChatContent = encrypt(chatLogContent, key);
+        const encChatTitle = encrypt(chatLogTitle, key);
+
+        const chatDoc = await storage.saveDocument({
+          userId,
+          title: "[encrypted]",
+          titleCiphertext: encChatTitle.ciphertext,
+          titleSalt: encChatTitle.salt,
+          titleIv: encChatTitle.iv,
+          ciphertext: encChatContent.ciphertext,
+          salt: encChatContent.salt,
+          iv: encChatContent.iv,
+          folderId: chatToContextFolderId,
+        });
+        chatLogDocId = chatDoc.id;
+      }
+
+      res.json({
+        documentId: primaryDoc.id,
+        folderId: chatToContextFolderId,
+        chatLogDocumentId: chatLogDocId,
+      });
+    } catch (error) {
+      console.error("Save chat session error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to save session", details: errorMessage });
     }
   });
 
