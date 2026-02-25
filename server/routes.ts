@@ -3864,6 +3864,22 @@ RULES:
   });
 
   // ==========================================
+  // Storage API aliases — /api/storage/* redirects to /api/documents/* & /api/folders/*
+  // Streamlined naming for microservice-style access
+  // ==========================================
+
+  app.use("/api/storage", (req, _res, next) => {
+    // Rewrite /api/storage/documents/* → /api/documents/*
+    // Rewrite /api/storage/folders/* → /api/folders/*
+    if (req.url.startsWith("/documents")) {
+      req.url = `/api${req.url}`;
+    } else if (req.url.startsWith("/folders")) {
+      req.url = `/api${req.url}`;
+    }
+    next("route");
+  });
+
+  // ==========================================
   // User Preferences
   // ==========================================
 

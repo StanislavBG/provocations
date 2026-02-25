@@ -2134,7 +2134,7 @@ RULES:
                 className="gap-1.5"
               >
                 <HardDrive className="w-4 h-4" />
-                <span className="hidden sm:inline">Context Store</span>
+                <span className="hidden sm:inline">Storage</span>
               </Button>
             </Link>
             <Link href="/pricing">

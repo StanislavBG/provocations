@@ -33,6 +33,8 @@ import {
   FolderInput,
   Lock,
   Upload,
+  Search,
+  ArrowUpDown,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
@@ -141,6 +143,10 @@ export function StoragePanel({
 
   // Move-to dialog state
   const [moveTarget, setMoveTarget] = useState<DragData | null>(null);
+
+  // Search & sort
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "date">("date");
 
   useEffect(() => {
     if (currentTitle) setSaveTitle(currentTitle);
@@ -525,16 +531,35 @@ export function StoragePanel({
     : false;
 
   // ── Subfolders in current directory (for middle panel) ──
-  const currentSubfolders = currentFolderId === null
+  const rawSubfolders = currentFolderId === null
     ? rootFolders
     : getChildren(currentFolderId);
+
+  // Apply search filter
+  const lowerQuery = searchQuery.toLowerCase().trim();
+  const currentSubfolders = lowerQuery
+    ? rawSubfolders.filter((f) => f.name.toLowerCase().includes(lowerQuery))
+    : rawSubfolders;
+  const filteredDocs = lowerQuery
+    ? documentsList.filter((d) => d.title.toLowerCase().includes(lowerQuery))
+    : documentsList;
+
+  // Apply sort
+  const sortedDocs = [...filteredDocs].sort((a, b) => {
+    if (sortBy === "name") return a.title.localeCompare(b.title);
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+  const sortedSubfolders = [...currentSubfolders].sort((a, b) => {
+    if (sortBy === "name") return a.name.localeCompare(b.name);
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
       {/* ── Header ── */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
-        <HardDrive className="w-5 h-5 text-primary" />
-        <h2 className="font-semibold text-base flex-1">Private Context Store</h2>
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-card shrink-0">
+        <HardDrive className="w-4 h-4 text-primary" />
+        <h2 className="font-semibold text-sm flex-1">Storage</h2>
 
         {/* Save bar — inline in header when content exists */}
         {hasContent && (
@@ -567,9 +592,9 @@ export function StoragePanel({
       <div className="flex-1 flex overflow-hidden">
 
         {/* ── LEFT PANEL: Folder tree ── */}
-        <div className="w-64 shrink-0 border-r flex flex-col overflow-hidden bg-card">
-          <div className="px-3 py-2.5 border-b flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Folders</span>
+        <div className="w-52 shrink-0 border-r flex flex-col overflow-hidden bg-card">
+          <div className="px-2 py-1.5 border-b flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Folders</span>
             <Button
               variant="ghost"
               size="icon"
@@ -681,7 +706,7 @@ export function StoragePanel({
           }}
         >
           {/* Breadcrumb + actions bar */}
-          <div className="flex items-center gap-1 px-4 py-2 border-b text-xs overflow-x-auto shrink-0 bg-card/60">
+          <div className="flex items-center gap-1 px-3 py-1.5 border-b text-xs overflow-x-auto shrink-0 bg-card/60">
             {folderPath.map((entry, idx) => (
               <span key={idx} className="flex items-center gap-1 shrink-0">
                 {idx > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground" />}
@@ -695,33 +720,47 @@ export function StoragePanel({
                 </button>
               </span>
             ))}
-            <div className="ml-auto flex items-center gap-2 shrink-0">
-              <span className="text-muted-foreground/60">
-                {currentSubfolders.length > 0 && (
-                  <span className="mr-2">{currentSubfolders.length} folder{currentSubfolders.length !== 1 ? "s" : ""}</span>
-                )}
-                {documentsList.length} doc{documentsList.length !== 1 ? "s" : ""}
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/50" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter..."
+                  className="h-6 text-xs pl-6 w-28 focus:w-40 transition-all"
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 text-[11px] px-1.5"
+                onClick={() => setSortBy(sortBy === "date" ? "name" : "date")}
+                title={`Sort by ${sortBy === "date" ? "name" : "date"}`}
+              >
+                <ArrowUpDown className="w-3 h-3" />
+                {sortBy === "date" ? "Date" : "Name"}
+              </Button>
+              <span className="text-muted-foreground/60 text-[11px]">
+                {sortedSubfolders.length + sortedDocs.length}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 gap-1 text-xs px-2"
+                className="h-6 gap-1 text-[11px] px-1.5"
                 onClick={() => setIsCreatingFolder(true)}
                 disabled={isCreatingFolder}
                 title="Create a new folder here"
               >
                 <FolderPlus className="w-3 h-3" />
-                New Folder
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 gap-1 text-xs px-2"
+                className="h-6 gap-1 text-[11px] px-1.5"
                 onClick={() => fileInputRef.current?.click()}
                 title="Upload a file as a new document"
               >
                 <Upload className="w-3 h-3" />
-                Upload
               </Button>
               <input
                 ref={fileInputRef}
@@ -739,7 +778,7 @@ export function StoragePanel({
 
           {/* Document & subfolder list */}
           <ScrollArea className="flex-1 min-h-0">
-            <div className="p-3 space-y-1">
+            <div className="p-2 space-y-0.5">
               {isLoading && (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -748,7 +787,7 @@ export function StoragePanel({
 
               {/* Inline folder creation in middle panel */}
               {!isLoading && isCreatingFolder && (
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-primary/30 bg-primary/5">
+                <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md border border-primary/30 bg-primary/5">
                   <FolderOpen className="w-4 h-4 shrink-0 text-amber-500" />
                   <Input
                     value={newFolderName}
@@ -782,7 +821,7 @@ export function StoragePanel({
               )}
 
               {/* Subfolders in current directory */}
-              {!isLoading && currentSubfolders.map((folder) => (
+              {!isLoading && sortedSubfolders.map((folder) => (
                 <MiddlePanelFolder
                   key={`f-${folder.id}`}
                   folder={folder}
@@ -806,23 +845,27 @@ export function StoragePanel({
               ))}
 
               {/* Separator between folders and docs */}
-              {!isLoading && currentSubfolders.length > 0 && documentsList.length > 0 && (
-                <div className="border-t my-2" />
+              {!isLoading && sortedSubfolders.length > 0 && sortedDocs.length > 0 && (
+                <div className="border-t my-1" />
               )}
 
-              {!isLoading && documentsList.length === 0 && currentSubfolders.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-                  <FolderOpen className="w-10 h-10 text-muted-foreground/20" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">No documents here yet</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      Save your work from the workspace or create a new folder
-                    </p>
-                  </div>
+              {!isLoading && sortedDocs.length === 0 && sortedSubfolders.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+                  {lowerQuery ? (
+                    <>
+                      <Search className="w-8 h-8 text-muted-foreground/20" />
+                      <p className="text-xs text-muted-foreground">No results for "{searchQuery}"</p>
+                    </>
+                  ) : (
+                    <>
+                      <FolderOpen className="w-8 h-8 text-muted-foreground/20" />
+                      <p className="text-xs text-muted-foreground">Empty folder</p>
+                    </>
+                  )}
                 </div>
               )}
 
-              {!isLoading && documentsList.map((doc) => {
+              {!isLoading && sortedDocs.map((doc) => {
                 const isSelected = selectedDocId === doc.id;
                 const isCurrent = currentDocId === doc.id;
                 return (
@@ -854,7 +897,7 @@ export function StoragePanel({
           </ScrollArea>
 
           {/* Middle panel footer */}
-          <div className="flex items-center gap-2 px-4 py-2 border-t shrink-0 bg-card/60">
+          <div className="flex items-center gap-2 px-3 py-1 border-t shrink-0 bg-card/60">
             {folderPath.length > 1 && (
               <Button
                 variant="ghost"
@@ -882,7 +925,7 @@ export function StoragePanel({
           ) : previewDoc ? (
             <>
               {/* Preview header with metadata */}
-              <div className="px-4 py-3 border-b shrink-0 space-y-2">
+              <div className="px-3 py-2 border-b shrink-0 space-y-1">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="text-sm font-semibold leading-tight flex-1 break-words">{previewDoc.title}</h3>
                   <Button
@@ -915,7 +958,7 @@ export function StoragePanel({
               {/* Preview content */}
               <div className="flex-1 overflow-hidden">
                 {isMarkdown ? (
-                  <div className="h-full overflow-y-auto px-4 py-3">
+                  <div className="h-full overflow-y-auto px-3 py-2">
                     <MarkdownRenderer content={previewDoc.content} />
                   </div>
                 ) : (
@@ -927,7 +970,7 @@ export function StoragePanel({
                     readOnly
                     showCopy
                     showClear={false}
-                    className="text-sm leading-relaxed font-serif px-4 py-3"
+                    className="text-sm leading-relaxed font-serif px-3 py-2"
                     containerClassName="h-full"
                   />
                 )}
@@ -1341,18 +1384,18 @@ function MiddlePanelFolder({
 
   return (
     <div
-      className="group w-full flex items-start gap-2 px-3 py-2.5 rounded-lg transition-colors hover:bg-muted/40 border border-transparent cursor-pointer"
+      className="group w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors hover:bg-muted/40 border border-transparent cursor-pointer"
       draggable={!isRenaming && !isLocked}
       onDragStart={handleDragStart}
       onClick={onNavigate}
       onDoubleClick={onNavigate}
     >
       {isLocked ? (
-        <span title="System-managed"><Lock className="w-3.5 h-3.5 mt-1 text-muted-foreground/50 shrink-0" /></span>
+        <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
       ) : (
-        <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+        <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
       )}
-      <Folder className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+      <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
       <div className="flex-1 min-w-0">
         {isRenaming && !isLocked ? (
           <Input
@@ -1368,24 +1411,22 @@ function MiddlePanelFolder({
             }}
           />
         ) : (
-          <>
-            <div className="flex items-start gap-1">
-              <p className="text-sm font-medium break-words leading-snug flex-1">{folder.name}</p>
-              {!isLocked && (
-                <button
-                  type="button"
-                  className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                  title="Rename folder"
-                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            <p className="text-[13px] font-medium truncate flex-1">{folder.name}</p>
+            <span className="text-[10px] text-muted-foreground shrink-0">
               {docCount} item{docCount !== 1 ? "s" : ""}
-            </p>
-          </>
+            </span>
+            {!isLocked && (
+              <button
+                type="button"
+                className="shrink-0 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/30 hover:text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"
+                title="Rename folder"
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
+              >
+                <Pencil className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -1468,7 +1509,7 @@ function DocumentRow({
 
   return (
     <div
-      className={`group w-full flex items-start gap-2 px-3 py-2.5 rounded-lg transition-colors ${
+      className={`group w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors ${
         isSelected
           ? "bg-primary/10 border border-primary/30"
           : isCurrent
@@ -1480,9 +1521,9 @@ function DocumentRow({
     >
       {/* Lock icon for system docs, drag grip for user docs */}
       {isLocked ? (
-        <span title="System-managed"><Lock className="w-3.5 h-3.5 mt-1 text-muted-foreground/50 shrink-0" /></span>
+        <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
       ) : (
-        <GripVertical className="w-3.5 h-3.5 mt-1 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+        <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
       )}
 
       {/* Click area — file icon + title/date */}
@@ -1490,9 +1531,9 @@ function DocumentRow({
         type="button"
         onClick={onPreview}
         onDoubleClick={onOpen}
-        className="flex items-start gap-2 flex-1 min-w-0 text-left"
+        className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
       >
-        <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
+        <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
         <div className="flex-1 min-w-0">
           {isRenaming && !isLocked ? (
             <Input
@@ -1508,29 +1549,25 @@ function DocumentRow({
               }}
             />
           ) : (
-            <>
-              <div className="flex items-start gap-1">
-                <p className="text-sm font-medium break-words leading-snug flex-1">{doc.title}</p>
-                {!isLocked && (
-                  <button
-                    type="button"
-                    className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                    title="Rename document"
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <p className="text-[13px] font-medium truncate flex-1">{doc.title}</p>
+              <span className="text-[10px] text-muted-foreground shrink-0">
                 {new Date(doc.updatedAt).toLocaleDateString(undefined, {
                   month: "short",
                   day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
                 })}
-              </p>
-            </>
+              </span>
+              {!isLocked && (
+                <button
+                  type="button"
+                  className="shrink-0 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/30 hover:text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"
+                  title="Rename document"
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
+                >
+                  <Pencil className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
           )}
         </div>
       </button>
