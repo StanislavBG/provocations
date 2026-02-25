@@ -1,4 +1,4 @@
-import { Target, RefreshCw, Loader2, Sparkles, Save, Check, Copy } from "lucide-react";
+import { Target, RefreshCw, Loader2, Sparkles, Save, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,7 +13,6 @@ interface DynamicSummaryPanelProps {
   onRefresh: () => void;
   onSaveToContext?: () => void;
   isSaving?: boolean;
-  isSaved?: boolean;
 }
 
 export function DynamicSummaryPanel({
@@ -25,7 +24,6 @@ export function DynamicSummaryPanel({
   onRefresh,
   onSaveToContext,
   isSaving,
-  isSaved,
 }: DynamicSummaryPanelProps) {
   const hasContent = messageCount > 0 || notesLength > 0;
   const { toast } = useToast();
@@ -54,7 +52,7 @@ export function DynamicSummaryPanel({
             )}
             {onSaveToContext && (
               <Button
-                variant={isSaved ? "outline" : "default"}
+                variant="default"
                 size="sm"
                 className="gap-1.5 h-7 text-xs"
                 onClick={onSaveToContext}
@@ -62,12 +60,10 @@ export function DynamicSummaryPanel({
               >
                 {isSaving ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
-                ) : isSaved ? (
-                  <Check className="w-3 h-3 text-primary" />
                 ) : (
                   <Save className="w-3 h-3" />
                 )}
-                {isSaved ? "Saved" : "Save to Context"}
+                Save to Context
               </Button>
             )}
           </div>

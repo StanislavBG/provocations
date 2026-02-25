@@ -78,7 +78,6 @@ import {
   CreditCard,
   StickyNote,
   Save,
-  Check,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -1351,7 +1350,6 @@ RULES:
 
   // ── Save research session to "Chat to Context" folder ──
   const [isSavingSession, setIsSavingSession] = useState(false);
-  const [savedSessionId, setSavedSessionId] = useState<number | null>(null);
 
   const handleSaveSession = useCallback(async () => {
     if (isSavingSession) return;
@@ -1369,8 +1367,7 @@ RULES:
         notes: researchNotes || undefined,
         chatHistory: chatMessages.length > 0 ? chatMessages : undefined,
       });
-      const data = await res.json();
-      setSavedSessionId(data.documentId);
+      await res.json();
       trackEvent("document_saved", { metadata: { source: "chat-session" } });
       toast({
         title: "Session saved",
@@ -1986,7 +1983,6 @@ RULES:
               onRefresh={handleRefreshSummary}
               onSaveToContext={handleSaveSession}
               isSaving={isSavingSession}
-              isSaved={!!savedSessionId}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -2419,7 +2415,7 @@ RULES:
               </div>
             )}
             <Button
-              variant={savedSessionId ? "outline" : "default"}
+              variant="default"
               size="sm"
               className="gap-1.5 shrink-0"
               onClick={handleSaveSession}
@@ -2427,12 +2423,10 @@ RULES:
             >
               {isSavingSession ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : savedSessionId ? (
-                <Check className="w-3.5 h-3.5 text-primary" />
               ) : (
                 <Save className="w-3.5 h-3.5" />
               )}
-              {savedSessionId ? "Saved" : "Save Session"}
+              Save Session
             </Button>
           </div>
         )}
