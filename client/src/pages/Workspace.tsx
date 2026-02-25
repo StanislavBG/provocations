@@ -151,14 +151,21 @@ export default function Workspace() {
   // Which template was selected in step 1 — drives workspace behavior
   const [selectedTemplateId, setSelectedTemplateIdRaw] = useState<string | null>(null);
 
-  /** Set the selected template and sync the browser URL */
+  /** Set the selected template and sync the browser URL.
+   *  URL updates stay within the same wouter route pattern to prevent
+   *  component remounts (wouter's Switch treats "/" and "/app/:id" as
+   *  separate routes — crossing between them destroys all component state
+   *  including in-flight mutations). */
   const setSelectedTemplateId = useCallback((id: string | null) => {
     setSelectedTemplateIdRaw(id);
-    if (id) {
+    const currentPath = window.location.pathname;
+    const isOnAppRoute = currentPath.startsWith("/app/");
+    if (id && isOnAppRoute) {
+      // Safe: /app/X → /app/Y stays within the same route pattern
       window.history.replaceState({}, "", `/app/${id}`);
-    } else {
-      window.history.replaceState({}, "", "/");
     }
+    // Don't cross route boundaries: "/" → "/app/…" or "/app/…" → "/"
+    // would cause wouter to unmount and remount the Workspace component.
   }, []);
 
   // Layout override — set when research-chat mode is activated within a standard-layout app
