@@ -15,6 +15,15 @@ Think of it as a **smarter Google Docs** — the document is the output, and the
 
 The AI doesn't write for you — it provokes deeper thinking so *you* write better.
 
+## AIQA — QA Bug Tracking
+
+The AIQA QA overlay is embedded in `client/index.html`. When it's time to check for new issues logged via AIQA, fetch all bugs for this project:
+
+```bash
+curl -H "X-API-Key: 3b03bd31-93b9-4efe-9c3d-4d6a54db97f0" \
+  "https://aiqastudio.com/api/bugs?project_id=0681dd20-4cec-4a1a-8280-7c7b33fdaee7"
+```
+
 ## Quick Commands
 
 ```bash
