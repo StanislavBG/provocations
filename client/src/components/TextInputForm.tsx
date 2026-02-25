@@ -456,21 +456,22 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
           )}
         </div>
 
-        {/* ── GPT to Context: two-field input (What to Research + What is the Objective) ── */}
+        {/* ── GPT to Context: research topic input ── */}
         {isGptToContext && onResearchChatMode && (
-          <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full py-4 flex-1">
+          <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full py-4 flex-1 min-h-0">
             <ProvokeText
               chrome="container"
               label="What to Research"
               labelIcon={Search}
               description="Define the topic, domain, or question you want to explore."
+              containerClassName="flex-1 min-h-0 flex flex-col"
               id="research-topic"
               placeholder="e.g. Best practices for building AI-powered search systems, or How do top SaaS companies handle onboarding..."
               className="text-sm leading-relaxed font-serif"
               value={researchTopic}
               onChange={setResearchTopic}
-              minRows={2}
-              maxRows={5}
+              minRows={6}
+              maxRows={30}
               autoFocus
               voice={{ mode: "replace" }}
               onVoiceTranscript={setResearchTopic}
@@ -502,57 +503,15 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
             >
             </ProvokeText>
 
-            <ProvokeText
-              chrome="container"
-              label="What is the Objective"
-              labelIcon={Target}
-              description="What will this research feed into? What outcome are you building toward?"
-              id="research-objective"
-              placeholder={activePrebuilt?.objective || "e.g. Write a PRD for a search feature, or Prepare a presentation on onboarding best practices..."}
-              className="text-sm leading-relaxed font-serif"
-              value={objective}
-              onChange={setObjective}
-              minRows={2}
-              maxRows={5}
-              voice={{ mode: "replace" }}
-              onVoiceTranscript={setObjective}
-              textProcessor={(text, mode) =>
-                processText(text, mode, mode === "clean" ? "objective" : undefined)
-              }
-              showCharCount
-              maxCharCount={5000}
-              maxAudioDuration="2min"
-              actions={[
-                {
-                  key: "save",
-                  label: "Save",
-                  description: "Save this content to the Context Store for reuse.",
-                  icon: Save,
-                  onClick: () => handleSaveFieldToStore(objective, "What is the Objective"),
-                  disabled: !objective.trim(),
-                  loading: savingField === "What is the Objective",
-                  loadingLabel: "Saving...",
-                },
-                {
-                  key: "load",
-                  label: "Load",
-                  description: "Load content from the Context Store.",
-                  icon: HardDrive,
-                  onClick: () => { setLoadTarget("objective"); },
-                },
-              ]}
-            >
-            </ProvokeText>
-
             <Button
               onClick={() => onResearchChatMode(
-                objective.trim() || activePrebuilt?.objective || "Research and context gathering",
+                activePrebuilt?.objective || "Research and context gathering",
                 researchTopic.trim() || "General research",
                 activePrebuilt!.id,
               )}
-              disabled={isLoading || (!researchTopic.trim() && !objective.trim())}
+              disabled={isLoading || !researchTopic.trim()}
               size="lg"
-              className="w-full gap-2"
+              className="w-full gap-2 shrink-0"
             >
               <BookOpenCheck className="w-4 h-4" />
               Start Research
