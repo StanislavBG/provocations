@@ -21,7 +21,7 @@ export function onVerboseData(listener: VerboseListener): () => void {
 }
 
 /** Emit verbose data to all listeners */
-function emitVerboseData(data: unknown) {
+export function emitVerboseData(data: unknown) {
   for (const listener of verboseListeners) {
     try { listener(data); } catch { /* ignore listener errors */ }
   }
