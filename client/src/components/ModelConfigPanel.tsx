@@ -32,12 +32,14 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
 };
 
 const AVAILABLE_MODELS = [
+  // Google Gemini (via GEMINI_API_KEY)
   { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
+  // OpenAI (via Replit AI Integrations proxy)
   { value: "gpt-4o", label: "GPT-4o" },
   { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
-  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+  { value: "o4-mini", label: "o4 Mini" },
 ];
 
 // ---------------------------------------------------------------------------

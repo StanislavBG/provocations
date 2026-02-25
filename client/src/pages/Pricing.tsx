@@ -45,7 +45,7 @@ const comicPanels = [
 
 function DilbertComicStrip() {
   return (
-    <div className="max-w-4xl mx-auto mb-12">
+    <div className="mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-2 border-foreground/20 rounded-lg overflow-hidden bg-card">
         {comicPanels.map((panel, i) => (
           <div
@@ -278,10 +278,10 @@ export default function Pricing() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
       {/* Header */}
-      <div className="border-b">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div className="border-b shrink-0">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => setLocation("/")}
             className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -292,96 +292,100 @@ export default function Pricing() {
         </div>
       </div>
 
-      {/* Pricing Content */}
-      <div className="max-w-5xl mx-auto px-4 py-16">
-        <div className="text-center mb-8">
-          <h1 className="font-serif text-4xl font-bold tracking-tight mb-4">
+      {/* Pricing Content — single-screen, no scroll */}
+      <div className="flex-1 flex flex-col justify-center max-w-6xl mx-auto px-6 w-full">
+        {/* Title */}
+        <div className="text-center mb-4">
+          <h1 className="font-serif text-3xl font-bold tracking-tight mb-2">
             Feed the AI. It's Hungry.
           </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-base max-w-2xl mx-auto">
             Every provocation, challenge, and piece of advice costs tokens.
             Tokens cost money. Money comes from you. It's the circle of AI life.
           </p>
           <RotatingQuote />
         </div>
 
-        {/* Product Grid */}
-        <div className="grid grid-cols-3 gap-6 max-w-4xl mx-auto mb-12">
-          {products.map((product, index) => {
-            const TierIcon = tierIcons[index % tierIcons.length];
-            const perks = tierPerks[index % tierPerks.length];
-            return (
-              <Card
-                key={product.id}
-                className={`relative flex flex-col transition-transform hover:scale-[1.02] ${
-                  index === 1 ? "border-primary/50 shadow-lg" : ""
-                }`}
-              >
-                {index === 1 && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground font-mono text-xs">
-                      PHB's CHOICE
-                    </Badge>
-                  </div>
-                )}
-                <CardHeader>
-                  <div className="flex items-center gap-2 mb-2">
-                    <TierIcon className="h-5 w-5 text-primary" />
-                    <Badge variant="secondary" className="font-mono">
-                      {product.type === "one_time" ? "One-time" : "Recurring"}
-                    </Badge>
-                  </div>
-                  <CardTitle className="font-serif text-xl">{product.name}</CardTitle>
-                  <CardDescription>{product.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1">
-                  <div className="mb-2">
-                    <span className="text-4xl font-bold">
-                      ${(product.amount / 100).toFixed(product.amount % 100 === 0 ? 0 : 2)}
-                    </span>
-                    <span className="text-muted-foreground ml-1">
-                      {product.type === "one_time" ? "one-time" : "/month"}
-                    </span>
-                  </div>
-                  <TokenMeter amount={product.amount} />
-                  <ul className="space-y-2 text-sm text-muted-foreground mt-4">
-                    {perks.map((perk, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                        {perk}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full"
-                    onClick={() => handleCheckout(product.priceId)}
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Taking your money...
-                      </>
-                    ) : (
-                      <>
-                        {index === 0
-                          ? "Sacrifice a Coffee"
-                          : index === 1
-                          ? "Appease the AI"
-                          : "Go Full Wally"}
-                      </>
-                    )}
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
+        {/* Product cards + Comic — side by side */}
+        <div className="flex gap-6 items-start mb-4">
+          {/* Product column */}
+          <div className="flex gap-4 shrink-0">
+            {products.map((product, index) => {
+              const TierIcon = tierIcons[index % tierIcons.length];
+              const perks = tierPerks[index % tierPerks.length];
+              return (
+                <Card
+                  key={product.id}
+                  className={`relative flex flex-col transition-transform hover:scale-[1.02] w-[260px] ${
+                    index === 1 ? "border-primary/50 shadow-lg" : ""
+                  }`}
+                >
+                  {index === 1 && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-primary text-primary-foreground font-mono text-xs">
+                        PHB's CHOICE
+                      </Badge>
+                    </div>
+                  )}
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TierIcon className="h-4 w-4 text-primary" />
+                      <Badge variant="secondary" className="font-mono text-[10px]">
+                        {product.type === "one_time" ? "One-time" : "Recurring"}
+                      </Badge>
+                    </div>
+                    <CardTitle className="font-serif text-lg">{product.name}</CardTitle>
+                    <CardDescription className="text-xs">{product.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 pt-0">
+                    <div className="mb-1">
+                      <span className="text-3xl font-bold">
+                        ${(product.amount / 100).toFixed(product.amount % 100 === 0 ? 0 : 2)}
+                      </span>
+                      <span className="text-muted-foreground ml-1 text-sm">
+                        {product.type === "one_time" ? "one-time" : "/month"}
+                      </span>
+                    </div>
+                    <TokenMeter amount={product.amount} />
+                    <ul className="space-y-1.5 text-xs text-muted-foreground mt-3">
+                      {perks.map((perk, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <Check className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                          {perk}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                  <CardFooter className="pt-0">
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      onClick={() => handleCheckout(product.priceId)}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Taking your money...
+                        </>
+                      ) : (
+                        <>
+                          {index === 0
+                            ? "Sacrifice a Coffee"
+                            : index === 1
+                            ? "Appease the AI"
+                            : "Go Full Wally"}
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
 
-          {products.length === 0 && (
-            <div className="col-span-full text-center text-muted-foreground py-8">
-              <pre className="text-xs leading-tight font-mono mb-4 mx-auto inline-block select-none">
+            {products.length === 0 && (
+              <div className="w-[260px] text-center text-muted-foreground py-8">
+                <pre className="text-xs leading-tight font-mono mb-3 mx-auto inline-block select-none">
 {`   ┌─────┐
    │ .  . │
    │  __  │
@@ -391,21 +395,21 @@ export default function Pricing() {
    ┌──┴──┐
    │zzz  │
    └─────┘`}
-              </pre>
-              <p className="font-mono text-sm">Loading token packages...</p>
-              <p className="font-serif italic text-xs mt-1">
-                (The AI is counting how much to charge you)
-              </p>
-              <Loader2 className="h-5 w-5 animate-spin mx-auto mt-3" />
-            </div>
-          )}
+                </pre>
+                <p className="font-mono text-xs">Loading token packages...</p>
+                <Loader2 className="h-4 w-4 animate-spin mx-auto mt-2" />
+              </div>
+            )}
+          </div>
+
+          {/* Comic strip — fills remaining space */}
+          <div className="flex-1 min-w-0">
+            <DilbertComicStrip />
+          </div>
         </div>
 
-        {/* Comic Strip */}
-        <DilbertComicStrip />
-
         {/* Footer quip */}
-        <div className="text-center mt-12 text-xs text-muted-foreground font-mono space-y-1">
+        <div className="text-center text-[11px] text-muted-foreground font-mono space-y-0.5 shrink-0">
           <p>No tokens were harmed in the making of this page.</p>
           <p>
             All proceeds go toward making the AI slightly more provocative
