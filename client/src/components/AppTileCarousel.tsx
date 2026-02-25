@@ -128,33 +128,8 @@ function AppTile({
           : "hover:border-primary/40 hover:shadow-md hover:bg-card cursor-pointer",
       )}
     >
-      {/* Coming Soon badge */}
-      {isComingSoon && (
-        <span className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-primary/15 text-primary border border-primary/20">
-          Coming Soon
-        </span>
-      )}
-      {/* External link badge */}
-      {isExternal && !isComingSoon && (
-        <span className="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-          External App
-        </span>
-      )}
-      {/* Status label badge */}
-      {!isComingSoon && !isExternal && template.statusLabel && (
-        <span className={cn(
-          "absolute top-2 right-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full border",
-          template.statusLabel === "try-it" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-          template.statusLabel === "beta" && "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
-          template.statusLabel === "broken" && "bg-red-500/15 text-red-500 dark:text-red-400 border-red-500/20",
-          template.statusLabel === "untested" && "bg-muted text-muted-foreground border-border",
-        )}>
-          {STATUS_LABEL_CONFIG[template.statusLabel].text}
-        </span>
-      )}
-
-      {/* Header row: icon + title + favorite */}
-      <div className="flex items-start gap-3">
+      {/* Header row: icon + title + badge + favorite */}
+      <div className="flex items-start gap-2">
         <div className={cn(
           "shrink-0 flex items-center justify-center w-8 h-8 rounded-lg",
           isComingSoon ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
@@ -162,13 +137,38 @@ function AppTile({
           <Icon className="w-4 h-4" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold leading-tight">
+          <h3 className="text-sm font-semibold leading-tight truncate">
             {template.title}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
             {template.subtitle}
           </p>
         </div>
+        {/* Status / Coming Soon / External badge — inline to prevent overlap */}
+        {isComingSoon && (
+          <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-primary/15 text-primary border border-primary/20 whitespace-nowrap">
+            Soon
+          </span>
+        )}
+        {isExternal && !isComingSoon && (
+          <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20 whitespace-nowrap">
+            External
+          </span>
+        )}
+        {!isComingSoon && !isExternal && template.statusLabel && (
+          <span className={cn(
+            "shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-full border whitespace-nowrap",
+            template.statusLabel === "try-it" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+            template.statusLabel === "beta" && "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+            template.statusLabel === "broken" && "bg-red-500/15 text-red-500 dark:text-red-400 border-red-500/20",
+            template.statusLabel === "untested" && "bg-muted text-muted-foreground border-border",
+            template.statusLabel === "under-dev" && "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/20",
+            template.statusLabel === "under-construction" && "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/20",
+            template.statusLabel === "alpha" && "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
+          )}>
+            {STATUS_LABEL_CONFIG[template.statusLabel].text}
+          </span>
+        )}
         {!isComingSoon && !isExternal && (
           <button
             type="button"
