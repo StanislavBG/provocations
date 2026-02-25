@@ -26,5 +26,6 @@ export default defineConfig({
     "agent_definitions",
     "agent_prompt_overrides",
     "error_logs",
+    "llm_call_logs",
   ],
 });
