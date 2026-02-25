@@ -55,22 +55,22 @@ export interface ChatModelDef {
 }
 
 export const CHAT_MODELS: ChatModelDef[] = [
-  // ── Google ──
-  { id: "gemini-2.5-pro",       label: "Gemini 2.5 Pro",        provider: "gemini",    tier: "premium" },
-  { id: "gemini-2.5-flash",     label: "Gemini 2.5 Flash",      provider: "gemini",    tier: "value"   },
-  { id: "gemini-2.0-flash-lite",label: "Gemini 2.0 Flash Lite", provider: "gemini",    tier: "value"   },
-  // ── OpenAI ──
-  { id: "gpt-4o",               label: "GPT-4o",                provider: "openai",    tier: "premium" },
-  { id: "o3-mini",              label: "o3 Mini",                provider: "openai",    tier: "value"   },
-  { id: "gpt-4o-mini",          label: "GPT-4o Mini",           provider: "openai",    tier: "value"   },
-  // ── Anthropic ──
-  { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5", provider: "anthropic", tier: "premium" },
-  { id: "claude-haiku-3-5-20241022",  label: "Claude Haiku 3.5",  provider: "anthropic", tier: "value"   },
+  // ── Google  ($0.10–$2.00 / $0.40–$12.00 per 1M tokens) ──
+  { id: "gemini-2.5-pro",          label: "Gemini 2.5 Pro",          provider: "gemini",    tier: "premium" },  // $1.25 / $10.00
+  { id: "gemini-2.5-flash",        label: "Gemini 2.5 Flash",        provider: "gemini",    tier: "value"   },  // $0.30 / $2.50  — best price-performance
+  { id: "gemini-2.5-flash-lite",   label: "Gemini 2.5 Flash Lite",   provider: "gemini",    tier: "value"   },  // $0.10 / $0.40  — cheapest
+  // ── OpenAI  ($0.15–$2.50 / $0.60–$10.00 per 1M tokens) ──
+  { id: "gpt-4o",                  label: "GPT-4o",                  provider: "openai",    tier: "premium" },  // $2.50 / $10.00
+  { id: "o4-mini",                 label: "o4 Mini",                 provider: "openai",    tier: "value"   },  // $1.10 / $4.40  — fast reasoning
+  { id: "gpt-4o-mini",             label: "GPT-4o Mini",             provider: "openai",    tier: "value"   },  // $0.15 / $0.60  — cheapest
+  // ── Anthropic  ($1.00–$3.00 / $5.00–$15.00 per 1M tokens) ──
+  { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5",    provider: "anthropic", tier: "premium" },  // $3.00 / $15.00
+  { id: "claude-haiku-4-5",        label: "Claude Haiku 4.5",        provider: "anthropic", tier: "value"   },  // $1.00 / $5.00  — fastest Claude
 ];
 
 function detectProviderForModel(modelId: string): Provider {
   if (modelId.startsWith("gemini-")) return "gemini";
-  if (modelId.startsWith("gpt-") || modelId.startsWith("o1") || modelId.startsWith("o3")) return "openai";
+  if (modelId.startsWith("gpt-") || modelId.startsWith("o1") || modelId.startsWith("o3") || modelId.startsWith("o4")) return "openai";
   if (modelId.startsWith("claude-")) return "anthropic";
   throw new Error(`Unknown model provider for: ${modelId}`);
 }
