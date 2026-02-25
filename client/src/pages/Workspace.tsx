@@ -1701,21 +1701,6 @@ RULES:
             };
             setVersions([initialVersion]);
           }}
-          onYouTubeInfographicMode={(obj, channelUrl, templateId) => {
-            setSelectedTemplateId(templateId);
-            setDocument({ id: generateId("doc"), rawText: `# YouTube to Infographic\n\n*Loading channel: ${channelUrl}...*` });
-            setObjective(obj);
-            setWebsiteUrl(channelUrl);
-            const ytConfig = getAppFlowConfig(templateId);
-            setActiveToolboxApp(ytConfig.defaultToolboxTab as ToolboxApp);
-            const initialVersion: DocumentVersion = {
-              id: generateId("v"),
-              text: `# YouTube to Infographic\n\n*Loading channel...*`,
-              timestamp: Date.now(),
-              description: "YouTube infographic workspace initialized",
-            };
-            setVersions([initialVersion]);
-          }}
           onVoiceInfographicMode={(obj, transcript, templateId) => {
             setSelectedTemplateId(templateId);
             setDocument({ id: generateId("doc"), rawText: transcript });

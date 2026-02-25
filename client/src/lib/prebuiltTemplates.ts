@@ -8,7 +8,6 @@ import {
   DatabaseZap,
   BookOpenCheck,
   Mic,
-  Youtube,
   FileAudio,
   Mail,
   Workflow,
@@ -22,7 +21,7 @@ export interface TemplateStep {
 export type TemplateCategory = "build" | "write" | "analyze" | "capture";
 
 /** Status label shown next to each template in the sidebar and landing page */
-export type TemplateStatusLabel = "try-it" | "beta" | "broken" | "untested";
+export type TemplateStatusLabel = "try-it" | "beta" | "broken" | "untested" | "under-construction" | "alpha" | "under-dev";
 
 /** Display config for each status label */
 export const STATUS_LABEL_CONFIG: Record<TemplateStatusLabel, { text: string; className: string }> = {
@@ -33,6 +32,18 @@ export const STATUS_LABEL_CONFIG: Record<TemplateStatusLabel, { text: string; cl
   beta: {
     text: "Beta",
     className: "text-amber-600 dark:text-amber-400",
+  },
+  alpha: {
+    text: "Alpha",
+    className: "text-blue-600 dark:text-blue-400",
+  },
+  "under-dev": {
+    text: "Under Dev",
+    className: "text-violet-600 dark:text-violet-400",
+  },
+  "under-construction": {
+    text: "Under Construction",
+    className: "text-orange-600 dark:text-orange-400",
   },
   broken: {
     text: "Broken",
@@ -75,7 +86,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "write-a-prompt",
     category: "write",
-    statusLabel: "beta",
+    statusLabel: "alpha",
     title: "Write a Prompt",
     shortLabel: "Prompt",
     subtitle: "AIM framework, any format",
@@ -108,7 +119,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "gpt-to-context",
     category: "capture",
-    statusLabel: "try-it",
+    statusLabel: "under-dev",
     title: "GPT to Context",
     shortLabel: "GPT Context",
     subtitle: "Research with AI, build structured context",
@@ -164,7 +175,7 @@ export const prebuiltTemplates: PrebuiltTemplate[] = [
   {
     id: "product-requirement",
     category: "build",
-    statusLabel: "try-it",
+    statusLabel: "alpha",
     title: "Product Requirement",
     shortLabel: "Feature PRD",
     subtitle: "Incremental feature, enterprise-grade",
@@ -233,7 +244,7 @@ What specifically changes for the user? Walk through the new flow step by step.
   {
     id: "new-application",
     category: "build",
-    statusLabel: "try-it",
+    statusLabel: "alpha",
     title: "New Application",
     shortLabel: "App from Scratch",
     subtitle: "Full SaaS spec from scratch",
@@ -325,7 +336,7 @@ Key endpoints the backend needs:
   {
     id: "streaming",
     category: "analyze",
-    statusLabel: "try-it",
+    statusLabel: "alpha",
     title: "Screen Capture",
     shortLabel: "Capture",
     subtitle: "Screenshots & annotations to requirements",
@@ -360,7 +371,7 @@ Key endpoints the backend needs:
   {
     id: "persona-definition",
     category: "write",
-    statusLabel: "broken",
+    statusLabel: "under-construction",
     title: "Persona / Agent",
     shortLabel: "Persona",
     subtitle: "Character, role, or AI agent profile",
@@ -475,98 +486,9 @@ Typical way they end an interaction.
     steps: [{ id: "context", label: "Share your context" }],
   },
   {
-    id: "research-context",
-    category: "capture",
-    comingSoon: true,
-    title: "Research into Context",
-    shortLabel: "Research",
-    subtitle: "Conversational research captured as structured context",
-    description:
-      "Dynamically converse with AI to explore a topic, then capture structured nuggets of information — facts, insights, quotes, data points — directly into your context library in a dedicated Research folder. Each captured item is tagged, organized, and ready to feed into any other application. Think of it as a research conversation where the valuable parts stick.",
-    howTo: "Start a conversation about the topic you're researching. As the AI surfaces useful information, capture specific nuggets into structured context items stored in a Research folder. Tag, annotate, and organize as you go. When you're done, your Research folder contains a curated, reusable knowledge base.",
-    useCases: [
-      "Exploring a new domain through conversation and saving key findings",
-      "Building a curated context folder before starting a PRD or strategy doc",
-      "Capturing structured research nuggets from an AI-assisted deep dive",
-    ],
-    icon: BookOpenCheck,
-    objective:
-      "Build a structured research context by capturing, organizing, and cross-referencing sources, notes, and references into a coherent knowledge base",
-    starterText: "",
-    draftQuestions: [
-      "What topic or question are you researching?",
-      "What do you already know — paste existing notes, links, or excerpts?",
-      "What are the key gaps in your understanding right now?",
-      "How will this research be used? (feeding a PRD, writing a paper, informing a decision)",
-    ],
-    templateContent: `# Research Context
-
-## Research Objective
-What question are you trying to answer or what topic are you building context on?
-
-## Key Questions
-What specific questions need answers?
-1.
-2.
-3.
-
-## Sources & References
-### Primary Sources
-| Source | Type | Key Insight | Link |
-|--------|------|-------------|------|
-| name | article/paper/doc/interview | what it tells us | URL |
-
-### Secondary Sources
-Supporting materials, background reading, related work.
-
-## Captured Notes
-### From Reading
-Key excerpts, highlights, and observations from sources.
-
-### From Conversations
-Notes from interviews, meetings, or discussions.
-
-### From Observation
-Screenshots, recordings, or first-hand observations.
-
-## Themes & Patterns
-What recurring themes, agreements, or contradictions emerge across sources?
-
-## Knowledge Gaps
-What's still unknown? What needs further research?
-
-## Synthesis
-### Key Findings
-The most important things learned so far, organized by theme.
-
-### Implications
-What do the findings suggest for the next step?
-
-### Recommendations
-Based on the research, what should be done?
-
-## Context Library
-Organized collection of reusable context items that can be shared with other projects.`,
-    provocationSources: [
-      "Research Librarian",
-      "Skeptical Reviewer",
-      "Domain Expert",
-      "Synthesis Coach",
-      "Gap Finder",
-    ],
-    provocationExamples: [
-      "You have 6 sources but they all say the same thing. Where's the opposing view? — Skeptical Reviewer",
-      "Three of your sources are from 2019. Has anything changed since then? — Research Librarian",
-      "You've captured a lot of facts but haven't synthesized them into insights. What does it all mean? — Synthesis Coach",
-      "Your research objective is broad. Can you narrow it to something actionable? — Domain Expert",
-      "You haven't addressed [specific subtopic]. That's a critical gap for your stated objective. — Gap Finder",
-    ],
-    steps: [{ id: "context", label: "Capture your sources" }],
-  },
-  {
     id: "voice-capture",
     category: "capture",
-    statusLabel: "broken",
+    statusLabel: "under-construction",
     title: "Voice Capture",
     shortLabel: "Voice",
     subtitle: "Speak your ideas, structure them later",
@@ -631,92 +553,9 @@ What needs to happen next based on this capture?`,
     steps: [{ id: "capture", label: "Record your thoughts" }],
   },
   {
-    id: "youtube-to-infographic",
-    category: "capture",
-    comingSoon: true,
-    title: "YouTube to Infographic",
-    shortLabel: "YouTube",
-    subtitle: "Channel videos to visual summaries",
-    description:
-      "Input a YouTube channel URL and the system fetches the latest videos, extracts transcripts automatically, summarizes key points, tips, and advice, then generates a detailed infographic specification — all without manual intervention. Perfect for turning video knowledge into structured, shareable visual content.",
-    howTo: "Paste a YouTube channel URL and describe what insights you're looking for. The system fetches the latest videos, extracts transcripts automatically, summarizes key points and tips, then generates a detailed infographic specification with sections, colors, and icons.",
-    useCases: [
-      "Turning a tutorial series into a shareable visual summary",
-      "Extracting key tips from a thought leader's channel",
-      "Creating infographic content from video research",
-    ],
-    icon: Youtube,
-    objective:
-      "Transform YouTube video content into structured infographic specifications by extracting transcripts, summarizing key insights, and generating visual layouts",
-    starterText: "",
-    draftQuestions: [
-      "What YouTube channel do you want to extract insights from?",
-      "Are you looking for tips, tutorials, or thought-leadership content?",
-      "Who is the audience for the infographic — colleagues, social media, personal reference?",
-      "Should the infographic focus on a single video or synthesize insights across multiple videos?",
-    ],
-    templateContent: `# Infographic Brief
-
-## Source
-### Channel
-Channel name and URL
-
-### Video(s)
-| Video | Duration | Key Topic |
-|-------|----------|-----------|
-| title | length | main subject |
-
-## Transcript Summary
-### Key Points
-The most important ideas from the video content, ranked by impact.
-
-### Tips & Advice
-Actionable takeaways the audience can apply immediately.
-
-### Statistics & Data Points
-Numbers, percentages, and data mentioned in the content.
-
-## Infographic Layout
-### Title & Subtitle
-The headline and supporting tagline for the infographic.
-
-### Sections
-Each visual block in the infographic with heading, content, and suggested icon.
-
-### Color Palette
-Suggested colors that match the content tone and channel branding.
-
-### Visual Hierarchy
-How sections are ordered — most impactful insight first, supporting details below.
-
-## Artifacts
-- Transcript (auto-generated)
-- Summary (auto-generated)
-- Infographic Spec (auto-generated)`,
-    provocationSources: [
-      "Content Strategist",
-      "UX Designer",
-      "Data Journalist",
-      "Visual Designer",
-      "Accessibility Expert",
-    ],
-    provocationExamples: [
-      "You extracted 12 key points but an infographic should focus on 3-5. Which ones actually matter? — Content Strategist",
-      "The color palette doesn't account for colorblind users. Have you tested contrast ratios? — Accessibility Expert",
-      "These are facts, not insights. What's the 'so what' — why should someone care about this data point? — Data Journalist",
-      "The visual hierarchy is flat — every section looks equally important. What's the hero insight? — Visual Designer",
-      "You summarized the video but lost the speaker's unique perspective. What made this content worth watching? — Content Strategist",
-    ],
-    steps: [
-      { id: "channel", label: "Enter channel URL" },
-      { id: "transcript-summary", label: "Transcript & summary" },
-      { id: "infographic", label: "Generate infographic" },
-    ],
-  },
-  {
     id: "text-to-infographic",
     category: "capture",
-    statusLabel: "beta",
+    statusLabel: "under-construction",
     title: "Text to Infographic",
     shortLabel: "Text → Visual",
     subtitle: "Text descriptions to visual infographics",
@@ -795,7 +634,7 @@ How sections are ordered — most impactful insight first, supporting details be
   {
     id: "email-composer",
     category: "write",
-    statusLabel: "try-it",
+    statusLabel: "under-construction",
     title: "Email Composer",
     shortLabel: "Email",
     subtitle: "Business professional emails, fast",
@@ -832,7 +671,7 @@ How sections are ordered — most impactful insight first, supporting details be
   {
     id: "agent-editor",
     category: "build",
-    statusLabel: "untested",
+    statusLabel: "under-construction",
     title: "Agent Editor",
     shortLabel: "Agent",
     subtitle: "Design multi-step AI workflows",
