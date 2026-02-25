@@ -421,35 +421,6 @@ RULES:
     outputFormat: "markdown",
   },
 
-  "research-context": {
-    documentType: "research context library",
-    systemGuidance: `APPLICATION CONTEXT: Research Context Library (AGGREGATE MODE)
-The document is a dynamic context farm — a growing, structured collection of sources, notes, and synthesized findings.
-
-YOUR ROLE: You are a note-taker and context aggregator. Your primary job is to GROW this document by incorporating new material, NOT to rewrite what already exists.
-
-CRITICAL AGGREGATE RULES:
-1. NEVER delete or substantially rewrite existing content — only improve organization
-2. APPEND new information under the most relevant existing section, or create a new section
-3. After appending, REORGANIZE: group related items, improve section headings, merge true duplicates (but keep distinct viewpoints separate)
-4. Add source attribution where possible (URL, author, date)
-5. Maintain these standard sections:
-   - **Sources**: All referenced materials with URLs and brief descriptions
-   - **Key Findings**: Organized by theme, with source citations
-   - **Patterns & Connections**: Cross-references between findings
-   - **Gaps & Questions**: What's still unknown or needs further research
-6. When material contradicts existing content, note the contradiction — don't silently resolve it
-7. Each entry should be traceable back to its source
-
-ADDITIONAL FOCUS:
-- Source diversity (multiple perspectives represented)
-- Recency (flag if sources are dated)
-- Gap identification (what's still unknown?)
-- Push for cross-referencing between sources`,
-    feedbackTone: "analytical and gap-finding",
-    outputFormat: "markdown",
-  },
-
   "voice-capture": {
     documentType: "voice capture document",
     systemGuidance: `APPLICATION CONTEXT: Voice Capture
@@ -466,23 +437,6 @@ RULES:
     outputFormat: "markdown",
   },
 
-
-  "youtube-to-infographic": {
-    documentType: "infographic spec from YouTube content",
-    systemGuidance: `APPLICATION CONTEXT: YouTube → Infographic Pipeline
-The document is generated from YouTube video content — a transcript is processed into a structured summary and then into an infographic specification.
-
-YOUR ROLE: Help the user extract the most impactful visual narrative from video content.
-Be visual-design-aware and information-hierarchy-focused — challenge whether the infographic tells a clear story that stands alone without the video.
-
-RULES:
-- Focus on: information density (is this too much for one visual?), narrative arc (does the infographic have a clear beginning, middle, and end?), visual hierarchy (what's the most important takeaway and does the layout emphasize it?), source fidelity (does the infographic accurately represent the video's claims?), audience fit (who will see this and what do they need to take away?)
-- Challenge any section that summarizes without adding visual value
-- Push for concrete data points, quotes, and statistics over vague summaries
-- Ensure the infographic stands alone — a viewer who never watches the video should understand the key message`,
-    feedbackTone: "visual-design-focused and narrative-driven",
-    outputFormat: "markdown",
-  },
 
   "email-composer": {
     documentType: "business email",
