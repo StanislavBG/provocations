@@ -35,6 +35,8 @@ import {
   Upload,
   Search,
   ArrowUpDown,
+  Copy,
+  Download,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
@@ -78,6 +80,19 @@ function decodeDragData(dt: DataTransfer): DragData | null {
   }
 }
 
+/** Download document content as a .md file */
+function downloadDocumentAsFile(title: string, content: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${title.replace(/[^a-zA-Z0-9_-]/g, "_")}.md`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 interface StoragePanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -92,6 +107,7 @@ interface PreviewDoc {
   id: number;
   title: string;
   content: string;
+  locked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -439,6 +455,7 @@ export function StoragePanel({
         id: data.id,
         title: data.title,
         content: data.content,
+        locked: !!data.locked,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
       });
@@ -822,25 +839,26 @@ export function StoragePanel({
 
               {/* Subfolders in current directory */}
               {!isLoading && sortedSubfolders.map((folder) => (
-                <MiddlePanelFolder
+                <StorageItemRow
                   key={`f-${folder.id}`}
-                  folder={folder}
-                  docCount={getTotalDocCount(folder.id)}
-                  onNavigate={() => navigateToFolder(folder.id, folder.name)}
+                  item={{ kind: "folder", folder, docCount: getTotalDocCount(folder.id) }}
+                  isSelected={false}
+                  isRenaming={renamingFolderId === folder.id}
+                  renameText={renameText}
+                  onRenameTextChange={setRenameText}
                   onStartRename={() => { setRenamingFolderId(folder.id); setRenameText(folder.name); }}
+                  onRename={() => {
+                    if (renameText.trim()) renameFolderMutation.mutate({ id: folder.id, name: renameText.trim() });
+                  }}
+                  onCancelRename={() => { setRenamingFolderId(null); setRenameText(""); }}
+                  onClick={() => navigateToFolder(folder.id, folder.name)}
+                  onDoubleClick={() => navigateToFolder(folder.id, folder.name)}
                   onDelete={() => {
                     if (window.confirm(`Delete "${folder.name}" and all its contents?`)) {
                       deleteFolderMutation.mutate(folder.id);
                     }
                   }}
                   onMoveTo={() => setMoveTarget({ type: "folder", id: folder.id, title: folder.name })}
-                  isRenaming={renamingFolderId === folder.id}
-                  renameText={renameText}
-                  onRenameTextChange={setRenameText}
-                  onRename={() => {
-                    if (renameText.trim()) renameFolderMutation.mutate({ id: folder.id, name: renameText.trim() });
-                  }}
-                  onCancelRename={() => { setRenamingFolderId(null); setRenameText(""); }}
                 />
               ))}
 
@@ -869,11 +887,10 @@ export function StoragePanel({
                 const isSelected = selectedDocId === doc.id;
                 const isCurrent = currentDocId === doc.id;
                 return (
-                  <DocumentRow
+                  <StorageItemRow
                     key={`d-${doc.id}`}
-                    doc={doc}
+                    item={{ kind: "document", doc, isCurrent }}
                     isSelected={isSelected}
-                    isCurrent={isCurrent}
                     isRenaming={renamingDocId === doc.id}
                     renameText={renameText}
                     onRenameTextChange={setRenameText}
@@ -882,8 +899,8 @@ export function StoragePanel({
                       if (renameText.trim()) renameDocMutation.mutate({ id: doc.id, title: renameText.trim() });
                     }}
                     onCancelRename={() => { setRenamingDocId(null); setRenameText(""); }}
-                    onPreview={() => handlePreviewDocument(doc.id)}
-                    onOpen={() => handleOpenDocument(doc.id)}
+                    onClick={() => handlePreviewDocument(doc.id)}
+                    onDoubleClick={() => handleOpenDocument(doc.id)}
                     onDelete={() => {
                       if (window.confirm(`Delete "${doc.title}"?`)) {
                         deleteDocMutation.mutate(doc.id);
@@ -917,7 +934,7 @@ export function StoragePanel({
         </div>
 
         {/* ── RIGHT PANEL: Document preview ── */}
-        <div className="w-[40%] min-w-[300px] border-l flex flex-col overflow-hidden bg-card">
+        <div className="w-[35%] min-w-[280px] border-l flex flex-col overflow-hidden bg-card">
           {isLoadingPreview ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -928,14 +945,54 @@ export function StoragePanel({
               <div className="px-3 py-2 border-b shrink-0 space-y-1">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="text-sm font-semibold leading-tight flex-1 break-words">{previewDoc.title}</h3>
-                  <Button
-                    size="sm"
-                    onClick={() => handleOpenDocument(previewDoc.id)}
-                    className="gap-1.5 shrink-0"
-                  >
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                    Open
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!previewDoc.locked && (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          title="Copy to clipboard"
+                          onClick={() => {
+                            navigator.clipboard.writeText(previewDoc.content);
+                            toast({ title: "Copied to clipboard" });
+                          }}
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          title="Download as file"
+                          onClick={() => downloadDocumentAsFile(previewDoc.title, previewDoc.content)}
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive/60 hover:text-destructive"
+                          title="Delete document"
+                          onClick={() => {
+                            if (window.confirm(`Delete "${previewDoc.title}"?`)) {
+                              deleteDocMutation.mutate(previewDoc.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => handleOpenDocument(previewDoc.id)}
+                      className="gap-1.5"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                      Open
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-1">
@@ -1238,7 +1295,7 @@ function FolderTreeBranch({
             {isLocked ? (
               <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
             ) : (
-              <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+              <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-30 group-hover:opacity-70 transition-opacity cursor-grab" />
             )}
 
             {/* Folder icon + label */}
@@ -1346,164 +1403,51 @@ function FolderTreeBranch({
 }
 
 // ---------------------------------------------------------------------------
-// Middle panel: subfolder row
+// Unified middle-panel item row (documents & folders)
 // ---------------------------------------------------------------------------
 
-function MiddlePanelFolder({
-  folder,
-  docCount,
-  onNavigate,
-  onStartRename,
-  onDelete,
-  onMoveTo,
-  isRenaming,
-  renameText,
-  onRenameTextChange,
-  onRename,
-  onCancelRename,
-}: {
-  folder: FolderItem;
-  docCount: number;
-  onNavigate: () => void;
-  onStartRename: () => void;
-  onDelete: () => void;
-  onMoveTo: () => void;
-  isRenaming: boolean;
-  renameText: string;
-  onRenameTextChange: (v: string) => void;
-  onRename: () => void;
-  onCancelRename: () => void;
-}) {
-  const isLocked = !!folder.locked;
+type StorageItem =
+  | { kind: "document"; doc: DocumentListItem; isCurrent: boolean }
+  | { kind: "folder"; folder: FolderItem; docCount: number };
 
-  const handleDragStart = (e: React.DragEvent) => {
-    if (isLocked) { e.preventDefault(); return; }
-    e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "folder", id: folder.id, title: folder.name }));
-    e.dataTransfer.effectAllowed = "move";
-  };
-
-  return (
-    <div
-      className="group w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors hover:bg-muted/40 border border-transparent cursor-pointer"
-      draggable={!isRenaming && !isLocked}
-      onDragStart={handleDragStart}
-      onClick={onNavigate}
-      onDoubleClick={onNavigate}
-    >
-      {isLocked ? (
-        <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
-      ) : (
-        <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
-      )}
-      <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-      <div className="flex-1 min-w-0">
-        {isRenaming && !isLocked ? (
-          <Input
-            value={renameText}
-            onChange={(e) => onRenameTextChange(e.target.value)}
-            className="h-7 text-sm"
-            autoFocus
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Enter") onRename();
-              if (e.key === "Escape") onCancelRename();
-            }}
-          />
-        ) : (
-          <div className="flex items-center gap-1 flex-1 min-w-0">
-            <p className="text-[13px] font-medium truncate flex-1">{folder.name}</p>
-            <span className="text-[10px] text-muted-foreground shrink-0">
-              {docCount} item{docCount !== 1 ? "s" : ""}
-            </span>
-            {!isLocked && (
-              <button
-                type="button"
-                className="shrink-0 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/30 hover:text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"
-                title="Rename folder"
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
-              >
-                <Pencil className="w-2.5 h-2.5" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Actions — hidden for locked folders */}
-      {!isLocked && (
-        <div className="flex items-center gap-0.5 shrink-0">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            title="Move to..."
-            onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
-          >
-            <FolderInput className="w-3 h-3" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            title="Rename"
-            onClick={(e) => { e.stopPropagation(); onStartRename(); }}
-          >
-            <Pencil className="w-3 h-3" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 text-destructive/60 hover:text-destructive"
-            title="Delete"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          >
-            <Trash2 className="w-3 h-3" />
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Middle panel: document row (draggable)
-// ---------------------------------------------------------------------------
-
-function DocumentRow({
-  doc,
+function StorageItemRow({
+  item,
   isSelected,
-  isCurrent,
   isRenaming,
   renameText,
   onRenameTextChange,
   onStartRename,
   onRename,
   onCancelRename,
-  onPreview,
-  onOpen,
+  onClick,
+  onDoubleClick,
   onDelete,
   onMoveTo,
 }: {
-  doc: DocumentListItem;
+  item: StorageItem;
   isSelected: boolean;
-  isCurrent: boolean;
   isRenaming: boolean;
   renameText: string;
   onRenameTextChange: (v: string) => void;
   onStartRename: () => void;
   onRename: () => void;
   onCancelRename: () => void;
-  onPreview: () => void;
-  onOpen: () => void;
+  onClick: () => void;
+  onDoubleClick: () => void;
   onDelete: () => void;
   onMoveTo: () => void;
 }) {
-  const isLocked = !!doc.locked;
+  const isDoc = item.kind === "document";
+  const isLocked = isDoc ? !!item.doc.locked : !!item.folder.locked;
+  const isCurrent = isDoc ? item.isCurrent : false;
+  const title = isDoc ? item.doc.title : item.folder.name;
+  const id = isDoc ? item.doc.id : item.folder.id;
+  const updatedAt = isDoc ? item.doc.updatedAt : item.folder.updatedAt;
 
   const handleDragStart = (e: React.DragEvent) => {
     if (isLocked) { e.preventDefault(); return; }
-    e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "document", id: doc.id, title: doc.title }));
+    const dragType: DragItemType = isDoc ? "document" : "folder";
+    e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: dragType, id, title }));
     e.dataTransfer.effectAllowed = "move";
   };
 
@@ -1515,25 +1459,31 @@ function DocumentRow({
           : isCurrent
             ? "bg-muted/50 border border-muted"
             : "hover:bg-muted/40 border border-transparent"
-      }`}
+      } cursor-pointer`}
       draggable={!isRenaming && !isLocked}
       onDragStart={handleDragStart}
     >
-      {/* Lock icon for system docs, drag grip for user docs */}
+      {/* Drag handle or lock icon */}
       {isLocked ? (
         <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
       ) : (
-        <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+        <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-30 group-hover:opacity-70 transition-opacity cursor-grab" />
       )}
 
-      {/* Click area — file icon + title/date */}
+      {/* Click area — icon + title/meta */}
       <button
         type="button"
-        onClick={onPreview}
-        onDoubleClick={onOpen}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
         className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
       >
-        <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
+        {/* Item icon */}
+        {isDoc ? (
+          <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : "text-blue-500"}`} />
+        ) : (
+          <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+        )}
+
         <div className="flex-1 min-w-0">
           {isRenaming && !isLocked ? (
             <Input
@@ -1550,18 +1500,19 @@ function DocumentRow({
             />
           ) : (
             <div className="flex items-center gap-1 flex-1 min-w-0">
-              <p className="text-[13px] font-medium truncate flex-1">{doc.title}</p>
+              <p className="text-[13px] font-medium truncate flex-1">{title}</p>
+              {/* Meta: date for docs, item count for folders */}
               <span className="text-[10px] text-muted-foreground shrink-0">
-                {new Date(doc.updatedAt).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}
+                {isDoc
+                  ? new Date(updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+                  : `${item.docCount} item${item.docCount !== 1 ? "s" : ""}`
+                }
               </span>
               {!isLocked && (
                 <button
                   type="button"
                   className="shrink-0 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/30 hover:text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"
-                  title="Rename document"
+                  title={isDoc ? "Rename document" : "Rename folder"}
                   onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStartRename(); }}
                 >
                   <Pencil className="w-2.5 h-2.5" />
@@ -1572,8 +1523,8 @@ function DocumentRow({
         </div>
       </button>
 
-      {/* Actions — hidden for locked documents */}
-      <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+      {/* Actions */}
+      <div className="flex items-center gap-0.5 shrink-0">
         {isCurrent && (
           <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
         )}
