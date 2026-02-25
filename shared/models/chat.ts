@@ -87,6 +87,7 @@ export const userPreferences = pgTable("user_preferences", {
   userId: varchar("user_id", { length: 128 }).notNull().unique(),
   autoDictate: boolean("auto_dictate").default(false).notNull(),
   verboseMode: boolean("verbose_mode").default(false).notNull(),
+  autoSaveSession: boolean("auto_save_session").default(true).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -312,4 +313,28 @@ export const llmCallLogs = pgTable("llm_call_logs", {
 
 export type StoredLlmCallLog = typeof llmCallLogs.$inferSelect;
 export type InsertLlmCallLog = typeof llmCallLogs.$inferInsert;
+
+// Workspace sessions — saves full workspace state for resume functionality.
+// Encrypted at rest (like documents). Each user can have multiple saved sessions.
+export const workspaceSessions = pgTable("workspace_sessions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  templateId: varchar("template_id", { length: 64 }).notNull(),
+  // Encrypted title (same pattern as documents)
+  title: text("title").notNull(), // "[encrypted]" for new rows
+  titleCiphertext: text("title_ciphertext"),
+  titleSalt: varchar("title_salt", { length: 64 }),
+  titleIv: varchar("title_iv", { length: 32 }),
+  // AES-GCM encrypted JSON blob of workspace state
+  ciphertext: text("ciphertext").notNull(),
+  salt: varchar("salt", { length: 64 }).notNull(),
+  iv: varchar("iv", { length: 32 }).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_workspace_sessions_user").on(table.userId),
+  index("idx_workspace_sessions_template").on(table.userId, table.templateId),
+]);
+
+export type StoredWorkspaceSession = typeof workspaceSessions.$inferSelect;
 
