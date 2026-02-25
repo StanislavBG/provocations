@@ -76,6 +76,8 @@ import {
   Lock,
   CreditCard,
   StickyNote,
+  Save,
+  Check,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -1245,6 +1247,45 @@ RULES:
     });
   }, []);
 
+  // ── Save research session to "Chat to Context" folder ──
+  const [isSavingSession, setIsSavingSession] = useState(false);
+  const [savedSessionId, setSavedSessionId] = useState<number | null>(null);
+
+  const handleSaveSession = useCallback(async () => {
+    if (isSavingSession) return;
+    setIsSavingSession(true);
+    try {
+      const sessionTitle = researchTopic
+        ? `${researchTopic.slice(0, 80)} — ${new Date().toLocaleDateString()}`
+        : `Research — ${new Date().toLocaleDateString()}`;
+
+      const res = await apiRequest("POST", "/api/chat/save-session", {
+        title: sessionTitle,
+        researchTopic: researchTopic || undefined,
+        objective,
+        summary: researchSummary || undefined,
+        notes: researchNotes || undefined,
+        chatHistory: chatMessages.length > 0 ? chatMessages : undefined,
+      });
+      const data = await res.json();
+      setSavedSessionId(data.documentId);
+      trackEvent("document_saved", { metadata: { source: "chat-session" } });
+      toast({
+        title: "Session saved",
+        description: `Saved to "Chat to Context" folder.`,
+      });
+    } catch (error) {
+      console.error("Failed to save session:", error);
+      toast({
+        title: "Save failed",
+        description: "Could not save the session. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSession(false);
+    }
+  }, [isSavingSession, researchTopic, objective, researchSummary, researchNotes, chatMessages, toast]);
+
   // Auto-trigger initial research when entering research-chat mode
   // so the chat is never empty after submitting topic + objective
   useEffect(() => {
@@ -2248,7 +2289,7 @@ RULES:
         {isResearchChat && (researchTopic || objective) && (
           <div className="border-t px-4 py-2 flex items-center gap-4">
             {researchTopic && (
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
                 <Crosshair className="w-4 h-4 text-primary shrink-0" />
                 <span className="text-xs font-medium text-muted-foreground/70 shrink-0">Topic</span>
                 <span className="text-sm text-muted-foreground truncate">
@@ -2256,6 +2297,22 @@ RULES:
                 </span>
               </div>
             )}
+            <Button
+              variant={savedSessionId ? "outline" : "default"}
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={handleSaveSession}
+              disabled={isSavingSession || (!researchSummary && !researchNotes && chatMessages.length === 0)}
+            >
+              {isSavingSession ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : savedSessionId ? (
+                <Check className="w-3.5 h-3.5 text-primary" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              {savedSessionId ? "Saved" : "Save Session"}
+            </Button>
           </div>
         )}
       </header>
