@@ -347,31 +347,6 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     },
   },
 
-  "research-context": {
-    workspaceLayout: "standard",
-    defaultToolboxTab: "context",
-    autoStartInterview: true,
-    autoStartPersonas: ["thinking_bigger" as ProvocationType],
-
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "capture", label: "Capture Sources", description: "Collect links, excerpts, and notes" },
-      { id: "organize", label: "Organize & Synthesize", description: "Cross-reference and identify patterns" },
-      { id: "gaps", label: "Find Gaps", description: "Identify what's missing and plan next steps" },
-    ],
-
-    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_WEBSITE],
-
-    rightPanelTabs: [RIGHT_DISCUSSION],
-
-    writer: {
-      mode: "aggregate",
-      outputFormat: "markdown",
-      documentType: "research context library",
-      feedbackTone: "analytical and gap-finding",
-    },
-  },
-
   "voice-capture": {
     workspaceLayout: "voice-capture",
     defaultToolboxTab: "provoke",
@@ -395,32 +370,6 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
     },
   },
 
-
-  "youtube-to-infographic": {
-    workspaceLayout: "standard",
-    defaultToolboxTab: "context",
-    autoStartInterview: false,
-    autoStartPersonas: undefined,
-
-    flowSteps: [
-      { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "channel", label: "Enter Channel", description: "Paste a YouTube channel URL to fetch videos" },
-      { id: "transcript-summary", label: "Transcript & Summary", description: "Extract video transcripts and produce a rich, infographic-ready summary with key points, data, and actionable tips" },
-      { id: "infographic", label: "Generate Infographic", description: "Transform the detailed summary into a structured visual specification" },
-      { id: "refine", label: "Refine", description: "Challenge and polish the infographic specification" },
-    ],
-
-    leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
-
-    rightPanelTabs: [RIGHT_DISCUSSION],
-
-    writer: {
-      mode: "edit",
-      outputFormat: "markdown",
-      documentType: "infographic brief from YouTube content",
-      feedbackTone: "visual-design-focused and data-driven",
-    },
-  },
 
   "email-composer": {
     ...DEFAULT_CONFIG,
