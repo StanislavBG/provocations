@@ -260,19 +260,23 @@ export function useWhisperRecorder({
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: any) => {
-      let finalTranscript = "";
+      let newFinal = "";
       let interimTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          newFinal += event.results[i][0].transcript;
         } else {
           interimTranscript += event.results[i][0].transcript;
         }
       }
-      if (finalTranscript) {
-        speechTranscriptRef.current += finalTranscript + " ";
+      if (newFinal) {
+        speechTranscriptRef.current += newFinal + " ";
+        // Deliver confirmed fragments immediately so the parent can use them
+        // without waiting for stop — critical for long conversations
+        onTranscriptRef.current(speechTranscriptRef.current.trim());
       }
       const full = speechTranscriptRef.current + interimTranscript;
       if (full) onInterimTranscriptRef.current?.(full);
@@ -290,12 +294,10 @@ export function useWhisperRecorder({
     };
 
     recognition.onend = () => {
-      // If user intentionally stopped, finalize and deliver transcript
+      // If user intentionally stopped, clean up (final fragments already
+      // delivered incrementally via onresult)
       if (speechStoppingRef.current) {
         speechStoppingRef.current = false;
-        if (speechTranscriptRef.current.trim()) {
-          onTranscriptRef.current(speechTranscriptRef.current.trim());
-        }
         speechTranscriptRef.current = "";
         isRecordingRef.current = false;
         setIsRecording(false);
