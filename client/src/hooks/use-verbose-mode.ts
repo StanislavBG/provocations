@@ -28,13 +28,15 @@ export function useVerboseMode() {
       }));
       return { previous };
     },
+    onSuccess: (data) => {
+      // Replace the optimistic data with the server's authoritative response.
+      // No invalidation needed — the PUT response IS the fresh data.
+      queryClient.setQueryData<Preferences>(["/api/preferences"], data);
+    },
     onError: (_err, _verboseMode, context) => {
       if (context?.previous) {
         queryClient.setQueryData(["/api/preferences"], context.previous);
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preferences"] });
     },
   });
 
