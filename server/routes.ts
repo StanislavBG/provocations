@@ -2156,6 +2156,7 @@ Output only valid JSON, no markdown.`;
         targetLength,
         referenceDocuments,
         capturedContext,
+        sessionNotes,
         editHistory,
       } = parsed.data;
 
@@ -2239,6 +2240,12 @@ ${refExcerpts}`);
 
         contextParts.push(`CAPTURED CONTEXT (use as grounding material — these are reference items the author collected to inform the document):
 ${contextEntries}`);
+      }
+
+      // Add session notes — temporary rules, constraints, and working notes from the author
+      if (sessionNotes && sessionNotes.trim()) {
+        contextParts.push(`SESSION NOTES (rules, constraints, and working notes from the author — follow these absolutely):
+${sessionNotes.trim()}`);
       }
 
       if (provocation) {
