@@ -19,6 +19,7 @@ import { InfographicStudioWorkspace } from "@/components/InfographicStudioWorksp
 import { ChatSessionPanel } from "@/components/ChatSessionPanel";
 import { DynamicSummaryPanel } from "@/components/DynamicSummaryPanel";
 import { ResearchNotesPanel } from "@/components/ResearchNotesPanel";
+import { SessionNotesPanel } from "@/components/SessionNotesPanel";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
@@ -74,6 +75,7 @@ import {
   FolderOpen,
   Lock,
   CreditCard,
+  StickyNote,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -128,6 +130,9 @@ export default function Workspace() {
 
   // Captured context items (persists across phases)
   const [capturedContext, setCapturedContext] = useState<ContextItem[]>([]);
+
+  // Session notes — temporary working notes for the current document (e.g. PM constraints/rules)
+  const [sessionNotes, setSessionNotes] = useState<string>("");
 
   // Guard: prevent secondary objective from duplicating the primary (REQ-002)
   const setSecondaryObjective = useCallback((value: string) => {
@@ -389,7 +394,7 @@ export default function Workspace() {
   const [activeTabId, setActiveTabId] = useState<string>("");
 
   // Right panel mode — defaults to first tab in config
-  const [rightPanelMode, setRightPanelMode] = useState<RightPanelTabId>("discussion");
+  const [rightPanelMode, setRightPanelMode] = useState<RightPanelTabId>(appFlowConfig.rightPanelTabs[0]?.id ?? "discussion");
 
   // ── Tab operations ──
 
@@ -552,6 +557,7 @@ RULES:
           appType: validAppType,
           referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
           capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+          sessionNotes: sessionNotes.trim() || undefined,
           editHistory: editHistory.length > 0 ? editHistory : undefined,
           ...request,
           instruction: aggregateInstruction,
@@ -567,6 +573,7 @@ RULES:
         appType: validAppType,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        sessionNotes: sessionNotes.trim() || undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
         ...request,
       });
@@ -640,6 +647,7 @@ RULES:
         instruction: "Create a well-structured first draft from these raw notes and context. Organize the ideas into clear sections, develop the key points, and present the content as a cohesive document ready for further refinement.",
         referenceDocuments: refs.length > 0 ? refs : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        sessionNotes: sessionNotes.trim() || undefined,
       });
       return await response.json() as WriteResponse;
     },
@@ -756,6 +764,7 @@ RULES:
         instruction: effectiveInstruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        sessionNotes: sessionNotes.trim() || undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
       });
       return await writeResponse.json() as WriteResponse;
@@ -830,6 +839,7 @@ RULES:
         instruction: effectiveInstruction,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        sessionNotes: sessionNotes.trim() || undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
       });
       return await writeResponse.json() as WriteResponse;
@@ -1322,7 +1332,7 @@ RULES:
     // Reset tab state
     setTabs([]);
     setActiveTabId("");
-    setRightPanelMode("discussion");
+    setRightPanelMode(appFlowConfig.rightPanelTabs[0]?.id ?? "discussion");
     // Reset template selection (so appFlowConfig resets to default)
     setSelectedTemplateId(null);
     setLayoutOverride(null);
@@ -1945,7 +1955,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : Zap;
           return (
             <button
               key={tab.id}
@@ -2019,6 +2029,11 @@ RULES:
         <AgentRunner
           steps={agentSteps}
           persona={agentPersona}
+        />
+      ) : rightPanelMode === "notes" ? (
+        <SessionNotesPanel
+          notes={sessionNotes}
+          onNotesChange={setSessionNotes}
         />
       ) : null}
     </div>
@@ -2124,7 +2139,7 @@ RULES:
                 className="gap-1.5"
               >
                 <HardDrive className="w-4 h-4" />
-                <span className="hidden sm:inline">Context Store</span>
+                <span className="hidden sm:inline">Storage</span>
               </Button>
             </Link>
             <Link href="/pricing">

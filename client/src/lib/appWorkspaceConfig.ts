@@ -26,7 +26,7 @@ export interface LeftPanelTabConfig {
 }
 
 /** Identifiers for right-panel tabs */
-export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution";
+export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution" | "notes";
 
 /** Configuration for a single right-panel tab */
 export interface RightPanelTabConfig {
@@ -186,6 +186,11 @@ const RIGHT_EXECUTION: RightPanelTabConfig = {
   label: "Execution",
 };
 
+const RIGHT_NOTES: RightPanelTabConfig = {
+  id: "notes",
+  label: "Notes",
+};
+
 // ---------------------------------------------------------------------------
 // Default config — used by most prose-based templates
 // ---------------------------------------------------------------------------
@@ -256,6 +261,8 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
   "product-requirement": {
     ...DEFAULT_CONFIG,
+    defaultToolboxTab: "context",
+    autoStartInterview: false,
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
       { id: "context", label: "Share Context", description: "Describe the user, workflow, and problem" },
@@ -271,11 +278,13 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       secondaryDescription: "The specific feature or change you're building requirements for right now.",
       showLoadFromStore: true,
     },
+    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE],
+    rightPanelTabs: [RIGHT_NOTES, RIGHT_DISCUSSION],
     writer: {
       mode: "edit",
       outputFormat: "markdown",
       documentType: "product requirement document",
-      feedbackTone: "rigorous but constructive",
+      feedbackTone: "precise and faithful",
     },
   },
 
