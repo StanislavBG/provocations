@@ -71,7 +71,7 @@ function getEncryptionKey(): string {
 
 // ── RBAC ──
 // Admin users are identified by email. Everyone else is a regular user.
-const ADMIN_EMAILS = ["stanislavbg@gmail.com"];
+const ADMIN_EMAILS = ["stanislavbg@gmail.com", "derrick.ellis@gmail.com"];
 
 async function isAdminUser(userId: string): Promise<boolean> {
   try {
