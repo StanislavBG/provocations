@@ -1,8 +1,9 @@
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { InterviewPanel } from "./InterviewPanel";
 import { ProvokeText } from "./ProvokeText";
 import { BrowserExplorer } from "./BrowserExplorer";
 import { ContextCapturePanel } from "./ContextCapturePanel";
@@ -36,8 +37,11 @@ import {
   Target,
   ListOrdered,
   Plus,
+  ArrowRightToLine,
+  Loader2 as Loader2Icon,
+  MessageCircle,
 } from "lucide-react";
-import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument, PersonaDomain } from "@shared/schema";
+import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument, PersonaDomain, InterviewEntry, DiscussionMessage } from "@shared/schema";
 import type { LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
 import { builtInPersonas, getAllPersonas, getPersonasByDomain } from "@shared/personas";
 import { ChevronRight, Settings } from "lucide-react";
@@ -123,6 +127,35 @@ interface ProvocationToolboxProps {
 
   /** Custom tab content — Workspace can inject React nodes for app-specific tabs (e.g. "steps") */
   customTabContent?: Partial<Record<ToolboxApp, ReactNode>>;
+
+  // Inline discussion — embeds InterviewPanel inside the Provoke tab
+  /** When true, the Provoke tab shows personas (collapsible) + discussion inline */
+  inlineDiscussion?: boolean;
+  /** InterviewPanel props (required when inlineDiscussion is true) */
+  discussionProps?: {
+    isActive: boolean;
+    entries: InterviewEntry[];
+    currentQuestion: string | null;
+    currentTopic: string | null;
+    isLoadingQuestion: boolean;
+    isMerging: boolean;
+    directionMode?: DirectionMode;
+    onAnswer: (answer: string) => void;
+    onEnd: () => void;
+    onViewAdvice?: (question: string, topic: string) => void;
+    onDismissQuestion?: () => void;
+    adviceText?: string | null;
+    isLoadingAdvice?: boolean;
+    onAskQuestion?: (question: string) => void;
+    isLoadingAskResponse?: boolean;
+    discussionMessages?: DiscussionMessage[];
+    onAcceptResponse?: (messageId: string) => void;
+    onDismissResponse?: (messageId: string) => void;
+    onRespondToMessage?: (messageId: string, response: string) => void;
+  };
+  /** Called when "Evolve Document" button is clicked in inline discussion mode */
+  onMergeToDraft?: () => void;
+  isMergeToDraftPending?: boolean;
 }
 
 /** Icon lookup for left-panel tab IDs */
@@ -159,6 +192,10 @@ export function ProvocationToolbox({
   onModelConfigChange,
   provokeMode = "challenge",
   customTabContent,
+  inlineDiscussion,
+  discussionProps,
+  onMergeToDraft,
+  isMergeToDraftPending,
 }: ProvocationToolboxProps) {
   const hasCapturedContext = !!(capturedContext && capturedContext.length > 0);
 
@@ -226,13 +263,26 @@ export function ProvocationToolbox({
         {customTabContent?.[activeApp] ? (
           customTabContent[activeApp]
         ) : activeApp === "provoke" ? (
-          <ProvokeConfigApp
-            isInterviewActive={isInterviewActive}
-            isMerging={isMerging}
-            interviewEntryCount={interviewEntryCount}
-            onStartInterview={onStartInterview}
-            provokeMode={provokeMode}
-          />
+          inlineDiscussion && discussionProps ? (
+            <ProvokeWithDiscussion
+              isInterviewActive={isInterviewActive}
+              isMerging={isMerging}
+              interviewEntryCount={interviewEntryCount}
+              onStartInterview={onStartInterview}
+              provokeMode={provokeMode}
+              discussionProps={discussionProps}
+              onMergeToDraft={onMergeToDraft}
+              isMergeToDraftPending={isMergeToDraftPending}
+            />
+          ) : (
+            <ProvokeConfigApp
+              isInterviewActive={isInterviewActive}
+              isMerging={isMerging}
+              interviewEntryCount={interviewEntryCount}
+              onStartInterview={onStartInterview}
+              provokeMode={provokeMode}
+            />
+          )
         ) : activeApp === "model-config" && modelConfig && onModelConfigChange ? (
           <ModelConfigPanel config={modelConfig} onChange={onModelConfigChange} />
         ) : activeApp === "context" ? (
@@ -590,6 +640,284 @@ function ProvokeConfigApp({
         )}
       </div>
     </ScrollArea>
+  );
+}
+
+// ── Provoke + Inline Discussion (collapsible personas above InterviewPanel) ──
+
+interface ProvokeWithDiscussionProps extends ProvokeConfigAppProps {
+  discussionProps: NonNullable<ProvocationToolboxProps["discussionProps"]>;
+  onMergeToDraft?: () => void;
+  isMergeToDraftPending?: boolean;
+}
+
+function ProvokeWithDiscussion({
+  isInterviewActive,
+  isMerging,
+  interviewEntryCount,
+  onStartInterview,
+  provokeMode = "challenge",
+  discussionProps,
+  onMergeToDraft,
+  isMergeToDraftPending,
+}: ProvokeWithDiscussionProps) {
+  const isSuggestMode = provokeMode === "suggest";
+  const [personasExpanded, setPersonasExpanded] = useState(true);
+
+  // Persona state — Think Big is selected by default
+  const [selectedPersonas, setSelectedPersonas] = useState<Set<ProvocationType>>(
+    () => new Set<ProvocationType>(["thinking_bigger"])
+  );
+  const [guidance, setGuidance] = useState("");
+  const [isRecordingGuidance, setIsRecordingGuidance] = useState(false);
+
+  // Domain accordion state — tracks which domains are expanded
+  const [expandedDomains, setExpandedDomains] = useState<Set<PersonaDomain>>(
+    () => new Set<PersonaDomain>()
+  );
+
+  const toggleDomain = useCallback((domain: PersonaDomain) => {
+    setExpandedDomains(prev => {
+      const next = new Set(prev);
+      if (next.has(domain)) next.delete(domain);
+      else next.add(domain);
+      return next;
+    });
+  }, []);
+
+  const togglePersona = useCallback((type: ProvocationType) => {
+    setSelectedPersonas(prev => {
+      const next = new Set<ProvocationType>(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      // Auto-apply persona change to active interview
+      if (isInterviewActive) {
+        onStartInterview({
+          mode: isSuggestMode ? "advise" : "challenge",
+          personas: Array.from(next),
+          guidance: guidance.trim() || undefined,
+        });
+      }
+      return next;
+    });
+  }, [isInterviewActive, onStartInterview, guidance, isSuggestMode]);
+
+  // Custom persona expanded state
+  const [isCustomExpanded, setIsCustomExpanded] = useState(false);
+
+  // Count selected personas per domain
+  const selectedCountByDomain = (domain: PersonaDomain) => {
+    const domainPersonas = getPersonasByDomain(domain);
+    return domainPersonas.filter(p => selectedPersonas.has(p.id as ProvocationType)).length;
+  };
+
+  const hasDiscussionContent = discussionProps.entries.length > 0 || discussionProps.isActive;
+
+  // Auto-collapse personas when the first discussion entry arrives
+  const prevEntryCount = useRef(discussionProps.entries.length);
+  useEffect(() => {
+    if (prevEntryCount.current === 0 && discussionProps.entries.length > 0) {
+      setPersonasExpanded(false);
+    }
+    prevEntryCount.current = discussionProps.entries.length;
+  }, [discussionProps.entries.length]);
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Collapsible Personas Section */}
+      <div className={`shrink-0 border-b ${personasExpanded ? "" : ""}`}>
+        <button
+          className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/50 transition-colors"
+          onClick={() => setPersonasExpanded(!personasExpanded)}
+        >
+          <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${personasExpanded ? "rotate-90" : ""}`} />
+          <UserCircle className="w-4 h-4 text-primary" />
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            {isSuggestMode ? "Suggest Personas" : "Personas"}
+          </span>
+          {selectedPersonas.size > 0 && (
+            <Badge variant="secondary" className="ml-auto h-4 min-w-[16px] px-1 text-[10px]">
+              {selectedPersonas.size}
+            </Badge>
+          )}
+        </button>
+
+        {personasExpanded && (
+          <div className="px-4 pb-3 space-y-3">
+            {/* Domain-grouped persona accordions */}
+            <div className="space-y-1">
+              {DOMAIN_META.map(({ domain, label, color }) => {
+                const isExpanded = expandedDomains.has(domain);
+                const domainPersonas = getPersonasByDomain(domain);
+                const selectedCount = selectedCountByDomain(domain);
+
+                return (
+                  <div key={domain} className="rounded-lg border bg-card overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+                      onClick={() => toggleDomain(domain)}
+                    >
+                      <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      <span className={`text-xs font-semibold uppercase tracking-wider ${color}`}>
+                        {label}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {domainPersonas.length} personas
+                      </span>
+                      {selectedCount > 0 && (
+                        <Badge variant="secondary" className="ml-auto h-4 min-w-[16px] px-1 text-[10px]">
+                          {selectedCount}
+                        </Badge>
+                      )}
+                    </button>
+                    {isExpanded && (
+                      <div className="px-3 pb-2 space-y-1">
+                        {domainPersonas.map((persona) => {
+                          const type = persona.id as ProvocationType;
+                          const Icon = personaIcons[type] || Blocks;
+                          const isSelected = selectedPersonas.has(type);
+
+                          return (
+                            <button
+                              key={type}
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors ${
+                                isSelected
+                                  ? "bg-primary/10 text-foreground"
+                                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                              }`}
+                              onClick={() => togglePersona(type)}
+                            >
+                              <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : ""}`} />
+                              <span className="font-medium">{persona.label}</span>
+                              {isSelected && (
+                                <Badge variant="default" className="ml-auto h-4 px-1 text-[9px]">
+                                  {isSuggestMode ? "suggesting" : "active"}
+                                </Badge>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Custom focus */}
+            <div className="space-y-2">
+              <Button
+                size="sm"
+                variant={isCustomExpanded ? "default" : "outline"}
+                className={`gap-1 text-xs h-7 px-2 w-full ${
+                  isCustomExpanded
+                    ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                    : "opacity-70 border-indigo-300 dark:border-indigo-700 hover:opacity-100"
+                }`}
+                onClick={() => setIsCustomExpanded(!isCustomExpanded)}
+              >
+                <Pencil className="w-3 h-3" />
+                Custom Focus
+              </Button>
+
+              {isCustomExpanded && (
+                <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2">
+                  <label className="text-xs font-medium text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Crosshair className="w-3 h-3" />
+                    Focus Area
+                  </label>
+                  <ProvokeText
+                    chrome="inline"
+                    placeholder={isSuggestMode
+                      ? "e.g. 'Focus on data visualization clarity and color contrast'"
+                      : "e.g. 'Push me on pricing strategy and unit economics'"}
+                    value={guidance}
+                    onChange={setGuidance}
+                    className="text-sm"
+                    minRows={2}
+                    maxRows={4}
+                    voice={{ mode: "replace" }}
+                    onVoiceTranscript={(transcript) => setGuidance(transcript)}
+                    onRecordingChange={setIsRecordingGuidance}
+                  />
+                  {isRecordingGuidance && (
+                    <p className="text-xs text-primary animate-pulse">Listening... describe what to focus on</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selection summary */}
+            <p className="text-xs text-muted-foreground">
+              {selectedPersonas.size === 0 && !isCustomExpanded
+                ? "Select personas to focus the interview, or leave empty for general questions."
+                : `${selectedPersonas.size} persona${selectedPersonas.size > 1 ? "s" : ""} selected${isCustomExpanded ? " + Custom focus" : ""}`}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Discussion header bar */}
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/20 shrink-0">
+        <MessageCircle className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Discussion</span>
+        {discussionProps.entries.length > 0 && (
+          <Badge variant="outline" className="text-[10px] h-4 px-1">
+            {discussionProps.entries.length}
+          </Badge>
+        )}
+        <div className="flex-1" />
+        {hasDiscussionContent && onMergeToDraft && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs h-7"
+            onClick={onMergeToDraft}
+            disabled={isMergeToDraftPending}
+          >
+            {isMergeToDraftPending ? (
+              <>
+                <Loader2Icon className="w-3 h-3 animate-spin" />
+                Evolving...
+              </>
+            ) : (
+              <>
+                <ArrowRightToLine className="w-3 h-3" />
+                Evolve Document
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+
+      {/* Discussion content — takes remaining space */}
+      <div className="flex-1 overflow-hidden">
+        <InterviewPanel
+          isActive={discussionProps.isActive}
+          entries={discussionProps.entries}
+          currentQuestion={discussionProps.currentQuestion}
+          currentTopic={discussionProps.currentTopic}
+          isLoadingQuestion={discussionProps.isLoadingQuestion}
+          isMerging={discussionProps.isMerging}
+          directionMode={discussionProps.directionMode}
+          onAnswer={discussionProps.onAnswer}
+          onEnd={discussionProps.onEnd}
+          onViewAdvice={discussionProps.onViewAdvice}
+          onDismissQuestion={discussionProps.onDismissQuestion}
+          adviceText={discussionProps.adviceText}
+          isLoadingAdvice={discussionProps.isLoadingAdvice}
+          onAskQuestion={discussionProps.onAskQuestion}
+          isLoadingAskResponse={discussionProps.isLoadingAskResponse}
+          discussionMessages={discussionProps.discussionMessages}
+          onAcceptResponse={discussionProps.onAcceptResponse}
+          onDismissResponse={discussionProps.onDismissResponse}
+          onRespondToMessage={discussionProps.onRespondToMessage}
+        />
+      </div>
+    </div>
   );
 }
 
