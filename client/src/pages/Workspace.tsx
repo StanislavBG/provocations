@@ -232,7 +232,7 @@ export default function Workspace() {
   const [chatStreamingContent, setChatStreamingContent] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [researchSummary, setResearchSummary] = useState("");
-  const [chatUseGemini, setChatUseGemini] = useState(true);
+  const [chatModel, setChatModel] = useState("gemini-2.5-flash");
   const [isSummaryUpdating, setIsSummaryUpdating] = useState(false);
   const [researchNotes, setResearchNotes] = useState("");
   const [researchTopic, setResearchTopic] = useState("");
@@ -1150,7 +1150,7 @@ RULES:
         notes: researchNotes || undefined,
         chatHistory: messages.length > 0 ? messages : [{ role: "user" as const, content: "No chat messages yet" }],
         currentSummary: researchSummary || undefined,
-        useGemini: chatUseGemini,
+        chatModel,
       });
       const data = await res.json();
       if (data.summary) {
@@ -1163,7 +1163,7 @@ RULES:
     } finally {
       setIsSummaryUpdating(false);
     }
-  }, [objective, researchTopic, researchNotes, researchSummary, chatUseGemini]);
+  }, [objective, researchTopic, researchNotes, researchSummary, chatModel]);
 
   const handleChatSendMessage = useCallback(async (message: string) => {
     // Add user message to chat
@@ -1184,7 +1184,7 @@ RULES:
           researchTopic: researchTopic || undefined,
           notes: researchNotes || undefined,
           history: chatMessages,
-          useGemini: chatUseGemini,
+          chatModel,
         }),
       });
 
@@ -1232,7 +1232,7 @@ RULES:
         { role: "assistant", content: "Sorry, I encountered an error. Please try again." },
       ]);
     }
-  }, [chatMessages, objective, researchTopic, researchNotes, chatUseGemini]);
+  }, [chatMessages, objective, researchTopic, researchNotes, chatModel]);
 
   const handleRefreshSummary = useCallback(() => {
     updateResearchSummary(chatMessages);
@@ -1825,8 +1825,8 @@ RULES:
               onCaptureToNotes={handleCaptureToNotes}
               objective={objective}
               researchTopic={researchTopic}
-              useGemini={chatUseGemini}
-              onToggleModel={setChatUseGemini}
+              chatModel={chatModel}
+              onModelChange={setChatModel}
             />
           </ResizablePanel>
           <ResizableHandle withHandle />
