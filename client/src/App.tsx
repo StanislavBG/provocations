@@ -20,6 +20,7 @@ import ContextStore from "@/pages/ContextStore";
 import Pricing from "@/pages/Pricing";
 import NotFound from "@/pages/not-found";
 import { trackEvent } from "@/lib/tracking";
+import { VerboseProvider } from "@/components/VerboseProvider";
 
 /** Fires a "login" tracking event once when the signed-in shell mounts. */
 function LoginTracker() {
@@ -74,7 +75,9 @@ function App() {
           </SignedOut>
           <SignedIn>
             <LoginTracker />
-            <Router />
+            <VerboseProvider>
+              <Router />
+            </VerboseProvider>
           </SignedIn>
         </ClerkLoaded>
       </TooltipProvider>

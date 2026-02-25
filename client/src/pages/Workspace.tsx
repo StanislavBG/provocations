@@ -26,6 +26,7 @@ import { errorLogStore } from "@/lib/errorLog";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
+import { VerboseModeToggle } from "@/components/VerboseModeToggle";
 import { DebugButton } from "@/components/DebugButton";
 import { UserButton } from "@clerk/clerk-react";
 import { useRole } from "@/hooks/use-role";
@@ -2185,6 +2186,7 @@ RULES:
               <span className="hidden sm:inline">New</span>
             </Button>
             <AutoDictateToggle />
+            <VerboseModeToggle />
             <ThemeToggle />
             {isAdmin && (
               <Link href="/admin">
