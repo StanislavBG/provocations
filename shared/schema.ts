@@ -1254,3 +1254,101 @@ export const paymentRecordSchema = z.object({
 });
 
 export type PaymentRecord = z.infer<typeof paymentRecordSchema>;
+
+// ══════════════════════════════════════════════════════════════════
+// Messaging — Schemas
+// ══════════════════════════════════════════════════════════════════
+
+export const connectionStatuses = ["pending", "accepted", "blocked"] as const;
+export type ConnectionStatus = typeof connectionStatuses[number];
+
+export const presenceStatuses = ["available", "busy", "away", "invisible"] as const;
+export type PresenceStatus = typeof presenceStatuses[number];
+
+export const messageTypes = ["text", "context-share"] as const;
+export type MessageType = typeof messageTypes[number];
+
+// ── Connection / invitation request ──
+
+export const sendInvitationRequestSchema = z.object({
+  email: z.string().email("Valid email required"),
+});
+export type SendInvitationRequest = z.infer<typeof sendInvitationRequestSchema>;
+
+export const respondInvitationRequestSchema = z.object({
+  connectionId: z.number(),
+  action: z.enum(["accept", "block", "decline"]),
+});
+export type RespondInvitationRequest = z.infer<typeof respondInvitationRequestSchema>;
+
+// ── Connection item (API response) ──
+
+export interface ConnectionItem {
+  id: number;
+  userId: string;  // the *other* user's ID
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  status: ConnectionStatus;
+  direction: "incoming" | "outgoing";
+  createdAt: string;
+}
+
+// ── Conversation list item ──
+
+export interface ConversationListItem {
+  id: number;
+  connectionId: number;
+  otherUser: {
+    userId: string;
+    displayName: string;
+    email: string;
+    avatarUrl: string | null;
+  };
+  lastMessage?: {
+    preview: string;      // first 80 chars, decrypted
+    senderId: string;
+    createdAt: string;
+  };
+  unreadCount: number;
+  lastActivityAt: string;
+}
+
+// ── Send message request ──
+
+export const sendMessageRequestSchema = z.object({
+  conversationId: z.number(),
+  content: z.string().min(1).max(10000),
+  messageType: z.enum(messageTypes).default("text"),
+  // For context-share: serialized reference JSON
+  contextRef: z.string().optional(),
+});
+export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
+
+// ── Message item (API response, decrypted) ──
+
+export interface MessageItem {
+  id: number;
+  conversationId: number;
+  senderId: string;
+  content: string;         // decrypted
+  messageType: MessageType;
+  contextRef?: string;     // decrypted context reference
+  readAt: string | null;
+  createdAt: string;
+}
+
+// ── Chat preferences (API shape) ──
+
+export const chatPreferencesSchema = z.object({
+  presenceStatus: z.enum(presenceStatuses).default("available"),
+  customStatusText: z.string().max(100).nullable().default(null),
+  notificationsEnabled: z.boolean().default(true),
+  notifyOnMentionOnly: z.boolean().default(false),
+  readReceiptsEnabled: z.boolean().default(true),
+  typingIndicatorsEnabled: z.boolean().default(true),
+  messageRetentionDays: z.number().min(1).max(30).default(7),
+  chatSoundEnabled: z.boolean().default(true),
+  compactMode: z.boolean().default(false),
+});
+export type ChatPreferencesData = z.infer<typeof chatPreferencesSchema>;

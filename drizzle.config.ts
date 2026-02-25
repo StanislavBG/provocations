@@ -32,5 +32,9 @@ export default defineConfig({
     "payments",
     "llm_call_logs",
     "workspace_sessions",
+    "connections",
+    "conversations",
+    "messages",
+    "chat_preferences",
   ],
 });
