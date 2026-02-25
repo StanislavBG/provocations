@@ -318,20 +318,25 @@ export function InfographicStudioWorkspace({
       const response = await apiRequest("POST", "/api/summarize-intent", {
         transcript: rawText,
         context: "infographic-clean-summary",
-        systemOverride: `You are a precise journalistic summarizer. Given the user's raw text, create a clean, factual summary that highlights the main points, key data, and core narrative.
+        systemOverride: `You are a precise editorial summarizer. Your input is typically unstructured — a conversation, meeting transcript, spoken notes, or stream-of-consciousness text. Your job is to extract the substance and discard the noise.
 
 ENRICHMENT CONTEXT: ${enrichmentPrompt}
 ${objective ? `USER OBJECTIVE: ${objective}` : ""}${contextBlock}
 
-Your output should:
-- Provide a clean, journalistic description of the content
-- Highlight main points, key facts, statistics, and quotes
-- Organize information in logical narrative order
-- Be factual and objective — no artistic interpretation yet
-- Use clear section headers and bullet points where helpful
-- Preserve all important data points and relationships
+EXTRACTION RULES:
+- Strip personal greetings, small talk, filler words, thinking out loud, and social exchanges
+- Identify the distinct discussion topics or main points raised
+- For each topic, extract: the core point, any supporting facts/data/quotes, and any conclusions reached
+- Preserve exact numbers, statistics, and specific claims — these are critical for the infographic
+- Maintain the logical relationships between points (cause/effect, comparison, sequence)
 
-Format as clean markdown. This summary will be used as the factual foundation for artistic infographic generation.`,
+OUTPUT FORMAT:
+- Clean bullet-point summary organized by discussion topic or theme
+- Use clear section headers for each major topic
+- Be factual and objective — no artistic interpretation yet
+- Each bullet should be a self-contained point that could stand alone on an infographic panel
+
+Format as clean markdown. This summary feeds directly into the next step: artistic composition for infographic generation.`,
       });
       return (await response.json()) as SummarizeResponse;
     },
@@ -364,21 +369,27 @@ Format as clean markdown. This summary will be used as the factual foundation fo
       const response = await apiRequest("POST", "/api/summarize-intent", {
         transcript: cleanSummary,
         context: "infographic-artistic-summary",
-        systemOverride: `You are an expert infographic art director. Transform the provided factual summary into a vivid, visually-descriptive infographic specification.
+        systemOverride: `You are an information composer — a mixer who takes structured facts and weaves them into a visual narrative for an infographic.
+
+YOUR PURPOSE: The output you create will be sent directly to an image generation model to produce an infographic. Many people are visual learners — your job is to create not just a summary, but a learning experience. The infographic should help people understand, remember, and share the key insights.
 
 ARTISTIC STYLE PRESETS:
 - ${presetNames || "Business: Professional corporate infographic style"}${artisticBlock}
 
-Your output should:
-- Rewrite the factual content with visual storytelling language
-- Describe specific visual elements: layout sections, icon suggestions, color notes
-- Add visual hierarchy direction (hero insight first, supporting details after)
-- Include suggested infographic sections (4-7) with visual treatment for each
-- Specify visual flow, emphasis areas, and decorative elements
-- Blend the factual data with the artistic style direction
-- Make the description detailed enough for an image generation model
+YOUR APPROACH — think like a composer:
+1. STORYLINE: Connect the bullet points into a narrative flow. What's the opening insight? What builds on it? What's the takeaway?
+2. VISUAL HIERARCHY: Identify the hero insight (largest visual element), supporting points (medium), and details (smallest). Direct the viewer's eye through the story.
+3. SECTIONS: Design 4-7 infographic sections, each with a clear visual treatment — layout, icons, colors, and spatial relationships between elements.
+4. DEEPER MEANING: Go beyond restating facts. Tie points together to reveal patterns, cause-and-effect, or surprising connections. Make the viewer think.
+5. SHAREABILITY: The final infographic should be compelling enough that someone would share it. Lead with the most striking insight.
 
-Format as rich markdown with visual direction embedded throughout. This output will be sent directly to an image generation model.`,
+OUTPUT REQUIREMENTS:
+- Rich visual descriptions: specific enough for an image generation model to render
+- Each section: visual treatment (layout, colors, icons) + the content it presents
+- Visual flow direction: how the viewer's eye moves through the infographic
+- Emphasis areas: what stands out, what supports, what provides context
+
+Format as rich markdown with visual direction embedded throughout.`,
       });
       return (await response.json()) as SummarizeResponse;
     },
