@@ -28,7 +28,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   topP: 1.0,
   frequencyPenalty: 0,
   presencePenalty: 0,
-  model: "gpt-4o",
+  model: "gpt-5.2",
 };
 
 const AVAILABLE_MODELS = [
@@ -36,10 +36,10 @@ const AVAILABLE_MODELS = [
   { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
   { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
-  // OpenAI (via Replit AI Integrations proxy)
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "o4-mini", label: "o4 Mini" },
+  // OpenAI GPT-5 series (via Replit AI Integrations proxy)
+  { value: "gpt-5.2", label: "GPT-5.2" },
+  { value: "gpt-5-mini", label: "GPT-5 Mini" },
+  { value: "gpt-5-nano", label: "GPT-5 Nano" },
 ];
 
 // ---------------------------------------------------------------------------
