@@ -33,11 +33,11 @@ function LoginTracker() {
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Workspace} />
-      <Route path="/app/:templateId" component={Workspace} />
       <Route path="/store" component={ContextStore} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/admin" component={Admin} />
+      <Route path="/app/:templateId" component={Workspace} />
+      <Route path="/" component={Workspace} />
       <Route component={NotFound} />
     </Switch>
   );
