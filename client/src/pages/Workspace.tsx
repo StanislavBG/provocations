@@ -2035,6 +2035,30 @@ RULES:
       modelConfig={modelConfig}
       onModelConfigChange={setModelConfig}
       provokeMode={selectedTemplateId === "text-to-infographic" ? "suggest" : "challenge"}
+      inlineDiscussion={appFlowConfig.inlineDiscussion}
+      discussionProps={appFlowConfig.inlineDiscussion ? {
+        isActive: isInterviewActive,
+        entries: interviewEntries,
+        currentQuestion: currentInterviewQuestion,
+        currentTopic: currentInterviewTopic,
+        isLoadingQuestion: interviewQuestionMutation.isPending,
+        isMerging: interviewSummaryMutation.isPending,
+        directionMode: interviewDirection?.mode,
+        onAnswer: handleInterviewAnswer,
+        onEnd: handleEndInterview,
+        onViewAdvice: handleViewAdvice,
+        onDismissQuestion: handleDismissQuestion,
+        adviceText: currentAdviceText,
+        isLoadingAdvice: adviceMutation.isPending,
+        onAskQuestion: handleAskQuestion,
+        isLoadingAskResponse: askQuestionMutation.isPending,
+        discussionMessages: discussionMessages,
+        onAcceptResponse: handleAcceptResponse,
+        onDismissResponse: handleDismissResponse,
+        onRespondToMessage: handleRespondToMessage,
+      } : undefined}
+      onMergeToDraft={appFlowConfig.inlineDiscussion ? handleMergeToDraft : undefined}
+      isMergeToDraftPending={interviewMergeMutation.isPending}
       customTabContent={selectedTemplateId === "agent-editor" ? {
         steps: (
           <div className="flex flex-col h-full">

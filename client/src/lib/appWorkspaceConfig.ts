@@ -130,6 +130,10 @@ export interface AppFlowConfig {
   /** Available tabs in the right panel. Order determines display order. */
   rightPanelTabs: RightPanelTabConfig[];
 
+  /** When true, the Provoke tab embeds the Discussion (InterviewPanel) inline
+   *  below a collapsible personas section, instead of it being a separate right-panel tab. */
+  inlineDiscussion?: boolean;
+
   /** Writer behavior — output format, document type, tone */
   writer: WriterBehaviorConfig;
 
@@ -279,7 +283,8 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       showLoadFromStore: true,
     },
     leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE],
-    rightPanelTabs: [RIGHT_NOTES, RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_NOTES],
+    inlineDiscussion: true,
     writer: {
       mode: "edit",
       outputFormat: "markdown",
