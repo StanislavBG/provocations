@@ -42,7 +42,7 @@ export const STATUS_LABEL_CONFIG: Record<TemplateStatusLabel, { text: string; cl
     className: "text-violet-600 dark:text-violet-400",
   },
   "under-construction": {
-    text: "Under Construction",
+    text: "Back Burner",
     className: "text-orange-600 dark:text-orange-400",
   },
   broken: {
@@ -488,7 +488,7 @@ Typical way they end an interaction.
   {
     id: "voice-capture",
     category: "capture",
-    statusLabel: "under-construction",
+    statusLabel: "alpha",
     title: "Voice Capture",
     shortLabel: "Voice",
     subtitle: "Speak your ideas, structure them later",
@@ -555,7 +555,7 @@ What needs to happen next based on this capture?`,
   {
     id: "text-to-infographic",
     category: "capture",
-    statusLabel: "under-construction",
+    statusLabel: "alpha",
     title: "Text to Infographic",
     shortLabel: "Text → Visual",
     subtitle: "Text descriptions to visual infographics",
@@ -735,11 +735,15 @@ export function sortTemplatesByUsage(
   usage: Record<string, number>,
 ): PrebuiltTemplate[] {
   const usable: PrebuiltTemplate[] = [];
+  const backBurner: PrebuiltTemplate[] = [];
   const bottom: PrebuiltTemplate[] = [];
 
   for (const t of templates) {
     if (t.comingSoon || t.externalUrl) {
       bottom.push(t);
+    } else if (t.statusLabel === "under-construction") {
+      // "Back Burner" items go below usable apps but above comingSoon/external
+      backBurner.push(t);
     } else {
       usable.push(t);
     }
@@ -748,5 +752,5 @@ export function sortTemplatesByUsage(
   // Stable sort: usage desc, original array order as tiebreaker
   usable.sort((a, b) => (usage[b.id] ?? 0) - (usage[a.id] ?? 0));
 
-  return [...usable, ...bottom];
+  return [...usable, ...backBurner, ...bottom];
 }

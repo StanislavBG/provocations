@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import {
   X,
   FolderOpen,
@@ -184,6 +185,8 @@ export function StoragePanel({
       return (data.folders || []) as FolderItem[];
     },
     enabled: isOpen,
+    staleTime: 30_000, // Cache for 30s — folder list rarely changes mid-session
+    placeholderData: (prev) => prev, // Keep showing old data while refetching
   });
 
   // Single query for all document metadata (titles only — no content loaded).
@@ -198,6 +201,8 @@ export function StoragePanel({
       return res.json();
     },
     enabled: isOpen,
+    staleTime: 30_000, // Cache for 30s — doc metadata rarely changes mid-session
+    placeholderData: (prev) => prev, // Keep showing old data while refetching
   });
 
   // ── Auto-sync locked folders for admin ──
@@ -622,11 +627,11 @@ export function StoragePanel({
         </Button>
       </div>
 
-      {/* ── 3-panel layout ── */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* ── 3-panel layout (resizable) ── */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
 
         {/* ── LEFT PANEL: Folder tree ── */}
-        <div className="w-52 shrink-0 border-r flex flex-col overflow-hidden bg-card">
+        <ResizablePanel defaultSize={18} minSize={12} maxSize={30} className="flex flex-col overflow-hidden bg-card">
           <div className="px-2 py-1.5 border-b flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Folders</span>
             <Button
@@ -716,29 +721,32 @@ export function StoragePanel({
               ))}
             </div>
           </ScrollArea>
-        </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
 
         {/* ── MIDDLE PANEL: Documents in current folder ── */}
-        <div
-          className="flex-1 min-w-0 flex flex-col overflow-hidden"
-          onDragOver={(e) => {
-            // Allow drops on the middle panel body (move to current folder)
-            if (e.dataTransfer.types.includes(DRAG_MIME)) {
-              e.preventDefault();
-            }
-          }}
-          onDrop={(e) => {
-            // Drop onto middle panel = move to current folder
-            const data = decodeDragData(e.dataTransfer);
-            if (data) {
-              e.preventDefault();
-              if (data.type === "document") {
-                moveDocMutation.mutate({ id: data.id, folderId: currentFolderId });
+        <ResizablePanel defaultSize={47} minSize={25}>
+          <div
+            className="flex flex-col overflow-hidden h-full"
+            onDragOver={(e) => {
+              // Allow drops on the middle panel body (move to current folder)
+              if (e.dataTransfer.types.includes(DRAG_MIME)) {
+                e.preventDefault();
               }
-              // Don't allow folder drop onto the same parent
-            }
-          }}
-        >
+            }}
+            onDrop={(e) => {
+              // Drop onto middle panel = move to current folder
+              const data = decodeDragData(e.dataTransfer);
+              if (data) {
+                e.preventDefault();
+                if (data.type === "document") {
+                  moveDocMutation.mutate({ id: data.id, folderId: currentFolderId });
+                }
+                // Don't allow folder drop onto the same parent
+              }
+            }}
+          >
           {/* Breadcrumb + actions bar */}
           <div className="flex items-center gap-1 px-3 py-1.5 border-b text-xs overflow-x-auto shrink-0 bg-card/60">
             {folderPath.map((entry, idx) => (
@@ -945,13 +953,16 @@ export function StoragePanel({
             )}
             <div className="flex-1" />
             <p className="text-[10px] text-muted-foreground/50">
-              Drag items to move between folders. Click to preview, double-click to open.
+              Drag to move. Click to preview. Double-click to open.
             </p>
           </div>
-        </div>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
 
         {/* ── RIGHT PANEL: Document preview ── */}
-        <div className="w-[35%] min-w-[280px] border-l flex flex-col overflow-hidden bg-card">
+        <ResizablePanel defaultSize={35} minSize={20} maxSize={50} className="flex flex-col overflow-hidden bg-card">
           {isLoadingPreview ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -1102,8 +1113,8 @@ export function StoragePanel({
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* ── Move-to dialog (modal) ── */}
       {moveTarget && (
@@ -1580,22 +1591,54 @@ function StorageItemRow({
         </div>
       </button>
 
-      {/* Actions */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        {isCurrent && (
-          <Badge variant="secondary" className="text-[10px] mr-1">Current</Badge>
-        )}
+      {/* Current badge — always visible */}
+      {isCurrent && (
+        <Badge variant="secondary" className="text-[10px] shrink-0">Current</Badge>
+      )}
+
+      {/* Actions — visible on hover */}
+      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         {!isLocked && (
           <>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6"
-              title="Move to..."
-              onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
-            >
-              <FolderInput className="w-3 h-3" />
-            </Button>
+            {isDoc && (
+              <>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  title="Copy content"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Fetch and copy document content
+                    apiRequest("GET", `/api/documents/${id}`)
+                      .then((r) => r.json())
+                      .then((data) => {
+                        navigator.clipboard.writeText(data.content || "");
+                      })
+                      .catch(() => {});
+                  }}
+                >
+                  <Copy className="w-3 h-3" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  title="Download"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    apiRequest("GET", `/api/documents/${id}`)
+                      .then((r) => r.json())
+                      .then((data) => {
+                        downloadDocumentAsFile(title, data.content || "");
+                      })
+                      .catch(() => {});
+                  }}
+                >
+                  <Download className="w-3 h-3" />
+                </Button>
+              </>
+            )}
             <Button
               size="icon"
               variant="ghost"
@@ -1604,6 +1647,15 @@ function StorageItemRow({
               onClick={(e) => { e.stopPropagation(); onStartRename(); }}
             >
               <Pencil className="w-3 h-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              title="Move to..."
+              onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
+            >
+              <FolderInput className="w-3 h-3" />
             </Button>
             <Button
               size="icon"
