@@ -3231,6 +3231,14 @@ Output only valid JSON, no markdown.`,
   });
 
   // ==========================================
+  // Chat model catalog (returns models with valid API keys)
+  // ==========================================
+
+  app.get("/api/chat/models", (_req, res) => {
+    res.json({ models: llm.getAvailableChatModels() });
+  });
+
+  // ==========================================
   // Clean-context chat (Research & Data Gathering)
   // Minimal-context LLM interaction — only the user's
   // message and objective are sent. No personas, no
@@ -3244,7 +3252,8 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, useGemini } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel } = parsed.data;
+      const selectedModel = chatModel || "gemini-2.5-flash";
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
@@ -3261,9 +3270,7 @@ Output only valid JSON, no markdown.`,
 
       messages.push({ role: "user", content: message });
 
-      // Toggle between Gemini 2.5 Flash and the global provider
-      const provider = useGemini !== false ? llm.gemini : llm;
-      const result = await provider.generate({
+      const result = await llm.generateWithModel(selectedModel, {
         system: systemPrompt,
         messages,
         maxTokens: 4096,
@@ -3286,7 +3293,8 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, useGemini } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel } = parsed.data;
+      const selectedModel = chatModel || "gemini-2.5-flash";
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -3309,9 +3317,7 @@ Output only valid JSON, no markdown.`,
 
       messages.push({ role: "user", content: message });
 
-      // Toggle between Gemini 2.5 Flash and the global provider
-      const provider = useGemini !== false ? llm.gemini : llm;
-      const stream = provider.stream({
+      const stream = llm.streamWithModel(selectedModel, {
         system: systemPrompt,
         messages,
         maxTokens: 4096,
@@ -3343,7 +3349,8 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, researchTopic, notes, chatHistory, currentSummary, useGemini } = parsed.data;
+      const { objective, researchTopic, notes, chatHistory, currentSummary, chatModel } = parsed.data;
+      const selectedModel = chatModel || "gemini-2.5-flash";
 
       const historyText = chatHistory
         .map((m) => `[${m.role.toUpperCase()}]: ${m.content}`)
@@ -3356,9 +3363,7 @@ Output only valid JSON, no markdown.`,
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES:\n${notes}` : "";
 
-      // Toggle between Gemini 2.5 Flash and the global provider
-      const provider = useGemini !== false ? llm.gemini : llm;
-      const result = await provider.generate({
+      const result = await llm.generateWithModel(selectedModel, {
         system: `You are a research summarizer. Generate a clear, structured summary that fulfills the user's stated objective, drawing from their research chat and notes.${existingSummaryContext}${topicContext}
 
 OBJECTIVE: ${objective}

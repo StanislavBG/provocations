@@ -1051,7 +1051,7 @@ export const chatRequestSchema = z.object({
   notes: z.string().optional(),
   history: z.array(chatMessageSchema).optional(),
   appType: z.enum(templateIds).optional(),
-  useGemini: z.boolean().optional(),
+  chatModel: z.string().optional(),
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -1067,7 +1067,7 @@ export const summarizeSessionRequestSchema = z.object({
   chatHistory: z.array(chatMessageSchema).min(1, "At least one message is required"),
   currentSummary: z.string().optional(),
   appType: z.enum(templateIds).optional(),
-  useGemini: z.boolean().optional(),
+  chatModel: z.string().optional(),
 });
 
 export type SummarizeSessionRequest = z.infer<typeof summarizeSessionRequestSchema>;
