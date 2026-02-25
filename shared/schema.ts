@@ -712,6 +712,7 @@ export const trackingEventType = [
   // ── Document export ──
   "document_downloaded",      // User downloaded document (markdown/zip)
   "document_copied",          // User copied document text to clipboard
+  "document_summarized",      // User summarized document in preview panel
 
   // ── Context store operations ──
   "folder_created",           // User created a folder
