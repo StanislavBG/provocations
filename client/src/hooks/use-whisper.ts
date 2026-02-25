@@ -101,6 +101,8 @@ export function useWhisperRecorder({
   // Web Speech API fallback state
   const recognitionRef = useRef<any>(null);
   const speechTranscriptRef = useRef("");
+  /** When true the user intentionally stopped — do NOT auto-restart */
+  const speechStoppingRef = useRef(false);
 
   // Check availability on mount
   useEffect(() => {
@@ -277,24 +279,46 @@ export function useWhisperRecorder({
     };
 
     recognition.onerror = (event: any) => {
+      // "no-speech" and "aborted" are recoverable — the onend handler
+      // will auto-restart. Only fatal errors should kill the session.
+      if (event.error === "no-speech" || event.error === "aborted") return;
       console.error("Speech recognition error:", event.error);
+      speechStoppingRef.current = true;
       isRecordingRef.current = false;
       setIsRecording(false);
       onRecordingChangeRef.current?.(false);
     };
 
     recognition.onend = () => {
-      if (speechTranscriptRef.current.trim()) {
-        onTranscriptRef.current(speechTranscriptRef.current.trim());
+      // If user intentionally stopped, finalize and deliver transcript
+      if (speechStoppingRef.current) {
+        speechStoppingRef.current = false;
+        if (speechTranscriptRef.current.trim()) {
+          onTranscriptRef.current(speechTranscriptRef.current.trim());
+        }
+        speechTranscriptRef.current = "";
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        onRecordingChangeRef.current?.(false);
+        return;
       }
-      speechTranscriptRef.current = "";
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      onRecordingChangeRef.current?.(false);
+      // Otherwise the browser killed the session (silence timeout, network
+      // hiccup, etc.) — auto-restart to keep listening
+      if (isRecordingRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          // start() can throw if called too quickly — retry once
+          setTimeout(() => {
+            try { recognition.start(); } catch { /* give up */ }
+          }, 200);
+        }
+      }
     };
 
     recognitionRef.current = recognition;
     speechTranscriptRef.current = "";
+    speechStoppingRef.current = false;
 
     try {
       recognition.start();
@@ -309,6 +333,7 @@ export function useWhisperRecorder({
 
   const stopSpeechFallback = useCallback(() => {
     if (recognitionRef.current) {
+      speechStoppingRef.current = true;
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
