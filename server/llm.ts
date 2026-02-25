@@ -15,7 +15,7 @@
  *   const stream = llm.stream({ system, messages, maxTokens });
  *   // Per-model (for chat model selector):
  *   const result = await llm.generateWithModel("gemini-2.5-pro", req);
- *   const stream = llm.streamWithModel("gpt-4o-mini", req);
+ *   const stream = llm.streamWithModel("gpt-5-mini", req);
  */
 
 import OpenAI from "openai";
@@ -42,7 +42,7 @@ export interface LLMResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Chat model catalog (for per-request model selection in Chat-to-Context)
+// Chat model catalog — discovered from live APIs at startup
 // ---------------------------------------------------------------------------
 
 type Provider = "openai" | "anthropic" | "gemini";
@@ -54,18 +54,180 @@ export interface ChatModelDef {
   tier: "premium" | "value";
 }
 
-export const CHAT_MODELS: ChatModelDef[] = [
-  // ── Google Gemini (via GEMINI_API_KEY) ──
-  { id: "gemini-2.5-pro",          label: "Gemini 2.5 Pro",          provider: "gemini",    tier: "premium" },  // $1.25 / $10.00
-  { id: "gemini-2.5-flash",        label: "Gemini 2.5 Flash",        provider: "gemini",    tier: "value"   },  // $0.30 / $2.50  — best price-performance
-  { id: "gemini-2.5-flash-lite",   label: "Gemini 2.5 Flash Lite",   provider: "gemini",    tier: "value"   },  // $0.10 / $0.40  — cheapest
-  // ── OpenAI GPT-5 series (via Replit AI Integrations proxy) ──
-  { id: "gpt-5.2",                 label: "GPT-5.2",                 provider: "openai",    tier: "premium" },  // $1.75 / $14.00 — latest flagship
-  { id: "gpt-5-mini",              label: "GPT-5 Mini",              provider: "openai",    tier: "value"   },  // $0.25 / $2.00  — fast, cost-efficient
-  { id: "gpt-5-nano",              label: "GPT-5 Nano",              provider: "openai",    tier: "value"   },  // $0.05 / $0.40  — cheapest
-  // Note: Anthropic models removed — no ANTHROPIC_API_KEY configured in this environment.
-  // The Anthropic provider code paths in llm.ts remain available if a key is added in the future.
+/**
+ * Model prefixes we care about, in preference order (best first).
+ * Only models matching these prefixes will be included in the catalog.
+ * The first match in each provider determines the default model for that provider.
+ */
+const OPENAI_PREFERRED_PREFIXES = [
+  // GPT-5 series
+  "gpt-5",
+  // GPT-4 series (fallback)
+  "gpt-4o", "gpt-4-turbo", "gpt-4",
+  // Reasoning models
+  "o4", "o3", "o1",
 ];
+
+const GEMINI_PREFERRED_PREFIXES = [
+  "gemini-2.5", "gemini-2.0", "gemini-1.5",
+];
+
+/** Models to skip even if they match a prefix (snapshots, dated variants, etc.) */
+const MODEL_SKIP_PATTERNS = [
+  /realtime/i,    // realtime audio models
+  /audio/i,       // audio models
+  /search/i,      // search-grounded variants
+  /\d{4}-\d{2}-\d{2}$/,  // dated snapshot IDs (e.g. gpt-4o-2024-08-06) — keep only aliases
+];
+
+/** Mutable catalog — populated by discoverModels() at startup, with static fallback */
+let discoveredModels: ChatModelDef[] = [];
+let modelsDiscovered = false;
+
+/** The default OpenAI model — updated after discovery */
+let openaiDefaultModel = "gpt-4o";
+
+function modelIdToLabel(id: string): string {
+  return id
+    .replace(/^models\//, "")
+    .split(/[-.]/)
+    .map((w) => {
+      // Uppercase known acronyms
+      if (/^gpt$/i.test(w)) return "GPT";
+      if (/^o\d+$/i.test(w)) return w.toUpperCase();
+      // Capitalize first letter
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(" ")
+    .replace(/ (\d)/g, "-$1")  // "GPT 5" → "GPT-5"
+    .replace(/(\d) (\d)/g, "$1.$2");  // "5 2" → "5.2" for version dots
+}
+
+function classifyTier(id: string): "premium" | "value" {
+  if (/mini|nano|lite|flash/i.test(id)) return "value";
+  return "premium";
+}
+
+function matchesPrefixes(id: string, prefixes: string[]): boolean {
+  return prefixes.some((p) => id.startsWith(p));
+}
+
+function shouldSkip(id: string): boolean {
+  return MODEL_SKIP_PATTERNS.some((p) => p.test(id));
+}
+
+/**
+ * Discover live models from OpenAI and Gemini APIs.
+ * Called once at server startup. Falls back to static catalog on error.
+ */
+export async function discoverModels(): Promise<void> {
+  const results: ChatModelDef[] = [];
+
+  // ── OpenAI models ──
+  if (process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+    try {
+      const client = getOpenAI();
+      const list = await client.models.list();
+      const openaiModels: string[] = [];
+      for await (const model of list) {
+        openaiModels.push(model.id);
+      }
+
+      const filtered = openaiModels
+        .filter((id) => matchesPrefixes(id, OPENAI_PREFERRED_PREFIXES))
+        .filter((id) => !shouldSkip(id))
+        .sort();
+
+      for (const id of filtered) {
+        results.push({
+          id,
+          label: modelIdToLabel(id),
+          provider: "openai",
+          tier: classifyTier(id),
+        });
+      }
+
+      // Pick the best default: first match in preference order
+      for (const prefix of OPENAI_PREFERRED_PREFIXES) {
+        const best = filtered.find((id) => id.startsWith(prefix) && classifyTier(id) === "premium");
+        if (best) {
+          openaiDefaultModel = best;
+          break;
+        }
+      }
+
+      console.log(`[llm] Discovered ${filtered.length} OpenAI models. Default: ${openaiDefaultModel}`);
+    } catch (err) {
+      console.warn("[llm] Failed to discover OpenAI models, using static fallback:", (err as Error).message);
+      results.push(
+        { id: "gpt-4o", label: "GPT-4o", provider: "openai", tier: "premium" },
+        { id: "gpt-4o-mini", label: "GPT-4o Mini", provider: "openai", tier: "value" },
+      );
+    }
+  }
+
+  // ── Gemini models ──
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}&pageSize=200`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
+
+      const geminiModels = (data.models ?? [])
+        .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+        .map((m) => m.name.replace(/^models\//, ""))
+        .filter((id) => matchesPrefixes(id, GEMINI_PREFERRED_PREFIXES))
+        .filter((id) => !shouldSkip(id))
+        .sort();
+
+      for (const id of geminiModels) {
+        results.push({
+          id,
+          label: modelIdToLabel(id),
+          provider: "gemini",
+          tier: classifyTier(id),
+        });
+      }
+
+      console.log(`[llm] Discovered ${geminiModels.length} Gemini models.`);
+    } catch (err) {
+      console.warn("[llm] Failed to discover Gemini models, using static fallback:", (err as Error).message);
+      results.push(
+        { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: "gemini", tier: "value" },
+      );
+    }
+  }
+
+  // ── Anthropic models (static — no list API in SDK) ──
+  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_KEY) {
+    results.push(
+      { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5", provider: "anthropic", tier: "premium" },
+      { id: "claude-haiku-3-5-20241022", label: "Claude Haiku 3.5", provider: "anthropic", tier: "value" },
+    );
+  }
+
+  if (results.length > 0) {
+    discoveredModels = results;
+    modelsDiscovered = true;
+  }
+}
+
+/** Static fallback used before discovery completes or if discovery fails entirely */
+const STATIC_FALLBACK_MODELS: ChatModelDef[] = [
+  { id: "gpt-4o", label: "GPT-4o", provider: "openai", tier: "premium" },
+  { id: "gpt-4o-mini", label: "GPT-4o Mini", provider: "openai", tier: "value" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: "gemini", tier: "value" },
+];
+
+export function getChatModels(): ChatModelDef[] {
+  return modelsDiscovered ? discoveredModels : STATIC_FALLBACK_MODELS;
+}
+
+export function getDefaultOpenAIModel(): string {
+  return openaiDefaultModel;
+}
 
 function detectProviderForModel(modelId: string): Provider {
   if (modelId.startsWith("gemini-")) return "gemini";
@@ -127,13 +289,11 @@ function getOpenAI(): OpenAI {
   return _openaiClient;
 }
 
-const OPENAI_MODEL = "gpt-5.2";
-
 async function openaiGenerate(req: LLMRequest): Promise<LLMResponse> {
   const client = getOpenAI();
 
   const response = await client.chat.completions.create({
-    model: OPENAI_MODEL,
+    model: getDefaultOpenAIModel(),
     max_tokens: req.maxTokens,
     temperature: req.temperature,
     messages: [
@@ -155,7 +315,7 @@ async function* openaiStream(
   const client = getOpenAI();
 
   const stream = await client.chat.completions.create({
-    model: OPENAI_MODEL,
+    model: getDefaultOpenAIModel(),
     max_tokens: req.maxTokens,
     temperature: req.temperature,
     stream: true,
@@ -495,17 +655,20 @@ export const llm = {
     }
   },
 
-  /** Returns chat models available based on configured API keys */
+  /** Returns chat models discovered from live APIs (filtered by configured keys) */
   getAvailableChatModels(): ChatModelDef[] {
-    const hasOpenAI = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-    const hasAnthropic = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_KEY);
-    const hasGemini = !!process.env.GEMINI_API_KEY;
-    return CHAT_MODELS.filter((m) => {
-      switch (m.provider) {
-        case "openai": return hasOpenAI;
-        case "anthropic": return hasAnthropic;
-        case "gemini": return hasGemini;
+    return getChatModels();
+  },
+
+  /** Default model ID for the active provider */
+  getDefaultModel(): string {
+    switch (activeProvider) {
+      case "openai": return getDefaultOpenAIModel();
+      case "gemini": {
+        const geminiModels = getChatModels().filter((m) => m.provider === "gemini");
+        return geminiModels[0]?.id ?? "gemini-2.5-flash";
       }
-    });
+      case "anthropic": return ANTHROPIC_MODEL;
+    }
   },
 };
