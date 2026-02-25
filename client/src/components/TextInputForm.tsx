@@ -16,7 +16,6 @@ import {
   Globe,
   Wand2,
   Mic,
-  Youtube,
   FileAudio,
   Upload,
   Sparkles,
@@ -45,7 +44,6 @@ interface TextInputFormProps {
   onBlankDocument?: (objective: string) => void;
   onStreamingMode?: (objective: string, websiteUrl?: string, templateId?: string) => void;
   onVoiceCaptureMode?: (objective: string, templateId?: string) => void;
-  onYouTubeInfographicMode?: (objective: string, channelUrl: string, templateId: string) => void;
   onVoiceInfographicMode?: (objective: string, transcript: string, templateId: string) => void;
   onResearchChatMode?: (objective: string, researchTopic: string, templateId: string) => void;
   isLoading?: boolean;
@@ -77,13 +75,12 @@ async function processText(
   return data.summary ?? text;
 }
 
-export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onYouTubeInfographicMode, onVoiceInfographicMode, onResearchChatMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
+export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVoiceCaptureMode, onVoiceInfographicMode, onResearchChatMode, isLoading, capturedContext, onCapturedContextChange, onTemplateSelect, selectedTemplateId }: TextInputFormProps) {
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [objective, setObjective] = useState("");
   const [secondaryObjective, setSecondaryObjective] = useState("");
   const [captureUrl, setCaptureUrl] = useState("");
-  const [youtubeChannelUrl, setYoutubeChannelUrl] = useState("");
   const [voiceTranscript, setVoiceTranscript] = useState("");
 
   // Prebuilt template state
@@ -99,7 +96,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       setObjective("");
       setSecondaryObjective("");
       setCaptureUrl("");
-      setYoutubeChannelUrl("");
       setVoiceTranscript("");
     }
   }, [selectedTemplateId]);
@@ -585,42 +581,6 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
-          ) : activePrebuilt?.id === "youtube-to-infographic" && onYouTubeInfographicMode ? (
-            <div className="space-y-3">
-              <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Youtube className="w-4 h-4 text-red-500" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    YouTube Channel URL
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Paste a channel URL to fetch the latest videos. The system will extract transcripts, summarize key points, and generate infographic specs automatically.
-                </p>
-                <input
-                  type="url"
-                  value={youtubeChannelUrl}
-                  onChange={(e) => setYoutubeChannelUrl(e.target.value)}
-                  placeholder="https://www.youtube.com/@channel"
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono"
-                />
-              </div>
-
-              <Button
-                onClick={() => onYouTubeInfographicMode(
-                  objective.trim() || "Transform YouTube video content into structured infographic specifications",
-                  youtubeChannelUrl.trim(),
-                  activePrebuilt.id,
-                )}
-                disabled={!youtubeChannelUrl.trim() || isLoading}
-                size="lg"
-                className="w-full gap-2"
-              >
-                <Youtube className="w-4 h-4" />
-                Fetch Channel & Enter Workspace
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
           ) : activePrebuilt?.id === "text-to-infographic" && onVoiceInfographicMode ? (
             <div className="space-y-3">
               <div className="rounded-lg border bg-card/50 p-3 space-y-1.5">
@@ -897,7 +857,7 @@ export function TextInputForm({ onSubmit, onBlankDocument, onStreamingMode, onVo
       )}
 
       {/* Fixed bottom bar: step progress + action */}
-      {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "youtube-to-infographic" && activePrebuilt?.id !== "text-to-infographic" && activePrebuilt?.id !== "gpt-to-context" && (
+      {hasObjectiveType && activePrebuilt?.id !== "streaming" && activePrebuilt?.id !== "text-to-infographic" && activePrebuilt?.id !== "gpt-to-context" && (
         <div className="shrink-0 border-t bg-card">
           <div className={`w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 px-3 md:px-6 py-2 ${
             isWritePrompt ? "" : "max-w-6xl"
