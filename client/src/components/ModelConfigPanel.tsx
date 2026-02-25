@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -22,24 +22,19 @@ export interface ModelConfig {
   model: string;
 }
 
+/** Initial default — overridden once we fetch the live default from the backend */
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   temperature: 0.7,
   maxTokens: 4096,
   topP: 1.0,
   frequencyPenalty: 0,
   presencePenalty: 0,
-  model: "gpt-5.2",
+  model: "", // resolved from backend
 };
 
-const AVAILABLE_MODELS = [
-  // Google Gemini (via GEMINI_API_KEY)
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-  { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
-  // OpenAI GPT-5 series (via Replit AI Integrations proxy)
-  { value: "gpt-5.2", label: "GPT-5.2" },
-  { value: "gpt-5-mini", label: "GPT-5 Mini" },
-  { value: "gpt-5-nano", label: "GPT-5 Nano" },
+/** Fallback when backend hasn't responded yet */
+const FALLBACK_MODELS = [
+  { value: "gpt-4o", label: "GPT-4o" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -105,6 +100,28 @@ interface ModelConfigPanelProps {
 }
 
 export function ModelConfigPanel({ config, onChange }: ModelConfigPanelProps) {
+  const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
+  const [defaultModel, setDefaultModel] = useState("");
+
+  // Fetch live model catalog from backend
+  useEffect(() => {
+    fetch("/api/chat/models")
+      .then((r) => r.json())
+      .then((data: { models?: Array<{ id: string; label: string }>; defaultModel?: string }) => {
+        if (data.models?.length) {
+          setAvailableModels(data.models.map((m) => ({ value: m.id, label: m.label })));
+        }
+        if (data.defaultModel) {
+          setDefaultModel(data.defaultModel);
+          // If current config has no model yet (initial load), set to discovered default
+          if (!config.model) {
+            onChange({ ...config, model: data.defaultModel });
+          }
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const update = useCallback(
     <K extends keyof ModelConfig>(key: K, value: ModelConfig[K]) => {
       onChange({ ...config, [key]: value });
@@ -113,16 +130,17 @@ export function ModelConfigPanel({ config, onChange }: ModelConfigPanelProps) {
   );
 
   const handleReset = useCallback(() => {
-    onChange({ ...DEFAULT_MODEL_CONFIG });
-  }, [onChange]);
+    onChange({ ...DEFAULT_MODEL_CONFIG, model: defaultModel || config.model });
+  }, [onChange, defaultModel, config.model]);
 
+  const resetTarget = { ...DEFAULT_MODEL_CONFIG, model: defaultModel || config.model };
   const isDefault =
-    config.temperature === DEFAULT_MODEL_CONFIG.temperature &&
-    config.maxTokens === DEFAULT_MODEL_CONFIG.maxTokens &&
-    config.topP === DEFAULT_MODEL_CONFIG.topP &&
-    config.frequencyPenalty === DEFAULT_MODEL_CONFIG.frequencyPenalty &&
-    config.presencePenalty === DEFAULT_MODEL_CONFIG.presencePenalty &&
-    config.model === DEFAULT_MODEL_CONFIG.model;
+    config.temperature === resetTarget.temperature &&
+    config.maxTokens === resetTarget.maxTokens &&
+    config.topP === resetTarget.topP &&
+    config.frequencyPenalty === resetTarget.frequencyPenalty &&
+    config.presencePenalty === resetTarget.presencePenalty &&
+    config.model === resetTarget.model;
 
   return (
     <ScrollArea className="h-full">
@@ -163,7 +181,7 @@ export function ModelConfigPanel({ config, onChange }: ModelConfigPanelProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {AVAILABLE_MODELS.map((m) => (
+              {availableModels.map((m) => (
                 <SelectItem key={m.value} value={m.value} className="text-xs">
                   {m.label}
                 </SelectItem>
@@ -234,7 +252,7 @@ export function ModelConfigPanel({ config, onChange }: ModelConfigPanelProps) {
           </p>
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="outline" className="text-[10px]">
-              {AVAILABLE_MODELS.find((m) => m.value === config.model)?.label ?? config.model}
+              {availableModels.find((m) => m.value === config.model)?.label ?? config.model}
             </Badge>
             <Badge variant="outline" className="text-[10px]">temp {config.temperature}</Badge>
             <Badge variant="outline" className="text-[10px]">tokens {config.maxTokens}</Badge>
