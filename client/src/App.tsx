@@ -15,12 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { LogIn, Sparkles } from "lucide-react";
 import Workspace from "@/pages/Workspace";
+import NotebookWorkspace from "@/pages/NotebookWorkspace";
 import Admin from "@/pages/Admin";
 import ContextStore from "@/pages/ContextStore";
 import Pricing from "@/pages/Pricing";
 import NotFound from "@/pages/not-found";
 import { trackEvent } from "@/lib/tracking";
 import { VerboseProvider } from "@/components/VerboseProvider";
+import { USE_NOTEBOOK_LAYOUT } from "@/lib/featureFlags";
 
 /** Fires a "login" tracking event once when the signed-in shell mounts. */
 function LoginTracker() {
@@ -30,14 +32,21 @@ function LoginTracker() {
   return null;
 }
 
+/** Choose workspace component based on feature flag */
+const WorkspaceComponent = USE_NOTEBOOK_LAYOUT ? NotebookWorkspace : Workspace;
+
 function Router() {
   return (
     <Switch>
       <Route path="/store" component={ContextStore} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/admin" component={Admin} />
-      <Route path="/app/:templateId" component={Workspace} />
-      <Route path="/" component={Workspace} />
+      {/* Classic layout available at /classic for regression testing */}
+      <Route path="/classic/app/:templateId" component={Workspace} />
+      <Route path="/classic" component={Workspace} />
+      {/* Main routes use feature-flagged workspace */}
+      <Route path="/app/:templateId" component={WorkspaceComponent} />
+      <Route path="/" component={WorkspaceComponent} />
       <Route component={NotFound} />
     </Switch>
   );
