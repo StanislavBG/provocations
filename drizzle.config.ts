@@ -13,6 +13,9 @@ export default defineConfig({
   },
   // Only manage tables that are declared in the schema.
   // Prevents drizzle-kit push from dropping legacy tables that still hold data.
+  // ⚠️  EVERY pgTable() in shared/models/chat.ts MUST have a matching entry here.
+  //     If you add a new table to the schema, add it here too — otherwise
+  //     drizzle-kit push will try to CREATE it even if it already exists.
   tablesFilter: [
     "folders",
     "key_versions",
@@ -26,6 +29,8 @@ export default defineConfig({
     "agent_definitions",
     "agent_prompt_overrides",
     "error_logs",
+    "payments",
     "llm_call_logs",
+    "workspace_sessions",
   ],
 });
