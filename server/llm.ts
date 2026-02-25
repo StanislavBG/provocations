@@ -59,10 +59,10 @@ export const CHAT_MODELS: ChatModelDef[] = [
   { id: "gemini-2.5-pro",          label: "Gemini 2.5 Pro",          provider: "gemini",    tier: "premium" },  // $1.25 / $10.00
   { id: "gemini-2.5-flash",        label: "Gemini 2.5 Flash",        provider: "gemini",    tier: "value"   },  // $0.30 / $2.50  — best price-performance
   { id: "gemini-2.5-flash-lite",   label: "Gemini 2.5 Flash Lite",   provider: "gemini",    tier: "value"   },  // $0.10 / $0.40  — cheapest
-  // ── OpenAI (via Replit AI Integrations proxy) ──
-  { id: "gpt-4o",                  label: "GPT-4o",                  provider: "openai",    tier: "premium" },  // $2.50 / $10.00
-  { id: "gpt-4o-mini",             label: "GPT-4o Mini",             provider: "openai",    tier: "value"   },  // $0.15 / $0.60  — cheapest
-  { id: "o4-mini",                 label: "o4 Mini",                 provider: "openai",    tier: "value"   },  // $1.10 / $4.40  — fast reasoning
+  // ── OpenAI GPT-5 series (via Replit AI Integrations proxy) ──
+  { id: "gpt-5.2",                 label: "GPT-5.2",                 provider: "openai",    tier: "premium" },  // $1.75 / $14.00 — latest flagship
+  { id: "gpt-5-mini",              label: "GPT-5 Mini",              provider: "openai",    tier: "value"   },  // $0.25 / $2.00  — fast, cost-efficient
+  { id: "gpt-5-nano",              label: "GPT-5 Nano",              provider: "openai",    tier: "value"   },  // $0.05 / $0.40  — cheapest
   // Note: Anthropic models removed — no ANTHROPIC_API_KEY configured in this environment.
   // The Anthropic provider code paths in llm.ts remain available if a key is added in the future.
 ];
@@ -127,7 +127,7 @@ function getOpenAI(): OpenAI {
   return _openaiClient;
 }
 
-const OPENAI_MODEL = "gpt-4o";
+const OPENAI_MODEL = "gpt-5.2";
 
 async function openaiGenerate(req: LLMRequest): Promise<LLMResponse> {
   const client = getOpenAI();
