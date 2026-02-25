@@ -1928,13 +1928,14 @@ RULES:
     </>
   ) : null;
 
-  // Infographic studio content — 3-panel pipeline (summary | artistic | gallery)
+  // Infographic studio content — 3-panel pipeline (raw text | summary | gallery)
   const isInfographicStudio = !isInputPhase && appFlowConfig.workspaceLayout === "infographic-studio";
   const infographicStudioContent = isInfographicStudio ? (
     <>
       <InfographicStudioWorkspace
+        rawText={document.rawText}
+        onRawTextChange={(text) => setDocument({ ...document, rawText: text })}
         objective={objective}
-        capturedContext={capturedContext}
       />
 
       <StepTracker
