@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, lazy, Suspense, type ReactNod
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, emitVerboseData } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { getAppFlowConfig, getObjectiveConfig, type AppFlowConfig, type RightPanelTabId, type WorkspaceLayout } from "@/lib/appWorkspaceConfig";
 import { TextInputForm } from "@/components/TextInputForm";
@@ -1311,6 +1311,8 @@ RULES:
             if (data.type === "content") {
               fullContent += data.content;
               setChatStreamingContent(fullContent);
+            } else if (data.type === "verbose" && data._verbose) {
+              emitVerboseData({ _verbose: data._verbose });
             }
           } catch {
             // Skip malformed lines
@@ -1982,6 +1984,9 @@ RULES:
               messageCount={chatMessages.length}
               notesLength={researchNotes.length}
               onRefresh={handleRefreshSummary}
+              onSaveToContext={handleSaveSession}
+              isSaving={isSavingSession}
+              isSaved={!!savedSessionId}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
