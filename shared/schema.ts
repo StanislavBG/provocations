@@ -1078,6 +1078,34 @@ export interface SummarizeSessionResponse {
   summary: string;
 }
 
+// ── Save chat session request (GPT-to-Context persistence) ──
+
+export const saveChatSessionRequestSchema = z.object({
+  /** Human-readable title for the saved session */
+  title: z.string().min(1, "Title is required").max(300),
+  /** Research topic that scoped the session */
+  researchTopic: z.string().optional(),
+  /** Objective the session worked toward */
+  objective: z.string().min(1, "Objective is required"),
+  /** Dynamic summary produced during the session */
+  summary: z.string().optional(),
+  /** User's working notes captured during the session */
+  notes: z.string().optional(),
+  /** Full chat history — stored as serialized reference */
+  chatHistory: z.array(chatMessageSchema).optional(),
+});
+
+export type SaveChatSessionRequest = z.infer<typeof saveChatSessionRequestSchema>;
+
+export interface SaveChatSessionResponse {
+  /** ID of the saved summary document (primary artifact) */
+  documentId: number;
+  /** ID of the locked system folder ("Chat to Context") */
+  folderId: number;
+  /** Optional: ID of the chat-log document (when chat history was provided) */
+  chatLogDocumentId?: number;
+}
+
 // ── App Launch Params ──
 // URL-based protocol for cross-app navigation.
 // Any app can invoke another by constructing: /?app=...&intent=...&entityType=...&entityId=...

@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ProvokeText } from "./ProvokeText";
 import { BrowserExplorer } from "./BrowserExplorer";
 import { ContextCapturePanel } from "./ContextCapturePanel";
+import { AddContextModal } from "./AddContextModal";
 import { ModelConfigPanel, type ModelConfig } from "./ModelConfigPanel";
 import {
   MessageCircleQuestion,
@@ -34,6 +35,7 @@ import {
   FileText,
   Target,
   ListOrdered,
+  Plus,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument, PersonaDomain } from "@shared/schema";
 import type { LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
@@ -609,9 +611,32 @@ function ContextTabContent({
   capturedContext,
   onCapturedContextChange,
 }: ContextTabContentProps) {
+  const [showAddContextModal, setShowAddContextModal] = useState(false);
+
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
+        {/* Add Context button — opens the global AddContextModal */}
+        {capturedContext && onCapturedContextChange && (
+          <>
+            <Button
+              variant="outline"
+              className="w-full gap-2 border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5"
+              onClick={() => setShowAddContextModal(true)}
+            >
+              <Plus className="w-4 h-4" />
+              Add Context
+            </Button>
+
+            <AddContextModal
+              open={showAddContextModal}
+              onOpenChange={setShowAddContextModal}
+              items={capturedContext}
+              onItemsChange={onCapturedContextChange}
+            />
+          </>
+        )}
+
         {/* Captured context items (editable) */}
         {capturedContext && onCapturedContextChange && (
           <div className="space-y-2">
