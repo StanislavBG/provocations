@@ -81,6 +81,7 @@ export async function ensureTables(): Promise<void> {
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_salt VARCHAR(64);
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_iv VARCHAR(32);
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE NOT NULL;
+        ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS verbose_mode BOOLEAN DEFAULT FALSE NOT NULL;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
 
@@ -196,6 +197,35 @@ export async function ensureTables(): Promise<void> {
 
       CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
       CREATE INDEX IF NOT EXISTS idx_payments_session ON payments(stripe_session_id);
+
+      -- LLM call logs for gateway-level observability
+      CREATE TABLE IF NOT EXISTS llm_call_logs (
+        id SERIAL PRIMARY KEY,
+        call_id VARCHAR(36) NOT NULL UNIQUE,
+        user_id VARCHAR(128) NOT NULL,
+        session_id VARCHAR(64),
+        app_type VARCHAR(64),
+        task_type VARCHAR(64) NOT NULL,
+        endpoint VARCHAR(128) NOT NULL,
+        provider VARCHAR(32) NOT NULL,
+        model VARCHAR(128) NOT NULL,
+        context_tokens_estimate INTEGER,
+        context_characters INTEGER,
+        response_characters INTEGER,
+        response_tokens_estimate INTEGER,
+        max_tokens INTEGER,
+        temperature_x100 INTEGER,
+        estimated_cost_microdollars INTEGER,
+        duration_ms INTEGER,
+        status VARCHAR(16) DEFAULT 'success' NOT NULL,
+        error_message TEXT,
+        streaming BOOLEAN DEFAULT FALSE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_llm_call_logs_user ON llm_call_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_llm_call_logs_created ON llm_call_logs(created_at);
+      CREATE INDEX IF NOT EXISTS idx_llm_call_logs_task ON llm_call_logs(task_type);
+      CREATE INDEX IF NOT EXISTS idx_llm_call_logs_app ON llm_call_logs(app_type);
 
       CREATE INDEX IF NOT EXISTS idx_error_logs_user ON error_logs(user_id);
       CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at);

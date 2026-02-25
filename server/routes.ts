@@ -55,6 +55,7 @@ import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, g
 import { personaSchema } from "@shared/schema";
 import { trackingEventSchema } from "@shared/schema";
 import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
+import { runWithGateway, isVerboseEnabled, getActiveScope as getActiveGatewayScope, type GatewayContext, type LlmVerboseMetadata } from "./llm-gateway";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 import { executeAgent } from "./agent-executor";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
@@ -505,10 +506,100 @@ function classifyInstruction(instruction: string): InstructionType {
   return 'general';
 }
 
+/** Infer the LLM task type from the API endpoint path */
+function inferTaskType(path: string, body?: any): string {
+  // Direct task type from invoke endpoint
+  if (body?.taskType) return body.taskType;
+  // Map API paths to task types
+  const pathMap: Record<string, string> = {
+    "/generate-challenges": "challenge",
+    "/generate-advice": "advice",
+    "/write": "write",
+    "/write/stream": "write-stream",
+    "/summarize-intent": "summarize-intent",
+    "/interview/question": "interview-question",
+    "/interview/summary": "interview-summary",
+    "/discussion/ask": "discussion-ask",
+    "/chat": "chat",
+    "/chat/stream": "chat-stream",
+    "/chat/summarize": "chat-summarize",
+    "/generate-questions": "generate-questions",
+    "/generate-image": "generate-image",
+    "/generate-draft-questions": "generate-draft-questions",
+    "/streaming/question": "streaming-question",
+    "/streaming/wireframe-analysis": "wireframe-analysis",
+    "/streaming/refine": "streaming-refine",
+    "/youtube/channel": "youtube-channel",
+    "/youtube/process-video": "youtube-process-video",
+    "/pipeline/summarize": "pipeline-summarize",
+    "/pipeline/infographic": "pipeline-infographic",
+    "/invoke": "invoke",
+  };
+  return pathMap[path] || "unknown";
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // ── LLM Gateway middleware ──────────────────────────────────────────
+  // All API routes that make LLM calls are automatically intercepted.
+  // The gateway logs every call and collects verbose metadata.
+  //
+  // How it works:
+  // 1. Middleware wraps next() inside runWithGateway (AsyncLocalStorage scope)
+  // 2. All llm.generate/stream calls within the scope are automatically intercepted
+  // 3. res.json is monkey-patched to inject _verbose metadata when verbose mode is on
+  //
+  // The AsyncLocalStorage scope ensures the gateway context flows through all
+  // async operations within the request, even across await boundaries.
+
+  app.use("/api", async (req, res, next) => {
+    const { userId } = getAuth(req);
+    if (!userId) return next();
+
+    // Check verbose mode upfront (cached query, fast)
+    let verboseEnabled = false;
+    try {
+      verboseEnabled = await isVerboseEnabled(userId);
+    } catch { /* default to false */ }
+
+    // Infer task type and app type from the URL and body
+    const endpoint = `/api${req.path}`;
+    const appType = req.body?.appType;
+    const taskType = inferTaskType(req.path, req.body);
+
+    const ctx: GatewayContext = {
+      userId,
+      sessionId: req.headers["x-session-id"] as string | undefined,
+      appType,
+      taskType,
+      endpoint,
+    };
+
+    // Intercept res.json to inject verbose metadata synchronously
+    if (verboseEnabled) {
+      const originalJson = res.json.bind(res);
+      res.json = function patchedJson(body: any) {
+        const scope = getActiveGatewayScope();
+        if (scope && scope.verboseList.length > 0 && body && typeof body === "object" && !Array.isArray(body)) {
+          return originalJson({ ...body, _verbose: scope.verboseList });
+        }
+        return originalJson(body);
+      };
+    }
+
+    // Run the rest of the middleware chain inside a gateway scope.
+    // AsyncLocalStorage ensures the context flows through all async operations.
+    runWithGateway(ctx, () => new Promise<void>((resolve, reject) => {
+      res.on("finish", resolve);
+      res.on("error", reject);
+      next();
+    })).catch(() => {
+      // Gateway errors should not crash the request
+    });
+  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // LLM STATUS — diagnostic endpoint to verify active provider
@@ -1604,6 +1695,50 @@ Output only valid JSON, no markdown.`;
     } catch (error) {
       console.error("Admin event report error:", error);
       res.status(500).json({ error: "Failed to load event report" });
+    }
+  });
+
+  // ── Admin: LLM call logs (protected) ──
+  app.get("/api/admin/llm-logs", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const filterUserId = req.query.userId as string | undefined;
+
+      const [logs, total] = await Promise.all([
+        storage.listLlmCallLogs({ userId: filterUserId, limit, offset }),
+        storage.countLlmCallLogs({ userId: filterUserId }),
+      ]);
+
+      res.json({ logs, total, limit, offset });
+    } catch (error) {
+      console.error("Admin LLM logs error:", error);
+      res.status(500).json({ error: "Failed to load LLM logs" });
+    }
+  });
+
+  // ── User: own LLM call logs (for verbose mode display) ──
+  app.get("/api/llm-logs", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const [logs, total] = await Promise.all([
+        storage.listLlmCallLogs({ userId, limit, offset }),
+        storage.countLlmCallLogs({ userId }),
+      ]);
+
+      res.json({ logs, total, limit, offset });
+    } catch (error) {
+      console.error("LLM logs error:", error);
+      res.status(500).json({ error: "Failed to load LLM logs" });
     }
   });
 
@@ -4022,6 +4157,16 @@ RULES:
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
       const prefs = await storage.getUserPreferences(userId);
+
+      // Default verboseMode to true for admin users (first-time setup)
+      if (!prefs.verboseMode) {
+        const admin = await isAdminUser(userId);
+        if (admin) {
+          const updated = await storage.setUserPreferences(userId, { verboseMode: true });
+          return res.json(updated);
+        }
+      }
+
       res.json(prefs);
     } catch (error) {
       console.error("Get preferences error:", error);
@@ -4036,12 +4181,15 @@ RULES:
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const { autoDictate } = req.body;
-      if (typeof autoDictate !== "boolean") {
-        return res.status(400).json({ error: "autoDictate must be a boolean" });
+      const update: Partial<{ autoDictate: boolean; verboseMode: boolean }> = {};
+      if (typeof req.body.autoDictate === "boolean") update.autoDictate = req.body.autoDictate;
+      if (typeof req.body.verboseMode === "boolean") update.verboseMode = req.body.verboseMode;
+
+      if (Object.keys(update).length === 0) {
+        return res.status(400).json({ error: "At least one preference field must be provided" });
       }
 
-      const prefs = await storage.setUserPreferences(userId, { autoDictate });
+      const prefs = await storage.setUserPreferences(userId, update);
       res.json(prefs);
     } catch (error) {
       console.error("Set preferences error:", error);

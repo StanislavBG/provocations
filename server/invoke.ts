@@ -13,6 +13,8 @@
  */
 
 import { llm, type LLMRequest, type LLMResponse } from "./llm";
+// LLM gateway interceptor is active automatically via module-level patching
+// in llm-gateway.ts (imported by routes.ts). No explicit gateway imports needed.
 import {
   buildContext,
   classifyInstruction,
