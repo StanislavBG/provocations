@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { clerkMiddleware, requireAuth } from "@clerk/express";
 import { ensureTables } from "./db";
+import { discoverModels } from "./llm";
 
 const app = express();
 const httpServer = createServer(app);
@@ -79,6 +80,11 @@ app.use((req, res, next) => {
     console.error("ensureTables failed:", err instanceof Error ? err.message : err);
     console.warn("Continuing without database.");
   }
+
+  // Discover available models from OpenAI / Gemini APIs (non-blocking fallback on error)
+  await discoverModels().catch((err) => {
+    console.warn("[llm] Model discovery failed, using static fallback:", err instanceof Error ? err.message : err);
+  });
 
   await registerRoutes(httpServer, app);
 

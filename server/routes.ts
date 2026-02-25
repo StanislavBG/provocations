@@ -3240,7 +3240,10 @@ Output only valid JSON, no markdown.`,
   // ==========================================
 
   app.get("/api/chat/models", (_req, res) => {
-    res.json({ models: llm.getAvailableChatModels() });
+    res.json({
+      models: llm.getAvailableChatModels(),
+      defaultModel: llm.getDefaultModel(),
+    });
   });
 
   // ==========================================
