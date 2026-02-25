@@ -1,15 +1,31 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, User, Bot, BookmarkPlus, Sparkles, Globe } from "lucide-react";
+import { Send, Loader2, User, Bot, BookmarkPlus, ChevronDown, Crown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
 
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: "GPT-4o",
-  anthropic: "Claude",
-  gemini: "Gemini 2.5",
+interface ChatModelDef {
+  id: string;
+  label: string;
+  provider: "openai" | "anthropic" | "gemini";
+  tier: "premium" | "value";
+}
+
+const PROVIDER_DISPLAY: Record<string, string> = {
+  gemini: "Google",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
 };
 
 interface ChatSessionPanelProps {
@@ -20,8 +36,8 @@ interface ChatSessionPanelProps {
   onCaptureToNotes?: (text: string) => void;
   objective: string;
   researchTopic?: string;
-  useGemini: boolean;
-  onToggleModel: (useGemini: boolean) => void;
+  chatModel: string;
+  onModelChange: (modelId: string) => void;
 }
 
 export function ChatSessionPanel({
@@ -32,22 +48,22 @@ export function ChatSessionPanel({
   onCaptureToNotes,
   objective,
   researchTopic,
-  useGemini,
-  onToggleModel,
+  chatModel,
+  onModelChange,
 }: ChatSessionPanelProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const [globalProvider, setGlobalProvider] = useState<string>("default");
+  const [availableModels, setAvailableModels] = useState<ChatModelDef[]>([]);
 
-  // Fetch global provider name once
+  // Fetch available models from backend (filtered by configured API keys)
   useEffect(() => {
-    fetch("/api/llm-status")
+    fetch("/api/chat/models")
       .then((r) => r.json())
       .then((data) => {
-        if (data.provider) {
-          setGlobalProvider(data.provider);
+        if (data.models?.length) {
+          setAvailableModels(data.models);
         }
       })
       .catch(() => {});
@@ -76,7 +92,6 @@ export function ChatSessionPanel({
   );
 
   const handleCapture = useCallback((content: string) => {
-    // Check if user has selected text
     const selection = window.getSelection();
     const selectedText = selection?.toString().trim();
     const textToCapture = selectedText || content;
@@ -88,7 +103,21 @@ export function ChatSessionPanel({
     });
   }, [onCaptureToNotes, toast]);
 
-  const defaultLabel = PROVIDER_LABELS[globalProvider] || globalProvider;
+  // Group models by provider
+  const groupedModels = availableModels.reduce<Record<string, ChatModelDef[]>>(
+    (acc, model) => {
+      const key = model.provider;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(model);
+      return acc;
+    },
+    {},
+  );
+
+  // Provider order: Google first, then OpenAI, then Anthropic
+  const providerOrder = ["gemini", "openai", "anthropic"] as const;
+  const activeModel = availableModels.find((m) => m.id === chatModel);
+  const activeLabel = activeModel?.label || chatModel;
 
   return (
     <div className="flex flex-col h-full">
@@ -103,33 +132,66 @@ export function ChatSessionPanel({
               </p>
             )}
           </div>
-          {/* Model toggle */}
-          <div className="shrink-0 flex items-center rounded-md border bg-muted/30 p-0.5 gap-0.5">
-            <button
-              onClick={() => onToggleModel(true)}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                useGemini
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Use Gemini 2.5 Flash"
-            >
-              <Sparkles className="w-3 h-3" />
-              Gemini 2.5
-            </button>
-            <button
-              onClick={() => onToggleModel(false)}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                !useGemini
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              title={`Use ${defaultLabel} (global provider)`}
-            >
-              <Globe className="w-3 h-3" />
-              {defaultLabel}
-            </button>
-          </div>
+          {/* Model selector dropdown */}
+          {availableModels.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs font-medium px-2.5"
+                >
+                  {activeModel?.tier === "premium" ? (
+                    <Crown className="w-3 h-3 text-amber-500" />
+                  ) : (
+                    <Zap className="w-3 h-3 text-emerald-500" />
+                  )}
+                  {activeLabel}
+                  <ChevronDown className="w-3 h-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {providerOrder.map((provider, idx) => {
+                  const models = groupedModels[provider];
+                  if (!models?.length) return null;
+                  return (
+                    <div key={provider}>
+                      {idx > 0 && groupedModels[providerOrder[idx - 1]]?.length ? (
+                        <DropdownMenuSeparator />
+                      ) : null}
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">
+                        {PROVIDER_DISPLAY[provider] || provider}
+                      </DropdownMenuLabel>
+                      <DropdownMenuGroup>
+                        {models.map((model) => (
+                          <DropdownMenuItem
+                            key={model.id}
+                            onClick={() => onModelChange(model.id)}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className={chatModel === model.id ? "font-semibold" : ""}>
+                              {model.label}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              {model.tier === "premium" ? (
+                                <span className="text-[10px] text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded font-medium">
+                                  Premium
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded font-medium">
+                                  Value
+                                </span>
+                              )}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuGroup>
+                    </div>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
