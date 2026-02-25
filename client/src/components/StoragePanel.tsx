@@ -37,6 +37,7 @@ import {
   ArrowUpDown,
   Copy,
   Download,
+  Sparkles,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
@@ -150,6 +151,10 @@ export function StoragePanel({
   const [previewDoc, setPreviewDoc] = useState<PreviewDoc | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
+  // Summary state (smart summarize in preview panel)
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+
   // Expand/collapse state for folder tree (folder id → expanded)
   const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
 
@@ -181,21 +186,8 @@ export function StoragePanel({
     enabled: isOpen,
   });
 
-  const documentsQuery = useQuery({
-    queryKey: ["/api/documents", currentFolderId],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/documents");
-      const data = await res.json();
-      const all = (data.documents || []) as DocumentListItem[];
-      if (currentFolderId === null) {
-        return all.filter((d) => !d.folderId);
-      }
-      return all.filter((d) => d.folderId === currentFolderId);
-    },
-    enabled: isOpen,
-  });
-
-  // All documents (for sidebar counts)
+  // Single query for all document metadata (titles only — no content loaded).
+  // Content is fetched on-demand via GET /api/documents/:id when user selects a document.
   // NOTE: Returns { documents: [...] } to match the cache shape used by
   // Workspace, TextInputForm, ContextCapturePanel, InfographicStudioWorkspace.
   // All share queryKey ["/api/documents"] so the return shape MUST be identical.
@@ -448,6 +440,7 @@ export function StoragePanel({
   const handlePreviewDocument = useCallback(async (docId: number) => {
     setSelectedDocId(docId);
     setIsLoadingPreview(true);
+    setSummaryText(null); // Clear any previous summary
     try {
       const res = await apiRequest("GET", `/api/documents/${docId}`);
       const data = await res.json();
@@ -481,6 +474,26 @@ export function StoragePanel({
     }
   }, [onLoadDocument, onClose, toast]);
 
+  // Smart summarize: call /api/summarize-intent to condense preview content
+  const handleSummarize = useCallback(async () => {
+    if (!previewDoc?.content) return;
+    setIsSummarizing(true);
+    try {
+      const res = await apiRequest("POST", "/api/summarize-intent", {
+        transcript: previewDoc.content,
+        context: "source",
+        mode: "summarize",
+      });
+      const data = await res.json();
+      setSummaryText(data.summary ?? null);
+      trackEvent("document_summarized");
+    } catch {
+      toast({ title: "Failed to summarize", variant: "destructive" });
+    } finally {
+      setIsSummarizing(false);
+    }
+  }, [previewDoc, toast]);
+
   const handleSave = useCallback(async () => {
     if (!saveTitle.trim()) return;
     setIsSaving(true);
@@ -498,10 +511,14 @@ export function StoragePanel({
 
   if (!isOpen) return null;
 
-  const isLoading = allFoldersQuery.isLoading || documentsQuery.isLoading;
-  const allFolders = allFoldersQuery.data || [];
-  const documentsList = documentsQuery.data || [];
   const allDocs = allDocsQuery.data?.documents || [];
+  const isLoading = allFoldersQuery.isLoading || allDocsQuery.isLoading;
+  const allFolders = allFoldersQuery.data || [];
+
+  // Derive folder-filtered document list from the single allDocsQuery (no separate fetch)
+  const documentsList = currentFolderId === null
+    ? allDocs.filter((d) => !d.folderId)
+    : allDocs.filter((d) => d.folderId === currentFolderId);
 
   // Build folder tree structure
   const rootFolders = allFolders.filter((f) => f.parentFolderId === null);
@@ -954,7 +971,7 @@ export function StoragePanel({
                           className="h-7 w-7"
                           title="Copy to clipboard"
                           onClick={() => {
-                            navigator.clipboard.writeText(previewDoc.content);
+                            navigator.clipboard.writeText(summaryText ?? previewDoc.content);
                             toast({ title: "Copied to clipboard" });
                           }}
                         >
@@ -1010,11 +1027,51 @@ export function StoragePanel({
                     {previewWordCount.toLocaleString()} words
                   </span>
                 </div>
+
+                {/* Smart Summarize toggle */}
+                <div className="flex items-center gap-2 pt-1">
+                  {summaryText ? (
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="secondary" className="text-[10px] gap-1">
+                        <Sparkles className="w-2.5 h-2.5" />
+                        Summary
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 text-[10px] px-1.5 text-muted-foreground"
+                        onClick={() => setSummaryText(null)}
+                      >
+                        Show full
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] gap-1.5 px-2"
+                      disabled={isSummarizing || !previewDoc.content}
+                      onClick={handleSummarize}
+                    >
+                      {isSummarizing ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      {isSummarizing ? "Summarizing..." : "Summarize"}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Preview content */}
               <div className="flex-1 overflow-hidden">
-                {isMarkdown ? (
+                {summaryText ? (
+                  /* Summary view */
+                  <div className="h-full overflow-y-auto px-3 py-2">
+                    <MarkdownRenderer content={summaryText} />
+                  </div>
+                ) : isMarkdown ? (
                   <div className="h-full overflow-y-auto px-3 py-2">
                     <MarkdownRenderer content={previewDoc.content} />
                   </div>
