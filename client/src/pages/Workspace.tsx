@@ -107,7 +107,11 @@ import type {
   AgentStep,
   FolderItem,
   ChatMessage,
+  WorkspaceSessionState,
 } from "@shared/schema";
+import { useSessionAutosave } from "@/hooks/use-session-autosave";
+import { SessionResumePrompt } from "@/components/SessionResumePrompt";
+import { SessionStorePanel } from "@/components/SessionStorePanel";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
   const context = mode === "clean" ? "objective" : mode;
@@ -258,6 +262,9 @@ export default function Workspace() {
   const [showNewConfirm, setShowNewConfirm] = useState(false);
   const [savedDocId, setSavedDocId] = useState<number | null>(null);
   const [savedDocTitle, setSavedDocTitle] = useState<string>("");
+
+  // Session Store panel visibility
+  const [showSessionStore, setShowSessionStore] = useState(false);
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
@@ -1025,6 +1032,98 @@ RULES:
     ? prebuiltTemplates.find((t) => t.id === selectedTemplateId)?.title
     : undefined;
 
+  // ── Session autosave ──
+  const getSessionState = useCallback((): WorkspaceSessionState | null => {
+    return {
+      document: { id: document.id, rawText: document.rawText },
+      objective,
+      secondaryObjective,
+      interviewEntries,
+      interviewDirection: {
+        mode: interviewDirection?.mode ?? "challenge",
+        selectedPersonaIds: interviewDirection?.personas ?? [],
+        guidance: interviewDirection?.guidance ?? "",
+      },
+      isInterviewActive,
+      currentInterviewQuestion,
+      currentInterviewTopic,
+      versions,
+      editHistory,
+      savedDocId,
+      savedDocTitle,
+      sessionNotes,
+      capturedContext,
+    };
+  }, [document, objective, secondaryObjective, interviewEntries, interviewDirection, isInterviewActive, currentInterviewQuestion, currentInterviewTopic, versions, editHistory, savedDocId, savedDocTitle, sessionNotes, capturedContext]);
+
+  const getSessionTitle = useCallback((): string => {
+    if (savedDocTitle) return savedDocTitle;
+    if (objective) return objective.slice(0, 100);
+    if (selectedTemplateName) return `${selectedTemplateName} session`;
+    return "Untitled session";
+  }, [savedDocTitle, objective, selectedTemplateName]);
+
+  const sessionAutosave = useSessionAutosave({
+    templateId: selectedTemplateId,
+    isActive: !isInputPhase,
+    getState: getSessionState,
+    getTitle: getSessionTitle,
+  });
+
+  // Trigger autosave when key state changes (debounced inside the hook)
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!sessionAutosave.autoSaveEnabled || isInputPhase || !selectedTemplateId) return;
+    // Debounce: clear previous timer, set new one
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      sessionAutosave.saveNow();
+    }, 5_000);
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document.rawText, objective, interviewEntries.length, versions.length, editHistory.length, sessionNotes, isInputPhase, selectedTemplateId]);
+
+  // Resume session handler
+  const handleResumeSession = useCallback((sessionId: number, state: WorkspaceSessionState) => {
+    // Restore document
+    setDocument(state.document);
+    setObjective(state.objective);
+    if (state.secondaryObjective) setSecondaryObjectiveRaw(state.secondaryObjective);
+    // Restore interview
+    setInterviewEntries(state.interviewEntries);
+    if (state.interviewDirection) {
+      setInterviewDirection({
+        mode: state.interviewDirection.mode as DirectionMode,
+        personas: state.interviewDirection.selectedPersonaIds as ProvocationType[],
+        guidance: state.interviewDirection.guidance,
+      });
+    }
+    if (state.isInterviewActive !== undefined) setIsInterviewActive(state.isInterviewActive);
+    if (state.currentInterviewQuestion !== undefined) setCurrentInterviewQuestion(state.currentInterviewQuestion);
+    if (state.currentInterviewTopic !== undefined) setCurrentInterviewTopic(state.currentInterviewTopic);
+    // Restore versions and history
+    setVersions(state.versions);
+    setEditHistory(state.editHistory);
+    // Restore persistence state
+    setSavedDocId(state.savedDocId);
+    setSavedDocTitle(state.savedDocTitle);
+    setSessionNotes(state.sessionNotes);
+    setCapturedContext(state.capturedContext);
+    // Track session ID
+    sessionAutosave.setCurrentSessionId(sessionId);
+  }, [sessionAutosave]);
+
+  // Resume from Session Store panel
+  const handleSessionStoreLoad = useCallback((sessionId: number, state: WorkspaceSessionState, templateId: string) => {
+    // Set template first (this triggers appFlowConfig computation)
+    if (templateId !== selectedTemplateId) {
+      setSelectedTemplateId(templateId);
+    }
+    handleResumeSession(sessionId, state);
+  }, [selectedTemplateId, setSelectedTemplateId, handleResumeSession]);
+
   // Auto-start interview when entering workspace — respects per-app config
   const autoStartedRef = useRef(false);
   useEffect(() => {
@@ -1371,6 +1470,9 @@ RULES:
     // Reset storage state
     setSavedDocId(null);
     setSavedDocTitle("");
+    setSessionNotes("");
+    // Reset session tracking
+    sessionAutosave.setCurrentSessionId(null);
     // Reset tab state
     setTabs([]);
     setActiveTabId("");
@@ -1378,7 +1480,8 @@ RULES:
     // Reset template selection (so appFlowConfig resets to default)
     setSelectedTemplateId(null);
     setLayoutOverride(null);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionAutosave.setCurrentSessionId]);
 
   // Show confirmation when there's work in progress, otherwise reset immediately
   const handleNewClick = useCallback(() => {
@@ -2168,6 +2271,18 @@ RULES:
                 <span className="hidden sm:inline">Storage</span>
               </Button>
             </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowSessionStore(true)}
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline">Sessions</span>
+              {sessionAutosave.isSaving && (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              )}
+            </Button>
             <Link href="/pricing">
               <Button variant="outline" size="sm" className="gap-1.5">
                 <CreditCard className="w-4 h-4" />
@@ -2631,6 +2746,30 @@ RULES:
 
         </div>{/* end main content area */}
       </div>{/* end sidebar + content row */}
+
+      {/* ── Session Resume Prompt ── */}
+      {!isInputPhase && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
+          <SessionResumePrompt
+            templateId={selectedTemplateId}
+            isActive={!isInputPhase && !sessionAutosave.currentSessionId}
+            onResume={handleResumeSession}
+            onDismiss={() => {}}
+          />
+        </div>
+      )}
+
+      {/* ── Session Store Panel ── */}
+      <SessionStorePanel
+        isOpen={showSessionStore}
+        onClose={() => setShowSessionStore(false)}
+        onLoadSession={handleSessionStoreLoad}
+        currentSessionId={sessionAutosave.currentSessionId}
+        autoSaveEnabled={sessionAutosave.autoSaveEnabled}
+        onToggleAutoSave={(enabled) => {
+          apiRequest("PUT", "/api/preferences", { autoSaveSession: enabled });
+        }}
+      />
 
     </div>
   );
