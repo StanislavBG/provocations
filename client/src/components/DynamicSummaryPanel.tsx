@@ -1,7 +1,8 @@
-import { Target, RefreshCw, Loader2, Sparkles } from "lucide-react";
+import { Target, RefreshCw, Loader2, Sparkles, Save, Copy } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
-import { ProvokeText } from "@/components/ProvokeText";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
 
 interface DynamicSummaryPanelProps {
   summary: string;
@@ -10,6 +11,8 @@ interface DynamicSummaryPanelProps {
   messageCount: number;
   notesLength: number;
   onRefresh: () => void;
+  onSaveToContext?: () => void;
+  isSaving?: boolean;
 }
 
 export function DynamicSummaryPanel({
@@ -19,8 +22,17 @@ export function DynamicSummaryPanel({
   messageCount,
   notesLength,
   onRefresh,
+  onSaveToContext,
+  isSaving,
 }: DynamicSummaryPanelProps) {
   const hasContent = messageCount > 0 || notesLength > 0;
+  const { toast } = useToast();
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(summary).then(() => {
+      toast({ title: "Copied", description: "Summary copied to clipboard" });
+    });
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -37,6 +49,22 @@ export function DynamicSummaryPanel({
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Generating...
               </span>
+            )}
+            {onSaveToContext && (
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-1.5 h-7 text-xs"
+                onClick={onSaveToContext}
+                disabled={isSaving || (!summary && !hasContent)}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Save className="w-3 h-3" />
+                )}
+                Save to Context
+              </Button>
             )}
           </div>
         </div>
@@ -81,16 +109,20 @@ export function DynamicSummaryPanel({
             </div>
           ) : (
             <div className="space-y-3">
-              <ProvokeText
-                chrome="bare"
-                variant="editor"
-                readOnly
-                showCopy
-                showClear={false}
-                value={summary}
-                onChange={() => {}}
-                className="text-sm leading-relaxed font-serif"
-              />
+              <div className="relative group">
+                <div className="prose prose-sm prose-stone dark:prose-invert max-w-none break-words leading-relaxed font-serif [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_p]:my-1.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_h1]:font-bold [&_h2]:font-semibold [&_h3]:font-medium [&_code]:text-xs [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:text-xs [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded-md [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-3 [&_blockquote]:italic [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_td]:px-2 [&_td]:py-1">
+                  <ReactMarkdown>{summary}</ReactMarkdown>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-0 right-0 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={handleCopy}
+                  title="Copy summary"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
               <div className="flex justify-center pt-2">
                 <Button
                   variant="outline"

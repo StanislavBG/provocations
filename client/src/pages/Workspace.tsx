@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, lazy, Suspense, type ReactNod
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, emitVerboseData } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { getAppFlowConfig, getObjectiveConfig, type AppFlowConfig, type RightPanelTabId, type WorkspaceLayout } from "@/lib/appWorkspaceConfig";
 import { TextInputForm } from "@/components/TextInputForm";
@@ -78,7 +78,6 @@ import {
   CreditCard,
   StickyNote,
   Save,
-  Check,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -1311,6 +1310,8 @@ RULES:
             if (data.type === "content") {
               fullContent += data.content;
               setChatStreamingContent(fullContent);
+            } else if (data.type === "verbose" && data._verbose) {
+              emitVerboseData({ _verbose: data._verbose });
             }
           } catch {
             // Skip malformed lines
@@ -1349,7 +1350,6 @@ RULES:
 
   // ── Save research session to "Chat to Context" folder ──
   const [isSavingSession, setIsSavingSession] = useState(false);
-  const [savedSessionId, setSavedSessionId] = useState<number | null>(null);
 
   const handleSaveSession = useCallback(async () => {
     if (isSavingSession) return;
@@ -1367,8 +1367,7 @@ RULES:
         notes: researchNotes || undefined,
         chatHistory: chatMessages.length > 0 ? chatMessages : undefined,
       });
-      const data = await res.json();
-      setSavedSessionId(data.documentId);
+      await res.json();
       trackEvent("document_saved", { metadata: { source: "chat-session" } });
       toast({
         title: "Session saved",
@@ -1982,6 +1981,8 @@ RULES:
               messageCount={chatMessages.length}
               notesLength={researchNotes.length}
               onRefresh={handleRefreshSummary}
+              onSaveToContext={handleSaveSession}
+              isSaving={isSavingSession}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -2414,7 +2415,7 @@ RULES:
               </div>
             )}
             <Button
-              variant={savedSessionId ? "outline" : "default"}
+              variant="default"
               size="sm"
               className="gap-1.5 shrink-0"
               onClick={handleSaveSession}
@@ -2422,12 +2423,10 @@ RULES:
             >
               {isSavingSession ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : savedSessionId ? (
-                <Check className="w-3.5 h-3.5 text-primary" />
               ) : (
                 <Save className="w-3.5 h-3.5" />
               )}
-              {savedSessionId ? "Saved" : "Save Session"}
+              Save Session
             </Button>
           </div>
         )}

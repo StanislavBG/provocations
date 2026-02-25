@@ -3504,6 +3504,12 @@ RESPONSE BEHAVIOR:
         res.write(`data: ${JSON.stringify({ type: "content", content: chunk })}\n\n`);
       }
 
+      // Send verbose metadata if verbose mode is enabled
+      const scope = getActiveGatewayScope();
+      if (scope && scope.verboseList.length > 0) {
+        res.write(`data: ${JSON.stringify({ type: "verbose", _verbose: scope.verboseList })}\n\n`);
+      }
+
       res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       res.end();
     } catch (error) {
