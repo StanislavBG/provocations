@@ -4,7 +4,8 @@ import { STATUS_LABEL_CONFIG } from "@/lib/prebuiltTemplates";
 import { ProvokeText } from "@/components/ProvokeText";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight, Dices } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 interface OnboardingSplashProps {
   onStart: (templateId: string, objective: string) => void;
@@ -14,6 +15,7 @@ interface OnboardingSplashProps {
 export function OnboardingSplash({ onStart, onDismiss }: OnboardingSplashProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [objective, setObjective] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const availableApps = prebuiltTemplates.filter(
     (t) => !t.comingSoon && !t.externalUrl,
@@ -24,6 +26,22 @@ export function OnboardingSplash({ onStart, onDismiss }: OnboardingSplashProps) 
   const handleStart = () => {
     if (selectedId && objective.trim()) {
       onStart(selectedId, objective.trim());
+    }
+  };
+
+  const handleSurpriseMe = async () => {
+    if (!selectedTemplate || isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const res = await apiRequest("POST", "/api/generate-sample-objective", {
+        appTitle: selectedTemplate.title,
+      });
+      const data = await res.json();
+      if (data.objective) setObjective(data.objective);
+    } catch {
+      // silently ignore — user can just type
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -110,6 +128,18 @@ export function OnboardingSplash({ onStart, onDismiss }: OnboardingSplashProps) 
                 "Describe what you want to create or explore..."
               }
               label="Your Objective"
+              headerActions={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSurpriseMe}
+                  disabled={isGenerating}
+                  className="h-6 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                >
+                  <Dices className={`w-3.5 h-3.5 ${isGenerating ? "animate-spin" : ""}`} />
+                  {isGenerating ? "Thinking..." : "Surprise me"}
+                </Button>
+              }
               className="text-sm font-serif"
               minRows={2}
               maxRows={5}
