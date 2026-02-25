@@ -1,9 +1,8 @@
-import { useState, useCallback } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState, useCallback, useMemo } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { errorLogStore } from "@/lib/errorLog";
-import { generateId } from "@/lib/utils";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -25,25 +24,20 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import {
-  FileText,
   Wand2,
   Image as ImageIcon,
   Loader2,
   Download,
   RefreshCw,
-  Info,
   Palette,
   LayoutGrid,
   Sparkles,
-  Upload,
   BookOpen,
   PaintBucket,
-  Library,
   SlidersHorizontal,
   Shuffle,
-  Check,
-  Plus,
 } from "lucide-react";
+import type { ContextItem } from "@shared/schema";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -235,27 +229,21 @@ function CompactSelect({
 // ---------------------------------------------------------------------------
 
 interface InfographicStudioWorkspaceProps {
-  rawText: string;
-  onRawTextChange: (text: string) => void;
   objective: string;
+  capturedContext?: ContextItem[];
 }
 
 export function InfographicStudioWorkspace({
-  rawText,
-  onRawTextChange,
   objective,
+  capturedContext,
 }: InfographicStudioWorkspaceProps) {
   const { toast } = useToast();
 
-  // ── Left panel state: enrichment options ──
+  // ── Enrichment options ──
   const [enrichment, setEnrichment] = useState<EnrichmentOptions>(DEFAULT_ENRICHMENT);
 
-  // ── Panel 2 state: Clean summary + context ──
+  // ── Panel 1 state: Clean summary ──
   const [cleanSummary, setCleanSummary] = useState("");
-  const [summaryContext, setSummaryContext] = useState("");
-  const [showStorePicker, setShowStorePicker] = useState(false);
-  const [loadingDocId, setLoadingDocId] = useState<number | null>(null);
-  const [loadedDocIds, setLoadedDocIds] = useState<Set<number>>(new Set());
 
   // ── Panel 3 state: Artistic summary + presets ──
   const [artisticSummary, setArtisticSummary] = useState("");
@@ -266,40 +254,21 @@ export function InfographicStudioWorkspace({
   const [userParams, setUserParams] = useState<ImageParams>(DEFAULT_PARAMS);
   const [variants, setVariants] = useState<InfographicVariant[]>(() => makeVariants(DEFAULT_PARAMS));
 
-  // ── Context store documents ──
-  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
-    queryKey: ["/api/documents"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/documents");
-      return res.json();
-    },
-    enabled: showStorePicker,
-    staleTime: 30_000,
-  });
+  // ── Derive source text from captured context ──
+  const sourceText = useMemo(() => {
+    if (!capturedContext || capturedContext.length === 0) return "";
+    return capturedContext
+      .filter((item) => item.type === "text" || item.type === "document-link")
+      .map((item) => item.content)
+      .join("\n\n---\n\n");
+  }, [capturedContext]);
 
-  // ── Load document from store into summary context ──
-  const handleLoadStoreDoc = useCallback(async (docId: number, docTitle: string) => {
-    setLoadingDocId(docId);
-    try {
-      const res = await apiRequest("GET", `/api/documents/${docId}`);
-      const data = await res.json();
-      if (data.content) {
-        const prefix = summaryContext ? summaryContext + "\n\n---\n\n" : "";
-        setSummaryContext(prefix + `[Context from "${docTitle}"]\n${data.content}`);
-        setLoadedDocIds((prev) => new Set(prev).add(docId));
-        toast({ title: "Context loaded", description: `"${docTitle}" added to summary context.` });
-      }
-    } catch {
-      toast({ title: "Failed to load", description: "Could not load the document.", variant: "destructive" });
-    } finally {
-      setLoadingDocId(null);
-    }
-  }, [summaryContext, toast]);
+  const hasSourceText = sourceText.trim().length > 0;
 
-  // ── Clean summary generation (Panel 2) ──
+  // ── Clean summary generation (Panel 1) ──
   const cleanSummaryMutation = useMutation({
     mutationFn: async () => {
-      if (!rawText.trim()) throw new Error("No raw text to summarize");
+      if (!sourceText.trim()) throw new Error("No context loaded — add text or documents via the Context tab");
 
       const enrichmentPrompt = [
         `Audience: ${AUDIENCE_OPTIONS.find((o) => o.value === enrichment.audience)?.label}`,
@@ -311,17 +280,13 @@ export function InfographicStudioWorkspace({
         .filter(Boolean)
         .join(". ");
 
-      const contextBlock = summaryContext.trim()
-        ? `\n\nADDITIONAL CONTEXT (use this to focus and enrich the summary):\n${summaryContext}`
-        : "";
-
       const response = await apiRequest("POST", "/api/summarize-intent", {
-        transcript: rawText,
+        transcript: sourceText,
         context: "infographic-clean-summary",
         systemOverride: `You are a precise editorial summarizer. Your input is typically unstructured — a conversation, meeting transcript, spoken notes, or stream-of-consciousness text. Your job is to extract the substance and discard the noise.
 
 ENRICHMENT CONTEXT: ${enrichmentPrompt}
-${objective ? `USER OBJECTIVE: ${objective}` : ""}${contextBlock}
+${objective ? `USER OBJECTIVE: ${objective}` : ""}
 
 EXTRACTION RULES:
 - Strip personal greetings, small talk, filler words, thinking out loud, and social exchanges
@@ -468,18 +433,6 @@ Format as rich markdown with visual direction embedded throughout.`,
     link.click();
   }, []);
 
-  const handleFileUpload = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const content = ev.target?.result;
-      if (typeof content === "string" && content.trim()) {
-        onRawTextChange(rawText ? rawText + "\n\n" + content : content);
-        toast({ title: "File loaded", description: `"${file.name}" added to raw text.` });
-      }
-    };
-    reader.readAsText(file);
-  }, [rawText, onRawTextChange, toast]);
-
   const togglePreset = useCallback((preset: string) => {
     setSelectedPresets((prev) => {
       const next = new Set(prev);
@@ -492,7 +445,6 @@ Format as rich markdown with visual direction embedded throughout.`,
     });
   }, []);
 
-  const hasRawText = rawText.trim().length > 0;
   const hasCleanSummary = cleanSummary.trim().length > 0;
   const hasArtisticSummary = artisticSummary.trim().length > 0;
   const anyGenerating = variants.some((v) => v.isGenerating);
@@ -504,37 +456,50 @@ Format as rich markdown with visual direction embedded throughout.`,
   return (
     <div className="flex-1 overflow-hidden">
       <ResizablePanelGroup direction="horizontal">
-        {/* ── PANEL 1: Raw Text + Compact Enrichment ── */}
-        <ResizablePanel defaultSize={22} minSize={15}>
-          <div className="h-full flex flex-col border-r">
-            {/* Compact header with enrichment inline */}
+        {/* ── PANEL 1: Clean Summary + Enrichment ── */}
+        <ResizablePanel defaultSize={34} minSize={20}>
+          <div className="h-full flex flex-col">
+            {/* Header with generate button */}
             <div className="shrink-0 border-b bg-muted/20">
-              <div className="flex items-center gap-2 px-3 py-1.5">
-                <FileText className="w-3.5 h-3.5 text-primary" />
-                <h3 className="text-xs font-semibold">Raw Text</h3>
-                <div className="ml-auto flex items-center gap-1.5">
-                  <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                    <Upload className="w-3 h-3" />
-                    Upload
-                    <input
-                      type="file"
-                      accept=".txt,.md,.text,.csv,.json,.xml,.yaml,.yml,.toml"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileUpload(file);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                  <Badge variant="outline" className="text-[9px] px-1 py-0">
-                    {rawText.length}
-                  </Badge>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-primary" />
+                  <h3 className="text-xs font-semibold">Clean Summary</h3>
+                  {hasSourceText && (
+                    <Badge variant="outline" className="text-[9px] px-1 py-0">
+                      {capturedContext?.length ?? 0} items
+                    </Badge>
+                  )}
                 </div>
+                <Button
+                  size="sm"
+                  className="gap-1 text-[10px] h-6 px-2"
+                  onClick={() => cleanSummaryMutation.mutate()}
+                  disabled={!hasSourceText || cleanSummaryMutation.isPending}
+                >
+                  {cleanSummaryMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Generating...
+                    </>
+                  ) : hasCleanSummary ? (
+                    <>
+                      <RefreshCw className="w-3 h-3" />
+                      Regenerate
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3 h-3" />
+                      Summarize
+                    </>
+                  )}
+                </Button>
               </div>
+            </div>
 
-              {/* Compact enrichment — single row of selects + checkboxes */}
-              <div className="px-2 pb-2 space-y-1.5">
+            {/* Enrichment options */}
+            <div className="shrink-0 border-b bg-muted/10">
+              <div className="px-2 py-2 space-y-1.5">
                 <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
                   <Sparkles className="w-2.5 h-2.5" />
                   Enrichment
@@ -583,115 +548,6 @@ Format as rich markdown with visual direction embedded throughout.`,
               </div>
             </div>
 
-            {/* Raw text editor */}
-            <div className="flex-1 min-h-0">
-              <ProvokeText
-                chrome="bare"
-                variant="editor"
-                value={rawText}
-                onChange={onRawTextChange}
-                placeholder="Paste or type raw content — notes, transcripts, data dumps. The messier the better."
-                showCopy
-                showClear
-                voice={{ mode: "append" }}
-                onVoiceTranscript={(transcript) => onRawTextChange(rawText ? `${rawText}\n\n${transcript}` : transcript)}
-              />
-            </div>
-          </div>
-        </ResizablePanel>
-
-        <ResizableHandle withHandle />
-
-        {/* ── PANEL 2: Clean Summary + Context ── */}
-        <ResizablePanel defaultSize={26} minSize={18}>
-          <div className="h-full flex flex-col">
-            {/* Header with generate button */}
-            <div className="shrink-0 border-b bg-muted/20">
-              <div className="flex items-center justify-between px-3 py-1.5">
-                <div className="flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-primary" />
-                  <h3 className="text-xs font-semibold">Clean Summary</h3>
-                </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-[10px] h-6 px-2"
-                  onClick={() => cleanSummaryMutation.mutate()}
-                  disabled={!hasRawText || cleanSummaryMutation.isPending}
-                >
-                  {cleanSummaryMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Generating...
-                    </>
-                  ) : hasCleanSummary ? (
-                    <>
-                      <RefreshCw className="w-3 h-3" />
-                      Regenerate
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-3 h-3" />
-                      Summarize
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Context input area */}
-            <div className="shrink-0 border-b bg-muted/10">
-              <div className="px-3 py-2 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
-                    Focus Context (optional)
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 text-[10px] px-1.5 gap-1"
-                    onClick={() => setShowStorePicker(!showStorePicker)}
-                  >
-                    <Library className="w-3 h-3" />
-                    Store
-                  </Button>
-                </div>
-                {showStorePicker && (
-                  <div className="border rounded-md bg-background p-1.5 max-h-24 overflow-y-auto space-y-0.5">
-                    {isLoadingDocs && (
-                      <p className="text-[10px] text-muted-foreground px-1">Loading documents...</p>
-                    )}
-                    {savedDocs?.documents?.length === 0 && (
-                      <p className="text-[10px] text-muted-foreground px-1">No saved documents</p>
-                    )}
-                    {savedDocs?.documents?.map((doc) => (
-                      <button
-                        key={doc.id}
-                        className="w-full text-left px-1.5 py-0.5 rounded text-[10px] hover:bg-muted/50 flex items-center justify-between gap-1"
-                        onClick={() => handleLoadStoreDoc(doc.id, doc.title)}
-                        disabled={loadingDocId === doc.id}
-                      >
-                        <span className="truncate">{doc.title}</span>
-                        {loadedDocIds.has(doc.id) ? (
-                          <Check className="w-3 h-3 text-green-500 shrink-0" />
-                        ) : loadingDocId === doc.id ? (
-                          <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                        ) : (
-                          <Plus className="w-3 h-3 text-muted-foreground shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <textarea
-                  className="w-full text-[11px] bg-transparent border rounded-md px-2 py-1 resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
-                  rows={2}
-                  placeholder="Add context to focus the summary (e.g. 'focus on revenue metrics' or 'highlight team decisions')..."
-                  value={summaryContext}
-                  onChange={(e) => setSummaryContext(e.target.value)}
-                />
-              </div>
-            </div>
-
             {/* Clean summary display */}
             <div className="flex-1 min-h-0">
               {hasCleanSummary ? (
@@ -706,12 +562,12 @@ Format as rich markdown with visual direction embedded throughout.`,
                 />
               ) : (
                 <div className="h-full flex items-center justify-center p-4">
-                  <div className="text-center space-y-2 max-w-[180px]">
+                  <div className="text-center space-y-2 max-w-[200px]">
                     <BookOpen className="w-8 h-8 text-muted-foreground/15 mx-auto" />
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      {hasRawText
-                        ? 'Click "Summarize" to extract a clean, factual summary from your raw text.'
-                        : "Enter raw text in the left panel first."}
+                      {hasSourceText
+                        ? 'Click "Summarize" to extract a clean, factual summary from your loaded context.'
+                        : "Load context via the Context tab first — transcripts, documents, or text."}
                     </p>
                   </div>
                 </div>
@@ -722,8 +578,8 @@ Format as rich markdown with visual direction embedded throughout.`,
 
         <ResizableHandle withHandle />
 
-        {/* ── PANEL 3: Artistic Summary + Presets ── */}
-        <ResizablePanel defaultSize={26} minSize={18}>
+        {/* ── PANEL 2: Artistic Summary + Presets ── */}
+        <ResizablePanel defaultSize={33} minSize={20}>
           <div className="h-full flex flex-col">
             {/* Header with generate button */}
             <div className="shrink-0 border-b bg-muted/20">
@@ -814,7 +670,7 @@ Format as rich markdown with visual direction embedded throughout.`,
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                       {hasCleanSummary
                         ? 'Select artistic presets and click "Artify" to create a visual specification.'
-                        : "Generate a clean summary in Panel 2 first."}
+                        : "Generate a clean summary first."}
                     </p>
                   </div>
                 </div>
@@ -825,8 +681,8 @@ Format as rich markdown with visual direction embedded throughout.`,
 
         <ResizableHandle withHandle />
 
-        {/* ── PANEL 4: Infographic Gallery with Fine-tune Params ── */}
-        <ResizablePanel defaultSize={26} minSize={18}>
+        {/* ── PANEL 3: Infographic Gallery with Fine-tune Params ── */}
+        <ResizablePanel defaultSize={33} minSize={20}>
           <div className="h-full flex flex-col">
             {/* Header */}
             <div className="shrink-0 border-b bg-muted/20">

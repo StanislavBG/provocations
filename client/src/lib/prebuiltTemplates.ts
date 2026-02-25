@@ -626,8 +626,7 @@ How sections are ordered — most impactful insight first, supporting details be
       "The infographic assumes context the audience doesn't have. Can someone outside the meeting understand this? — UX Designer",
     ],
     steps: [
-      { id: "upload", label: "Upload transcript" },
-      { id: "transcript-summary", label: "Transcript & summary" },
+      { id: "context", label: "Load context" },
       { id: "infographic", label: "Generate infographic" },
     ],
   },
