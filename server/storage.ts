@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, workspaceSessions } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredWorkspaceSession } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, workspaceSessions, connections, conversations, messages, chatPreferences } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredWorkspaceSession, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -1145,6 +1145,207 @@ export class DatabaseStorage implements IStorage {
       .from(payments)
       .where(eq(payments.userId, userId))
       .orderBy(desc(payments.createdAt));
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Messaging — Connections
+  // ══════════════════════════════════════════════════════════════════
+
+  async createConnection(requesterId: string, responderId: string): Promise<StoredConnection> {
+    const [row] = await db
+      .insert(connections)
+      .values({ requesterId, responderId, status: "pending" })
+      .returning();
+    return row;
+  }
+
+  async getConnection(id: number): Promise<StoredConnection | null> {
+    const [row] = await db.select().from(connections).where(eq(connections.id, id));
+    return row ?? null;
+  }
+
+  /** Find connection between two users regardless of who requested */
+  async findConnectionBetween(userA: string, userB: string): Promise<StoredConnection | null> {
+    const rows = await db
+      .select()
+      .from(connections)
+      .where(
+        sql`(${connections.requesterId} = ${userA} AND ${connections.responderId} = ${userB})
+         OR (${connections.requesterId} = ${userB} AND ${connections.responderId} = ${userA})`,
+      );
+    return rows[0] ?? null;
+  }
+
+  /** List all connections for a user (incoming + outgoing) */
+  async listConnections(userId: string): Promise<StoredConnection[]> {
+    return db
+      .select()
+      .from(connections)
+      .where(
+        sql`${connections.requesterId} = ${userId} OR ${connections.responderId} = ${userId}`,
+      )
+      .orderBy(desc(connections.updatedAt));
+  }
+
+  async updateConnectionStatus(id: number, status: "accepted" | "blocked"): Promise<StoredConnection | null> {
+    const [row] = await db
+      .update(connections)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(connections.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteConnection(id: number): Promise<void> {
+    await db.delete(connections).where(eq(connections.id, id));
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Messaging — Conversations
+  // ══════════════════════════════════════════════════════════════════
+
+  async createConversation(connectionId: number, participantA: string, participantB: string): Promise<StoredConversation> {
+    const [row] = await db
+      .insert(conversations)
+      .values({ connectionId, participantA, participantB })
+      .returning();
+    return row;
+  }
+
+  async getConversation(id: number): Promise<StoredConversation | null> {
+    const [row] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return row ?? null;
+  }
+
+  async getConversationByConnection(connectionId: number): Promise<StoredConversation | null> {
+    const [row] = await db.select().from(conversations).where(eq(conversations.connectionId, connectionId));
+    return row ?? null;
+  }
+
+  /** List all conversations a user participates in, sorted by last activity */
+  async listConversations(userId: string): Promise<StoredConversation[]> {
+    return db
+      .select()
+      .from(conversations)
+      .where(
+        sql`${conversations.participantA} = ${userId} OR ${conversations.participantB} = ${userId}`,
+      )
+      .orderBy(desc(conversations.lastActivityAt));
+  }
+
+  async touchConversation(id: number): Promise<void> {
+    await db
+      .update(conversations)
+      .set({ lastActivityAt: new Date() })
+      .where(eq(conversations.id, id));
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Messaging — Messages (encrypted)
+  // ══════════════════════════════════════════════════════════════════
+
+  async createMessage(data: {
+    conversationId: number;
+    senderId: string;
+    ciphertext: string;
+    salt: string;
+    iv: string;
+    messageType?: string;
+    refCiphertext?: string;
+    refSalt?: string;
+    refIv?: string;
+    expiresAt: Date;
+  }): Promise<StoredMessage> {
+    const [row] = await db
+      .insert(messages)
+      .values({
+        conversationId: data.conversationId,
+        senderId: data.senderId,
+        ciphertext: data.ciphertext,
+        salt: data.salt,
+        iv: data.iv,
+        messageType: data.messageType ?? "text",
+        refCiphertext: data.refCiphertext ?? null,
+        refSalt: data.refSalt ?? null,
+        refIv: data.refIv ?? null,
+        expiresAt: data.expiresAt,
+      })
+      .returning();
+    return row;
+  }
+
+  /** Fetch messages for a conversation, most recent last. Optionally paginate. */
+  async listMessages(conversationId: number, limit = 50, beforeId?: number): Promise<StoredMessage[]> {
+    const conditions = [eq(messages.conversationId, conversationId)];
+    if (beforeId) {
+      conditions.push(sql`${messages.id} < ${beforeId}`);
+    }
+    return db
+      .select()
+      .from(messages)
+      .where(and(...conditions))
+      .orderBy(desc(messages.createdAt))
+      .limit(limit);
+  }
+
+  async markMessagesRead(conversationId: number, readerId: string): Promise<void> {
+    await db
+      .update(messages)
+      .set({ readAt: new Date() })
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          sql`${messages.senderId} != ${readerId}`,
+          isNull(messages.readAt),
+        ),
+      );
+  }
+
+  async countUnreadMessages(conversationId: number, userId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          sql`${messages.senderId} != ${userId}`,
+          isNull(messages.readAt),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  /** Delete all messages past their expiresAt — called periodically */
+  async purgeExpiredMessages(): Promise<number> {
+    const result = await db
+      .delete(messages)
+      .where(sql`${messages.expiresAt} < CURRENT_TIMESTAMP`)
+      .returning({ id: messages.id });
+    return result.length;
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Messaging — Chat Preferences
+  // ══════════════════════════════════════════════════════════════════
+
+  async getChatPreferences(userId: string): Promise<Partial<StoredChatPreferences>> {
+    const [row] = await db.select().from(chatPreferences).where(eq(chatPreferences.userId, userId));
+    return row ?? {};
+  }
+
+  async setChatPreferences(
+    userId: string,
+    prefs: Partial<Omit<StoredChatPreferences, "id" | "userId" | "createdAt" | "updatedAt">>,
+  ): Promise<StoredChatPreferences> {
+    const [row] = await db
+      .insert(chatPreferences)
+      .values({ userId, ...prefs })
+      .onConflictDoUpdate({
+        target: chatPreferences.userId,
+        set: { ...prefs, updatedAt: new Date() },
+      })
+      .returning();
+    return row;
   }
 }
 
