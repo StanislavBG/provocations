@@ -227,6 +227,7 @@ export default function Workspace() {
   const [chatStreamingContent, setChatStreamingContent] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [researchSummary, setResearchSummary] = useState("");
+  const [chatUseGemini, setChatUseGemini] = useState(true);
   const [isSummaryUpdating, setIsSummaryUpdating] = useState(false);
   const [researchNotes, setResearchNotes] = useState("");
   const [researchTopic, setResearchTopic] = useState("");
@@ -1139,6 +1140,7 @@ RULES:
         notes: researchNotes || undefined,
         chatHistory: messages.length > 0 ? messages : [{ role: "user" as const, content: "No chat messages yet" }],
         currentSummary: researchSummary || undefined,
+        useGemini: chatUseGemini,
       });
       const data = await res.json();
       if (data.summary) {
@@ -1151,7 +1153,7 @@ RULES:
     } finally {
       setIsSummaryUpdating(false);
     }
-  }, [objective, researchTopic, researchNotes, researchSummary]);
+  }, [objective, researchTopic, researchNotes, researchSummary, chatUseGemini]);
 
   const handleChatSendMessage = useCallback(async (message: string) => {
     // Add user message to chat
@@ -1172,6 +1174,7 @@ RULES:
           researchTopic: researchTopic || undefined,
           notes: researchNotes || undefined,
           history: chatMessages,
+          useGemini: chatUseGemini,
         }),
       });
 
@@ -1219,7 +1222,7 @@ RULES:
         { role: "assistant", content: "Sorry, I encountered an error. Please try again." },
       ]);
     }
-  }, [chatMessages, objective, researchTopic, researchNotes]);
+  }, [chatMessages, objective, researchTopic, researchNotes, chatUseGemini]);
 
   const handleRefreshSummary = useCallback(() => {
     updateResearchSummary(chatMessages);
@@ -1827,6 +1830,8 @@ RULES:
               onCaptureToNotes={handleCaptureToNotes}
               objective={objective}
               researchTopic={researchTopic}
+              useGemini={chatUseGemini}
+              onToggleModel={setChatUseGemini}
             />
           </ResizablePanel>
           <ResizableHandle withHandle />

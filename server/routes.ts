@@ -3244,7 +3244,7 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history } = parsed.data;
+      const { message, objective, researchTopic, notes, history, useGemini } = parsed.data;
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
@@ -3261,8 +3261,9 @@ Output only valid JSON, no markdown.`,
 
       messages.push({ role: "user", content: message });
 
-      // GPT-to-Context chat always uses Gemini 2.5 Flash for research
-      const result = await llm.gemini.generate({
+      // Toggle between Gemini 2.5 Flash and the global provider
+      const provider = useGemini !== false ? llm.gemini : llm;
+      const result = await provider.generate({
         system: systemPrompt,
         messages,
         maxTokens: 4096,
@@ -3285,7 +3286,7 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history } = parsed.data;
+      const { message, objective, researchTopic, notes, history, useGemini } = parsed.data;
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -3308,8 +3309,9 @@ Output only valid JSON, no markdown.`,
 
       messages.push({ role: "user", content: message });
 
-      // GPT-to-Context chat always uses Gemini 2.5 Flash for research
-      const stream = llm.gemini.stream({
+      // Toggle between Gemini 2.5 Flash and the global provider
+      const provider = useGemini !== false ? llm.gemini : llm;
+      const stream = provider.stream({
         system: systemPrompt,
         messages,
         maxTokens: 4096,
@@ -3341,7 +3343,7 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, researchTopic, notes, chatHistory, currentSummary } = parsed.data;
+      const { objective, researchTopic, notes, chatHistory, currentSummary, useGemini } = parsed.data;
 
       const historyText = chatHistory
         .map((m) => `[${m.role.toUpperCase()}]: ${m.content}`)
@@ -3354,8 +3356,9 @@ Output only valid JSON, no markdown.`,
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES:\n${notes}` : "";
 
-      // GPT-to-Context summarize always uses Gemini 2.5 Flash for research
-      const result = await llm.gemini.generate({
+      // Toggle between Gemini 2.5 Flash and the global provider
+      const provider = useGemini !== false ? llm.gemini : llm;
+      const result = await provider.generate({
         system: `You are a research summarizer. Generate a clear, structured summary that fulfills the user's stated objective, drawing from their research chat and notes.${existingSummaryContext}${topicContext}
 
 OBJECTIVE: ${objective}

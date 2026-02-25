@@ -1,10 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, User, Bot, BookmarkPlus } from "lucide-react";
+import { Send, Loader2, User, Bot, BookmarkPlus, Sparkles, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
+
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: "GPT-4o",
+  anthropic: "Claude",
+  gemini: "Gemini 2.5",
+};
 
 interface ChatSessionPanelProps {
   messages: ChatMessage[];
@@ -14,6 +20,8 @@ interface ChatSessionPanelProps {
   onCaptureToNotes?: (text: string) => void;
   objective: string;
   researchTopic?: string;
+  useGemini: boolean;
+  onToggleModel: (useGemini: boolean) => void;
 }
 
 export function ChatSessionPanel({
@@ -24,11 +32,26 @@ export function ChatSessionPanel({
   onCaptureToNotes,
   objective,
   researchTopic,
+  useGemini,
+  onToggleModel,
 }: ChatSessionPanelProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [globalProvider, setGlobalProvider] = useState<string>("default");
+
+  // Fetch global provider name once
+  useEffect(() => {
+    fetch("/api/llm-status")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.provider) {
+          setGlobalProvider(data.provider);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -65,16 +88,49 @@ export function ChatSessionPanel({
     });
   }, [onCaptureToNotes, toast]);
 
+  const defaultLabel = PROVIDER_LABELS[globalProvider] || globalProvider;
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="shrink-0 px-4 py-3 border-b bg-card/50">
-        <h3 className="text-sm font-semibold">Researcher</h3>
-        {researchTopic && (
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-            {researchTopic}
-          </p>
-        )}
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold">Researcher</h3>
+            {researchTopic && (
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                {researchTopic}
+              </p>
+            )}
+          </div>
+          {/* Model toggle */}
+          <div className="shrink-0 flex items-center rounded-md border bg-muted/30 p-0.5 gap-0.5">
+            <button
+              onClick={() => onToggleModel(true)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                useGemini
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Use Gemini 2.5 Flash"
+            >
+              <Sparkles className="w-3 h-3" />
+              Gemini 2.5
+            </button>
+            <button
+              onClick={() => onToggleModel(false)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                !useGemini
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title={`Use ${defaultLabel} (global provider)`}
+            >
+              <Globe className="w-3 h-3" />
+              {defaultLabel}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Messages area */}
