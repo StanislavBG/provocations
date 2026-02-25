@@ -401,11 +401,12 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
-      { id: "summarize", label: "Summarize & Expand", description: "LLM generates a rich summary from loaded context" },
+      { id: "describe", label: "Write Raw Text", description: "Paste or type your raw content" },
+      { id: "summarize", label: "Summarize & Expand", description: "LLM generates a rich summary with controls" },
       { id: "generate", label: "Generate Infographics", description: "Create 3 visual variants at different temperatures" },
     ],
 
-    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_MODEL_CONFIG],
+    leftPanelTabs: [TAB_PROVOKE, TAB_MODEL_CONFIG, TAB_CONTEXT],
 
     rightPanelTabs: [RIGHT_IMAGE_PREVIEW, RIGHT_DISCUSSION],
 
