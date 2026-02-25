@@ -86,6 +86,7 @@ export const userPreferences = pgTable("user_preferences", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id", { length: 128 }).notNull().unique(),
   autoDictate: boolean("auto_dictate").default(false).notNull(),
+  verboseMode: boolean("verbose_mode").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -270,4 +271,45 @@ export const payments = pgTable("payments", {
 ]);
 
 export type StoredPayment = typeof payments.$inferSelect;
+
+// LLM call logs — gateway-level logging for every LLM invocation.
+// Captures metadata only (no user text). Used by verbose mode and admin analytics.
+export const llmCallLogs = pgTable("llm_call_logs", {
+  id: serial("id").primaryKey(),
+  callId: varchar("call_id", { length: 36 }).notNull().unique(), // UUID per call
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  sessionId: varchar("session_id", { length: 64 }),
+  // What triggered this call
+  appType: varchar("app_type", { length: 64 }),        // templateId (e.g. "product-requirement")
+  taskType: varchar("task_type", { length: 64 }).notNull(), // e.g. "challenge", "write", "advice"
+  endpoint: varchar("endpoint", { length: 128 }).notNull(), // API route path
+  // Model info
+  provider: varchar("provider", { length: 32 }).notNull(),  // "openai" | "anthropic" | "gemini"
+  model: varchar("model", { length: 128 }).notNull(),       // e.g. "gpt-4o", "claude-sonnet-4-5-20250929"
+  // Token / size metrics
+  contextTokensEstimate: integer("context_tokens_estimate"), // estimated input tokens
+  contextCharacters: integer("context_characters"),          // exact input character count
+  responseCharacters: integer("response_characters"),        // exact output character count
+  responseTokensEstimate: integer("response_tokens_estimate"), // estimated output tokens
+  maxTokens: integer("max_tokens"),                          // maxTokens parameter sent
+  temperature: integer("temperature_x100"),                  // temperature * 100 (integer storage)
+  // Cost estimate (in microdollars — $1 = 1,000,000)
+  estimatedCostMicrodollars: integer("estimated_cost_microdollars"),
+  // Timing
+  durationMs: integer("duration_ms"),
+  // Status
+  status: varchar("status", { length: 16 }).default("success").notNull(), // "success" | "error" | "streaming"
+  errorMessage: text("error_message"),
+  // Whether this was a streaming call
+  streaming: boolean("streaming").default(false).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_llm_call_logs_user").on(table.userId),
+  index("idx_llm_call_logs_created").on(table.createdAt),
+  index("idx_llm_call_logs_task").on(table.taskType),
+  index("idx_llm_call_logs_app").on(table.appType),
+]);
+
+export type StoredLlmCallLog = typeof llmCallLogs.$inferSelect;
+export type InsertLlmCallLog = typeof llmCallLogs.$inferInsert;
 

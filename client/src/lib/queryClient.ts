@@ -7,6 +7,26 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Verbose mode: global event bus for LLM call metadata
+// ---------------------------------------------------------------------------
+
+type VerboseListener = (data: unknown) => void;
+const verboseListeners = new Set<VerboseListener>();
+
+/** Subscribe to verbose metadata events from API responses */
+export function onVerboseData(listener: VerboseListener): () => void {
+  verboseListeners.add(listener);
+  return () => verboseListeners.delete(listener);
+}
+
+/** Emit verbose data to all listeners */
+function emitVerboseData(data: unknown) {
+  for (const listener of verboseListeners) {
+    try { listener(data); } catch { /* ignore listener errors */ }
+  }
+}
+
 export async function apiRequest(
   method: string,
   url: string,
@@ -20,6 +40,19 @@ export async function apiRequest(
   });
 
   await throwIfResNotOk(res);
+
+  // For JSON responses from POST requests, intercept to capture verbose data.
+  // Clone the response so the caller can still read it.
+  const contentType = res.headers.get("content-type") || "";
+  if (method === "POST" && contentType.includes("application/json")) {
+    const cloned = res.clone();
+    cloned.json().then((json) => {
+      if (json && typeof json === "object" && "_verbose" in json) {
+        emitVerboseData(json);
+      }
+    }).catch(() => { /* ignore parse errors */ });
+  }
+
   return res;
 }
 

@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -77,8 +77,12 @@ export interface IStorage {
   deleteFolder(id: number): Promise<void>;
   getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null; locked: boolean } | null>;
   // User preferences
-  getUserPreferences(userId: string): Promise<{ autoDictate: boolean }>;
-  setUserPreferences(userId: string, prefs: { autoDictate: boolean }): Promise<{ autoDictate: boolean }>;
+  getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean }>;
+  setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean }>;
+  // LLM call logs
+  insertLlmCallLog(data: InsertLlmCallLog): Promise<StoredLlmCallLog>;
+  listLlmCallLogs(opts: { userId?: string; limit?: number; offset?: number }): Promise<StoredLlmCallLog[]>;
+  countLlmCallLogs(opts: { userId?: string }): Promise<number>;
   // Persona overrides
   getPersonaOverride(personaId: string): Promise<StoredPersonaOverride | null>;
   getAllPersonaOverrides(): Promise<StoredPersonaOverride[]>;
@@ -416,35 +420,65 @@ export class DatabaseStorage implements IStorage {
     await db.delete(folders).where(eq(folders.id, id));
   }
 
-  async getUserPreferences(userId: string): Promise<{ autoDictate: boolean }> {
+  async getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean }> {
     const [row] = await db
-      .select({ autoDictate: userPreferences.autoDictate })
+      .select({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode })
       .from(userPreferences)
       .where(eq(userPreferences.userId, userId))
       .limit(1);
 
-    return { autoDictate: row?.autoDictate ?? false };
+    return { autoDictate: row?.autoDictate ?? false, verboseMode: row?.verboseMode ?? false };
   }
 
-  async setUserPreferences(userId: string, prefs: { autoDictate: boolean }): Promise<{ autoDictate: boolean }> {
+  async setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean }> {
     const now = new Date();
+    // Build the set of fields to update (only those provided)
+    const updateSet: Record<string, unknown> = { updatedAt: now };
+    const insertValues: Record<string, unknown> = { userId, updatedAt: now };
+    if (typeof prefs.autoDictate === "boolean") {
+      updateSet.autoDictate = prefs.autoDictate;
+      insertValues.autoDictate = prefs.autoDictate;
+    }
+    if (typeof prefs.verboseMode === "boolean") {
+      updateSet.verboseMode = prefs.verboseMode;
+      insertValues.verboseMode = prefs.verboseMode;
+    }
+
     const [row] = await db
       .insert(userPreferences)
-      .values({
-        userId,
-        autoDictate: prefs.autoDictate,
-        updatedAt: now,
-      })
+      .values(insertValues as any)
       .onConflictDoUpdate({
         target: userPreferences.userId,
-        set: {
-          autoDictate: prefs.autoDictate,
-          updatedAt: now,
-        },
+        set: updateSet as any,
       })
-      .returning({ autoDictate: userPreferences.autoDictate });
+      .returning({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode });
 
-    return { autoDictate: row.autoDictate };
+    return { autoDictate: row.autoDictate, verboseMode: row.verboseMode };
+  }
+
+  async insertLlmCallLog(data: InsertLlmCallLog): Promise<StoredLlmCallLog> {
+    const [row] = await db.insert(llmCallLogs).values(data).returning();
+    return row;
+  }
+
+  async listLlmCallLogs(opts: { userId?: string; limit?: number; offset?: number }): Promise<StoredLlmCallLog[]> {
+    let query = db.select().from(llmCallLogs).orderBy(desc(llmCallLogs.createdAt));
+    if (opts.userId) {
+      query = query.where(eq(llmCallLogs.userId, opts.userId)) as any;
+    }
+    if (opts.limit) {
+      query = query.limit(opts.limit) as any;
+    }
+    if (opts.offset) {
+      query = query.offset(opts.offset) as any;
+    }
+    return query;
+  }
+
+  async countLlmCallLogs(opts: { userId?: string }): Promise<number> {
+    const conditions = opts.userId ? eq(llmCallLogs.userId, opts.userId) : undefined;
+    const [result] = await db.select({ count: count() }).from(llmCallLogs).where(conditions);
+    return result?.count ?? 0;
   }
 
   // ── Tracking Events ──
