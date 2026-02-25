@@ -2754,6 +2754,33 @@ Output only the evolved markdown document. No explanations.`;
     }
   });
 
+  // Generate a fun sample objective for an app template
+  app.post("/api/generate-sample-objective", async (req, res) => {
+    try {
+      const { appTitle } = req.body;
+      if (!appTitle || typeof appTitle !== "string") {
+        return res.status(400).json({ error: "appTitle is required" });
+      }
+
+      const response = await llm.generate({
+        maxTokens: 150,
+        temperature: 1,
+        system: `You generate short, fun, slightly quirky project objective ideas. One sentence, punchy and specific. Be creative and playful — think startup pitches meets shower thoughts. No quotes, no preamble, just the objective.`,
+        messages: [
+          {
+            role: "user",
+            content: `Give me a fun sample objective for a "${appTitle}" project.`,
+          },
+        ],
+      });
+
+      return res.json({ objective: response.text.trim() });
+    } catch (error) {
+      console.error("Error generating sample objective:", error);
+      return res.status(500).json({ error: "Failed to generate objective" });
+    }
+  });
+
   // Summarize voice transcript into clear intent
   app.post("/api/summarize-intent", async (req, res) => {
     try {
