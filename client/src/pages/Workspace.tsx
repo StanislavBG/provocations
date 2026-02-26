@@ -2275,15 +2275,27 @@ RULES:
       {/* ── Persistent global bar ── */}
       <header className="border-b bg-card shrink-0">
         <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
-          <div className="flex items-center gap-3">
+          {/* Left: app badge + primary action (New) */}
+          <div className="flex items-center gap-2">
             {selectedTemplateName && (
               <Badge variant="outline" className="text-xs">
                 {selectedTemplateName}
               </Badge>
             )}
+            <Button
+              data-testid="button-reset"
+              variant="outline"
+              size="sm"
+              onClick={handleNewClick}
+              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <Zap className="w-4 h-4" />
+              New
+            </Button>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right: workspace tools + toggles + user */}
+          <div className="flex items-center gap-1 sm:gap-2">
             {isStandardWorkspace && canShowDiff && (
               <Button
                 data-testid="button-versions"
@@ -2313,28 +2325,18 @@ RULES:
               className="gap-1.5"
               onClick={() => setShowSessionStore(true)}
             >
-              <RotateCcw className="w-4 h-4" />
+              <Save className="w-4 h-4" />
               <span className="hidden sm:inline">Sessions</span>
               {sessionAutosave.isSaving && (
                 <Loader2 className="w-3 h-3 animate-spin" />
               )}
             </Button>
             <Link href="/pricing">
-              <Button variant="outline" size="sm" className="gap-1.5">
+              <Button variant="ghost" size="sm" className="gap-1.5">
                 <CreditCard className="w-4 h-4" />
                 <span className="hidden sm:inline">Pricing</span>
               </Button>
             </Link>
-            <Button
-              data-testid="button-reset"
-              variant="ghost"
-              size="sm"
-              onClick={handleNewClick}
-              className="gap-1.5"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:inline">New</span>
-            </Button>
             <AutoDictateToggle />
             <VerboseModeToggle />
             <ThemeToggle />
