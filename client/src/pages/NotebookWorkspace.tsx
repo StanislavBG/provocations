@@ -12,7 +12,7 @@ import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useRole } from "@/hooks/use-role";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useSessionAutosave } from "@/hooks/use-session-autosave";
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -54,6 +54,7 @@ export default function NotebookWorkspace() {
   const isMobile = useIsMobile();
   const { isAdmin } = useRole();
   const [routeMatch, routeParams] = useRoute("/app/:templateId");
+  const [, navigate] = useLocation();
 
   // ── Core state ──
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
@@ -591,6 +592,7 @@ export default function NotebookWorkspace() {
           onStart={handleOnboardingStart}
           onDismiss={() => setShowOnboarding(false)}
           onLoadSession={() => setShowSessionStore(true)}
+          onLoadContext={() => navigate("/store")}
           recentSessions={sessionsQuery.data?.sessions ?? []}
           isAutoResuming={sessionsQuery.isLoading}
         />

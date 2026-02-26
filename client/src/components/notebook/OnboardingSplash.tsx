@@ -7,13 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sparkles, ArrowRight, Dices, Library, RotateCcw, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { Link } from "wouter";
 
 interface OnboardingSplashProps {
   onStart: (templateId: string, objective: string) => void;
   onDismiss: () => void;
   /** Open the Session Store to pick a session to resume */
   onLoadSession?: () => void;
+  /** Navigate to Context Store */
+  onLoadContext?: () => void;
   /** Recent sessions (for showing resume hint) */
   recentSessions?: Array<{ id: number; title: string; templateId: string; updatedAt: string }>;
   /** Whether we're in the process of auto-resuming a session */
@@ -24,6 +25,7 @@ export function OnboardingSplash({
   onStart,
   onDismiss,
   onLoadSession,
+  onLoadContext,
   recentSessions = [],
   isAutoResuming = false,
 }: OnboardingSplashProps) {
@@ -165,16 +167,15 @@ export function OnboardingSplash({
                 label="Your Objective"
                 headerActions={
                   <div className="flex items-center gap-1">
-                    <Link href="/store">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                      >
-                        <Library className="w-3.5 h-3.5" />
-                        Load Context
-                      </Button>
-                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onLoadContext}
+                      className="h-6 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Library className="w-3.5 h-3.5" />
+                      Load Context
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
