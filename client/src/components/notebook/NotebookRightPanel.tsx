@@ -1,23 +1,29 @@
+import { useState } from "react";
 import { PersonaAvatarRow } from "./PersonaAvatarRow";
 import { ChatThread } from "./ChatThread";
+import { NotebookResearchChat } from "./NotebookResearchChat";
 import { Button } from "@/components/ui/button";
-import { Flame, Lightbulb } from "lucide-react";
+import { Flame, Lightbulb, Sparkles, Users } from "lucide-react";
 import type { ProvocationType, DiscussionMessage } from "@shared/schema";
+
+type RightPanelTab = "research" | "provo";
 
 interface NotebookRightPanelProps {
   activePersonas: Set<ProvocationType>;
   onTogglePersona: (id: ProvocationType) => void;
 
-  // Chat (persona discussion) props
+  // Provo tab: persona discussion props
   discussionMessages: DiscussionMessage[];
   onSendMessage: (text: string) => void;
   onAcceptResponse: (messageId: string) => void;
   onDismissResponse: (messageId: string) => void;
   onRespondToMessage: (messageId: string, text: string) => void;
   isChatLoading: boolean;
-
-  // Document context for action buttons
   hasDocument?: boolean;
+
+  // Research tab
+  objective: string;
+  onCaptureToContext: (text: string, label: string) => void;
 }
 
 const PROVOKE_PROMPT =
@@ -36,55 +42,94 @@ export function NotebookRightPanel({
   onRespondToMessage,
   isChatLoading,
   hasDocument = false,
+  objective,
+  onCaptureToContext,
 }: NotebookRightPanelProps) {
+  const [activeTab, setActiveTab] = useState<RightPanelTab>("research");
   const canAct = hasDocument && !isChatLoading;
 
   return (
     <div className="h-full flex flex-col bg-card border-l">
-      {/* Persona selector + action buttons */}
-      <div className="px-3 py-2 border-b bg-muted/20 space-y-2 shrink-0">
-        <PersonaAvatarRow
-          activePersonas={activePersonas}
-          onToggle={onTogglePersona}
-          compact
-        />
+      {/* ─── Tab switcher ─── */}
+      <div className="flex border-b shrink-0">
+        <button
+          onClick={() => setActiveTab("research")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
+            activeTab === "research"
+              ? "text-primary border-b-2 border-primary -mb-px"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Research
+        </button>
+        <button
+          onClick={() => setActiveTab("provo")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
+            activeTab === "provo"
+              ? "text-primary border-b-2 border-primary -mb-px"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          Provo
+        </button>
+      </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            className="flex-1 gap-1.5 h-8 text-xs font-semibold"
-            disabled={!canAct}
-            onClick={() => onSendMessage(PROVOKE_PROMPT)}
-          >
-            <Flame className="w-3.5 h-3.5" />
-            Provoke Me
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1 gap-1.5 h-8 text-xs font-semibold"
-            disabled={!canAct}
-            onClick={() => onSendMessage(ADVICE_PROMPT)}
-          >
-            <Lightbulb className="w-3.5 h-3.5" />
-            Ask Advice
-          </Button>
+      {/* ─── Tab content ─── */}
+      {activeTab === "research" ? (
+        <div className="flex-1 overflow-hidden">
+          <NotebookResearchChat
+            objective={objective}
+            onCaptureToContext={onCaptureToContext}
+          />
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Persona selector + action buttons */}
+          <div className="px-3 py-2 border-b bg-muted/20 space-y-2 shrink-0">
+            <PersonaAvatarRow
+              activePersonas={activePersonas}
+              onToggle={onTogglePersona}
+              compact
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                className="flex-1 gap-1.5 h-8 text-xs font-semibold"
+                disabled={!canAct}
+                onClick={() => onSendMessage(PROVOKE_PROMPT)}
+              >
+                <Flame className="w-3.5 h-3.5" />
+                Provoke Me
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5 h-8 text-xs font-semibold"
+                disabled={!canAct}
+                onClick={() => onSendMessage(ADVICE_PROMPT)}
+              >
+                <Lightbulb className="w-3.5 h-3.5" />
+                Ask Advice
+              </Button>
+            </div>
+          </div>
 
-      {/* Persona chat thread */}
-      <div className="flex-1 overflow-hidden">
-        <ChatThread
-          messages={discussionMessages}
-          onSendMessage={onSendMessage}
-          onAcceptResponse={onAcceptResponse}
-          onDismissResponse={onDismissResponse}
-          onRespondToMessage={onRespondToMessage}
-          isLoading={isChatLoading}
-        />
-      </div>
+          {/* Persona chat thread */}
+          <div className="flex-1 overflow-hidden">
+            <ChatThread
+              messages={discussionMessages}
+              onSendMessage={onSendMessage}
+              onAcceptResponse={onAcceptResponse}
+              onDismissResponse={onDismissResponse}
+              onRespondToMessage={onRespondToMessage}
+              isLoading={isChatLoading}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

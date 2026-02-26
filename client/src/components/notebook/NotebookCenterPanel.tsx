@@ -4,8 +4,8 @@ interface NotebookCenterPanelProps {
   documentText: string;
   onDocumentTextChange: (text: string) => void;
   isMerging: boolean;
-  isGeneratingDraft?: boolean;
   objective?: string;
+  onObjectiveChange?: (objective: string) => void;
   templateName?: string;
 }
 
@@ -13,8 +13,8 @@ export function NotebookCenterPanel({
   documentText,
   onDocumentTextChange,
   isMerging,
-  isGeneratingDraft,
   objective,
+  onObjectiveChange,
   templateName,
 }: NotebookCenterPanelProps) {
   return (
@@ -23,8 +23,8 @@ export function NotebookCenterPanel({
         text={documentText}
         onTextChange={onDocumentTextChange}
         isMerging={isMerging}
-        isGeneratingDraft={isGeneratingDraft}
         objective={objective}
+        onObjectiveChange={onObjectiveChange}
         templateName={templateName}
       />
     </div>

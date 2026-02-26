@@ -2,14 +2,21 @@ import { useState } from "react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Download } from "lucide-react";
+import {
+  Eye,
+  Pencil,
+  Download,
+  Target,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 
 interface SplitDocumentEditorProps {
   text: string;
   onTextChange: (text: string) => void;
   isMerging?: boolean;
-  isGeneratingDraft?: boolean;
   objective?: string;
+  onObjectiveChange?: (objective: string) => void;
   templateName?: string;
 }
 
@@ -17,10 +24,14 @@ export function SplitDocumentEditor({
   text,
   onTextChange,
   isMerging = false,
-  isGeneratingDraft = false,
+  objective,
+  onObjectiveChange,
   templateName,
 }: SplitDocumentEditorProps) {
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
+  const [objectiveExpanded, setObjectiveExpanded] = useState(
+    !!(objective && objective.trim()),
+  );
 
   const handleDownload = () => {
     const blob = new Blob([text], { type: "text/markdown" });
@@ -31,17 +42,6 @@ export function SplitDocumentEditor({
     a.click();
     URL.revokeObjectURL(url);
   };
-
-  // Generating draft — full-panel loading state
-  if (isGeneratingDraft && !text.trim()) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center gap-3">
-        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-serif text-foreground/80">Generating your first draft...</p>
-        <p className="text-xs text-muted-foreground/60">This may take a moment</p>
-      </div>
-    );
-  }
 
   const modeToggle = (
     <div className="flex items-center gap-1">
@@ -79,6 +79,47 @@ export function SplitDocumentEditor({
 
   return (
     <div className="h-full flex flex-col">
+      {/* ─── Objective bar (expandable, part of the document) ─── */}
+      <div className="border-b shrink-0">
+        <button
+          type="button"
+          onClick={() => setObjectiveExpanded(!objectiveExpanded)}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-muted/30 transition-colors"
+        >
+          <Target className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
+            Objective
+          </span>
+          {!objectiveExpanded && objective?.trim() && (
+            <span className="text-xs text-muted-foreground truncate flex-1">
+              {objective}
+            </span>
+          )}
+          {objectiveExpanded ? (
+            <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
+          ) : (
+            <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
+          )}
+        </button>
+        {objectiveExpanded && (
+          <div className="px-3 pb-2">
+            <ProvokeText
+              chrome="bare"
+              variant="textarea"
+              value={objective || ""}
+              onChange={onObjectiveChange || (() => {})}
+              placeholder="What are you trying to achieve with this document?"
+              className="text-sm"
+              minRows={2}
+              maxRows={5}
+              showCopy={false}
+              showClear={false}
+              readOnly={!onObjectiveChange}
+            />
+          </div>
+        )}
+      </div>
+
       {/* Merging indicator */}
       {isMerging && (
         <div className="bg-primary/10 px-3 py-1.5 flex items-center gap-2 text-xs border-b shrink-0">
@@ -104,9 +145,10 @@ export function SplitDocumentEditor({
       {/* Preview mode: rendered markdown */}
       {viewMode === "preview" && (
         <div className="flex-1 flex flex-col">
-          {/* Header bar matching container chrome style */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b shrink-0">
-            <span className="text-xs font-semibold text-muted-foreground">Document</span>
+            <span className="text-xs font-semibold text-muted-foreground">
+              Document
+            </span>
             {modeToggle}
           </div>
           <div className="flex-1 overflow-y-auto p-4">
