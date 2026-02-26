@@ -17,12 +17,31 @@ The AI doesn't write for you — it provokes deeper thinking so *you* write bett
 
 ## AIQA — QA Bug Tracking
 
-The AIQA QA overlay is embedded in `client/index.html`. When it's time to check for new issues logged via AIQA, fetch all bugs for this project:
+The AIQA QA overlay is embedded in `client/index.html`. Environment variables are in `.env` (`AIQA_URL`, `AIQA_API_KEY`, `AIQA_PROJECT_ID`). MCP integration is in `.mcp.json` (uses `aiqastudio-mcp` package).
+
+### Fetch bugs and feature requests
 
 ```bash
 curl -H "X-API-Key: 3b03bd31-93b9-4efe-9c3d-4d6a54db97f0" \
   "https://aiqastudio.com/api/bugs?project_id=0681dd20-4cec-4a1a-8280-7c7b33fdaee7"
 ```
+
+Filter options: `&submission_type=bug_report`, `&submission_type=feature_request`, `&status=open`, `&urgency=high`.
+
+### Other AIQA API endpoints
+
+```bash
+# Check test results
+GET https://aiqastudio.com/api/projects/0681dd20-4cec-4a1a-8280-7c7b33fdaee7/results
+
+# List test cases
+GET https://aiqastudio.com/api/test-cases?project_id=0681dd20-4cec-4a1a-8280-7c7b33fdaee7
+
+# Stats overview
+GET https://aiqastudio.com/api/stats/overview?project_id=0681dd20-4cec-4a1a-8280-7c7b33fdaee7
+```
+
+All endpoints require `X-API-Key: {AIQA_API_KEY}` header.
 
 ## Quick Commands
 
