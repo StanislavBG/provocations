@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertDialog,
@@ -79,6 +80,8 @@ import {
   StickyNote,
   Save,
   MessageSquare,
+  LayoutGrid,
+  Check,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -280,8 +283,14 @@ export default function Workspace() {
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
   const [objectiveInterimTranscript, setObjectiveInterimTranscript] = useState("");
 
-  // Objective panel collapsed state (minimized by default)
-  const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(true);
+  // Objective panel collapsed state (expanded by default so it's prominent)
+  const [isObjectiveCollapsed, setIsObjectiveCollapsed] = useState(false);
+
+  // App-picker popover state
+  const [showAppPicker, setShowAppPicker] = useState(false);
+
+  // Document preview from Sources panel — shows selected doc in reading pane
+  const [previewingDoc, setPreviewingDoc] = useState<{ id: number; title: string; content: string } | null>(null);
 
   // Objective "Load from Context Store" dialog state
   const [objectiveStoreOpen, setObjectiveStoreOpen] = useState(false);
@@ -1627,6 +1636,28 @@ RULES:
     }
   }, [document]);
 
+  // Handle document preview from Sources panel — loads a store doc into reading pane
+  const handleDocumentPreview = useCallback((docId: number, title: string, content: string) => {
+    setPreviewingDoc({ id: docId, title, content });
+  }, []);
+
+  // Handle previewed doc text change — update local state and auto-save
+  const handlePreviewDocTextChange = useCallback((newText: string) => {
+    if (!previewingDoc) return;
+    setPreviewingDoc((prev) => prev ? { ...prev, content: newText } : null);
+  }, [previewingDoc]);
+
+  // Save previewed doc changes (debounced via effect below)
+  const previewSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!previewingDoc) return;
+    if (previewSaveTimerRef.current) clearTimeout(previewSaveTimerRef.current);
+    previewSaveTimerRef.current = setTimeout(() => {
+      apiRequest("PUT", `/api/documents/${previewingDoc.id}`, { content: previewingDoc.content }).catch(() => {});
+    }, 2000); // Auto-save after 2s of inactivity
+    return () => { if (previewSaveTimerRef.current) clearTimeout(previewSaveTimerRef.current); };
+  }, [previewingDoc?.content, previewingDoc?.id]);
+
   // Handle text edit from pencil icon prompt
   const handleTextEdit = useCallback((newText: string) => {
     if (document) {
@@ -2044,6 +2075,7 @@ RULES:
       }
       capturedContext={capturedContext}
       onCapturedContextChange={setCapturedContext}
+      onDocumentPreview={handleDocumentPreview}
       modelConfig={modelConfig}
       onModelConfigChange={setModelConfig}
       provokeMode={selectedTemplateId === "text-to-infographic" ? "suggest" : "challenge"}
@@ -2129,7 +2161,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "chat" ? MessageSquare : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : Zap;
           return (
             <button
               key={tab.id}
@@ -2172,6 +2204,48 @@ RULES:
         )}
       </div>
 
+      {/* Compact persona picklist — shown when discussion tab is active */}
+      {rightPanelMode === "discussion" && (
+        <div className="flex items-center gap-1 px-2 py-1.5 border-b bg-muted/10 overflow-x-auto shrink-0">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 shrink-0 mr-1">Personas</span>
+          {Object.values(builtInPersonas).map((persona) => {
+            const type = persona.id as ProvocationType;
+            const isActive = interviewDirection?.personas?.includes(type) ?? false;
+            // Generate 2-letter abbreviation from label
+            const abbr = persona.label.split(/\s+/).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+            return (
+              <Tooltip key={type}>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`w-7 h-7 rounded-full text-[9px] font-bold border-2 transition-all shrink-0 ${
+                      isActive
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-muted-foreground/20 text-muted-foreground/40 hover:border-muted-foreground/40 hover:text-muted-foreground/60"
+                    }`}
+                    onClick={() => {
+                      const currentPersonas = interviewDirection?.personas || [];
+                      const updated = isActive
+                        ? currentPersonas.filter((p) => p !== type)
+                        : [...currentPersonas, type];
+                      handleStartInterview({
+                        mode: interviewDirection?.mode || "challenge",
+                        personas: updated,
+                        guidance: interviewDirection?.guidance,
+                      });
+                    }}
+                  >
+                    {abbr}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {persona.label} — {isActive ? "Active" : "Click to activate"}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      )}
+
       {/* Panel content — swapped based on active mode */}
       {rightPanelMode === "discussion" ? (
         <div className="flex-1 overflow-hidden">
@@ -2209,6 +2283,23 @@ RULES:
           notes={sessionNotes}
           onNotesChange={setSessionNotes}
         />
+      ) : rightPanelMode === "chat" ? (
+        <div className="flex-1 overflow-hidden">
+          <ChatDrawer
+            open={true}
+            onOpenChange={() => setRightPanelMode("discussion")}
+            sessionContext={{
+              objective,
+              templateName: selectedTemplateName ?? null,
+              documentExcerpt: document.rawText?.trim()
+                ? document.rawText.slice(0, 200) + (document.rawText.length > 200 ? "..." : "")
+                : "",
+            }}
+            activeConversationId={chatActiveConversationId}
+            onActiveConversationChange={setChatActiveConversationId}
+            embedded
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -2216,7 +2307,41 @@ RULES:
   const documentPanel = (
     <div className="h-full flex flex-col relative min-h-0">
 
-      {selectedTemplateId === "agent-editor" ? (
+      {/* Source document preview mode — editable, auto-saves */}
+      {previewingDoc ? (
+        <div className="h-full flex flex-col">
+          <div className="flex items-center gap-2 px-3 py-2 border-b bg-blue-50/50 dark:bg-blue-950/20 shrink-0">
+            <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 truncate flex-1">
+              {previewingDoc.title}
+            </span>
+            <span className="text-[9px] text-muted-foreground/60">Editable — auto-saves</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={() => setPreviewingDoc(null)}
+              title="Close preview"
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <ReadingPane
+              text={previewingDoc.content}
+              onTextChange={handlePreviewDocTextChange}
+              isMerging={false}
+              onTranscriptUpdate={() => {}}
+              onTextEdit={handlePreviewDocTextChange}
+              onSendFeedback={() => {}}
+              draftWordCount={previewingDoc.content.split(/\s+/).filter(Boolean).length}
+              onDocumentCopy={() => {}}
+              objective={objective}
+              templateName={selectedTemplateName}
+            />
+          </div>
+        </div>
+      ) : selectedTemplateId === "agent-editor" ? (
         <div className="h-full overflow-y-auto">
           <StepEditor
             step={agentSteps.find((s) => s.id === selectedStepId) ?? null}
@@ -2284,13 +2409,54 @@ RULES:
       {/* ── Persistent global bar ── */}
       <header className="border-b bg-card shrink-0">
         <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
-          {/* Left: app badge + primary action (New) */}
+          {/* Left: app-picker + New button */}
           <div className="flex items-center gap-2">
-            {selectedTemplateName && (
-              <Badge variant="outline" className="text-xs">
-                {selectedTemplateName}
-              </Badge>
-            )}
+            {/* App-picker dropdown — shows selected app with icon, click to switch */}
+            {selectedTemplateId && (() => {
+              const currentTemplate = prebuiltTemplates.find((t) => t.id === selectedTemplateId);
+              const CurrentIcon = currentTemplate?.icon;
+              return (
+                <Popover open={showAppPicker} onOpenChange={setShowAppPicker}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs"
+                    >
+                      {CurrentIcon && <CurrentIcon className="w-4 h-4 text-primary" />}
+                      <span className="hidden sm:inline">{currentTemplate?.shortLabel || selectedTemplateName}</span>
+                      <LayoutGrid className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-2" align="start">
+                    <div className="grid grid-cols-3 gap-1">
+                      {prebuiltTemplates.filter((t) => !t.comingSoon).map((template) => {
+                        const Icon = template.icon;
+                        const isActive = template.id === selectedTemplateId;
+                        return (
+                          <button
+                            key={template.id}
+                            onClick={() => {
+                              setSelectedTemplateId(template.id);
+                              setShowAppPicker(false);
+                            }}
+                            className={`flex flex-col items-center gap-1 p-2 rounded-lg text-center transition-all ${
+                              isActive
+                                ? "bg-primary/10 border border-primary/30 ring-1 ring-primary/20"
+                                : "hover:bg-muted/50 border border-transparent"
+                            }`}
+                          >
+                            <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                            <span className="text-[10px] font-medium leading-tight">{template.shortLabel}</span>
+                            {isActive && <Check className="w-3 h-3 text-primary" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              );
+            })()}
             <Button
               data-testid="button-reset"
               variant="outline"
@@ -2357,36 +2523,26 @@ RULES:
                 </Button>
               </Link>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowChatDrawer(true)}
-              className="gap-1.5 relative"
-              title="Messages"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span className="hidden sm:inline">Chat</span>
-            </Button>
             <DebugButton />
             <UserButton data-testid="button-user-menu-main" />
           </div>
         </div>
 
-        {/* Objective bar — only in standard workspace mode */}
+        {/* Objective bar — prominent on main workspace screen */}
         {isStandardWorkspace && (isObjectiveCollapsed ? (
           <button
-            className="border-t px-4 py-2 flex items-center gap-2 w-full text-left hover:bg-muted/50 transition-colors"
+            className="border-t bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2.5 flex items-center gap-3 w-full text-left hover:bg-amber-50/80 dark:hover:bg-amber-950/30 transition-colors"
             onClick={() => setIsObjectiveCollapsed(false)}
           >
             <Target className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-xs font-medium text-muted-foreground/70 shrink-0">{objectiveConfig.primaryLabel}</span>
-            <span className="text-sm text-muted-foreground truncate flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-primary/70 shrink-0">Objective</span>
+            <span className="text-sm text-foreground/80 font-serif truncate flex-1">
               {objective || `Set your ${objectiveConfig.primaryLabel.toLowerCase()}...`}
             </span>
             <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
         ) : isStandardWorkspace ? (
-          <div className="border-t px-4 py-3 space-y-3">
+          <div className="border-t bg-amber-50/40 dark:bg-amber-950/15 px-4 py-3 space-y-3">
             <ProvokeText
               chrome="container"
               variant="textarea"
@@ -2430,21 +2586,23 @@ RULES:
                 </div>
               }
             />
-            <ProvokeText
-              chrome="container"
-              variant="textarea"
-              data-testid="input-secondary-objective-header"
-              label={objectiveConfig.secondaryLabel}
-              labelIcon={Crosshair}
-              value={secondaryObjective}
-              onChange={setSecondaryObjective}
-              placeholder={objectiveConfig.secondaryPlaceholder}
-              className="text-sm leading-relaxed font-serif"
-              minRows={1}
-              maxRows={3}
-              voice={{ mode: "replace" }}
-              onVoiceTranscript={(text) => setSecondaryObjective(text)}
-            />
+            {secondaryObjective.trim() || objectiveConfig.secondaryDescription ? (
+              <ProvokeText
+                chrome="container"
+                variant="textarea"
+                data-testid="input-secondary-objective-header"
+                label={objectiveConfig.secondaryLabel}
+                labelIcon={Crosshair}
+                value={secondaryObjective}
+                onChange={setSecondaryObjective}
+                placeholder={objectiveConfig.secondaryPlaceholder}
+                className="text-sm leading-relaxed font-serif"
+                minRows={1}
+                maxRows={3}
+                voice={{ mode: "replace" }}
+                onVoiceTranscript={(text) => setSecondaryObjective(text)}
+              />
+            ) : null}
           </div>
         ) : null)}
 
