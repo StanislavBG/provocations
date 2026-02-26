@@ -336,10 +336,10 @@ Key endpoints the backend needs:
   {
     id: "streaming",
     category: "analyze",
-    statusLabel: "alpha",
-    title: "Screen Capture",
-    shortLabel: "Capture",
-    subtitle: "Screenshots & annotations to requirements",
+    externalUrl: "https://aiqastudio.replit.app/",
+    title: "QA-Annotate",
+    shortLabel: "QA-Annotate",
+    subtitle: "Screenshot annotation & QA bug tracking",
     description:
       "Capture screenshots, annotate them, and transform your observations into structured requirements. An agent asks sequential questions — exploring what you've captured — until the spec is crystal clear. The output is a markdown requirements document.",
     howTo: "Optionally paste a website URL to load it in the built-in browser. Take screenshots, draw annotations on them, and describe what you see. An AI agent asks follow-up questions about your captures until the requirements document is complete.",
