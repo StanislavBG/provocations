@@ -2,11 +2,12 @@
   "mcpServers": {
     "aiqa": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "https://mcp.aiqastudio.com/sse"
-      ]
+      "args": ["aiqastudio-mcp"],
+      "env": {
+        "AIQA_API_KEY": "REDACTED",
+        "AIQA_PROJECT_ID": "0681dd20-4cec-4a1a-8280-7c7b33fdaee7",
+        "AIQA_URL": "https://aiqastudio.com"
+      }
     }
   }
 }
