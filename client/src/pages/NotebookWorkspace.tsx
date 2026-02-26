@@ -66,7 +66,6 @@ export default function NotebookWorkspace() {
   const [sessionNotes, setSessionNotes] = useState("");
 
   // ── Layout state ──
-  const [centerTab, setCenterTab] = useState<"chat" | "document">("chat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(!routeMatch);
   const [showNewConfirm, setShowNewConfirm] = useState(false);
@@ -224,7 +223,6 @@ export default function NotebookWorkspace() {
       };
       setVersions([newVersion]);
       setDocument((prev) => ({ ...prev, rawText: data.document }));
-      setCenterTab("document");
 
       toast({
         title: "Draft created",
@@ -417,8 +415,8 @@ export default function NotebookWorkspace() {
   );
 
   // ── Mobile tab state ──
-  type MobileTab = "context" | "chat" | "document" | "apps";
-  const [mobileTab, setMobileTab] = useState<MobileTab>("chat");
+  type MobileTab = "context" | "document" | "chat";
+  const [mobileTab, setMobileTab] = useState<MobileTab>("document");
 
   // ── Render ──
   return (
@@ -451,41 +449,11 @@ export default function NotebookWorkspace() {
                   onPinDoc={handlePinDoc}
                   onUnpinDoc={handleUnpinDoc}
                   isCollapsed={false}
-                  onToggleCollapse={() => setMobileTab("chat")}
-                />
-              )}
-              {mobileTab === "chat" && (
-                <NotebookCenterPanel
-                  activeTab="chat"
-                  onTabChange={() => {}}
-                  discussionMessages={discussionMessages}
-                  onSendMessage={handleSendMessage}
-                  onAcceptResponse={handleAcceptResponse}
-                  onDismissResponse={handleDismissResponse}
-                  onRespondToMessage={handleRespondToMessage}
-                  isChatLoading={askQuestionMutation.isPending}
-                  activePersonas={activePersonas}
-                  onTogglePersona={handleTogglePersona}
-                  documentText={document.rawText}
-                  onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
-                  isMerging={writeMutation.isPending}
-                  isGeneratingDraft={createDraftMutation.isPending}
-                  objective={objective}
-                  templateName={selectedTemplateName}
+                  onToggleCollapse={() => setMobileTab("document")}
                 />
               )}
               {mobileTab === "document" && (
                 <NotebookCenterPanel
-                  activeTab="document"
-                  onTabChange={() => {}}
-                  discussionMessages={discussionMessages}
-                  onSendMessage={handleSendMessage}
-                  onAcceptResponse={handleAcceptResponse}
-                  onDismissResponse={handleDismissResponse}
-                  onRespondToMessage={handleRespondToMessage}
-                  isChatLoading={askQuestionMutation.isPending}
-                  activePersonas={activePersonas}
-                  onTogglePersona={handleTogglePersona}
                   documentText={document.rawText}
                   onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                   isMerging={writeMutation.isPending}
@@ -494,14 +462,16 @@ export default function NotebookWorkspace() {
                   templateName={selectedTemplateName}
                 />
               )}
-              {mobileTab === "apps" && (
+              {mobileTab === "chat" && (
                 <NotebookRightPanel
-                  activeTemplateId={selectedTemplateId}
-                  onSelectTemplate={setSelectedTemplateId}
                   activePersonas={activePersonas}
                   onTogglePersona={handleTogglePersona}
-                  hasDocument={!!document.rawText}
-                  hasObjective={!!objective}
+                  discussionMessages={discussionMessages}
+                  onSendMessage={handleSendMessage}
+                  onAcceptResponse={handleAcceptResponse}
+                  onDismissResponse={handleDismissResponse}
+                  onRespondToMessage={handleRespondToMessage}
+                  isChatLoading={askQuestionMutation.isPending}
                 />
               )}
             </div>
@@ -510,9 +480,8 @@ export default function NotebookWorkspace() {
             <div className="h-12 shrink-0 border-t bg-card flex">
               {([
                 { id: "context" as MobileTab, label: "Sources" },
-                { id: "chat" as MobileTab, label: "Chat" },
                 { id: "document" as MobileTab, label: "Document" },
-                { id: "apps" as MobileTab, label: "Apps" },
+                { id: "chat" as MobileTab, label: "Chat" },
               ] as const).map((tab) => (
                 <button
                   key={tab.id}
@@ -551,19 +520,9 @@ export default function NotebookWorkspace() {
 
             <ResizableHandle withHandle />
 
-            {/* Center: Chat + Document tabs */}
+            {/* Center: Document */}
             <ResizablePanel defaultSize={55} minSize={30}>
               <NotebookCenterPanel
-                activeTab={centerTab}
-                onTabChange={setCenterTab}
-                discussionMessages={discussionMessages}
-                onSendMessage={handleSendMessage}
-                onAcceptResponse={handleAcceptResponse}
-                onDismissResponse={handleDismissResponse}
-                onRespondToMessage={handleRespondToMessage}
-                isChatLoading={askQuestionMutation.isPending}
-                activePersonas={activePersonas}
-                onTogglePersona={handleTogglePersona}
                 documentText={document.rawText}
                 onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                 isMerging={writeMutation.isPending}
@@ -575,15 +534,17 @@ export default function NotebookWorkspace() {
 
             <ResizableHandle withHandle />
 
-            {/* Right: Apps + Personas */}
+            {/* Right: Personas + Chat */}
             <ResizablePanel defaultSize={25} minSize={15}>
               <NotebookRightPanel
-                activeTemplateId={selectedTemplateId}
-                onSelectTemplate={setSelectedTemplateId}
                 activePersonas={activePersonas}
                 onTogglePersona={handleTogglePersona}
-                hasDocument={!!document.rawText}
-                hasObjective={!!objective}
+                discussionMessages={discussionMessages}
+                onSendMessage={handleSendMessage}
+                onAcceptResponse={handleAcceptResponse}
+                onDismissResponse={handleDismissResponse}
+                onRespondToMessage={handleRespondToMessage}
+                isChatLoading={askQuestionMutation.isPending}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
