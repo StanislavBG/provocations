@@ -29,10 +29,11 @@ import {
 import { SessionStorePanel } from "@/components/SessionStorePanel";
 
 import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
+import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { ContextSidebar } from "@/components/notebook/ContextSidebar";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
-import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
+import type { ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
 import type {
@@ -69,8 +70,7 @@ export default function NotebookWorkspace() {
   const [showNewConfirm, setShowNewConfirm] = useState(false);
   const [showSessionStore, setShowSessionStore] = useState(false);
 
-  // ── User-to-user chat state ──
-  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+  // ── User-to-user chat state (embedded in left panel) ──
   const [activeChatConversationId, setActiveChatConversationId] = useState<number | null>(null);
 
   // ── Persona state ──
@@ -449,14 +449,11 @@ export default function NotebookWorkspace() {
         sessionName={sessionName}
         onSessionNameChange={setSessionName}
         onSave={handleSave}
-        onLoad={() => setShowSessionStore(true)}
         onNew={handleNewSession}
         isSaving={sessionAutosave.isSaving}
         isAdmin={isAdmin}
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={setSelectedTemplateId}
-        objective={objective}
-        onOpenChat={() => setChatDrawerOpen(true)}
         versionCount={versions.length}
       />
 
@@ -526,7 +523,7 @@ export default function NotebookWorkspace() {
         ) : (
           /* Desktop: 3-column resizable layout */
           <ResizablePanelGroup direction="horizontal">
-            {/* Left: Context Sidebar */}
+            {/* Left: Tabbed panel (Context / Chat / Video) */}
             <ResizablePanel
               defaultSize={20}
               minSize={4}
@@ -535,10 +532,18 @@ export default function NotebookWorkspace() {
               onCollapse={() => setSidebarCollapsed(true)}
               onExpand={() => setSidebarCollapsed(false)}
             >
-              <ContextSidebar
+              <NotebookLeftPanel
                 pinnedDocIds={pinnedDocIds}
                 onPinDoc={handlePinDoc}
                 onUnpinDoc={handleUnpinDoc}
+                chatSessionContext={{
+                  objective,
+                  templateName: selectedTemplateName ?? null,
+                  documentExcerpt: document.rawText.slice(0, 200),
+                } satisfies ChatSessionContext}
+                activeChatConversationId={activeChatConversationId}
+                onActiveChatConversationChange={setActiveChatConversationId}
+                onOpenSessionStore={() => setShowSessionStore(true)}
                 isCollapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
               />
@@ -598,19 +603,6 @@ export default function NotebookWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* User-to-user chat drawer */}
-      <ChatDrawer
-        open={chatDrawerOpen}
-        onOpenChange={setChatDrawerOpen}
-        sessionContext={{
-          objective,
-          templateName: selectedTemplateName ?? null,
-          documentExcerpt: document.rawText.slice(0, 200),
-        } satisfies ChatSessionContext}
-        activeConversationId={activeChatConversationId}
-        onActiveConversationChange={setActiveChatConversationId}
-      />
 
       {/* Session Store panel */}
       <SessionStorePanel
