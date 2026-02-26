@@ -511,6 +511,7 @@ export default function NotebookWorkspace() {
                   onDismissResponse={handleDismissResponse}
                   onRespondToMessage={handleRespondToMessage}
                   isChatLoading={askQuestionMutation.isPending}
+                  hasDocument={!!document.rawText.trim()}
                 />
               )}
             </div>
@@ -584,6 +585,7 @@ export default function NotebookWorkspace() {
                 onDismissResponse={handleDismissResponse}
                 onRespondToMessage={handleRespondToMessage}
                 isChatLoading={askQuestionMutation.isPending}
+                hasDocument={!!document.rawText.trim()}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
