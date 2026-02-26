@@ -32,9 +32,11 @@ import { generateId } from "@/lib/utils";
 interface ContextCapturePanelProps {
   items: ContextItem[];
   onItemsChange: (items: ContextItem[]) => void;
+  /** Called when user clicks a document to preview it in the main reading pane */
+  onDocumentPreview?: (docId: number, title: string, content: string) => void;
 }
 
-export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePanelProps) {
+export function ContextCapturePanel({ items, onItemsChange, onDocumentPreview }: ContextCapturePanelProps) {
   const { toast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [addingType, setAddingType] = useState<ContextItemType | null>(null);
@@ -82,6 +84,7 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
       const res = await apiRequest("GET", `/api/documents/${docId}`);
       const data = await res.json();
       if (data.content) {
+        // Add as context item
         const newItem: ContextItem = {
           id: generateId("ctx"),
           type: "text",
@@ -91,13 +94,15 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
         };
         onItemsChange([...items, newItem]);
         setLoadedStoreDocIds((prev) => new Set(prev).add(docId));
+        // Also preview in the document pane if callback provided
+        onDocumentPreview?.(docId, docTitle, data.content);
       }
     } catch {
       // Silently fail — user sees no new item added
     } finally {
       setLoadingStoreDocId(null);
     }
-  }, [items, onItemsChange]);
+  }, [items, onItemsChange, onDocumentPreview]);
 
   const handleFileUploadAsContext = useCallback((file: File) => {
     const reader = new FileReader();
@@ -311,8 +316,22 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
                     const hasContent = children.length > 0 || docs.length > 0;
                     if (!hasContent) return null;
                     const isExpanded = expandedPickerFolders.has(folder.id);
+                    const indent = 8 + depth * 14;
                     return (
-                      <div key={folder.id}>
+                      <div key={folder.id} className="relative">
+                        {/* Tree connector lines */}
+                        {depth > 0 && (
+                          <>
+                            <div
+                              className="absolute top-0 bottom-0 border-l border-muted-foreground/15"
+                              style={{ left: `${8 + (depth - 1) * 14 + 6}px` }}
+                            />
+                            <div
+                              className="absolute border-t border-muted-foreground/15"
+                              style={{ left: `${8 + (depth - 1) * 14 + 6}px`, top: "50%", width: "8px" }}
+                            />
+                          </>
+                        )}
                         <button
                           type="button"
                           onClick={() => setExpandedPickerFolders((prev) => {
@@ -321,7 +340,7 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
                             return next;
                           })}
                           className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-xs rounded-md hover:bg-muted/50 transition-colors"
-                          style={{ paddingLeft: `${8 + depth * 12}px` }}
+                          style={{ paddingLeft: `${indent}px` }}
                         >
                           {isExpanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
                           {folder.locked ? (
@@ -331,9 +350,24 @@ export function ContextCapturePanel({ items, onItemsChange }: ContextCapturePane
                           <span className="font-medium truncate">{folder.name}</span>
                         </button>
                         {isExpanded && (
-                          <div style={{ paddingLeft: `${depth * 8}px` }}>
+                          <div className="relative">
                             {children.map((c) => renderFolder(c, depth + 1))}
-                            {docs.map(renderDoc)}
+                            {docs.map((doc) => (
+                              <div key={doc.id} className="relative">
+                                {/* Tree line for docs */}
+                                <div
+                                  className="absolute top-0 bottom-0 border-l border-muted-foreground/15"
+                                  style={{ left: `${indent + 6}px` }}
+                                />
+                                <div
+                                  className="absolute border-t border-muted-foreground/15"
+                                  style={{ left: `${indent + 6}px`, top: "50%", width: "8px" }}
+                                />
+                                <div style={{ paddingLeft: `${14}px` }}>
+                                  {renderDoc(doc)}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

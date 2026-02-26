@@ -58,6 +58,8 @@ interface ChatDrawerProps {
   /** Controlled active conversation (persisted in session state) */
   activeConversationId: number | null;
   onActiveConversationChange: (id: number | null) => void;
+  /** When true, render inline (no Sheet wrapper) — used in right panel */
+  embedded?: boolean;
 }
 
 type DrawerView = "conversations" | "thread" | "settings" | "connections";
@@ -68,6 +70,7 @@ export function ChatDrawer({
   sessionContext,
   activeConversationId,
   onActiveConversationChange,
+  embedded,
 }: ChatDrawerProps) {
   const [view, setView] = useState<DrawerView>(
     activeConversationId ? "thread" : "conversations",
@@ -96,34 +99,49 @@ export function ChatDrawer({
     queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
   }, [queryClient, onActiveConversationChange]);
 
+  const content = (
+    <>
+      {view === "conversations" && (
+        <ConversationListView
+          sessionContext={sessionContext}
+          onOpenThread={openThread}
+          onOpenSettings={() => setView("settings")}
+          onOpenConnections={() => setView("connections")}
+        />
+      )}
+      {view === "thread" && activeConversationId && (
+        <ThreadView
+          conversationId={activeConversationId}
+          otherUser={activeOtherUser}
+          sessionContext={sessionContext}
+          onBack={goBack}
+        />
+      )}
+      {view === "settings" && (
+        <ChatSettings onBack={() => setView("conversations")} />
+      )}
+      {view === "connections" && (
+        <ConnectionsManager onBack={() => setView("conversations")} />
+      )}
+    </>
+  );
+
+  // Embedded mode: render inline without Sheet wrapper
+  if (embedded) {
+    return (
+      <div className="h-full flex flex-col">
+        {content}
+      </div>
+    );
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="w-[400px] sm:w-[440px] p-0 flex flex-col"
       >
-        {view === "conversations" && (
-          <ConversationListView
-            sessionContext={sessionContext}
-            onOpenThread={openThread}
-            onOpenSettings={() => setView("settings")}
-            onOpenConnections={() => setView("connections")}
-          />
-        )}
-        {view === "thread" && activeConversationId && (
-          <ThreadView
-            conversationId={activeConversationId}
-            otherUser={activeOtherUser}
-            sessionContext={sessionContext}
-            onBack={goBack}
-          />
-        )}
-        {view === "settings" && (
-          <ChatSettings onBack={() => setView("conversations")} />
-        )}
-        {view === "connections" && (
-          <ConnectionsManager onBack={() => setView("conversations")} />
-        )}
+        {content}
       </SheetContent>
     </Sheet>
   );

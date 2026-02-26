@@ -39,6 +39,7 @@ import {
   Copy,
   Download,
   Sparkles,
+  ChevronsUp,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
@@ -170,9 +171,68 @@ export function StoragePanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "date">("date");
 
+  // Ref for tree scroll area (jump-to-top)
+  const treeScrollRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (currentTitle) setSaveTitle(currentTitle);
   }, [currentTitle]);
+
+  // Keyboard hotkeys for selected document
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      // Only handle when no input is focused
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        // Delete selected doc
+        if (selectedDocId) {
+          const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
+          if (doc && !doc.locked && window.confirm(`Delete "${doc.title}"?`)) {
+            deleteDocMutation.mutate(doc.id);
+          }
+        }
+      }
+      if (e.key === "F2" || (e.key === "r" && !e.metaKey && !e.ctrlKey)) {
+        // Rename selected doc
+        if (selectedDocId) {
+          const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
+          if (doc && !doc.locked) {
+            e.preventDefault();
+            setRenamingDocId(doc.id);
+            setRenameText(doc.title);
+          }
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
+        // Copy selected doc content
+        if (selectedDocId) {
+          apiRequest("GET", `/api/documents/${selectedDocId}`)
+            .then((r) => r.json())
+            .then((data) => {
+              navigator.clipboard.writeText(data.content || "");
+              toast({ title: "Copied", description: "Document content copied to clipboard" });
+            })
+            .catch(() => {});
+        }
+      }
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) {
+        // Summarize selected doc
+        if (selectedDocId && previewDoc?.content && !isSummarizing) {
+          e.preventDefault();
+          handleSummarize();
+        }
+      }
+      if (e.key === "Home") {
+        // Jump to top of tree
+        treeScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isOpen, selectedDocId, allDocsQuery.data, toast, previewDoc, isSummarizing, handleSummarize]);
 
   // ── Queries ──
 
@@ -622,6 +682,14 @@ export function StoragePanel({
           </div>
         )}
 
+        {/* Keyboard shortcut hints */}
+        <div className="flex items-center gap-2 text-[9px] text-muted-foreground/50 mr-2">
+          <span><kbd className="px-1 py-0.5 rounded bg-muted text-[8px]">F2</kbd> Rename</span>
+          <span><kbd className="px-1 py-0.5 rounded bg-muted text-[8px]">Del</kbd> Delete</span>
+          <span><kbd className="px-1 py-0.5 rounded bg-muted text-[8px]">Ctrl+C</kbd> Copy</span>
+          <span><kbd className="px-1 py-0.5 rounded bg-muted text-[8px]">S</kbd> Summarize</span>
+          <span><kbd className="px-1 py-0.5 rounded bg-muted text-[8px]">Home</kbd> Top</span>
+        </div>
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>
@@ -634,20 +702,31 @@ export function StoragePanel({
         <ResizablePanel defaultSize={18} minSize={12} maxSize={30} className="flex flex-col overflow-hidden bg-card">
           <div className="px-2 py-1.5 border-b flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Folders</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => setIsCreatingFolder(true)}
-              disabled={isCreatingFolder}
-              title="New folder"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-            </Button>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => treeScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                title="Jump to top (Home)"
+              >
+                <ChevronsUp className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setIsCreatingFolder(true)}
+                disabled={isCreatingFolder}
+                title="New folder"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           </div>
 
           <ScrollArea className="flex-1 min-h-0" type="auto">
-            <div className="p-2 space-y-0.5 min-w-fit">
+            <div ref={treeScrollRef} className="p-2 space-y-0.5 min-w-fit">
               {/* Root / My Documents — drop target */}
               <RootDropTarget
                 isActive={currentFolderId === null}
@@ -1301,7 +1380,7 @@ function FolderTreeBranch({
       {isRenaming && !isLocked ? (
         <div
           className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/30"
-          style={{ paddingLeft: `${treeIndent(depth)}px` }}
+          style={{ paddingLeft: `${treeIndent(depth) + (depth > 0 ? 12 : 0)}px` }}
         >
           <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <Input
@@ -1331,6 +1410,19 @@ function FolderTreeBranch({
           }}
           onDrop={(e) => onDrop(folder.id, e)}
         >
+          {/* Tree connector line */}
+          {depth > 0 && (
+            <div
+              className="absolute top-0 bottom-0 border-l border-muted-foreground/15"
+              style={{ left: `${treeIndent(depth - 1) + 8}px` }}
+            />
+          )}
+          {depth > 0 && (
+            <div
+              className="absolute border-t border-muted-foreground/15"
+              style={{ left: `${treeIndent(depth - 1) + 8}px`, top: "50%", width: "8px" }}
+            />
+          )}
           <div
             className={`w-full flex items-center gap-1 py-1.5 rounded-md text-left text-sm transition-all cursor-pointer ${
               isDragOver
