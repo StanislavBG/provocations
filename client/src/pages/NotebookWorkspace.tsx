@@ -202,7 +202,7 @@ export default function NotebookWorkspace() {
       const config = getAppFlowConfig(tplId);
 
       const payload = {
-        document: template?.templateContent || "",
+        document: template?.templateContent || "(empty — create from scratch)",
         objective: obj,
         appType,
         instruction: `Create a comprehensive first draft based on the objective. ${
