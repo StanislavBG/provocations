@@ -338,3 +338,101 @@ export const workspaceSessions = pgTable("workspace_sessions", {
 
 export type StoredWorkspaceSession = typeof workspaceSessions.$inferSelect;
 
+// ══════════════════════════════════════════════════════════════════
+// Messaging — Connections, Conversations & Encrypted Messages
+// ══════════════════════════════════════════════════════════════════
+
+// Connections — tracks relationships between users.
+// Both users must accept before they can message each other.
+export const connections = pgTable("connections", {
+  id: serial("id").primaryKey(),
+  requesterId: varchar("requester_id", { length: 128 }).notNull(),     // Clerk userId who sent the invite
+  responderId: varchar("responder_id", { length: 128 }).notNull(),     // Clerk userId who received it
+  status: varchar("status", { length: 16 }).default("pending").notNull(), // "pending" | "accepted" | "blocked"
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_connections_requester").on(table.requesterId),
+  index("idx_connections_responder").on(table.responderId),
+  uniqueIndex("idx_connections_pair").on(table.requesterId, table.responderId),
+]);
+
+export type StoredConnection = typeof connections.$inferSelect;
+
+// Conversations — a chat thread between exactly two connected users.
+// One conversation per connection. Title is encrypted.
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  connectionId: integer("connection_id").notNull(),                    // FK to connections.id
+  // Participants stored explicitly for fast lookups
+  participantA: varchar("participant_a", { length: 128 }).notNull(),   // Clerk userId
+  participantB: varchar("participant_b", { length: 128 }).notNull(),   // Clerk userId
+  // Last activity timestamp for sorting conversation list
+  lastActivityAt: timestamp("last_activity_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_conversations_participant_a").on(table.participantA),
+  index("idx_conversations_participant_b").on(table.participantB),
+  uniqueIndex("idx_conversations_connection").on(table.connectionId),
+]);
+
+export type StoredConversation = typeof conversations.$inferSelect;
+
+// Messages — individual messages within a conversation. Fully encrypted at rest.
+// Auto-purged after 7 days via scheduled cleanup.
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),                // FK to conversations.id
+  senderId: varchar("sender_id", { length: 128 }).notNull(),          // Clerk userId
+  // AES-256-GCM encrypted message body
+  ciphertext: text("ciphertext").notNull(),
+  salt: varchar("salt", { length: 64 }).notNull(),
+  iv: varchar("iv", { length: 32 }).notNull(),
+  // Message metadata
+  messageType: varchar("message_type", { length: 16 }).default("text").notNull(), // "text" | "context-share"
+  // For context-share: encrypted reference to shared document/context
+  refCiphertext: text("ref_ciphertext"),
+  refSalt: varchar("ref_salt", { length: 64 }),
+  refIv: varchar("ref_iv", { length: 32 }),
+  // Read receipt
+  readAt: timestamp("read_at"),
+  // Expiry — messages older than this are purged
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_messages_conversation").on(table.conversationId),
+  index("idx_messages_sender").on(table.senderId),
+  index("idx_messages_expires").on(table.expiresAt),
+  index("idx_messages_created").on(table.conversationId, table.createdAt),
+]);
+
+export type StoredMessage = typeof messages.$inferSelect;
+
+// Chat preferences — per-user messaging settings (separate from app preferences)
+export const chatPreferences = pgTable("chat_preferences", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull().unique(),
+  // Presence / status
+  presenceStatus: varchar("presence_status", { length: 16 }).default("available").notNull(), // "available" | "busy" | "away" | "invisible"
+  customStatusText: varchar("custom_status_text", { length: 100 }),
+  // Notification settings
+  notificationsEnabled: boolean("notifications_enabled").default(true).notNull(),
+  notifyOnMentionOnly: boolean("notify_on_mention_only").default(false).notNull(),
+  mutedConversations: text("muted_conversations"),  // JSON array of conversation IDs
+  // Privacy
+  readReceiptsEnabled: boolean("read_receipts_enabled").default(true).notNull(),
+  typingIndicatorsEnabled: boolean("typing_indicators_enabled").default(true).notNull(),
+  // Message retention (days) — 7 default, user can lower
+  messageRetentionDays: integer("message_retention_days").default(7).notNull(),
+  // Display
+  chatSoundEnabled: boolean("chat_sound_enabled").default(true).notNull(),
+  compactMode: boolean("compact_mode").default(false).notNull(),
+  // Timestamps
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  uniqueIndex("idx_chat_preferences_user").on(table.userId),
+]);
+
+export type StoredChatPreferences = typeof chatPreferences.$inferSelect;
+

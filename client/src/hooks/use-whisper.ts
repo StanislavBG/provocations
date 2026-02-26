@@ -101,6 +101,8 @@ export function useWhisperRecorder({
   // Web Speech API fallback state
   const recognitionRef = useRef<any>(null);
   const speechTranscriptRef = useRef("");
+  /** When true the user intentionally stopped — do NOT auto-restart */
+  const speechStoppingRef = useRef(false);
 
   // Check availability on mount
   useEffect(() => {
@@ -258,43 +260,67 @@ export function useWhisperRecorder({
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: any) => {
-      let finalTranscript = "";
+      let newFinal = "";
       let interimTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          newFinal += event.results[i][0].transcript;
         } else {
           interimTranscript += event.results[i][0].transcript;
         }
       }
-      if (finalTranscript) {
-        speechTranscriptRef.current += finalTranscript + " ";
+      if (newFinal) {
+        speechTranscriptRef.current += newFinal + " ";
+        // Deliver confirmed fragments immediately so the parent can use them
+        // without waiting for stop — critical for long conversations
+        onTranscriptRef.current(speechTranscriptRef.current.trim());
       }
       const full = speechTranscriptRef.current + interimTranscript;
       if (full) onInterimTranscriptRef.current?.(full);
     };
 
     recognition.onerror = (event: any) => {
+      // "no-speech" and "aborted" are recoverable — the onend handler
+      // will auto-restart. Only fatal errors should kill the session.
+      if (event.error === "no-speech" || event.error === "aborted") return;
       console.error("Speech recognition error:", event.error);
+      speechStoppingRef.current = true;
       isRecordingRef.current = false;
       setIsRecording(false);
       onRecordingChangeRef.current?.(false);
     };
 
     recognition.onend = () => {
-      if (speechTranscriptRef.current.trim()) {
-        onTranscriptRef.current(speechTranscriptRef.current.trim());
+      // If user intentionally stopped, clean up (final fragments already
+      // delivered incrementally via onresult)
+      if (speechStoppingRef.current) {
+        speechStoppingRef.current = false;
+        speechTranscriptRef.current = "";
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        onRecordingChangeRef.current?.(false);
+        return;
       }
-      speechTranscriptRef.current = "";
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      onRecordingChangeRef.current?.(false);
+      // Otherwise the browser killed the session (silence timeout, network
+      // hiccup, etc.) — auto-restart to keep listening
+      if (isRecordingRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          // start() can throw if called too quickly — retry once
+          setTimeout(() => {
+            try { recognition.start(); } catch { /* give up */ }
+          }, 200);
+        }
+      }
     };
 
     recognitionRef.current = recognition;
     speechTranscriptRef.current = "";
+    speechStoppingRef.current = false;
 
     try {
       recognition.start();
@@ -309,6 +335,7 @@ export function useWhisperRecorder({
 
   const stopSpeechFallback = useCallback(() => {
     if (recognitionRef.current) {
+      speechStoppingRef.current = true;
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }

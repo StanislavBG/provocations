@@ -31,6 +31,7 @@ export function VoiceRecorder({
   const {
     isRecording,
     isSupported,
+    isWhisper,
     isTranscribing,
     startRecording,
     stopRecording,
@@ -89,7 +90,7 @@ export function VoiceRecorder({
       variant={isRecording ? "destructive" : variant}
       onClick={toggleRecording}
       disabled={isTranscribing}
-      title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Start voice recording"}
+      title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : `Voice input (${isWhisper ? "Whisper" : "browser speech"})`}
       className={`${className} ${isRecording ? "animate-pulse" : ""}`}
     >
       {isTranscribing ? (

@@ -5180,5 +5180,437 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
     console.warn("STRIPE_SECRET_KEY_PROD not set — Stripe endpoints disabled.");
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // Messaging — Connections, Conversations, Messages
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── Connections / Invitations ──
+
+  /** Send a connection invitation by email */
+  app.post("/api/chat/connections/invite", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { email } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ error: "email is required" });
+      }
+
+      // Look up the target user by email in Clerk
+      const users = await clerkClient.users.getUserList({ emailAddress: [email.toLowerCase()] });
+      const target = users.data?.[0];
+      if (!target) {
+        return res.status(404).json({ error: "No Provocations user found with that email" });
+      }
+      if (target.id === userId) {
+        return res.status(400).json({ error: "You cannot invite yourself" });
+      }
+
+      // Check if connection already exists
+      const existing = await storage.findConnectionBetween(userId, target.id);
+      if (existing) {
+        if (existing.status === "blocked") {
+          return res.status(403).json({ error: "Connection is blocked" });
+        }
+        return res.status(409).json({ error: "Connection already exists", connection: existing });
+      }
+
+      const connection = await storage.createConnection(userId, target.id);
+      res.status(201).json(connection);
+    } catch (error) {
+      console.error("Invite connection error:", error);
+      res.status(500).json({ error: "Failed to send invitation" });
+    }
+  });
+
+  /** List all connections for the current user */
+  app.get("/api/chat/connections", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const rawConnections = await storage.listConnections(userId);
+
+      // Enrich with Clerk user info
+      const otherUserIds = rawConnections.map((c) =>
+        c.requesterId === userId ? c.responderId : c.requesterId,
+      );
+
+      // Batch-fetch Clerk users
+      const clerkUsers = otherUserIds.length > 0
+        ? (await clerkClient.users.getUserList({ userId: otherUserIds })).data
+        : [];
+      const userMap = new Map(clerkUsers.map((u) => [u.id, u]));
+
+      const items = rawConnections.map((c) => {
+        const otherId = c.requesterId === userId ? c.responderId : c.requesterId;
+        const user = userMap.get(otherId);
+        return {
+          id: c.id,
+          userId: otherId,
+          displayName: user
+            ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.emailAddresses[0]?.emailAddress || otherId
+            : otherId,
+          email: user?.emailAddresses[0]?.emailAddress ?? "",
+          avatarUrl: user?.imageUrl ?? null,
+          status: c.status,
+          direction: c.requesterId === userId ? "outgoing" : "incoming",
+          createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt),
+        };
+      });
+
+      res.json(items);
+    } catch (error) {
+      console.error("List connections error:", error);
+      res.status(500).json({ error: "Failed to list connections" });
+    }
+  });
+
+  /** Respond to a connection invitation (accept / block / decline) */
+  app.post("/api/chat/connections/respond", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { connectionId, action } = req.body;
+      if (!connectionId || !action) {
+        return res.status(400).json({ error: "connectionId and action are required" });
+      }
+
+      const conn = await storage.getConnection(connectionId);
+      if (!conn) return res.status(404).json({ error: "Connection not found" });
+
+      // Only the responder can accept/decline
+      if (conn.responderId !== userId) {
+        return res.status(403).json({ error: "Only the invitee can respond" });
+      }
+      if (conn.status !== "pending") {
+        return res.status(400).json({ error: `Connection is already ${conn.status}` });
+      }
+
+      if (action === "decline") {
+        await storage.deleteConnection(connectionId);
+        return res.json({ deleted: true });
+      }
+
+      const status = action === "block" ? "blocked" : "accepted";
+      const updated = await storage.updateConnectionStatus(connectionId, status as "accepted" | "blocked");
+
+      // Auto-create conversation when accepted
+      if (status === "accepted" && updated) {
+        const existing = await storage.getConversationByConnection(connectionId);
+        if (!existing) {
+          await storage.createConversation(connectionId, conn.requesterId, conn.responderId);
+        }
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Respond connection error:", error);
+      res.status(500).json({ error: "Failed to respond to invitation" });
+    }
+  });
+
+  /** Delete / remove a connection */
+  app.delete("/api/chat/connections/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id, 10);
+      const conn = await storage.getConnection(id);
+      if (!conn) return res.status(404).json({ error: "Not found" });
+      if (conn.requesterId !== userId && conn.responderId !== userId) {
+        return res.status(403).json({ error: "Not your connection" });
+      }
+
+      await storage.deleteConnection(id);
+      res.json({ deleted: true });
+    } catch (error) {
+      console.error("Delete connection error:", error);
+      res.status(500).json({ error: "Failed to delete connection" });
+    }
+  });
+
+  // ── Conversations ──
+
+  /** List conversations for the current user */
+  app.get("/api/chat/conversations", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const key = getEncryptionKey();
+      const convos = await storage.listConversations(userId);
+
+      // Gather other-user IDs
+      const otherIds = convos.map((c) =>
+        c.participantA === userId ? c.participantB : c.participantA,
+      );
+      const clerkUsers = otherIds.length > 0
+        ? (await clerkClient.users.getUserList({ userId: otherIds })).data
+        : [];
+      const userMap = new Map(clerkUsers.map((u) => [u.id, u]));
+
+      const items = await Promise.all(
+        convos.map(async (c) => {
+          const otherId = c.participantA === userId ? c.participantB : c.participantA;
+          const user = userMap.get(otherId);
+
+          // Fetch last message + unread count
+          const recentMsgs = await storage.listMessages(c.id, 1);
+          const lastMsg = recentMsgs[0];
+          const unread = await storage.countUnreadMessages(c.id, userId);
+
+          let preview: string | undefined;
+          if (lastMsg) {
+            try {
+              const decrypted = decrypt(
+                { ciphertext: lastMsg.ciphertext, salt: lastMsg.salt, iv: lastMsg.iv },
+                key,
+              );
+              preview = decrypted.length > 80 ? decrypted.slice(0, 80) + "..." : decrypted;
+            } catch {
+              preview = "[encrypted]";
+            }
+          }
+
+          return {
+            id: c.id,
+            connectionId: c.connectionId,
+            otherUser: {
+              userId: otherId,
+              displayName: user
+                ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.emailAddresses[0]?.emailAddress || otherId
+                : otherId,
+              email: user?.emailAddresses[0]?.emailAddress ?? "",
+              avatarUrl: user?.imageUrl ?? null,
+            },
+            lastMessage: lastMsg
+              ? {
+                  preview: preview ?? "",
+                  senderId: lastMsg.senderId,
+                  createdAt: lastMsg.createdAt instanceof Date ? lastMsg.createdAt.toISOString() : String(lastMsg.createdAt),
+                }
+              : undefined,
+            unreadCount: unread,
+            lastActivityAt: c.lastActivityAt instanceof Date ? c.lastActivityAt.toISOString() : String(c.lastActivityAt),
+          };
+        }),
+      );
+
+      res.json(items);
+    } catch (error) {
+      console.error("List conversations error:", error);
+      res.status(500).json({ error: "Failed to list conversations" });
+    }
+  });
+
+  // ── Messages ──
+
+  /** Send a message */
+  app.post("/api/chat/messages", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { conversationId, content, messageType, contextRef } = req.body;
+      if (!conversationId || !content) {
+        return res.status(400).json({ error: "conversationId and content are required" });
+      }
+
+      // Verify user is participant
+      const convo = await storage.getConversation(conversationId);
+      if (!convo) return res.status(404).json({ error: "Conversation not found" });
+      if (convo.participantA !== userId && convo.participantB !== userId) {
+        return res.status(403).json({ error: "Not a participant" });
+      }
+
+      const key = getEncryptionKey();
+
+      // Get sender's retention preference for message expiry
+      const chatPrefs = await storage.getChatPreferences(userId);
+      const retentionDays = (chatPrefs as any).messageRetentionDays ?? 7;
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + retentionDays);
+
+      // Encrypt message body
+      const encBody = encrypt(content, key);
+
+      // Encrypt context reference if provided
+      let refEnc: { ciphertext: string; salt: string; iv: string } | undefined;
+      if (contextRef) {
+        refEnc = encrypt(contextRef, key);
+      }
+
+      const msg = await storage.createMessage({
+        conversationId,
+        senderId: userId,
+        ciphertext: encBody.ciphertext,
+        salt: encBody.salt,
+        iv: encBody.iv,
+        messageType: messageType ?? "text",
+        refCiphertext: refEnc?.ciphertext,
+        refSalt: refEnc?.salt,
+        refIv: refEnc?.iv,
+        expiresAt,
+      });
+
+      // Touch conversation for sorting
+      await storage.touchConversation(conversationId);
+
+      // Return decrypted message
+      res.status(201).json({
+        id: msg.id,
+        conversationId: msg.conversationId,
+        senderId: msg.senderId,
+        content,
+        messageType: msg.messageType,
+        contextRef: contextRef ?? undefined,
+        readAt: null,
+        createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : String(msg.createdAt),
+      });
+    } catch (error) {
+      console.error("Send message error:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  /** List messages for a conversation (paginated) */
+  app.get("/api/chat/messages/:conversationId", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const conversationId = parseInt(req.params.conversationId, 10);
+      const limit = Math.min(parseInt(String(req.query.limit ?? "50"), 10), 100);
+      const beforeId = req.query.beforeId ? parseInt(String(req.query.beforeId), 10) : undefined;
+
+      // Verify participant
+      const convo = await storage.getConversation(conversationId);
+      if (!convo) return res.status(404).json({ error: "Conversation not found" });
+      if (convo.participantA !== userId && convo.participantB !== userId) {
+        return res.status(403).json({ error: "Not a participant" });
+      }
+
+      const key = getEncryptionKey();
+      const rawMessages = await storage.listMessages(conversationId, limit, beforeId);
+
+      const items = rawMessages.map((m) => {
+        let content = "[encrypted]";
+        let contextRef: string | undefined;
+        try {
+          content = decrypt({ ciphertext: m.ciphertext, salt: m.salt, iv: m.iv }, key);
+        } catch { /* decryption failed */ }
+        if (m.refCiphertext && m.refSalt && m.refIv) {
+          try {
+            contextRef = decrypt({ ciphertext: m.refCiphertext, salt: m.refSalt, iv: m.refIv }, key);
+          } catch { /* ignore */ }
+        }
+        return {
+          id: m.id,
+          conversationId: m.conversationId,
+          senderId: m.senderId,
+          content,
+          messageType: m.messageType,
+          contextRef,
+          readAt: m.readAt ? (m.readAt instanceof Date ? m.readAt.toISOString() : String(m.readAt)) : null,
+          createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : String(m.createdAt),
+        };
+      });
+
+      // Return in chronological order (storage returns desc)
+      res.json(items.reverse());
+    } catch (error) {
+      console.error("List messages error:", error);
+      res.status(500).json({ error: "Failed to list messages" });
+    }
+  });
+
+  /** Mark messages as read */
+  app.post("/api/chat/messages/:conversationId/read", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const conversationId = parseInt(req.params.conversationId, 10);
+      const convo = await storage.getConversation(conversationId);
+      if (!convo) return res.status(404).json({ error: "Conversation not found" });
+      if (convo.participantA !== userId && convo.participantB !== userId) {
+        return res.status(403).json({ error: "Not a participant" });
+      }
+
+      await storage.markMessagesRead(conversationId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark read error:", error);
+      res.status(500).json({ error: "Failed to mark messages as read" });
+    }
+  });
+
+  // ── Chat Preferences ──
+
+  app.get("/api/chat/preferences", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const prefs = await storage.getChatPreferences(userId);
+      res.json({
+        presenceStatus: "available",
+        customStatusText: null,
+        notificationsEnabled: true,
+        notifyOnMentionOnly: false,
+        readReceiptsEnabled: true,
+        typingIndicatorsEnabled: true,
+        messageRetentionDays: 7,
+        chatSoundEnabled: true,
+        compactMode: false,
+        ...prefs,
+      });
+    } catch (error) {
+      console.error("Get chat prefs error:", error);
+      res.status(500).json({ error: "Failed to get chat preferences" });
+    }
+  });
+
+  app.put("/api/chat/preferences", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const allowedKeys = [
+        "presenceStatus", "customStatusText", "notificationsEnabled",
+        "notifyOnMentionOnly", "readReceiptsEnabled", "typingIndicatorsEnabled",
+        "messageRetentionDays", "chatSoundEnabled", "compactMode",
+      ];
+      const update: Record<string, any> = {};
+      for (const key of allowedKeys) {
+        if (key in req.body) update[key] = req.body[key];
+      }
+      if (Object.keys(update).length === 0) {
+        return res.status(400).json({ error: "At least one preference field is required" });
+      }
+
+      const prefs = await storage.setChatPreferences(userId, update);
+      res.json(prefs);
+    } catch (error) {
+      console.error("Set chat prefs error:", error);
+      res.status(500).json({ error: "Failed to set chat preferences" });
+    }
+  });
+
+  // ── Message purge scheduler (runs every hour) ──
+  setInterval(async () => {
+    try {
+      const purged = await storage.purgeExpiredMessages();
+      if (purged > 0) {
+        console.log(`Purged ${purged} expired messages.`);
+      }
+    } catch (err) {
+      console.error("Message purge error:", err);
+    }
+  }, 60 * 60 * 1000); // every hour
+
   return httpServer;
 }
