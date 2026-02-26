@@ -12,7 +12,7 @@ import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useRole } from "@/hooks/use-role";
-import { useRoute, useLocation } from "wouter";
+import { useRoute } from "wouter";
 import { useSessionAutosave } from "@/hooks/use-session-autosave";
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -54,7 +54,6 @@ export default function NotebookWorkspace() {
   const isMobile = useIsMobile();
   const { isAdmin } = useRole();
   const [routeMatch, routeParams] = useRoute("/app/:templateId");
-  const [, navigate] = useLocation();
 
   // ── Core state ──
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
@@ -385,11 +384,16 @@ export default function NotebookWorkspace() {
 
   // ── Onboarding / new session ──
   const handleOnboardingStart = useCallback(
-    (templateId: string, obj: string) => {
+    (templateId: string, obj: string, initialPinnedDocIds?: Set<number>) => {
       setSelectedTemplateId(templateId);
       setObjective(obj);
       setShowOnboarding(false);
       setSessionName(obj.slice(0, 50) || "Untitled Session");
+
+      // Apply pinned context documents from onboarding
+      if (initialPinnedDocIds && initialPinnedDocIds.size > 0) {
+        setPinnedDocIds(initialPinnedDocIds);
+      }
 
       // Initialize document with template content if available
       const template = prebuiltTemplates.find((t) => t.id === templateId);
@@ -592,7 +596,6 @@ export default function NotebookWorkspace() {
           onStart={handleOnboardingStart}
           onDismiss={() => setShowOnboarding(false)}
           onLoadSession={() => setShowSessionStore(true)}
-          onLoadContext={() => navigate("/store")}
           recentSessions={sessionsQuery.data?.sessions ?? []}
           isAutoResuming={sessionsQuery.isLoading}
         />
