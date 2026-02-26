@@ -32,7 +32,6 @@ import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { ContextSidebar } from "@/components/notebook/ContextSidebar";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
-import { OnboardingSplash } from "@/components/notebook/OnboardingSplash";
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
@@ -67,7 +66,6 @@ export default function NotebookWorkspace() {
 
   // ── Layout state ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(!routeMatch);
   const [showNewConfirm, setShowNewConfirm] = useState(false);
   const [showSessionStore, setShowSessionStore] = useState(false);
 
@@ -139,7 +137,7 @@ export default function NotebookWorkspace() {
     getTitle: getSessionTitle,
   });
 
-  // ── Auto-resume: load most recent session on mount ──
+  // ── Auto-resume: silently load most recent session on mount ──
   const sessionsQuery = useQuery<{ sessions: Array<{ id: number; title: string; templateId: string; updatedAt: string }> }>({
     queryKey: ["/api/sessions"],
     queryFn: async () => {
@@ -147,11 +145,11 @@ export default function NotebookWorkspace() {
       return res.json();
     },
     staleTime: Infinity,
-    enabled: showOnboarding && !routeMatch,
+    enabled: !routeMatch && !document.rawText,
   });
 
   useEffect(() => {
-    if (!sessionsQuery.data?.sessions?.length || !showOnboarding || routeMatch) return;
+    if (!sessionsQuery.data?.sessions?.length || routeMatch || document.rawText) return;
 
     const sorted = [...sessionsQuery.data.sessions].sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
@@ -159,7 +157,6 @@ export default function NotebookWorkspace() {
     const mostRecent = sorted[0];
     if (!mostRecent) return;
 
-    // Auto-resume the most recent session
     (async () => {
       try {
         const res = await apiRequest("GET", `/api/sessions/${mostRecent.id}`);
@@ -167,7 +164,7 @@ export default function NotebookWorkspace() {
         handleSessionStoreLoad(mostRecent.id, data.state, data.templateId);
         toast({ title: "Session resumed", description: mostRecent.title });
       } catch {
-        // If auto-resume fails, splash stays visible
+        // Silent failure — user starts fresh
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,49 +239,6 @@ export default function NotebookWorkspace() {
       const msg = error instanceof Error ? error.message : "Write failed";
       errorLogStore.push({ step: "Write", endpoint: "/api/write", message: msg });
       toast({ title: "Write failed", description: msg, variant: "destructive" });
-    },
-  });
-
-  // ── Create draft mutation (fires on "Start Working") ──
-  const createDraftMutation = useMutation({
-    mutationFn: async ({ obj, tplId }: { obj: string; tplId: string }) => {
-      const template = prebuiltTemplates.find((t) => t.id === tplId);
-      const appType = (templateIds as readonly string[]).includes(tplId) ? tplId : undefined;
-      const config = getAppFlowConfig(tplId);
-
-      const payload = {
-        document: template?.templateContent || "(empty — create from scratch)",
-        objective: obj,
-        appType,
-        instruction: `Create a comprehensive first draft based on the objective. ${
-          template?.templateContent
-            ? "Use the template structure as a starting framework."
-            : `This is a ${config.writer.documentType || "document"}.`
-        } Fill in all sections with substantive, well-structured content that directly addresses the objective. Write in markdown format.`,
-      };
-
-      const response = await apiRequest("POST", "/api/write", payload);
-      return (await response.json()) as WriteResponse;
-    },
-    onSuccess: (data) => {
-      const newVersion: DocumentVersion = {
-        id: generateId("v"),
-        text: data.document,
-        timestamp: Date.now(),
-        description: "Initial draft created",
-      };
-      setVersions([newVersion]);
-      setDocument((prev) => ({ ...prev, rawText: data.document }));
-
-      toast({
-        title: "Draft created",
-        description: "Your initial document has been generated. Review and refine it.",
-      });
-    },
-    onError: (error) => {
-      const msg = error instanceof Error ? error.message : "Draft creation failed";
-      errorLogStore.push({ step: "Create Draft", endpoint: "/api/write", message: msg });
-      toast({ title: "Draft creation failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -424,38 +378,27 @@ export default function NotebookWorkspace() {
     });
   }, []);
 
-  // ── Onboarding / new session ──
-  const handleOnboardingStart = useCallback(
-    (templateId: string, obj: string, initialPinnedDocIds?: Set<number>) => {
-      setSelectedTemplateId(templateId);
-      setObjective(obj);
-      setShowOnboarding(false);
-      setSessionName(obj.slice(0, 50) || "Untitled Session");
-
-      // Apply pinned context documents from onboarding
-      if (initialPinnedDocIds && initialPinnedDocIds.size > 0) {
-        setPinnedDocIds(initialPinnedDocIds);
-      }
-
-      // Initialize document with template content if available
-      const template = prebuiltTemplates.find((t) => t.id === templateId);
-      if (template?.templateContent) {
-        setDocument({ id: generateId("doc"), rawText: template.templateContent });
-      }
-
-      trackEvent("template_selected", { metadata: { templateId } });
-
-      // Auto-generate initial draft so the user doesn't start with an empty document
-      createDraftMutation.mutate({ obj, tplId: templateId });
+  // ── Capture research response to session context ──
+  const handleCaptureToContext = useCallback(
+    (text: string, label: string) => {
+      const item: ContextItem = {
+        id: generateId("ctx"),
+        type: "text",
+        content: text,
+        annotation: label,
+        createdAt: Date.now(),
+      };
+      setCapturedContext((prev) => [...prev, item]);
     },
-    [createDraftMutation],
+    [],
   );
 
+  // ── New session ──
   const handleNewSession = useCallback(() => {
     if (document.rawText || objective) {
       setShowNewConfirm(true);
     } else {
-      setShowOnboarding(true);
+      // Already empty — nothing to confirm
     }
   }, [document.rawText, objective]);
 
@@ -466,10 +409,10 @@ export default function NotebookWorkspace() {
     setVersions([]);
     setEditHistory([]);
     setDiscussionMessages([]);
+    setCapturedContext([]);
     setSessionName("Untitled Session");
     sessionAutosave.setCurrentSessionId(null);
     setShowNewConfirm(false);
-    setShowOnboarding(true);
   }, [sessionAutosave]);
 
   // ── Session management ──
@@ -489,7 +432,6 @@ export default function NotebookWorkspace() {
       setSessionNotes(state.sessionNotes ?? "");
       sessionAutosave.setCurrentSessionId(sessionId);
       setShowSessionStore(false);
-      setShowOnboarding(false);
       setSessionName(state.objective?.slice(0, 50) || "Loaded Session");
     },
     [sessionAutosave],
@@ -538,8 +480,8 @@ export default function NotebookWorkspace() {
                   documentText={document.rawText}
                   onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                   isMerging={writeMutation.isPending}
-                  isGeneratingDraft={createDraftMutation.isPending}
                   objective={objective}
+                  onObjectiveChange={setObjective}
                   templateName={selectedTemplateName}
                 />
               )}
@@ -554,6 +496,8 @@ export default function NotebookWorkspace() {
                   onRespondToMessage={handleRespondToMessage}
                   isChatLoading={askQuestionMutation.isPending}
                   hasDocument={!!document.rawText.trim()}
+                  objective={objective}
+                  onCaptureToContext={handleCaptureToContext}
                 />
               )}
             </div>
@@ -608,15 +552,15 @@ export default function NotebookWorkspace() {
                 documentText={document.rawText}
                 onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                 isMerging={writeMutation.isPending}
-                isGeneratingDraft={createDraftMutation.isPending}
                 objective={objective}
+                onObjectiveChange={setObjective}
                 templateName={selectedTemplateName}
               />
             </ResizablePanel>
 
             <ResizableHandle withHandle />
 
-            {/* Right: Personas + Chat */}
+            {/* Right: Research + Provo tabs */}
             <ResizablePanel defaultSize={25} minSize={15}>
               <NotebookRightPanel
                 activePersonas={activePersonas}
@@ -628,22 +572,13 @@ export default function NotebookWorkspace() {
                 onRespondToMessage={handleRespondToMessage}
                 isChatLoading={askQuestionMutation.isPending}
                 hasDocument={!!document.rawText.trim()}
+                objective={objective}
+                onCaptureToContext={handleCaptureToContext}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
         )}
       </div>
-
-      {/* Onboarding overlay */}
-      {showOnboarding && (
-        <OnboardingSplash
-          onStart={handleOnboardingStart}
-          onDismiss={() => setShowOnboarding(false)}
-          onLoadSession={() => setShowSessionStore(true)}
-          recentSessions={sessionsQuery.data?.sessions ?? []}
-          isAutoResuming={sessionsQuery.isLoading}
-        />
-      )}
 
       {/* New session confirmation */}
       <AlertDialog open={showNewConfirm} onOpenChange={setShowNewConfirm}>
