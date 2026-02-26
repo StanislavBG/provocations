@@ -82,6 +82,9 @@ export default function NotebookWorkspace() {
 
   // ── Context pinning ──
   const [pinnedDocIds, setPinnedDocIds] = useState<Set<number>>(new Set());
+  const [pinnedDocContents, setPinnedDocContents] = useState<
+    Record<number, { title: string; content: string }>
+  >({});
 
   // ── Document versioning ──
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -170,19 +173,34 @@ export default function NotebookWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionsQuery.data]);
 
+  // ── Build session context (pinned docs + captured items) ──
+  const buildSessionContext = useCallback(() => {
+    const pinnedItems: ContextItem[] = Object.entries(pinnedDocContents).map(
+      ([id, doc]) => ({
+        id: `pinned-${id}`,
+        type: "text" as const,
+        content: `[Document: ${doc.title}]\n${doc.content}`,
+        annotation: "Pinned as session context",
+        createdAt: Date.now(),
+      }),
+    );
+    return [...capturedContext, ...pinnedItems];
+  }, [capturedContext, pinnedDocContents]);
+
   // ── Write mutation (merges content into document) ──
   const writeMutation = useMutation({
     mutationFn: async (request: { instruction: string; description?: string }) => {
       if (!document) throw new Error("No document to write to");
 
       const isAggregate = appFlowConfig.writer.mode === "aggregate";
+      const allContext = buildSessionContext();
 
       const payload = {
         document: document.rawText,
         objective,
         appType: validAppType,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
-        capturedContext: capturedContext.length > 0 ? capturedContext : undefined,
+        capturedContext: allContext.length > 0 ? allContext : undefined,
         sessionNotes: sessionNotes.trim() || undefined,
         editHistory: editHistory.length > 0 ? editHistory : undefined,
         ...request,
@@ -273,6 +291,7 @@ export default function NotebookWorkspace() {
   // ── Ask question mutation (chat with persona team) ──
   const askQuestionMutation = useMutation({
     mutationFn: async (question: string) => {
+      const allContext = buildSessionContext();
       const response = await apiRequest("POST", "/api/discussion/ask", {
         question,
         document: document.rawText,
@@ -280,6 +299,7 @@ export default function NotebookWorkspace() {
         appType: validAppType,
         activePersonas: Array.from(activePersonas),
         previousMessages: discussionMessages.length > 0 ? discussionMessages.slice(-10) : undefined,
+        capturedContext: allContext.length > 0 ? allContext : undefined,
       });
       return (await response.json()) as AskQuestionResponse;
     },
@@ -365,19 +385,41 @@ export default function NotebookWorkspace() {
     });
   }, []);
 
-  // ── Context pinning ──
-  const handlePinDoc = useCallback((id: number) => {
-    setPinnedDocIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }, []);
+  // ── Context pinning (fetches doc content on pin) ──
+  const handlePinDoc = useCallback(
+    async (id: number) => {
+      setPinnedDocIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      try {
+        const res = await apiRequest("GET", `/api/documents/${id}`);
+        const data = await res.json();
+        setPinnedDocContents((prev) => ({
+          ...prev,
+          [id]: { title: data.title, content: data.content },
+        }));
+      } catch {
+        toast({
+          title: "Context load failed",
+          description: "Could not load document content",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast],
+  );
 
   const handleUnpinDoc = useCallback((id: number) => {
     setPinnedDocIds((prev) => {
       const next = new Set(prev);
       next.delete(id);
+      return next;
+    });
+    setPinnedDocContents((prev) => {
+      const next = { ...prev };
+      delete next[id];
       return next;
     });
   }, []);
