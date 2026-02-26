@@ -384,11 +384,16 @@ export default function NotebookWorkspace() {
 
   // ── Onboarding / new session ──
   const handleOnboardingStart = useCallback(
-    (templateId: string, obj: string) => {
+    (templateId: string, obj: string, initialPinnedDocIds?: Set<number>) => {
       setSelectedTemplateId(templateId);
       setObjective(obj);
       setShowOnboarding(false);
       setSessionName(obj.slice(0, 50) || "Untitled Session");
+
+      // Apply pinned context documents from onboarding
+      if (initialPinnedDocIds && initialPinnedDocIds.size > 0) {
+        setPinnedDocIds(initialPinnedDocIds);
+      }
 
       // Initialize document with template content if available
       const template = prebuiltTemplates.find((t) => t.id === templateId);
@@ -506,6 +511,7 @@ export default function NotebookWorkspace() {
                   onDismissResponse={handleDismissResponse}
                   onRespondToMessage={handleRespondToMessage}
                   isChatLoading={askQuestionMutation.isPending}
+                  hasDocument={!!document.rawText.trim()}
                 />
               )}
             </div>
@@ -579,6 +585,7 @@ export default function NotebookWorkspace() {
                 onDismissResponse={handleDismissResponse}
                 onRespondToMessage={handleRespondToMessage}
                 isChatLoading={askQuestionMutation.isPending}
+                hasDocument={!!document.rawText.trim()}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
