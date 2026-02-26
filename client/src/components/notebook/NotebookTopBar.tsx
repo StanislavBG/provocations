@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,23 +12,18 @@ import { Link } from "wouter";
 import { prebuiltTemplates, STATUS_LABEL_CONFIG } from "@/lib/prebuiltTemplates";
 import {
   Save,
-  FolderOpen,
   FilePlus2,
   GitCompare,
   Shield,
   Loader2,
   Sparkles,
   ChevronDown,
-  Library,
-  MessageSquare,
-  Target,
 } from "lucide-react";
 
 interface NotebookTopBarProps {
   sessionName: string;
   onSessionNameChange: (name: string) => void;
   onSave: () => void;
-  onLoad: () => void;
   onNew: () => void;
   isSaving: boolean;
   isAdmin: boolean;
@@ -37,12 +31,6 @@ interface NotebookTopBarProps {
   selectedTemplateId: string | null;
   /** Callback when user picks a different app from the picker */
   onSelectTemplate: (id: string) => void;
-  /** Current objective text */
-  objective?: string;
-  /** Open the user-to-user chat drawer */
-  onOpenChat?: () => void;
-  /** Unread message count for chat badge */
-  chatUnreadCount?: number;
   /** Version count for diff view toggle */
   versionCount?: number;
   showVersions?: boolean;
@@ -53,15 +41,11 @@ export function NotebookTopBar({
   sessionName,
   onSessionNameChange,
   onSave,
-  onLoad,
   onNew,
   isSaving,
   isAdmin,
   selectedTemplateId,
   onSelectTemplate,
-  objective,
-  onOpenChat,
-  chatUnreadCount = 0,
   versionCount = 0,
   showVersions,
   onToggleVersions,
@@ -212,47 +196,6 @@ export function NotebookTopBar({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5">
-          {/* Context Store */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link href="/store">
-                <Button variant="ghost" size="sm" className="gap-1.5 h-7">
-                  <Library className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline text-xs">Store</span>
-                </Button>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>Context Store</TooltipContent>
-          </Tooltip>
-
-          {/* Chat / Messages */}
-          {onOpenChat && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onOpenChat}
-                  className="gap-1.5 h-7 relative"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline text-xs">Chat</span>
-                  {chatUnreadCount > 0 && (
-                    <Badge
-                      variant="destructive"
-                      className="absolute -top-1 -right-1 text-[9px] px-1 py-0 min-w-[16px] h-4"
-                    >
-                      {chatUnreadCount}
-                    </Badge>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Messages</TooltipContent>
-            </Tooltip>
-          )}
-
-          <div className="w-px h-4 bg-border mx-0.5" />
-
           {/* Save */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -272,22 +215,6 @@ export function NotebookTopBar({
               </Button>
             </TooltipTrigger>
             <TooltipContent>Save session</TooltipContent>
-          </Tooltip>
-
-          {/* Load */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onLoad}
-                className="gap-1.5 h-7"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline text-xs">Load</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Load a saved session</TooltipContent>
           </Tooltip>
 
           {/* New */}
@@ -338,18 +265,6 @@ export function NotebookTopBar({
         </div>
       </div>
 
-      {/* Objective bar — shown when objective is set */}
-      {objective && (
-        <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-t border-primary/10">
-          <Target className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70 shrink-0">
-            Objective
-          </span>
-          <p className="text-xs font-serif text-foreground/80 truncate flex-1">
-            {objective}
-          </p>
-        </div>
-      )}
     </header>
   );
 }
