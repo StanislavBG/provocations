@@ -231,6 +231,69 @@ export async function ensureTables(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at);
       CREATE INDEX IF NOT EXISTS idx_error_logs_tag ON error_logs(tag);
 
+      -- Messaging tables
+      CREATE TABLE IF NOT EXISTS connections (
+        id SERIAL PRIMARY KEY,
+        requester_id VARCHAR(128) NOT NULL,
+        responder_id VARCHAR(128) NOT NULL,
+        status VARCHAR(16) DEFAULT 'pending' NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_connections_requester ON connections(requester_id);
+      CREATE INDEX IF NOT EXISTS idx_connections_responder ON connections(responder_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_connections_pair ON connections(requester_id, responder_id);
+
+      CREATE TABLE IF NOT EXISTS conversations (
+        id SERIAL PRIMARY KEY,
+        connection_id INTEGER NOT NULL,
+        participant_a VARCHAR(128) NOT NULL,
+        participant_b VARCHAR(128) NOT NULL,
+        last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_conversations_participant_a ON conversations(participant_a);
+      CREATE INDEX IF NOT EXISTS idx_conversations_participant_b ON conversations(participant_b);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_connection ON conversations(connection_id);
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        conversation_id INTEGER NOT NULL,
+        sender_id VARCHAR(128) NOT NULL,
+        ciphertext TEXT NOT NULL,
+        salt VARCHAR(64) NOT NULL,
+        iv VARCHAR(32) NOT NULL,
+        message_type VARCHAR(16) DEFAULT 'text' NOT NULL,
+        ref_ciphertext TEXT,
+        ref_salt VARCHAR(64),
+        ref_iv VARCHAR(32),
+        read_at TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_expires ON messages(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(conversation_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS chat_preferences (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL UNIQUE,
+        presence_status VARCHAR(16) DEFAULT 'available' NOT NULL,
+        custom_status_text VARCHAR(100),
+        notifications_enabled BOOLEAN DEFAULT TRUE NOT NULL,
+        notify_on_mention_only BOOLEAN DEFAULT FALSE NOT NULL,
+        muted_conversations TEXT,
+        read_receipts_enabled BOOLEAN DEFAULT TRUE NOT NULL,
+        typing_indicators_enabled BOOLEAN DEFAULT TRUE NOT NULL,
+        message_retention_days INTEGER DEFAULT 7 NOT NULL,
+        chat_sound_enabled BOOLEAN DEFAULT TRUE NOT NULL,
+        compact_mode BOOLEAN DEFAULT FALSE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_preferences_user ON chat_preferences(user_id);
+
       CREATE INDEX IF NOT EXISTS idx_tracking_events_user ON tracking_events(user_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_type ON tracking_events(event_type);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_session ON tracking_events(session_id);

@@ -78,6 +78,7 @@ import {
   CreditCard,
   StickyNote,
   Save,
+  MessageSquare,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -111,6 +112,7 @@ import type {
 import { useSessionAutosave } from "@/hooks/use-session-autosave";
 import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { SessionStorePanel } from "@/components/SessionStorePanel";
+import { ChatDrawer } from "@/components/ChatDrawer";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
   const context = mode === "clean" ? "objective" : mode;
@@ -271,6 +273,7 @@ export default function Workspace() {
 
   // Session Store panel visibility
   const [showSessionStore, setShowSessionStore] = useState(false);
+  const [showChatDrawer, setShowChatDrawer] = useState(false);
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
@@ -2343,6 +2346,16 @@ RULES:
                 </Button>
               </Link>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowChatDrawer(true)}
+              className="gap-1.5 relative"
+              title="Messages"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Chat</span>
+            </Button>
             <DebugButton />
             <UserButton data-testid="button-user-menu-main" />
           </div>
@@ -2800,6 +2813,12 @@ RULES:
         onToggleAutoSave={(enabled) => {
           apiRequest("PUT", "/api/preferences", { autoSaveSession: enabled });
         }}
+      />
+
+      {/* ── Chat Drawer ── */}
+      <ChatDrawer
+        open={showChatDrawer}
+        onOpenChange={setShowChatDrawer}
       />
 
     </div>
