@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useCallback, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
@@ -135,6 +135,40 @@ export default function NotebookWorkspace() {
     getState: getSessionState,
     getTitle: getSessionTitle,
   });
+
+  // ── Auto-resume: load most recent session on mount ──
+  const sessionsQuery = useQuery<{ sessions: Array<{ id: number; title: string; templateId: string; updatedAt: string }> }>({
+    queryKey: ["/api/sessions"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/sessions");
+      return res.json();
+    },
+    staleTime: Infinity,
+    enabled: showOnboarding && !routeMatch,
+  });
+
+  useEffect(() => {
+    if (!sessionsQuery.data?.sessions?.length || !showOnboarding || routeMatch) return;
+
+    const sorted = [...sessionsQuery.data.sessions].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+    const mostRecent = sorted[0];
+    if (!mostRecent) return;
+
+    // Auto-resume the most recent session
+    (async () => {
+      try {
+        const res = await apiRequest("GET", `/api/sessions/${mostRecent.id}`);
+        const data = await res.json();
+        handleSessionStoreLoad(mostRecent.id, data.state, data.templateId);
+        toast({ title: "Session resumed", description: mostRecent.title });
+      } catch {
+        // If auto-resume fails, splash stays visible
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionsQuery.data]);
 
   // ── Write mutation (merges content into document) ──
   const writeMutation = useMutation({
@@ -556,6 +590,9 @@ export default function NotebookWorkspace() {
         <OnboardingSplash
           onStart={handleOnboardingStart}
           onDismiss={() => setShowOnboarding(false)}
+          onLoadSession={() => setShowSessionStore(true)}
+          recentSessions={sessionsQuery.data?.sessions ?? []}
+          isAutoResuming={sessionsQuery.isLoading}
         />
       )}
 
