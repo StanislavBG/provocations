@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useWhisperRecorder } from "@/hooks/use-whisper";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer, markdownToHtml } from "@/components/MarkdownRenderer";
+import { BlankCanvasGuide } from "@/components/BlankCanvasGuide";
 
 /** Extract all markdown image entries (alt + src) from text */
 function extractMarkdownImages(md: string): { alt: string; src: string }[] {
@@ -669,6 +670,23 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
 
       {/* Content area — notebook-style draft canvas */}
       <div className="flex-1 overflow-hidden relative min-h-0 notebook-canvas">
+        {/* Blank canvas guidance when document is empty */}
+        {text.trim().length === 0 && (
+          <div className="absolute inset-0 z-10 overflow-y-auto bg-background/80 backdrop-blur-sm">
+            <BlankCanvasGuide
+              templateName={templateName}
+              objective={objective}
+              onFocusEditor={() => {
+                setViewMode("edit");
+                setTimeout(() => editorRef.current?.focus(), 100);
+              }}
+              onStartDictating={() => {
+                setViewMode("edit");
+                setTimeout(() => editorRef.current?.focus(), 100);
+              }}
+            />
+          </div>
+        )}
         {viewMode === "preview" ? (
           <MarkdownRenderer
             content={text}
