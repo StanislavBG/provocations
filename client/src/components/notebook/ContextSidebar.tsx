@@ -46,6 +46,8 @@ interface ContextSidebarProps {
   onOpenDoc?: (id: number, title: string) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  /** When true, renders without its own header/border (used inside NotebookLeftPanel tabs) */
+  embedded?: boolean;
 }
 
 /** Compute tree indent padding */
@@ -102,6 +104,7 @@ export function ContextSidebar({
   onOpenDoc,
   isCollapsed,
   onToggleCollapse,
+  embedded = false,
 }: ContextSidebarProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -280,8 +283,8 @@ export function ContextSidebar({
     );
   const rootDocs = getDocsInFolder(null);
 
-  // ── Collapsed view ──
-  if (isCollapsed) {
+  // ── Collapsed view (only when not embedded — parent handles collapse) ──
+  if (isCollapsed && !embedded) {
     return (
       <div className="h-full flex flex-col items-center py-2 gap-2 bg-card border-r w-12">
         <Tooltip>
@@ -579,52 +582,76 @@ export function ContextSidebar({
   };
 
   return (
-    <div className="h-full flex flex-col bg-card border-r">
-      {/* ─── Header ─── */}
-      <div className="p-2 border-b flex items-center justify-between gap-1">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Context
-        </span>
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleFileUpload}
-                disabled={uploadMutation.isPending}
-              >
-                {uploadMutation.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Upload className="w-3.5 h-3.5" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Upload file</TooltipContent>
-          </Tooltip>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onToggleCollapse}
-          >
-            <PanelLeftClose className="w-3.5 h-3.5" />
-          </Button>
+    <div className={`h-full flex flex-col ${embedded ? "" : "bg-card border-r"}`}>
+      {/* ─── Header (hidden when embedded in tab panel) ─── */}
+      {!embedded && (
+        <div className="p-2 border-b flex items-center justify-between gap-1">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Context
+          </span>
+          <div className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleFileUpload}
+                  disabled={uploadMutation.isPending}
+                >
+                  {uploadMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Upload file</TooltipContent>
+            </Tooltip>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onToggleCollapse}
+            >
+              <PanelLeftClose className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ─── Search ─── */}
       <div className="p-2 border-b">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search..."
-            className="h-7 text-xs pl-7"
-          />
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search..."
+              className="h-7 text-xs pl-7"
+            />
+          </div>
+          {embedded && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={handleFileUpload}
+                  disabled={uploadMutation.isPending}
+                >
+                  {uploadMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Upload file</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
