@@ -112,7 +112,7 @@ import type {
 import { useSessionAutosave } from "@/hooks/use-session-autosave";
 import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { SessionStorePanel } from "@/components/SessionStorePanel";
-import { ChatDrawer } from "@/components/ChatDrawer";
+import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
   const context = mode === "clean" ? "objective" : mode;
@@ -274,6 +274,7 @@ export default function Workspace() {
   // Session Store panel visibility
   const [showSessionStore, setShowSessionStore] = useState(false);
   const [showChatDrawer, setShowChatDrawer] = useState(false);
+  const [chatActiveConversationId, setChatActiveConversationId] = useState<number | null>(null);
 
   // Voice input for objective (no writer call, direct update)
   const [isRecordingObjective, setIsRecordingObjective] = useState(false);
@@ -1062,8 +1063,10 @@ RULES:
       savedDocTitle,
       sessionNotes,
       capturedContext,
+      chatDrawerOpen: showChatDrawer,
+      activeConversationId: chatActiveConversationId,
     };
-  }, [document, objective, secondaryObjective, interviewEntries, interviewDirection, isInterviewActive, currentInterviewQuestion, currentInterviewTopic, versions, editHistory, savedDocId, savedDocTitle, sessionNotes, capturedContext]);
+  }, [document, objective, secondaryObjective, interviewEntries, interviewDirection, isInterviewActive, currentInterviewQuestion, currentInterviewTopic, versions, editHistory, savedDocId, savedDocTitle, sessionNotes, capturedContext, showChatDrawer, chatActiveConversationId]);
 
   const getSessionTitle = useCallback((): string => {
     if (savedDocTitle) return savedDocTitle;
@@ -1120,6 +1123,9 @@ RULES:
     setSavedDocTitle(state.savedDocTitle);
     setSessionNotes(state.sessionNotes);
     setCapturedContext(state.capturedContext);
+    // Restore chat state
+    if (state.chatDrawerOpen) setShowChatDrawer(true);
+    if (state.activeConversationId) setChatActiveConversationId(state.activeConversationId);
     // Track session ID
     sessionAutosave.setCurrentSessionId(sessionId);
   }, [sessionAutosave]);
@@ -1486,6 +1492,9 @@ RULES:
     setTabs([]);
     setActiveTabId("");
     setRightPanelMode(appFlowConfig.rightPanelTabs[0]?.id ?? "discussion");
+    // Reset chat state
+    setShowChatDrawer(false);
+    setChatActiveConversationId(null);
     // Reset template selection (so appFlowConfig resets to default)
     setSelectedTemplateId(null);
     setLayoutOverride(null);
@@ -2821,6 +2830,15 @@ RULES:
       <ChatDrawer
         open={showChatDrawer}
         onOpenChange={setShowChatDrawer}
+        sessionContext={{
+          objective,
+          templateName: selectedTemplateName ?? null,
+          documentExcerpt: document.rawText?.trim()
+            ? document.rawText.slice(0, 200) + (document.rawText.length > 200 ? "..." : "")
+            : "",
+        }}
+        activeConversationId={chatActiveConversationId}
+        onActiveConversationChange={setChatActiveConversationId}
       />
 
     </div>
