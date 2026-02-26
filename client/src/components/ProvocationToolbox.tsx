@@ -117,6 +117,8 @@ interface ProvocationToolboxProps {
   // Context app props (captured context items)
   capturedContext?: ContextItem[];
   onCapturedContextChange?: (items: ContextItem[]) => void;
+  /** Called when user clicks a document to preview in the reading pane */
+  onDocumentPreview?: (docId: number, title: string, content: string) => void;
 
   // Model config props
   modelConfig?: ModelConfig;
@@ -188,6 +190,7 @@ export function ProvocationToolbox({
   referenceDocuments,
   capturedContext,
   onCapturedContextChange,
+  onDocumentPreview,
   modelConfig,
   onModelConfigChange,
   provokeMode = "challenge",
@@ -990,7 +993,7 @@ function ContextTabContent({
                 {capturedContext.length} item{capturedContext.length !== 1 ? "s" : ""} available as grounding context.
               </p>
             )}
-            <ContextCapturePanel items={capturedContext} onItemsChange={onCapturedContextChange} />
+            <ContextCapturePanel items={capturedContext} onItemsChange={onCapturedContextChange} onDocumentPreview={onDocumentPreview} />
           </div>
         )}
 

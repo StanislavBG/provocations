@@ -26,7 +26,7 @@ export interface LeftPanelTabConfig {
 }
 
 /** Identifiers for right-panel tabs */
-export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution" | "notes";
+export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution" | "notes" | "chat";
 
 /** Configuration for a single right-panel tab */
 export interface RightPanelTabConfig {
@@ -195,6 +195,11 @@ const RIGHT_NOTES: RightPanelTabConfig = {
   label: "Notes",
 };
 
+const RIGHT_CHAT: RightPanelTabConfig = {
+  id: "chat",
+  label: "Chat",
+};
+
 // ---------------------------------------------------------------------------
 // Default config — used by most prose-based templates
 // ---------------------------------------------------------------------------
@@ -213,7 +218,7 @@ const DEFAULT_CONFIG: AppFlowConfig = {
 
   leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
 
-  rightPanelTabs: [RIGHT_DISCUSSION],
+  rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
   writer: {
     mode: "edit",
@@ -283,7 +288,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       showLoadFromStore: true,
     },
     leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE],
-    rightPanelTabs: [RIGHT_NOTES],
+    rightPanelTabs: [RIGHT_NOTES, RIGHT_CHAT],
     inlineDiscussion: true,
     writer: {
       mode: "edit",
@@ -325,7 +330,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_WEBSITE, TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
     writer: {
       mode: "edit",
@@ -365,7 +370,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
     writer: {
       mode: "aggregate",
@@ -388,7 +393,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
     writer: {
       mode: "edit",
@@ -413,7 +418,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_PROVOKE, TAB_MODEL_CONFIG, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_IMAGE_PREVIEW, RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_IMAGE_PREVIEW, RIGHT_DISCUSSION, RIGHT_CHAT],
 
     writer: {
       mode: "edit",
@@ -438,7 +443,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
     leftPanelTabs: [TAB_STEPS, TAB_PROVOKE, TAB_CONTEXT],
 
-    rightPanelTabs: [RIGHT_EXECUTION, RIGHT_DISCUSSION],
+    rightPanelTabs: [RIGHT_EXECUTION, RIGHT_DISCUSSION, RIGHT_CHAT],
 
     writer: {
       mode: "edit",
