@@ -1196,6 +1196,9 @@ export const workspaceSessionStateSchema = z.object({
   savedDocTitle: z.string(),
   sessionNotes: z.string(),
   capturedContext: z.array(contextItemSchema),
+  // Chat state — persisted so session resume restores the chat panel
+  chatDrawerOpen: z.boolean().optional(),
+  activeConversationId: z.number().nullable().optional(),
 });
 
 export type WorkspaceSessionState = z.infer<typeof workspaceSessionStateSchema>;

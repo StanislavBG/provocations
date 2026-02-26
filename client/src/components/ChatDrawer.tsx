@@ -1,9 +1,13 @@
 /**
  * ChatDrawer — slide-out messaging panel for user-to-user conversations.
- * Opens from the right side of the workspace. Contains three views:
+ * Integrated with the workspace session: shows current objective, allows
+ * sharing context/document excerpts, and persists its state across saves.
+ *
+ * Views:
  *   1. Conversation list (default)
- *   2. Active message thread
+ *   2. Active message thread — with session context banner
  *   3. Chat settings
+ *   4. Connections manager
  */
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +20,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   MessageSquare,
   ArrowLeft,
@@ -23,10 +28,11 @@ import {
   Settings,
   UserPlus,
   Check,
-  X,
-  Clock,
   ChevronRight,
   Share2,
+  Target,
+  FileText,
+  Paperclip,
 } from "lucide-react";
 import type {
   ConnectionItem,
@@ -36,39 +42,59 @@ import type {
 import { ChatSettings } from "./ChatSettings";
 import { ConnectionsManager } from "./ConnectionsManager";
 
+/** Session context passed from Workspace so chat knows what you're working on */
+export interface ChatSessionContext {
+  objective: string;
+  templateName: string | null;
+  /** First ~200 chars of the current document for sharing */
+  documentExcerpt: string;
+}
+
 interface ChatDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Current workspace session context */
+  sessionContext: ChatSessionContext;
+  /** Controlled active conversation (persisted in session state) */
+  activeConversationId: number | null;
+  onActiveConversationChange: (id: number | null) => void;
 }
 
 type DrawerView = "conversations" | "thread" | "settings" | "connections";
 
-export function ChatDrawer({ open, onOpenChange }: ChatDrawerProps) {
-  const [view, setView] = useState<DrawerView>("conversations");
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+export function ChatDrawer({
+  open,
+  onOpenChange,
+  sessionContext,
+  activeConversationId,
+  onActiveConversationChange,
+}: ChatDrawerProps) {
+  const [view, setView] = useState<DrawerView>(
+    activeConversationId ? "thread" : "conversations",
+  );
   const [activeOtherUser, setActiveOtherUser] = useState<ConversationListItem["otherUser"] | null>(null);
   const queryClient = useQueryClient();
 
-  // Reset to conversation list when drawer closes
+  // When drawer opens, restore to thread view if there's an active conversation
   useEffect(() => {
-    if (!open) {
+    if (open && activeConversationId) {
+      setView("thread");
+    } else if (open && !activeConversationId) {
       setView("conversations");
-      setActiveConversationId(null);
     }
-  }, [open]);
+  }, [open, activeConversationId]);
 
   const openThread = useCallback((convoId: number, otherUser: ConversationListItem["otherUser"]) => {
-    setActiveConversationId(convoId);
+    onActiveConversationChange(convoId);
     setActiveOtherUser(otherUser);
     setView("thread");
-  }, []);
+  }, [onActiveConversationChange]);
 
   const goBack = useCallback(() => {
     setView("conversations");
-    setActiveConversationId(null);
-    // Refresh conversation list when leaving a thread
+    onActiveConversationChange(null);
     queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
-  }, [queryClient]);
+  }, [queryClient, onActiveConversationChange]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -78,6 +104,7 @@ export function ChatDrawer({ open, onOpenChange }: ChatDrawerProps) {
       >
         {view === "conversations" && (
           <ConversationListView
+            sessionContext={sessionContext}
             onOpenThread={openThread}
             onOpenSettings={() => setView("settings")}
             onOpenConnections={() => setView("connections")}
@@ -87,6 +114,7 @@ export function ChatDrawer({ open, onOpenChange }: ChatDrawerProps) {
           <ThreadView
             conversationId={activeConversationId}
             otherUser={activeOtherUser}
+            sessionContext={sessionContext}
             onBack={goBack}
           />
         )}
@@ -101,13 +129,43 @@ export function ChatDrawer({ open, onOpenChange }: ChatDrawerProps) {
   );
 }
 
+// ── Session Context Banner ──
+// Shown at the top of the conversation list and inside threads to anchor
+// what you're currently working on.
+
+function SessionContextBanner({ ctx }: { ctx: ChatSessionContext }) {
+  if (!ctx.objective && !ctx.templateName) return null;
+  return (
+    <div className="mx-3 mt-2 mb-1 p-2.5 rounded-lg bg-primary/5 border border-primary/10">
+      {ctx.templateName && (
+        <div className="flex items-center gap-1.5 mb-1">
+          <FileText className="w-3 h-3 text-primary/60" />
+          <span className="text-[10px] font-medium uppercase tracking-wider text-primary/60">
+            {ctx.templateName}
+          </span>
+        </div>
+      )}
+      {ctx.objective && (
+        <div className="flex items-start gap-1.5">
+          <Target className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+          <p className="text-xs text-foreground/80 line-clamp-2 leading-relaxed">
+            {ctx.objective}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Conversation List ──
 
 function ConversationListView({
+  sessionContext,
   onOpenThread,
   onOpenSettings,
   onOpenConnections,
 }: {
+  sessionContext: ChatSessionContext;
   onOpenThread: (id: number, otherUser: ConversationListItem["otherUser"]) => void;
   onOpenSettings: () => void;
   onOpenConnections: () => void;
@@ -118,10 +176,9 @@ function ConversationListView({
       const res = await apiRequest("GET", "/api/chat/conversations");
       return res.json();
     },
-    refetchInterval: 10000, // Poll every 10s for new messages
+    refetchInterval: 10000,
   });
 
-  // Check for pending invitations
   const { data: connectionsList = [] } = useQuery<ConnectionItem[]>({
     queryKey: ["/api/chat/connections"],
     queryFn: async () => {
@@ -150,7 +207,7 @@ function ConversationListView({
             )}
           </SheetTitle>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={onOpenConnections} title="Connections">
+            <Button variant="ghost" size="icon" onClick={onOpenConnections} title="Connections" className="relative">
               <UserPlus className="w-4 h-4" />
               {pendingIncoming.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-destructive rounded-full" />
@@ -163,7 +220,10 @@ function ConversationListView({
         </div>
       </SheetHeader>
 
-      <Separator />
+      {/* Current session context — what you're working on right now */}
+      <SessionContextBanner ctx={sessionContext} />
+
+      <Separator className="mt-1" />
 
       {/* Pending invitations banner */}
       {pendingIncoming.length > 0 && (
@@ -246,10 +306,12 @@ function ConversationListView({
 function ThreadView({
   conversationId,
   otherUser,
+  sessionContext,
   onBack,
 }: {
   conversationId: number;
   otherUser: ConversationListItem["otherUser"] | null;
+  sessionContext: ChatSessionContext;
   onBack: () => void;
 }) {
   const [input, setInput] = useState("");
@@ -264,7 +326,7 @@ function ThreadView({
       const res = await apiRequest("GET", `/api/chat/messages/${conversationId}`);
       return res.json();
     },
-    refetchInterval: 3000, // Poll every 3s for near-real-time
+    refetchInterval: 3000,
   });
 
   // Mark messages read when viewing
@@ -287,11 +349,16 @@ function ThreadView({
   }, []);
 
   const sendMutation = useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async ({ content, messageType, contextRef }: {
+      content: string;
+      messageType?: string;
+      contextRef?: string;
+    }) => {
       const res = await apiRequest("POST", "/api/chat/messages", {
         conversationId,
         content,
-        messageType: "text",
+        messageType: messageType ?? "text",
+        contextRef,
       });
       return res.json();
     },
@@ -307,8 +374,36 @@ function ThreadView({
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed || sendMutation.isPending) return;
-    sendMutation.mutate(trimmed);
+    sendMutation.mutate({ content: trimmed });
   };
+
+  /** Share current objective + document excerpt as a context-share message */
+  const handleShareContext = () => {
+    const parts: string[] = [];
+    if (sessionContext.templateName) {
+      parts.push(`[${sessionContext.templateName}]`);
+    }
+    if (sessionContext.objective) {
+      parts.push(`Objective: ${sessionContext.objective}`);
+    }
+    if (sessionContext.documentExcerpt) {
+      parts.push(`---\n${sessionContext.documentExcerpt}`);
+    }
+    if (parts.length === 0) {
+      toast({ title: "No session context to share", variant: "destructive" });
+      return;
+    }
+    sendMutation.mutate({
+      content: parts.join("\n\n"),
+      messageType: "context-share",
+      contextRef: JSON.stringify({
+        templateName: sessionContext.templateName,
+        objective: sessionContext.objective,
+      }),
+    });
+  };
+
+  const hasContext = !!(sessionContext.objective || sessionContext.documentExcerpt);
 
   return (
     <>
@@ -325,13 +420,40 @@ function ThreadView({
                 {otherUser.displayName.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{otherUser.displayName}</p>
               <p className="text-[11px] text-muted-foreground truncate">{otherUser.email}</p>
             </div>
           </>
         )}
+        {/* Share context button */}
+        {hasContext && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                onClick={handleShareContext}
+                disabled={sendMutation.isPending}
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Share current objective &amp; document excerpt
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
+
+      {/* Compact session context banner inside thread */}
+      {sessionContext.objective && (
+        <div className="px-3 py-1.5 bg-muted/30 border-b flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Target className="w-3 h-3 shrink-0" />
+          <span className="truncate">{sessionContext.objective}</span>
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
@@ -340,7 +462,18 @@ function ThreadView({
         ) : messagesList.length === 0 ? (
           <div className="text-center py-12">
             <MessageSquare className="w-10 h-10 mx-auto mb-2 text-muted-foreground/20" />
-            <p className="text-muted-foreground text-sm">Send the first message</p>
+            <p className="text-muted-foreground text-sm mb-1">Send the first message</p>
+            {hasContext && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={handleShareContext}
+              >
+                <Share2 className="w-3 h-3 mr-1" />
+                or share what you're working on
+              </Button>
+            )}
           </div>
         ) : (
           messagesList.map((msg) => (
@@ -358,6 +491,23 @@ function ThreadView({
           }}
           className="flex gap-2"
         >
+          {hasContext && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={handleShareContext}
+                  disabled={sendMutation.isPending}
+                >
+                  <Paperclip className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Share context</TooltipContent>
+            </Tooltip>
+          )}
           <Input
             ref={inputRef}
             value={input}
@@ -403,7 +553,9 @@ function MessageBubble({
         }`}
       >
         {message.messageType === "context-share" && (
-          <div className="flex items-center gap-1.5 text-[11px] opacity-70 mb-1">
+          <div className={`flex items-center gap-1.5 text-[11px] mb-1 ${
+            isMine ? "text-primary-foreground/70" : "text-muted-foreground"
+          }`}>
             <Share2 className="w-3 h-3" />
             Shared context
           </div>
