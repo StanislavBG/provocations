@@ -406,6 +406,8 @@ export const askQuestionRequestSchema = z.object({
   activePersonas: z.array(z.string()).optional(),
   previousMessages: z.array(discussionMessageSchema).optional(),
   appType: z.enum(templateIds).optional(),
+  /** Session context — pinned documents and captured items passed as grounding */
+  capturedContext: z.array(contextItemSchema).optional(),
 });
 
 export type AskQuestionRequest = z.infer<typeof askQuestionRequestSchema>;

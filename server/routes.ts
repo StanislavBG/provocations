@@ -3245,13 +3245,28 @@ Output only the instruction text. No meta-commentary.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { question, document: docText, objective, appType: askAppType, secondaryObjective, activePersonas, previousMessages } = parsed.data;
+      const { question, document: docText, objective, appType: askAppType, secondaryObjective, activePersonas, previousMessages, capturedContext } = parsed.data;
 
       const askAppConfig = getAppTypeConfig(askAppType);
       const askAppContext = formatAppTypeContext(askAppType);
 
       const MAX_DOC_LENGTH = 6000;
       const analysisText = docText.slice(0, MAX_DOC_LENGTH);
+
+      // Build session context section from pinned documents / captured items
+      let sessionContextSection = "";
+      if (capturedContext && capturedContext.length > 0) {
+        const contextEntries = capturedContext
+          .filter(item => item.type === "text")
+          .map((item, i) => {
+            const annotation = item.annotation ? ` (${item.annotation})` : "";
+            return `${i + 1}. ${item.content.slice(0, 2000)}${annotation}`;
+          })
+          .join("\n\n");
+        if (contextEntries) {
+          sessionContextSection = `\n\nSESSION CONTEXT (reference documents the author has pinned for this session):\n${contextEntries}`;
+        }
+      }
 
       // Build all available personas list
       const allPersonas = Object.values(builtInPersonas);
@@ -3334,7 +3349,7 @@ Output only valid JSON.`,
         system: `${askAppContext ? askAppContext + "\n\n" : ""}You are a panel of expert advisors responding to a user's question about their ${askAppConfig?.documentType || "document"}. Each advisor provides their unique perspective.
 
 DOCUMENT OBJECTIVE: ${objective}${secondaryObjective ? `\nSECONDARY OBJECTIVE: ${secondaryObjective}` : ""}
-${conversationContext}
+${sessionContextSection}${conversationContext}
 
 THE PANEL (respond from each of these perspectives):
 ${personaPromptSection}
