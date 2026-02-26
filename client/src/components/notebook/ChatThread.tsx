@@ -13,6 +13,9 @@ import {
   User,
   Users,
   Loader2,
+  Flame,
+  Lightbulb,
+  Send,
 } from "lucide-react";
 import type { DiscussionMessage, PersonaPerspective } from "@shared/schema";
 
@@ -59,11 +62,13 @@ function PersonaResponseBubble({
   onAccept,
   onDismiss,
   onRespond,
+  pinned = false,
 }: {
   msg: ChatMessageItem;
   onAccept: () => void;
   onDismiss: () => void;
   onRespond: (text: string) => void;
+  pinned?: boolean;
 }) {
   const [showPerspectives, setShowPerspectives] = useState(false);
   const [showReply, setShowReply] = useState(false);
@@ -74,10 +79,12 @@ function PersonaResponseBubble({
       ? "border-green-500/30 bg-green-50/30 dark:bg-green-950/20"
       : msg.status === "dismissed"
         ? "border-muted/30 bg-muted/10 opacity-60"
-        : "border-blue-500/20 bg-blue-50/30 dark:bg-blue-950/20";
+        : pinned
+          ? "border-blue-500/30 bg-blue-50/40 dark:bg-blue-950/30 shadow-sm"
+          : "border-blue-500/20 bg-blue-50/30 dark:bg-blue-950/20";
 
   return (
-    <div className={`rounded-lg border p-3 ${statusColor} max-w-[85%]`}>
+    <div className={`rounded-lg border p-3 ${statusColor}`}>
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
         <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
@@ -100,7 +107,9 @@ function PersonaResponseBubble({
       </div>
 
       {/* Synthesized content */}
-      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+        {msg.content}
+      </p>
 
       {/* Individual perspectives toggle */}
       {msg.perspectives && msg.perspectives.length > 0 && (
@@ -120,7 +129,10 @@ function PersonaResponseBubble({
           {showPerspectives && (
             <div className="mt-2 space-y-2">
               {msg.perspectives.map((p, i) => {
-                const persona = builtInPersonas[p.personaId as keyof typeof builtInPersonas];
+                const persona =
+                  builtInPersonas[
+                    p.personaId as keyof typeof builtInPersonas
+                  ];
                 return (
                   <div
                     key={i}
@@ -135,9 +147,7 @@ function PersonaResponseBubble({
                         : undefined
                     }
                   >
-                    <span className="font-semibold">
-                      {p.personaLabel}:
-                    </span>{" "}
+                    <span className="font-semibold">{p.personaLabel}:</span>{" "}
                     {p.content}
                   </div>
                 );
@@ -233,17 +243,25 @@ export function ChatThread({
   onRespondToMessage,
   isLoading,
 }: ChatThreadProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const historyScrollRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState("");
 
   const chatMessages = toChatMessages(messages);
 
-  // Auto-scroll on new messages
+  // Separate pending responses from resolved history
+  const pendingResponses = chatMessages.filter(
+    (m) => m.role === "persona-response" && m.status === "pending",
+  );
+  const pendingIds = new Set(pendingResponses.map((m) => m.id));
+  const historyMessages = chatMessages.filter((m) => !pendingIds.has(m.id));
+
+  // Auto-scroll history to bottom on new messages
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (historyScrollRef.current) {
+      historyScrollRef.current.scrollTop =
+        historyScrollRef.current.scrollHeight;
     }
-  }, [chatMessages.length]);
+  }, [historyMessages.length]);
 
   const handleSend = () => {
     const text = inputValue.trim();
@@ -252,21 +270,69 @@ export function ChatThread({
     setInputValue("");
   };
 
+  const hasAnyMessages = chatMessages.length > 0;
+
   return (
     <div className="h-full flex flex-col">
-      {/* Message list */}
-      <ScrollArea className="flex-1 p-3" ref={scrollRef}>
-        {chatMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground/50 py-16">
-            <Users className="w-10 h-10" />
-            <p className="text-sm text-center max-w-[280px]">
-              Ask your persona team anything about your document. They'll
-              challenge your thinking and provide multi-perspective feedback.
-            </p>
+      {/* ─── Pending responses (pinned at top, needs action) ─── */}
+      {pendingResponses.length > 0 && (
+        <div className="border-b shrink-0 max-h-[50%] overflow-y-auto">
+          <div className="px-3 py-1.5 bg-blue-50/50 dark:bg-blue-950/20 border-b">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+              Needs your attention
+            </span>
+          </div>
+          <div className="p-3 space-y-2">
+            {pendingResponses.map((msg) => (
+              <PersonaResponseBubble
+                key={msg.id}
+                msg={msg}
+                onAccept={() => onAcceptResponse(msg.id)}
+                onDismiss={() => onDismissResponse(msg.id)}
+                onRespond={(text) => onRespondToMessage(msg.id, text)}
+                pinned
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Loading indicator ─── */}
+      {isLoading && (
+        <div className="px-3 py-2 border-b shrink-0">
+          <div className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+            <span className="text-xs text-muted-foreground">
+              Consulting the team...
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Message history or empty state ─── */}
+      <ScrollArea className="flex-1 p-3" ref={historyScrollRef}>
+        {!hasAnyMessages && !isLoading ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground/50 py-12">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Flame className="w-5 h-5 text-primary/60" />
+              </div>
+              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <Lightbulb className="w-5 h-5 text-blue-500/60" />
+              </div>
+            </div>
+            <div className="text-center space-y-1.5 max-w-[260px]">
+              <p className="text-sm font-medium text-foreground/60">
+                Ready when you are
+              </p>
+              <p className="text-xs leading-relaxed">
+                Use <strong>Provoke Me</strong> to get challenged on gaps and assumptions, or <strong>Ask Advice</strong> for actionable improvements. You can also type your own question below.
+              </p>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
-            {chatMessages.map((msg) => (
+            {historyMessages.map((msg) => (
               <div
                 key={msg.id}
                 className={`flex ${
@@ -274,7 +340,7 @@ export function ChatThread({
                 }`}
               >
                 {msg.role === "user" ? (
-                  <div className="max-w-[75%] bg-primary text-primary-foreground rounded-lg px-3 py-2 text-sm">
+                  <div className="max-w-[85%] bg-primary text-primary-foreground rounded-lg px-3 py-2 text-sm">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <User className="w-3 h-3" />
                       <span className="text-[10px] opacity-70">You</span>
@@ -295,24 +361,12 @@ export function ChatThread({
                 )}
               </div>
             ))}
-
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
-                  <span className="text-xs text-muted-foreground">
-                    Consulting the team...
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </ScrollArea>
 
-      {/* Input bar */}
-      <div className="border-t p-2">
+      {/* ─── Input bar (always at bottom) ─── */}
+      <div className="border-t p-2 shrink-0">
         <div className="flex items-end gap-2">
           <div className="flex-1">
             <ProvokeText
@@ -320,7 +374,7 @@ export function ChatThread({
               variant="textarea"
               value={inputValue}
               onChange={setInputValue}
-              placeholder="Ask your team..."
+              placeholder="Ask your team anything..."
               className="text-sm"
               minRows={1}
               maxRows={4}
@@ -335,12 +389,13 @@ export function ChatThread({
             />
           </div>
           <Button
-            size="sm"
+            size="icon"
+            variant="ghost"
             onClick={handleSend}
             disabled={!inputValue.trim() || isLoading}
-            className="h-8 shrink-0"
+            className="h-8 w-8 shrink-0"
           >
-            Send
+            <Send className="w-4 h-4" />
           </Button>
         </div>
       </div>
