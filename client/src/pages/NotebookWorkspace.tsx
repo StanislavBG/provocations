@@ -33,6 +33,7 @@ import { ContextSidebar } from "@/components/notebook/ContextSidebar";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
 import { OnboardingSplash } from "@/components/notebook/OnboardingSplash";
+import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
 import type {
@@ -70,6 +71,10 @@ export default function NotebookWorkspace() {
   const [showOnboarding, setShowOnboarding] = useState(!routeMatch);
   const [showNewConfirm, setShowNewConfirm] = useState(false);
   const [showSessionStore, setShowSessionStore] = useState(false);
+
+  // ── User-to-user chat state ──
+  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+  const [activeChatConversationId, setActiveChatConversationId] = useState<number | null>(null);
 
   // ── Persona state ──
   const [activePersonas, setActivePersonas] = useState<Set<ProvocationType>>(
@@ -186,6 +191,50 @@ export default function NotebookWorkspace() {
       const msg = error instanceof Error ? error.message : "Write failed";
       errorLogStore.push({ step: "Write", endpoint: "/api/write", message: msg });
       toast({ title: "Write failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  // ── Create draft mutation (fires on "Start Working") ──
+  const createDraftMutation = useMutation({
+    mutationFn: async ({ obj, tplId }: { obj: string; tplId: string }) => {
+      const template = prebuiltTemplates.find((t) => t.id === tplId);
+      const appType = (templateIds as readonly string[]).includes(tplId) ? tplId : undefined;
+      const config = getAppFlowConfig(tplId);
+
+      const payload = {
+        document: template?.templateContent || "",
+        objective: obj,
+        appType,
+        instruction: `Create a comprehensive first draft based on the objective. ${
+          template?.templateContent
+            ? "Use the template structure as a starting framework."
+            : `This is a ${config.writer.documentType || "document"}.`
+        } Fill in all sections with substantive, well-structured content that directly addresses the objective. Write in markdown format.`,
+      };
+
+      const response = await apiRequest("POST", "/api/write", payload);
+      return (await response.json()) as WriteResponse;
+    },
+    onSuccess: (data) => {
+      const newVersion: DocumentVersion = {
+        id: generateId("v"),
+        text: data.document,
+        timestamp: Date.now(),
+        description: "Initial draft created",
+      };
+      setVersions([newVersion]);
+      setDocument((prev) => ({ ...prev, rawText: data.document }));
+      setCenterTab("document");
+
+      toast({
+        title: "Draft created",
+        description: "Your initial document has been generated. Review and refine it.",
+      });
+    },
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : "Draft creation failed";
+      errorLogStore.push({ step: "Create Draft", endpoint: "/api/write", message: msg });
+      toast({ title: "Draft creation failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -316,8 +365,11 @@ export default function NotebookWorkspace() {
       }
 
       trackEvent("template_selected", { metadata: { templateId } });
+
+      // Auto-generate initial draft so the user doesn't start with an empty document
+      createDraftMutation.mutate({ obj, tplId: templateId });
     },
-    [],
+    [createDraftMutation],
   );
 
   const handleNewSession = useCallback(() => {
@@ -380,7 +432,10 @@ export default function NotebookWorkspace() {
         onNew={handleNewSession}
         isSaving={sessionAutosave.isSaving}
         isAdmin={isAdmin}
-        activeAppLabel={selectedTemplateName}
+        selectedTemplateId={selectedTemplateId}
+        onSelectTemplate={setSelectedTemplateId}
+        objective={objective}
+        onOpenChat={() => setChatDrawerOpen(true)}
         versionCount={versions.length}
       />
 
@@ -414,6 +469,7 @@ export default function NotebookWorkspace() {
                   documentText={document.rawText}
                   onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                   isMerging={writeMutation.isPending}
+                  isGeneratingDraft={createDraftMutation.isPending}
                   objective={objective}
                   templateName={selectedTemplateName}
                 />
@@ -433,6 +489,7 @@ export default function NotebookWorkspace() {
                   documentText={document.rawText}
                   onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                   isMerging={writeMutation.isPending}
+                  isGeneratingDraft={createDraftMutation.isPending}
                   objective={objective}
                   templateName={selectedTemplateName}
                 />
@@ -510,6 +567,7 @@ export default function NotebookWorkspace() {
                 documentText={document.rawText}
                 onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                 isMerging={writeMutation.isPending}
+                isGeneratingDraft={createDraftMutation.isPending}
                 objective={objective}
                 templateName={selectedTemplateName}
               />
@@ -558,6 +616,19 @@ export default function NotebookWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* User-to-user chat drawer */}
+      <ChatDrawer
+        open={chatDrawerOpen}
+        onOpenChange={setChatDrawerOpen}
+        sessionContext={{
+          objective,
+          templateName: selectedTemplateName ?? null,
+          documentExcerpt: document.rawText.slice(0, 200),
+        } satisfies ChatSessionContext}
+        activeConversationId={activeChatConversationId}
+        onActiveConversationChange={setActiveChatConversationId}
+      />
 
       {/* Session Store panel */}
       <SessionStorePanel

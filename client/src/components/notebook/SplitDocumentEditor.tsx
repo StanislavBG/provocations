@@ -15,6 +15,7 @@ interface SplitDocumentEditorProps {
   text: string;
   onTextChange: (text: string) => void;
   isMerging?: boolean;
+  isGeneratingDraft?: boolean;
   objective?: string;
   templateName?: string;
 }
@@ -23,10 +24,11 @@ export function SplitDocumentEditor({
   text,
   onTextChange,
   isMerging = false,
+  isGeneratingDraft = false,
   objective,
   templateName,
 }: SplitDocumentEditorProps) {
-  const [viewMode, setViewMode] = useState<"split" | "edit" | "preview">("split");
+  const [viewMode, setViewMode] = useState<"split" | "edit" | "preview">("preview");
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
@@ -107,8 +109,17 @@ export function SplitDocumentEditor({
         </div>
       )}
 
+      {/* Generating draft indicator */}
+      {isGeneratingDraft && !text.trim() && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-serif text-foreground/80">Generating your first draft...</p>
+          <p className="text-xs text-muted-foreground/60">This may take a moment</p>
+        </div>
+      )}
+
       {/* Content area */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className={`flex-1 overflow-hidden flex ${isGeneratingDraft && !text.trim() ? "hidden" : ""}`}>
         {/* Editor pane */}
         {(viewMode === "split" || viewMode === "edit") && (
           <div
