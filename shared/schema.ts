@@ -128,6 +128,7 @@ export const templateIds = [
   "text-to-infographic",
   "email-composer",
   "agent-editor",
+  "bs-chart",
 ] as const;
 
 export type TemplateId = typeof templateIds[number];
