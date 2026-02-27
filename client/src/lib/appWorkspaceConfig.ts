@@ -26,7 +26,7 @@ export interface LeftPanelTabConfig {
 }
 
 /** Identifiers for right-panel tabs */
-export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution" | "notes" | "chat";
+export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution" | "notes" | "chat" | "transcript";
 
 /** Configuration for a single right-panel tab */
 export interface RightPanelTabConfig {
@@ -206,6 +206,11 @@ const RIGHT_CHAT: RightPanelTabConfig = {
   label: "Chat",
 };
 
+const RIGHT_TRANSCRIPT: RightPanelTabConfig = {
+  id: "transcript",
+  label: "Transcript",
+};
+
 // ---------------------------------------------------------------------------
 // Default config — used by most prose-based templates
 // ---------------------------------------------------------------------------
@@ -224,7 +229,7 @@ const DEFAULT_CONFIG: AppFlowConfig = {
 
   leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
 
-  rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
+  rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_TRANSCRIPT, RIGHT_CHAT],
 
   writer: {
     mode: "edit",
