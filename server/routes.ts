@@ -646,6 +646,21 @@ export async function registerRoutes(
   // LEGACY ENDPOINTS — kept for backward compatibility, delegate to invoke()
   // ═══════════════════════════════════════════════════════════════════════
 
+  // ── Live internet search via Gemini with Google Search grounding ──
+  app.post("/api/search", async (req, res) => {
+    try {
+      const { query } = req.body;
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "Query string is required" });
+      }
+      const result = await llm.search.query(query);
+      res.json(result);
+    } catch (error: any) {
+      console.error("[search] Error:", error.message);
+      res.status(500).json({ error: error.message || "Search failed" });
+    }
+  });
+
   // ── Generate challenges (persona-aware, no advice) ──
   // Generates challenges from selected personas. Each challenge includes the
   // full persona definition so the dialogue panel knows who is speaking.

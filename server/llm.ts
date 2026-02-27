@@ -595,6 +595,58 @@ function getStreamFn(
 }
 
 // ---------------------------------------------------------------------------
+// Gemini Search with Google Search grounding
+// ---------------------------------------------------------------------------
+
+export interface SearchResult {
+  answer: string;
+  sources: Array<{ title: string; url: string; snippet: string }>;
+}
+
+async function geminiSearchWithGrounding(query: string): Promise<SearchResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Gemini API key not configured for search. Set GEMINI_API_KEY.");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: query }] }],
+        tools: [{ googleSearch: {} }],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini search failed: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  const candidate = data.candidates?.[0];
+  const answer = candidate?.content?.parts?.map((p: any) => p.text).join("") || "No results found.";
+
+  const groundingMetadata = candidate?.groundingMetadata;
+  const sources: Array<{ title: string; url: string; snippet: string }> = [];
+
+  if (groundingMetadata?.groundingChunks) {
+    for (const chunk of groundingMetadata.groundingChunks) {
+      if (chunk.web) {
+        sources.push({
+          title: chunk.web.title || "Untitled",
+          url: chunk.web.uri || "",
+          snippet: "",
+        });
+      }
+    }
+  }
+
+  return { answer, sources };
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -670,5 +722,12 @@ export const llm = {
       }
       case "anthropic": return ANTHROPIC_MODEL;
     }
+  },
+
+  /** Live internet search via Gemini with Google Search grounding */
+  search: {
+    async query(query: string): Promise<SearchResult> {
+      return geminiSearchWithGrounding(query);
+    },
   },
 };

@@ -552,23 +552,37 @@ function ProvokeConfigApp({
                       const isSelected = selectedPersonas.has(type);
 
                       return (
-                        <button
-                          key={type}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors ${
-                            isSelected
-                              ? "bg-primary/10 text-foreground"
-                              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                          }`}
-                          onClick={() => togglePersona(type)}
-                        >
-                          <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : ""}`} />
-                          <span className="font-medium">{persona.label}</span>
-                          {isSelected && (
-                            <Badge variant="default" className="ml-auto h-4 px-1 text-[9px]">
-                              {isSuggestMode ? "suggesting" : "active"}
-                            </Badge>
-                          )}
-                        </button>
+                        <Tooltip key={type}>
+                          <TooltipTrigger asChild>
+                            <button
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors ${
+                                isSelected
+                                  ? "bg-primary/10 text-foreground"
+                                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                              }`}
+                              onClick={() => togglePersona(type)}
+                            >
+                              <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : ""}`} />
+                              <span className="font-medium">{persona.label}</span>
+                              {isSelected && (
+                                <Badge variant="default" className="ml-auto h-4 px-1 text-[9px]">
+                                  {isSuggestMode ? "suggesting" : "active"}
+                                </Badge>
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs p-3 space-y-2">
+                            <div className="font-semibold text-sm">{persona.label}</div>
+                            <div className="text-xs text-muted-foreground">{persona.role}</div>
+                            <div className="text-xs">{persona.description}</div>
+                            <div className="border-t pt-2 mt-2 space-y-1">
+                              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Challenges</div>
+                              <div className="text-xs">{persona.summary?.challenge || "Identifies gaps and weaknesses"}</div>
+                              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">Advises</div>
+                              <div className="text-xs">{persona.summary?.advice || "Provides actionable recommendations"}</div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
                       );
                     })}
                   </div>
@@ -784,23 +798,37 @@ function ProvokeWithDiscussion({
                           const isSelected = selectedPersonas.has(type);
 
                           return (
-                            <button
-                              key={type}
-                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors ${
-                                isSelected
-                                  ? "bg-primary/10 text-foreground"
-                                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                              }`}
-                              onClick={() => togglePersona(type)}
-                            >
-                              <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : ""}`} />
-                              <span className="font-medium">{persona.label}</span>
-                              {isSelected && (
-                                <Badge variant="default" className="ml-auto h-4 px-1 text-[9px]">
-                                  {isSuggestMode ? "suggesting" : "active"}
-                                </Badge>
-                              )}
-                            </button>
+                            <Tooltip key={type}>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors ${
+                                    isSelected
+                                      ? "bg-primary/10 text-foreground"
+                                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                                  }`}
+                                  onClick={() => togglePersona(type)}
+                                >
+                                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : ""}`} />
+                                  <span className="font-medium">{persona.label}</span>
+                                  {isSelected && (
+                                    <Badge variant="default" className="ml-auto h-4 px-1 text-[9px]">
+                                      {isSuggestMode ? "suggesting" : "active"}
+                                    </Badge>
+                                  )}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs p-3 space-y-2">
+                                <div className="font-semibold text-sm">{persona.label}</div>
+                                <div className="text-xs text-muted-foreground">{persona.role}</div>
+                                <div className="text-xs">{persona.description}</div>
+                                <div className="border-t pt-2 mt-2 space-y-1">
+                                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Challenges</div>
+                                  <div className="text-xs">{persona.summary?.challenge || "Identifies gaps and weaknesses"}</div>
+                                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">Advises</div>
+                                  <div className="text-xs">{persona.summary?.advice || "Provides actionable recommendations"}</div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
                           );
                         })}
                       </div>
