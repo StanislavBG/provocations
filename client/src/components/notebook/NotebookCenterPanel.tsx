@@ -7,6 +7,8 @@ interface NotebookCenterPanelProps {
   objective?: string;
   onObjectiveChange?: (objective: string) => void;
   templateName?: string;
+  previewDoc?: { title: string; content: string } | null;
+  onClosePreview?: () => void;
 }
 
 export function NotebookCenterPanel({
@@ -16,6 +18,8 @@ export function NotebookCenterPanel({
   objective,
   onObjectiveChange,
   templateName,
+  previewDoc,
+  onClosePreview,
 }: NotebookCenterPanelProps) {
   return (
     <div className="h-full flex flex-col">
@@ -26,6 +30,8 @@ export function NotebookCenterPanel({
         objective={objective}
         onObjectiveChange={onObjectiveChange}
         templateName={templateName}
+        previewDoc={previewDoc}
+        onClosePreview={onClosePreview}
       />
     </div>
   );
