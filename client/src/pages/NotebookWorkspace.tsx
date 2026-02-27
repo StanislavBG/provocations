@@ -427,6 +427,7 @@ export default function NotebookWorkspace() {
                   onCaptureToContext={handleCaptureToContext}
                   capturedContext={capturedContext}
                   onRemoveCapturedItem={handleRemoveCapturedItem}
+                  documentText={document.rawText}
                 />
               )}
             </div>
@@ -522,6 +523,7 @@ export default function NotebookWorkspace() {
                 onCaptureToContext={handleCaptureToContext}
                 capturedContext={capturedContext}
                 onRemoveCapturedItem={handleRemoveCapturedItem}
+                documentText={document.rawText}
               />
             </ResizablePanel>
             )}
