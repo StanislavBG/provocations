@@ -35,6 +35,9 @@ export interface LLMRequest {
   messages: LLMMessage[];
   maxTokens: number;
   temperature?: number;
+  /** Enable Google Search grounding (Gemini only). When true, Gemini uses
+   *  live internet search to ground its responses with real-time data. */
+  enableSearch?: boolean;
 }
 
 export interface LLMResponse {
@@ -405,73 +408,134 @@ async function* anthropicStream(
 }
 
 // ---------------------------------------------------------------------------
-// Gemini client (via OpenAI-compatible endpoint)
+// Gemini client (native REST API — direct to generativelanguage.googleapis.com)
 // ---------------------------------------------------------------------------
 
-let _geminiClient: OpenAI | null = null;
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-function getGemini(): OpenAI {
-  if (_geminiClient) return _geminiClient;
-
+function getGeminiApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("Gemini API key not configured. Set GEMINI_API_KEY.");
   }
-
-  _geminiClient = new OpenAI({
-    apiKey,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-  });
-  return _geminiClient;
+  return apiKey;
 }
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+/** Convert LLMRequest messages to Gemini native contents format */
+function toGeminiContents(messages: LLMMessage[]): Array<{ role: string; parts: Array<{ text: string }> }> {
+  return messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+}
 
-async function geminiGenerate(req: LLMRequest): Promise<LLMResponse> {
-  const client = getGemini();
+/** Build the native Gemini request body */
+function buildGeminiBody(req: LLMRequest, enableSearch = false): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    systemInstruction: { parts: [{ text: req.system }] },
+    contents: toGeminiContents(req.messages),
+    generationConfig: {
+      maxOutputTokens: req.maxTokens,
+      ...(req.temperature != null ? { temperature: req.temperature } : {}),
+    },
+  };
+  if (enableSearch) {
+    body.tools = [{ googleSearch: {} }];
+  }
+  return body;
+}
 
-  const response = await client.chat.completions.create({
-    model: GEMINI_MODEL,
-    max_tokens: req.maxTokens,
-    temperature: req.temperature,
-    messages: [
-      { role: "system", content: req.system },
-      ...req.messages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-    ],
-  });
+async function geminiNativeGenerate(
+  model: string,
+  req: LLMRequest,
+  enableSearch = false,
+): Promise<LLMResponse> {
+  const apiKey = getGeminiApiKey();
+  const response = await fetch(
+    `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildGeminiBody(req, enableSearch)),
+    },
+  );
 
-  const text = response.choices[0]?.message?.content ?? "";
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini generate failed: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  const candidate = data.candidates?.[0];
+  const text = candidate?.content?.parts?.map((p: any) => p.text).join("") ?? "";
   return { text };
 }
 
-async function* geminiStream(
-  req: LLMRequest
+async function* geminiNativeStream(
+  model: string,
+  req: LLMRequest,
+  enableSearch = false,
 ): AsyncGenerator<string, void, unknown> {
-  const client = getGemini();
+  const apiKey = getGeminiApiKey();
+  const response = await fetch(
+    `${GEMINI_API_BASE}/${model}:streamGenerateContent?alt=sse&key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildGeminiBody(req, enableSearch)),
+    },
+  );
 
-  const stream = await client.chat.completions.create({
-    model: GEMINI_MODEL,
-    max_tokens: req.maxTokens,
-    temperature: req.temperature,
-    stream: true,
-    messages: [
-      { role: "system", content: req.system },
-      ...req.messages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-    ],
-  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini stream failed: ${response.status} - ${errorText}`);
+  }
 
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content;
-    if (delta) {
-      yield delta;
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("No response body from Gemini stream");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE lines: each chunk is "data: {...}\n\n"
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? ""; // keep incomplete line in buffer
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data: ")) continue;
+      const jsonStr = trimmed.slice(6);
+      if (jsonStr === "[DONE]") return;
+
+      try {
+        const chunk = JSON.parse(jsonStr);
+        const parts = chunk.candidates?.[0]?.content?.parts;
+        if (parts) {
+          for (const part of parts) {
+            if (part.text) yield part.text;
+          }
+        }
+      } catch {
+        // Skip malformed JSON chunks
+      }
     }
   }
+}
+
+/** Default-model wrappers for global provider dispatch */
+async function geminiGenerate(req: LLMRequest): Promise<LLMResponse> {
+  return geminiNativeGenerate(GEMINI_MODEL, req, req.enableSearch);
+}
+
+function geminiStream(req: LLMRequest): AsyncGenerator<string, void, unknown> {
+  return geminiNativeStream(GEMINI_MODEL, req, req.enableSearch);
 }
 
 // ---------------------------------------------------------------------------
@@ -688,7 +752,7 @@ export const llm = {
       case "openai":
         return openaiCompatibleGenerate(getOpenAI(), model, req);
       case "gemini":
-        return openaiCompatibleGenerate(getGemini(), model, req);
+        return geminiNativeGenerate(model, req, req.enableSearch);
       case "anthropic":
         return anthropicGenerateWithModel(model, req);
     }
@@ -701,7 +765,7 @@ export const llm = {
       case "openai":
         return openaiCompatibleStream(getOpenAI(), model, req);
       case "gemini":
-        return openaiCompatibleStream(getGemini(), model, req);
+        return geminiNativeStream(model, req, req.enableSearch);
       case "anthropic":
         return anthropicStreamWithModel(model, req);
     }
