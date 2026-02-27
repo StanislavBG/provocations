@@ -78,7 +78,6 @@ import {
   CreditCard,
   StickyNote,
   Save,
-  MessageSquare,
   LayoutGrid,
   Check,
   Plus,
@@ -2228,6 +2227,22 @@ RULES:
             onDocRemove={handleRemoveGeneratedDoc}
           />
         ),
+        chat: (
+          <ChatDrawer
+            open={true}
+            onOpenChange={() => {}}
+            sessionContext={{
+              objective,
+              templateName: selectedTemplateName ?? null,
+              documentExcerpt: document.rawText?.trim()
+                ? document.rawText.slice(0, 200) + (document.rawText.length > 200 ? "..." : "")
+                : "",
+            }}
+            activeConversationId={chatActiveConversationId}
+            onActiveConversationChange={setChatActiveConversationId}
+            embedded
+          />
+        ),
         ...(selectedTemplateId === "agent-editor" ? {
           steps: (
             <div className="flex flex-col h-full">
@@ -2287,7 +2302,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "chat" ? MessageSquare : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : tab.id === "transcript" ? MicIcon : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : tab.id === "transcript" ? MicIcon : Zap;
           return (
             <button
               key={tab.id}
@@ -2419,23 +2434,6 @@ RULES:
             onWriteToDocument={handleTranscriptWrite}
             isWriting={writeMutation.isPending}
             selectedText={transcriptSelectedText}
-          />
-        </div>
-      ) : rightPanelMode === "chat" ? (
-        <div className="flex-1 overflow-hidden">
-          <ChatDrawer
-            open={true}
-            onOpenChange={() => setRightPanelMode("discussion")}
-            sessionContext={{
-              objective,
-              templateName: selectedTemplateName ?? null,
-              documentExcerpt: document.rawText?.trim()
-                ? document.rawText.slice(0, 200) + (document.rawText.length > 200 ? "..." : "")
-                : "",
-            }}
-            activeConversationId={chatActiveConversationId}
-            onActiveConversationChange={setChatActiveConversationId}
-            embedded
           />
         </div>
       ) : null}

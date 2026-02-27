@@ -16,7 +16,7 @@ import type { ProvocationType, TemplateId } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Identifiers for left-panel (toolbox) tabs */
-export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config" | "steps" | "generate";
+export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config" | "steps" | "generate" | "chat";
 
 /** Configuration for a single left-panel tab */
 export interface LeftPanelTabConfig {
@@ -26,7 +26,7 @@ export interface LeftPanelTabConfig {
 }
 
 /** Identifiers for right-panel tabs */
-export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution" | "notes" | "chat" | "transcript";
+export type RightPanelTabId = "discussion" | "metrics" | "discoveries" | "image-preview" | "execution" | "notes" | "transcript";
 
 /** Configuration for a single right-panel tab */
 export interface RightPanelTabConfig {
@@ -201,14 +201,15 @@ const RIGHT_NOTES: RightPanelTabConfig = {
   label: "Notes",
 };
 
-const RIGHT_CHAT: RightPanelTabConfig = {
-  id: "chat",
-  label: "Chat",
-};
-
 const RIGHT_TRANSCRIPT: RightPanelTabConfig = {
   id: "transcript",
   label: "Transcript",
+};
+
+const TAB_CHAT: LeftPanelTabConfig = {
+  id: "chat",
+  label: "Chat",
+  description: "Person-to-person encrypted chat with your team",
 };
 
 // ---------------------------------------------------------------------------
@@ -227,9 +228,9 @@ const DEFAULT_CONFIG: AppFlowConfig = {
     { id: "edit", label: "Edit & Refine", description: "Use canvas tools to evolve your document" },
   ],
 
-  leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
+  leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT, TAB_CHAT],
 
-  rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_TRANSCRIPT, RIGHT_CHAT],
+  rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_TRANSCRIPT],
 
   writer: {
     mode: "edit",
@@ -268,7 +269,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "research", label: "Research & Capture", description: "Chat with the researcher and build your notes" },
     ],
 
-    leftPanelTabs: [TAB_PROVOKE],
+    leftPanelTabs: [TAB_PROVOKE, TAB_CHAT],
     rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
@@ -298,8 +299,8 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       secondaryDescription: "The specific feature or change you're building requirements for right now.",
       showLoadFromStore: true,
     },
-    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_GENERATE],
-    rightPanelTabs: [RIGHT_NOTES, RIGHT_CHAT],
+    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_GENERATE, TAB_CHAT],
+    rightPanelTabs: [RIGHT_NOTES],
     inlineDiscussion: true,
     writer: {
       mode: "edit",
@@ -311,7 +312,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
   "new-application": {
     ...DEFAULT_CONFIG,
-    leftPanelTabs: [TAB_PROVOKE, TAB_WEBSITE, TAB_GENERATE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_WEBSITE, TAB_GENERATE, TAB_CONTEXT, TAB_CHAT],
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
       { id: "vision", label: "Define Vision", description: "Describe your app, users, and core value" },
@@ -339,9 +340,9 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "refine", label: "Refine", description: "Iterate until the spec is crystal clear" },
     ],
 
-    leftPanelTabs: [TAB_WEBSITE, TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_WEBSITE, TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT, TAB_CHAT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
+    rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
       mode: "edit",
@@ -379,9 +380,9 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "record", label: "Recording", description: "Speak freely — transcript auto-saves every 30 seconds" },
     ],
 
-    leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT, TAB_CHAT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
+    rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
       mode: "aggregate",
@@ -402,9 +403,9 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "compose", label: "Compose Email", description: "Describe purpose and audience, then generate" },
     ],
 
-    leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT, TAB_CHAT],
 
-    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
+    rightPanelTabs: [RIGHT_DISCUSSION],
 
     writer: {
       mode: "edit",
@@ -427,9 +428,9 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "generate", label: "Generate Infographics", description: "Create 3 visual variants at different temperatures" },
     ],
 
-    leftPanelTabs: [TAB_PROVOKE, TAB_MODEL_CONFIG, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_MODEL_CONFIG, TAB_CONTEXT, TAB_CHAT],
 
-    rightPanelTabs: [RIGHT_IMAGE_PREVIEW, RIGHT_DISCUSSION, RIGHT_CHAT],
+    rightPanelTabs: [RIGHT_IMAGE_PREVIEW, RIGHT_DISCUSSION],
 
     writer: {
       mode: "edit",
@@ -452,9 +453,9 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "test", label: "Test & Refine", description: "Execute and iterate on your agent" },
     ],
 
-    leftPanelTabs: [TAB_STEPS, TAB_PROVOKE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_STEPS, TAB_PROVOKE, TAB_CONTEXT, TAB_CHAT],
 
-    rightPanelTabs: [RIGHT_EXECUTION, RIGHT_DISCUSSION, RIGHT_CHAT],
+    rightPanelTabs: [RIGHT_EXECUTION, RIGHT_DISCUSSION],
 
     writer: {
       mode: "edit",
