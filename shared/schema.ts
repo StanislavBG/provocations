@@ -83,6 +83,33 @@ export const personaSchema = z.object({
 
 export type Persona = z.infer<typeof personaSchema>;
 
+// ── Document types ──
+// A document type defines the mission/purpose for the AI Writer.
+// "notepad" is the default for untyped documents.
+// Each type maps to LLM system guidance in server/context-builder.ts.
+
+export const documentTypes = [
+  "notepad",
+  "prompt",
+  "prd",
+  "app-spec",
+  "research",
+  "persona",
+  "email",
+] as const;
+
+export type DocumentType = typeof documentTypes[number];
+
+export const documentTypeLabels: Record<DocumentType, string> = {
+  notepad: "Notepad",
+  prompt: "Prompt (AIM)",
+  prd: "Feature PRD",
+  "app-spec": "App Spec",
+  research: "Research",
+  persona: "Persona / Agent",
+  email: "Email",
+};
+
 // ── Application template IDs ──
 // Every application requires three coordinated definitions:
 //   1. PrebuiltTemplate in client/src/lib/prebuiltTemplates.ts (UI identity)

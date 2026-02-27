@@ -82,6 +82,9 @@ import {
   LayoutGrid,
   Check,
   Plus,
+  PenLine,
+  ChevronRight,
+  Mic as MicIcon,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -116,6 +119,8 @@ import { useSessionAutosave } from "@/hooks/use-session-autosave";
 import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { SessionStorePanel } from "@/components/SessionStorePanel";
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
+import { TranscriptPanel } from "@/components/TranscriptPanel";
+import { documentTypes, documentTypeLabels, type DocumentType } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
   const context = mode === "clean" ? "objective" : mode;
@@ -302,6 +307,13 @@ export default function Workspace() {
 
   // App-picker popover state
   const [showAppPicker, setShowAppPicker] = useState(false);
+
+  // ── Document type — drives the Writer's mission (replaces per-app identity) ──
+  const [documentType, setDocumentType] = useState<DocumentType>("notepad");
+
+  // ── Transcript panel state — shared across all mic inputs ──
+  const [transcriptText, setTranscriptText] = useState<string>("");
+  const [transcriptSelectedText, setTranscriptSelectedText] = useState<string | undefined>(undefined);
 
   // Document preview from Sources panel — shows selected doc in reading pane
   const [previewingDoc, setPreviewingDoc] = useState<{ id: number; title: string; content: string } | null>(null);
@@ -1294,6 +1306,38 @@ RULES:
     askQuestionMutation.mutate(`${context}${response}`);
   }, [discussionMessages, askQuestionMutation]);
 
+  // ── Writer handler (callable from doc tab bar, transcript panel, provocation cards) ──
+  const handleWriterClick = useCallback((instruction?: string, selectedTextTarget?: string) => {
+    const typeLabel = documentTypeLabels[documentType];
+    const writerInstruction = instruction || `Evolve and improve this ${typeLabel} document based on the objective, document type, and all available context. The document type is "${typeLabel}" — ensure the output matches the expected format and quality for this document type.`;
+    writeMutation.mutate({
+      instruction: writerInstruction,
+      selectedText: selectedTextTarget,
+      description: "Writer: document evolved",
+    });
+    trackEvent("writer_invoked", { metadata: { source: "writer_button", documentType } });
+  }, [writeMutation, documentType]);
+
+  // ── Transcript → Writer handler ──
+  const handleTranscriptWrite = useCallback((transcriptContent: string) => {
+    const instruction = transcriptSelectedText
+      ? `Use the following voice transcript/feedback to evolve the selected portion of the document:\n\n${transcriptContent}`
+      : `Incorporate the following voice transcript/feedback into the document, evolving it accordingly:\n\n${transcriptContent}`;
+    writeMutation.mutate({
+      instruction,
+      selectedText: transcriptSelectedText,
+      description: "Transcript merged into document",
+    });
+    trackEvent("writer_invoked", { metadata: { source: "transcript_panel" } });
+  }, [writeMutation, transcriptSelectedText]);
+
+  // ── Mic → Transcript tab activation ──
+  const handleMicTranscript = useCallback((transcript: string, selectedText?: string) => {
+    setTranscriptText(prev => prev ? prev + "\n\n" + transcript : transcript);
+    if (selectedText) setTranscriptSelectedText(selectedText);
+    setRightPanelMode("transcript");
+  }, []);
+
   // ── Research chat handlers ──
 
   const updateResearchSummary = useCallback(async (messages: ChatMessage[]) => {
@@ -2243,7 +2287,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "chat" ? MessageSquare : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "chat" ? MessageSquare : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : tab.id === "transcript" ? MicIcon : Zap;
           return (
             <button
               key={tab.id}
@@ -2351,6 +2395,8 @@ RULES:
             onAcceptResponse={handleAcceptResponse}
             onDismissResponse={handleDismissResponse}
             onRespondToMessage={handleRespondToMessage}
+            onWriteToDocument={handleMergeToDraft}
+            isWriting={interviewMergeMutation.isPending || writeMutation.isPending}
           />
         </div>
       ) : rightPanelMode === "image-preview" ? (
@@ -2365,6 +2411,16 @@ RULES:
           notes={sessionNotes}
           onNotesChange={setSessionNotes}
         />
+      ) : rightPanelMode === "transcript" ? (
+        <div className="flex-1 overflow-hidden">
+          <TranscriptPanel
+            transcript={transcriptText}
+            onTranscriptChange={setTranscriptText}
+            onWriteToDocument={handleTranscriptWrite}
+            isWriting={writeMutation.isPending}
+            selectedText={transcriptSelectedText}
+          />
+        </div>
       ) : rightPanelMode === "chat" ? (
         <div className="flex-1 overflow-hidden">
           <ChatDrawer
@@ -2493,6 +2549,64 @@ RULES:
           </TooltipTrigger>
           <TooltipContent>New document tab</TooltipContent>
         </Tooltip>
+
+        {/* ── Spacer ── */}
+        <div className="flex-1" />
+
+        {/* ── Document type selector ── */}
+        <Popover>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 mb-px">
+                  {documentTypeLabels[documentType]}
+                  <ChevronDown className="w-2.5 h-2.5" />
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Document type — shapes Writer behavior</TooltipContent>
+          </Tooltip>
+          <PopoverContent align="end" className="w-44 p-1">
+            <p className="text-[10px] text-muted-foreground px-2 py-1 font-semibold uppercase tracking-wider">Document Type</p>
+            {documentTypes.map((dt) => (
+              <button
+                key={dt}
+                onClick={() => setDocumentType(dt)}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-sm transition-colors ${
+                  documentType === dt
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "hover:bg-muted text-foreground"
+                }`}
+              >
+                {documentType === dt && <Check className="w-3 h-3 shrink-0" />}
+                <span className={documentType === dt ? "" : "pl-5"}>{documentTypeLabels[dt]}</span>
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* ── Writer button ── */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => handleWriterClick()}
+              disabled={writeMutation.isPending || !document.rawText.trim()}
+              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold rounded transition-colors shrink-0 mb-px ${
+                writeMutation.isPending
+                  ? "text-muted-foreground cursor-wait"
+                  : "text-primary hover:bg-primary/10"
+              }`}
+            >
+              {writeMutation.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <PenLine className="w-3 h-3" />
+              )}
+              Writer
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Evolve document with AI Writer</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* ── Tab content ── */}
@@ -2592,6 +2706,7 @@ RULES:
           onDocumentCopy={() => recordUsageMetrics("copy")}
           objective={objective}
           templateName={selectedTemplateName}
+          onMicTranscript={handleMicTranscript}
         />
       )}
 
