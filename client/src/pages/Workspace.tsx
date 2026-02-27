@@ -83,6 +83,7 @@ import {
   MessageSquare,
   LayoutGrid,
   Check,
+  Plus,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -202,6 +203,12 @@ export default function Workspace() {
   const [canvasTabs, setCanvasTabs] = useState<GeneratedDocument[]>([]);
   const [activeCanvasTab, setActiveCanvasTab] = useState<string>("main"); // "main" or a GeneratedDocument.id
   const [canvasDropActive, setCanvasDropActive] = useState(false);
+
+  // Chrome-style document tabs — multiple documents like browser tabs
+  interface DocTab { id: string; title: string; }
+  const [docTabs, setDocTabs] = useState<DocTab[]>([{ id: document.id, title: "Document 1" }]);
+  const [activeDocTabId, setActiveDocTabId] = useState<string>(document.id);
+  const docTabContentRef = useRef<Map<string, string>>(new Map());
 
   // Agent editor state
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
@@ -1661,6 +1668,50 @@ RULES:
     }
   }, [document]);
 
+  // ── Chrome-style document tab handlers ──
+  const handleSwitchDocTab = useCallback((tabId: string) => {
+    if (tabId === activeDocTabId) return;
+    // Save current doc content to ref
+    docTabContentRef.current.set(activeDocTabId, document.rawText);
+    // Load new tab content
+    const newContent = docTabContentRef.current.get(tabId) ?? "";
+    setDocument({ id: tabId, rawText: newContent });
+    setActiveDocTabId(tabId);
+    // Reset to main canvas view when switching doc tabs
+    setActiveCanvasTab("main");
+  }, [activeDocTabId, document.rawText]);
+
+  const handleAddDocTab = useCallback(() => {
+    // Save current doc content
+    docTabContentRef.current.set(activeDocTabId, document.rawText);
+    const newId = generateId("doc");
+    const newTitle = `Document ${docTabs.length + 1}`;
+    setDocTabs(prev => [...prev, { id: newId, title: newTitle }]);
+    setDocument({ id: newId, rawText: "" });
+    setActiveDocTabId(newId);
+    setActiveCanvasTab("main");
+  }, [activeDocTabId, document.rawText, docTabs.length]);
+
+  const handleCloseDocTab = useCallback((tabId: string) => {
+    if (docTabs.length <= 1) return; // never close the last tab
+    const idx = docTabs.findIndex(t => t.id === tabId);
+    const newTabs = docTabs.filter(t => t.id !== tabId);
+    docTabContentRef.current.delete(tabId);
+    setDocTabs(newTabs);
+    // If closing the active tab, switch to the previous (or first) tab
+    if (tabId === activeDocTabId) {
+      const nextIdx = Math.min(idx, newTabs.length - 1);
+      const nextTab = newTabs[nextIdx];
+      const nextContent = docTabContentRef.current.get(nextTab.id) ?? "";
+      setDocument({ id: nextTab.id, rawText: nextContent });
+      setActiveDocTabId(nextTab.id);
+    }
+  }, [docTabs, activeDocTabId]);
+
+  const handleRenameDocTab = useCallback((tabId: string, newTitle: string) => {
+    setDocTabs(prev => prev.map(t => t.id === tabId ? { ...t, title: newTitle } : t));
+  }, []);
+
   // Handle document preview from Sources panel — loads a store doc into reading pane
   const handleDocumentPreview = useCallback((docId: number, title: string, content: string) => {
     setPreviewingDoc({ id: docId, title, content });
@@ -2436,32 +2487,50 @@ RULES:
         </div>
       )}
 
-      {/* ── Tab bar (only when secondary tabs exist) ── */}
-      {hasSecondaryTabs && (
-        <div className="flex items-center border-b bg-muted/20 shrink-0 overflow-x-auto">
-          {/* Main document tab */}
-          <button
-            onClick={() => setActiveCanvasTab("main")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-b-2 transition-colors shrink-0 ${
-              activeCanvasTab === "main"
-                ? "border-primary text-foreground font-medium"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
-            }`}
-          >
-            <FileText className="w-3 h-3" />
-            <span className="truncate max-w-[120px]">Document</span>
-          </button>
+      {/* ── Chrome-style document tab bar (always visible) ── */}
+      <div className="flex items-end bg-muted/30 shrink-0 overflow-x-auto pl-1 pt-1 gap-px" style={{ minHeight: 32 }}>
+        {/* Document tabs */}
+        {docTabs.map((tab) => {
+          const isActive = activeCanvasTab === "main" && tab.id === activeDocTabId;
+          return (
+            <div
+              key={tab.id}
+              onClick={() => { handleSwitchDocTab(tab.id); setActiveCanvasTab("main"); }}
+              className={`group flex items-center gap-1 pl-3 pr-1 py-1.5 text-xs cursor-pointer transition-colors rounded-t-lg shrink-0 ${
+                isActive
+                  ? "bg-card border-t border-x border-border text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              }`}
+            >
+              <FileText className="w-3 h-3 shrink-0" />
+              <span className="truncate max-w-[120px]">{tab.title}</span>
+              {docTabs.length > 1 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleCloseDocTab(tab.id); }}
+                  className="ml-1 h-4 w-4 flex items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
+          );
+        })}
 
-          {/* Secondary tabs (generated docs) */}
-          {canvasTabs.map((tab) => (
-            <div key={tab.id} className="flex items-center shrink-0">
+        {/* Secondary tabs (generated docs dragged in) */}
+        {canvasTabs.map((tab) => {
+          const isActive = activeCanvasTab === tab.id;
+          return (
+            <div
+              key={tab.id}
+              className={`group flex items-center gap-1 pl-3 pr-1 py-1.5 text-xs cursor-pointer transition-colors rounded-t-lg shrink-0 ${
+                isActive
+                  ? "bg-card border-t border-x border-border text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              }`}
+            >
               <button
                 onClick={() => setActiveCanvasTab(tab.id)}
-                className={`flex items-center gap-1.5 pl-3 pr-1 py-1.5 text-xs border-b-2 transition-colors ${
-                  activeCanvasTab === tab.id
-                    ? "border-primary text-foreground font-medium"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                }`}
+                className="flex items-center gap-1"
               >
                 {tab.imageUrl ? (
                   <ImageIcon className="w-3 h-3 text-purple-500" />
@@ -2470,33 +2539,40 @@ RULES:
                 )}
                 <span className="truncate max-w-[120px]">{tab.title}</span>
               </button>
-              {/* Save to Context Store */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 text-muted-foreground/50 hover:text-green-600"
-                    onClick={() => handleSaveCanvasTabToStore(tab)}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleSaveCanvasTabToStore(tab); }}
+                    className="h-4 w-4 flex items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 hover:bg-muted text-muted-foreground/50 hover:text-green-600 transition-opacity"
                   >
                     <Save className="w-2.5 h-2.5" />
-                  </Button>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent>Save to Context Store</TooltipContent>
               </Tooltip>
-              {/* Close tab */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 mr-1 text-muted-foreground/40 hover:text-foreground"
-                onClick={() => handleCloseCanvasTab(tab.id)}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCloseCanvasTab(tab.id); }}
+                className="h-4 w-4 flex items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 hover:bg-muted text-muted-foreground/40 hover:text-foreground transition-opacity"
               >
                 <X className="w-2.5 h-2.5" />
-              </Button>
+              </button>
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+
+        {/* Add new tab button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleAddDocTab}
+              className="flex items-center justify-center h-7 w-7 rounded-t-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0 mb-px"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>New document tab</TooltipContent>
+        </Tooltip>
+      </div>
 
       {/* ── Tab content ── */}
       {activeCanvasTab !== "main" && activeTabDoc ? (
@@ -3152,14 +3228,6 @@ RULES:
               </ResizablePanel>
             </ResizablePanelGroup>
           </div>
-
-          <StepTracker
-            currentPhase="edit"
-            selectedTemplate={selectedTemplateName}
-            activeToolboxApp={activeToolboxApp}
-            appFlowSteps={appFlowConfig.flowSteps}
-            appLeftPanelTabs={appFlowConfig.leftPanelTabs}
-          />
         </>
       )}
 
