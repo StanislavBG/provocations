@@ -16,7 +16,7 @@ import type { ProvocationType, TemplateId } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Identifiers for left-panel (toolbox) tabs */
-export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config" | "steps";
+export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config" | "steps" | "generate";
 
 /** Configuration for a single left-panel tab */
 export interface LeftPanelTabConfig {
@@ -185,6 +185,12 @@ const TAB_STEPS: LeftPanelTabConfig = {
   description: "Build and manage agent workflow steps with Input → Actor → Output definitions",
 };
 
+const TAB_GENERATE: LeftPanelTabConfig = {
+  id: "generate",
+  label: "Generate",
+  description: "Generate infographics, summaries, and other artifacts from your document",
+};
+
 const RIGHT_EXECUTION: RightPanelTabConfig = {
   id: "execution",
   label: "Execution",
@@ -216,7 +222,7 @@ const DEFAULT_CONFIG: AppFlowConfig = {
     { id: "edit", label: "Edit & Refine", description: "Use canvas tools to evolve your document" },
   ],
 
-  leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+  leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
 
   rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
@@ -287,7 +293,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       secondaryDescription: "The specific feature or change you're building requirements for right now.",
       showLoadFromStore: true,
     },
-    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE],
+    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_GENERATE],
     rightPanelTabs: [RIGHT_NOTES, RIGHT_CHAT],
     inlineDiscussion: true,
     writer: {
@@ -300,7 +306,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
   "new-application": {
     ...DEFAULT_CONFIG,
-    leftPanelTabs: [TAB_PROVOKE, TAB_WEBSITE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_WEBSITE, TAB_GENERATE, TAB_CONTEXT],
     flowSteps: [
       { id: "select", label: "Select Application", description: "Choose your document type" },
       { id: "vision", label: "Define Vision", description: "Describe your app, users, and core value" },
@@ -328,7 +334,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "refine", label: "Refine", description: "Iterate until the spec is crystal clear" },
     ],
 
-    leftPanelTabs: [TAB_WEBSITE, TAB_PROVOKE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_WEBSITE, TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
 
     rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
@@ -368,7 +374,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "record", label: "Recording", description: "Speak freely — transcript auto-saves every 30 seconds" },
     ],
 
-    leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
 
     rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
@@ -391,7 +397,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "compose", label: "Compose Email", description: "Describe purpose and audience, then generate" },
     ],
 
-    leftPanelTabs: [TAB_PROVOKE, TAB_CONTEXT],
+    leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT],
 
     rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_CHAT],
 
