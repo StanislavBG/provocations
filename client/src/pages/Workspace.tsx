@@ -14,11 +14,9 @@ import { ProvocationToolbox, type ToolboxApp } from "@/components/ProvocationToo
 import { ImagePreviewPanel } from "@/components/ImagePreviewPanel";
 import { DEFAULT_MODEL_CONFIG, type ModelConfig } from "@/components/ModelConfigPanel";
 import { StepTracker, type WorkflowPhase } from "@/components/StepTracker";
-import { VoiceCaptureWorkspace } from "@/components/VoiceCaptureWorkspace";
-import { InfographicStudioWorkspace } from "@/components/InfographicStudioWorkspace";
-import { ChatSessionPanel } from "@/components/ChatSessionPanel";
-import { DynamicSummaryPanel } from "@/components/DynamicSummaryPanel";
-import { ResearchNotesPanel } from "@/components/ResearchNotesPanel";
+// VoiceCaptureWorkspace, InfographicStudioWorkspace, ChatSessionPanel,
+// DynamicSummaryPanel, ResearchNotesPanel — previously used by per-layout
+// conditional render blocks. Now unified into tabs within the 3-panel layout.
 import { SessionNotesPanel } from "@/components/SessionNotesPanel";
 import { GeneratePanel, type GeneratedDocument } from "@/components/GeneratePanel";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
@@ -2106,90 +2104,13 @@ RULES:
     </>
   ) : null;
 
-  // Voice capture content — rendered inside unified layout below
+  // Voice capture, infographic studio, and research chat layouts have been
+  // unified into the standard 3-panel layout — their content is accessible
+  // as tabs within the left/right panels. These boolean flags are kept only
+  // for backwards compat in the header bar.
   const isVoiceCapture = !isInputPhase && appFlowConfig.workspaceLayout === "voice-capture";
-  const voiceCaptureContent = isVoiceCapture ? (
-    <>
-      <VoiceCaptureWorkspace
-        objective={objective}
-        onDocumentUpdate={(text) => setDocument({ ...document, rawText: text })}
-        documentText={document.rawText}
-        savedDocId={savedDocId}
-        onSave={handleStorageSave}
-        onSavedDocIdChange={setSavedDocId}
-      />
-
-      <StepTracker
-        currentPhase="edit"
-        selectedTemplate={selectedTemplateName}
-        appFlowSteps={appFlowConfig.flowSteps}
-        appLeftPanelTabs={appFlowConfig.leftPanelTabs}
-      />
-    </>
-  ) : null;
-
-  // Infographic studio content — 3-panel pipeline (raw text | summary | gallery)
   const isInfographicStudio = !isInputPhase && appFlowConfig.workspaceLayout === "infographic-studio";
-  const infographicStudioContent = isInfographicStudio ? (
-    <>
-      <InfographicStudioWorkspace
-        rawText={document.rawText}
-        onRawTextChange={(text) => setDocument({ ...document, rawText: text })}
-        objective={objective}
-      />
-
-      <StepTracker
-        currentPhase="edit"
-        selectedTemplate={selectedTemplateName}
-        appFlowSteps={appFlowConfig.flowSteps}
-        appLeftPanelTabs={appFlowConfig.leftPanelTabs}
-      />
-    </>
-  ) : null;
-
-  // Research chat content — 3-panel layout (notes | chat | summary)
   const isResearchChat = !isInputPhase && appFlowConfig.workspaceLayout === "research-chat";
-  const researchChatContent = isResearchChat ? (
-    <>
-      <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={25} minSize={15}>
-            <ResearchNotesPanel
-              notes={researchNotes}
-              onNotesChange={setResearchNotes}
-            />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={45} minSize={25}>
-            <ChatSessionPanel
-              messages={chatMessages}
-              isLoading={isChatLoading}
-              streamingContent={chatStreamingContent}
-              onSendMessage={handleChatSendMessage}
-              onCaptureToNotes={handleCaptureToNotes}
-              objective={objective}
-              researchTopic={researchTopic}
-              chatModel={chatModel}
-              onModelChange={setChatModel}
-            />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={30} minSize={20}>
-            <DynamicSummaryPanel
-              summary={researchSummary}
-              objective={objective}
-              isUpdating={isSummaryUpdating}
-              messageCount={chatMessages.length}
-              notesLength={researchNotes.length}
-              onRefresh={handleRefreshSummary}
-              onSaveToContext={handleSaveSession}
-              isSaving={isSavingSession}
-            />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
-    </>
-  ) : null;
 
   // ── Panel contents (shared between mobile and desktop layouts) ──
 
@@ -2687,7 +2608,9 @@ RULES:
 
   // ── Unified Layout — persistent sidebar + global bar ──
 
-  const isStandardWorkspace = !isInputPhase && !isVoiceCapture && !isInfographicStudio && !isResearchChat;
+  // All workspace layouts are unified into the 3-panel layout — this flag
+  // gates header elements that should appear once a document is open.
+  const isStandardWorkspace = !isInputPhase;
 
   return (
     <div className="h-screen flex flex-col">
@@ -3067,12 +2990,9 @@ RULES:
 
       {/* ── Phase-specific content ── */}
       {inputPhaseContent}
-      {voiceCaptureContent}
-      {infographicStudioContent}
-      {researchChatContent}
 
-      {/* ── Standard workspace content ── */}
-      {isStandardWorkspace && (
+      {/* ── Workspace content (unified 3-panel layout for all apps) ── */}
+      {!isInputPhase && (
       <>
 
       {/* Secondary objective panel (REQ-002, REQ-003) — prominent provocation text */}
