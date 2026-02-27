@@ -780,7 +780,8 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
             chrome === "container" && "border-none shadow-none focus-visible:ring-0",
             chrome === "bare" &&
               "border-none shadow-none focus-visible:ring-0 resize-none bg-transparent outline-none",
-            variant === "editor" && "min-h-[600px] font-serif text-base leading-[1.8]",
+            variant === "editor" && chrome === "bare" && "h-full min-h-0 font-serif text-base leading-[1.8]",
+            variant === "editor" && chrome !== "bare" && "min-h-[600px] font-serif text-base leading-[1.8]",
             isRecording && (chrome === "container" ? "text-primary" : "border-primary"),
             className,
           )}
@@ -894,8 +895,15 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
        ══════════════════════════════════════════════════════════════ */
 
     return (
-      <div className={cn("flex items-center gap-1", panelClassName)}>
-        {inputControl}
+      <div className={cn(
+        variant === "editor" ? "h-full flex flex-col" : "flex items-center gap-1",
+        panelClassName,
+      )}>
+        {variant === "editor" ? (
+          <div className="flex-1 min-h-0 overflow-y-auto">{inputControl}</div>
+        ) : (
+          inputControl
+        )}
         {toolbarButtons}
       </div>
     );
