@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, User, Bot, BookmarkPlus, ChevronDown, Crown, Zap } from "lucide-react";
+import { Send, Loader2, User, Bot, BookmarkPlus, ChevronDown, Crown, Zap, Mic } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
@@ -295,18 +296,22 @@ export function ChatSessionPanel({
             <ProvokeText
               chrome="bare"
               variant="textarea"
-              placeholder="Ask a research question..."
+              placeholder="Ask anything..."
               className="text-sm font-serif"
               value={input}
               onChange={setInput}
               minRows={1}
               maxRows={4}
-              voice={{ mode: "replace" }}
-              onVoiceTranscript={setInput}
               showCopy={false}
               showClear={false}
             />
           </div>
+          <VoiceRecorder
+            onTranscript={(text) => setInput(text)}
+            size="icon"
+            variant="ghost"
+            className="shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground"
+          />
           <Button
             size="icon"
             className="shrink-0 h-9 w-9"
