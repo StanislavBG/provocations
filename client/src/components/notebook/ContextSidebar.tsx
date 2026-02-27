@@ -582,7 +582,7 @@ export function ContextSidebar({
   };
 
   return (
-    <div className={`h-full flex flex-col overflow-hidden ${embedded ? "" : "bg-card border-r"}`}>
+    <div className={`flex flex-col overflow-hidden ${embedded ? "flex-1 min-h-0" : "h-full bg-card border-r"}`}>
       {/* ─── Header (hidden when embedded in tab panel) ─── */}
       {!embedded && (
         <div className="p-2 border-b flex items-center justify-between gap-1">
