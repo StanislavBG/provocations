@@ -20,6 +20,7 @@ import { ChatSessionPanel } from "@/components/ChatSessionPanel";
 import { DynamicSummaryPanel } from "@/components/DynamicSummaryPanel";
 import { ResearchNotesPanel } from "@/components/ResearchNotesPanel";
 import { SessionNotesPanel } from "@/components/SessionNotesPanel";
+import { GeneratePanel, type GeneratedDocument } from "@/components/GeneratePanel";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
@@ -193,6 +194,9 @@ export default function Workspace() {
 
   // Model configuration state — used by text-to-infographic
   const [modelConfig, setModelConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
+
+  // Generated documents — session context from the Generate tab
+  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
 
   // Agent editor state
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
@@ -1674,6 +1678,31 @@ RULES:
     return () => { if (previewSaveTimerRef.current) clearTimeout(previewSaveTimerRef.current); };
   }, [previewingDoc?.content, previewingDoc?.id]);
 
+  // ── Generate tab handlers ──
+
+  const handleGeneratedDoc = useCallback((doc: GeneratedDocument) => {
+    setGeneratedDocs((prev) => [doc, ...prev]);
+  }, []);
+
+  const handleRemoveGeneratedDoc = useCallback((id: string) => {
+    setGeneratedDocs((prev) => prev.filter((d) => d.id !== id));
+  }, []);
+
+  const handlePromoteGeneratedDoc = useCallback(async (doc: GeneratedDocument) => {
+    try {
+      await apiRequest("POST", "/api/documents", {
+        title: doc.title,
+        content: doc.imageUrl
+          ? `${doc.content}\n\n---\n\n![Infographic](${doc.imageUrl})`
+          : doc.content,
+      });
+      setGeneratedDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      toast({ title: "Saved to Context Store", description: `"${doc.title}" has been saved.` });
+    } catch {
+      toast({ title: "Save failed", description: "Could not save to Context Store.", variant: "destructive" });
+    }
+  }, [toast]);
+
   // Handle text edit from pencil icon prompt
   const handleTextEdit = useCallback((newText: string) => {
     if (document) {
@@ -2119,41 +2148,53 @@ RULES:
       } : undefined}
       onMergeToDraft={appFlowConfig.inlineDiscussion ? handleMergeToDraft : undefined}
       isMergeToDraftPending={interviewMergeMutation.isPending}
-      customTabContent={selectedTemplateId === "agent-editor" ? {
-        steps: (
-          <div className="flex flex-col h-full">
-            {adminEditTaskType && (
-              <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
-                <span className="text-xs text-muted-foreground flex-1">
-                  Editing: <span className="font-medium text-foreground">{adminEditTaskType}</span>
-                </span>
-                <Button
-                  size="sm"
-                  onClick={() => savePromptOverrideMutation.mutate()}
-                  disabled={savePromptOverrideMutation.isPending || agentSteps.length === 0}
-                >
-                  {savePromptOverrideMutation.isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                  ) : (
-                    <HardDrive className="w-3.5 h-3.5 mr-1.5" />
-                  )}
-                  Save Prompt Override
-                </Button>
-              </div>
-            )}
-            <div className="flex-1 overflow-auto">
-              <StepBuilder
-                steps={agentSteps}
-                onStepsChange={setAgentSteps}
-                selectedStepId={selectedStepId}
-                onSelectStep={setSelectedStepId}
-                persona={agentPersona}
-                agentName={agentName}
-              />
-            </div>
-          </div>
+      customTabContent={{
+        generate: (
+          <GeneratePanel
+            documentText={document.rawText}
+            objective={objective}
+            generatedDocs={generatedDocs}
+            onDocGenerated={handleGeneratedDoc}
+            onDocRemove={handleRemoveGeneratedDoc}
+            onDocPromote={handlePromoteGeneratedDoc}
+          />
         ),
-      } : undefined}
+        ...(selectedTemplateId === "agent-editor" ? {
+          steps: (
+            <div className="flex flex-col h-full">
+              {adminEditTaskType && (
+                <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
+                  <span className="text-xs text-muted-foreground flex-1">
+                    Editing: <span className="font-medium text-foreground">{adminEditTaskType}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => savePromptOverrideMutation.mutate()}
+                    disabled={savePromptOverrideMutation.isPending || agentSteps.length === 0}
+                  >
+                    {savePromptOverrideMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <HardDrive className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    Save Prompt Override
+                  </Button>
+                </div>
+              )}
+              <div className="flex-1 overflow-auto">
+                <StepBuilder
+                  steps={agentSteps}
+                  onStepsChange={setAgentSteps}
+                  selectedStepId={selectedStepId}
+                  onSelectStep={setSelectedStepId}
+                  persona={agentPersona}
+                  agentName={agentName}
+                />
+              </div>
+            </div>
+          ),
+        } : {}),
+      }}
     />
   );
 
