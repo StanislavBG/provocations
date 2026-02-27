@@ -13,8 +13,6 @@ import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useRole } from "@/hooks/use-role";
 import { useRoute } from "wouter";
-import { useSessionAutosave } from "@/hooks/use-session-autosave";
-
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   AlertDialog,
@@ -26,7 +24,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { SessionStorePanel } from "@/components/SessionStorePanel";
 
 import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
@@ -46,7 +43,6 @@ import type {
   AskQuestionResponse,
   ReferenceDocument,
   ContextItem,
-  WorkspaceSessionState,
 } from "@shared/schema";
 
 export default function NotebookWorkspace() {
@@ -68,7 +64,6 @@ export default function NotebookWorkspace() {
   // ── Layout state ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNewConfirm, setShowNewConfirm] = useState(false);
-  const [showSessionStore, setShowSessionStore] = useState(false);
 
   // ── User-to-user chat state (embedded in left panel) ──
   const [activeChatConversationId, setActiveChatConversationId] = useState<number | null>(null);
@@ -103,72 +98,6 @@ export default function NotebookWorkspace() {
   const selectedTemplateName = selectedTemplateId
     ? prebuiltTemplates.find((t) => t.id === selectedTemplateId)?.title
     : undefined;
-
-  // ── Session autosave ──
-  const getSessionState = useCallback((): WorkspaceSessionState | null => {
-    if (!document.rawText && !objective) return null;
-    return {
-      document,
-      objective,
-      secondaryObjective: "",
-      interviewEntries: [],
-      interviewDirection: {
-        mode: "challenge",
-        selectedPersonaIds: Array.from(activePersonas),
-        guidance: "",
-      },
-      versions,
-      editHistory,
-      savedDocId: null,
-      savedDocTitle: sessionName,
-      sessionNotes,
-      capturedContext,
-    };
-  }, [document, objective, activePersonas, versions, editHistory, sessionName, sessionNotes, capturedContext]);
-
-  const getSessionTitle = useCallback(() => {
-    return sessionName || objective?.slice(0, 50) || selectedTemplateName || "Untitled";
-  }, [sessionName, objective, selectedTemplateName]);
-
-  const sessionAutosave = useSessionAutosave({
-    templateId: selectedTemplateId,
-    isActive: !!document.rawText || !!objective,
-    getState: getSessionState,
-    getTitle: getSessionTitle,
-  });
-
-  // ── Auto-resume: silently load most recent session on mount ──
-  const sessionsQuery = useQuery<{ sessions: Array<{ id: number; title: string; templateId: string; updatedAt: string }> }>({
-    queryKey: ["/api/sessions"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/sessions");
-      return res.json();
-    },
-    staleTime: Infinity,
-    enabled: !routeMatch && !document.rawText,
-  });
-
-  useEffect(() => {
-    if (!sessionsQuery.data?.sessions?.length || routeMatch || document.rawText) return;
-
-    const sorted = [...sessionsQuery.data.sessions].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
-    const mostRecent = sorted[0];
-    if (!mostRecent) return;
-
-    (async () => {
-      try {
-        const res = await apiRequest("GET", `/api/sessions/${mostRecent.id}`);
-        const data = await res.json();
-        handleSessionStoreLoad(mostRecent.id, data.state, data.templateId);
-        toast({ title: "Session resumed", description: mostRecent.title });
-      } catch {
-        // Silent failure — user starts fresh
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionsQuery.data]);
 
   // ── Build session context (pinned docs + captured items) ──
   const buildSessionContext = useCallback(() => {
@@ -411,31 +340,8 @@ export default function NotebookWorkspace() {
     setDiscussionMessages([]);
     setCapturedContext([]);
     setSessionName("Untitled Session");
-    sessionAutosave.setCurrentSessionId(null);
     setShowNewConfirm(false);
-  }, [sessionAutosave]);
-
-  // ── Session management ──
-  const handleSave = useCallback(async () => {
-    await sessionAutosave.saveNow();
-    toast({ title: "Saved", description: "Session saved successfully" });
-  }, [sessionAutosave, toast]);
-
-  const handleSessionStoreLoad = useCallback(
-    (sessionId: number, state: WorkspaceSessionState, templateId: string) => {
-      setDocument(state.document);
-      setObjective(state.objective);
-      setSelectedTemplateId(templateId);
-      setVersions(state.versions);
-      setEditHistory(state.editHistory);
-      setCapturedContext(state.capturedContext);
-      setSessionNotes(state.sessionNotes ?? "");
-      sessionAutosave.setCurrentSessionId(sessionId);
-      setShowSessionStore(false);
-      setSessionName(state.objective?.slice(0, 50) || "Loaded Session");
-    },
-    [sessionAutosave],
-  );
+  }, []);
 
   // ── Mobile tab state ──
   type MobileTab = "context" | "document" | "chat";
@@ -448,9 +354,7 @@ export default function NotebookWorkspace() {
       <NotebookTopBar
         sessionName={sessionName}
         onSessionNameChange={setSessionName}
-        onSave={handleSave}
         onNew={handleNewSession}
-        isSaving={sessionAutosave.isSaving}
         isAdmin={isAdmin}
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={setSelectedTemplateId}
@@ -543,7 +447,6 @@ export default function NotebookWorkspace() {
                 } satisfies ChatSessionContext}
                 activeChatConversationId={activeChatConversationId}
                 onActiveChatConversationChange={setActiveChatConversationId}
-                onOpenSessionStore={() => setShowSessionStore(true)}
                 isCollapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
               />
@@ -604,17 +507,6 @@ export default function NotebookWorkspace() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Session Store panel */}
-      <SessionStorePanel
-        isOpen={showSessionStore}
-        onClose={() => setShowSessionStore(false)}
-        onLoadSession={handleSessionStoreLoad}
-        currentSessionId={sessionAutosave.currentSessionId}
-        autoSaveEnabled={sessionAutosave.autoSaveEnabled}
-        onToggleAutoSave={(enabled) => {
-          apiRequest("PUT", "/api/preferences", { autoSaveSession: enabled });
-        }}
-      />
     </div>
   );
 }
