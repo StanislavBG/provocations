@@ -3461,9 +3461,13 @@ RESPONSE FORMATTING — MANDATORY:
 - Separate sections with blank lines for visual breathing room.
 - Never output raw URLs inline — use [descriptive text](url) format if linking.
 
+CAPABILITIES:
+- You have **live internet access** via Google Search grounding. Use it to find current information, verify facts, and cite recent sources.
+- When answering questions about current events, prices, dates, availability, or anything time-sensitive, rely on your search results rather than training data.
+
 RESPONSE BEHAVIOR:
 1. **Follow user instructions exactly.** If the user asks for a short list, give a short list. If they ask for brief answers, be brief. User instructions always override defaults.
-2. **Prioritize accuracy and recency.** Favor recent developments and authoritative sources. Flag information that may be outdated or uncertain.
+2. **Prioritize accuracy and recency.** Use your live search capabilities to find the most current information. Cite sources where possible.
 3. **Be insightful, not verbose.** Surface insights, challenge assumptions, and suggest angles the user hasn't considered — but keep it tight.
 4. **Reference prior context.** Use the user's notes and conversation history to avoid repetition and build on what's already established.
 5. **Default to concise, scannable responses.** Only expand into long-form when the user explicitly asks for depth or comprehensive analysis.
@@ -3508,6 +3512,7 @@ RESPONSE BEHAVIOR:
         messages,
         maxTokens: 4096,
         temperature: 0.7,
+        enableSearch: true,
       });
 
       res.json({ response: result.text });
@@ -3555,6 +3560,7 @@ RESPONSE BEHAVIOR:
         messages,
         maxTokens: 4096,
         temperature: 0.7,
+        enableSearch: true,
       });
 
       for await (const chunk of stream) {
