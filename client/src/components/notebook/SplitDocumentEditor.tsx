@@ -1,8 +1,10 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import { generateId } from "@/lib/utils";
 import {
   Eye,
@@ -13,6 +15,13 @@ import {
   Plus,
   X,
   FileText,
+  Maximize2,
+  Minimize2,
+  ArrowUpDown,
+  Lightbulb,
+  Palette,
+  Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 
 interface DocTab {
@@ -30,6 +39,72 @@ interface PreviewDoc {
   title: string;
   content: string;
 }
+
+interface SmartButtonDef {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  color: string;
+  options: { id: string; label: string }[];
+}
+
+const SMART_BUTTONS: SmartButtonDef[] = [
+  {
+    id: "expand",
+    label: "Expand",
+    icon: Maximize2,
+    color: "text-blue-500",
+    options: [
+      { id: "add-examples", label: "Add examples" },
+      { id: "add-detail", label: "Add detail" },
+      { id: "add-data", label: "Supporting data" },
+    ],
+  },
+  {
+    id: "condense",
+    label: "Condense",
+    icon: Minimize2,
+    color: "text-amber-500",
+    options: [
+      { id: "tighten", label: "Tighten prose" },
+      { id: "dedup", label: "Remove redundancy" },
+      { id: "exec-summary", label: "Executive summary" },
+    ],
+  },
+  {
+    id: "restructure",
+    label: "Restructure",
+    icon: ArrowUpDown,
+    color: "text-purple-500",
+    options: [
+      { id: "reorder", label: "Reorder sections" },
+      { id: "headings", label: "Add headings" },
+      { id: "outline", label: "Outline view" },
+    ],
+  },
+  {
+    id: "clarify",
+    label: "Clarify",
+    icon: Lightbulb,
+    color: "text-green-500",
+    options: [
+      { id: "simplify", label: "Simplify language" },
+      { id: "define", label: "Define terms" },
+      { id: "context", label: "Add context" },
+    ],
+  },
+  {
+    id: "style",
+    label: "Style",
+    icon: Palette,
+    color: "text-pink-500",
+    options: [
+      { id: "professional", label: "Professional" },
+      { id: "casual", label: "Casual" },
+      { id: "academic", label: "Academic" },
+    ],
+  },
+];
 
 interface SplitDocumentEditorProps {
   text: string;
@@ -53,6 +128,7 @@ export function SplitDocumentEditor({
   previewDoc,
   onClosePreview,
 }: SplitDocumentEditorProps) {
+  const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(
     !!(objective && objective.trim()),
   );
@@ -62,18 +138,30 @@ export function SplitDocumentEditor({
     { id: "main", title: "Document 1" },
   ]);
   const [activeTabId, setActiveTabId] = useState("main");
-  // Stores text + objective for inactive tabs
   const tabSnapshotRef = useRef<Map<string, TabSnapshot>>(new Map());
+
+  // ── Tab rename state ──
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingTabValue, setEditingTabValue] = useState("");
+  const tabEditRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingTabId) {
+      tabEditRef.current?.focus();
+      tabEditRef.current?.select();
+    }
+  }, [editingTabId]);
+
+  // ── Smart buttons state ──
+  const [expandedSmartBtn, setExpandedSmartBtn] = useState<string | null>(null);
 
   const handleSwitchTab = useCallback(
     (tabId: string) => {
       if (tabId === activeTabId) return;
-      // Save current tab state
       tabSnapshotRef.current.set(activeTabId, {
         text,
         objective: objective || "",
       });
-      // Load new tab state
       const snapshot = tabSnapshotRef.current.get(tabId);
       onTextChange(snapshot?.text ?? "");
       onObjectiveChange?.(snapshot?.objective ?? "");
@@ -83,7 +171,6 @@ export function SplitDocumentEditor({
   );
 
   const handleAddTab = useCallback(() => {
-    // Save current tab
     tabSnapshotRef.current.set(activeTabId, {
       text,
       objective: objective || "",
@@ -115,6 +202,39 @@ export function SplitDocumentEditor({
     [tabs, activeTabId, onTextChange, onObjectiveChange],
   );
 
+  const handleStartRename = useCallback((tabId: string) => {
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    setEditingTabId(tabId);
+    setEditingTabValue(tab.title);
+  }, [tabs]);
+
+  const handleCommitRename = useCallback(() => {
+    if (!editingTabId) return;
+    const trimmed = editingTabValue.trim();
+    if (trimmed) {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === editingTabId ? { ...t, title: trimmed } : t)),
+      );
+    }
+    setEditingTabId(null);
+  }, [editingTabId, editingTabValue]);
+
+  const handleCancelRename = useCallback(() => {
+    setEditingTabId(null);
+  }, []);
+
+  const handleSmartAction = useCallback(
+    (btnId: string, optionId: string, optionLabel: string) => {
+      toast({
+        title: `${optionLabel}`,
+        description: "Smart actions coming soon — this will use AI to transform your document.",
+      });
+      setExpandedSmartBtn(null);
+    },
+    [toast],
+  );
+
   const handleDownload = () => {
     const blob = new Blob([text], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
@@ -140,7 +260,6 @@ export function SplitDocumentEditor({
     </div>
   );
 
-  // Objective bar rendered inside the document card
   const objectiveSection = (
     <div className="border-b shrink-0">
       <button
@@ -189,10 +308,12 @@ export function SplitDocumentEditor({
       <div className="flex items-end bg-muted/30 shrink-0 overflow-x-auto pl-1 pt-1 gap-px border-b">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
+          const isEditing = tab.id === editingTabId;
           return (
             <div
               key={tab.id}
-              onClick={() => handleSwitchTab(tab.id)}
+              onClick={() => !isEditing && handleSwitchTab(tab.id)}
+              onDoubleClick={() => handleStartRename(tab.id)}
               className={`group flex items-center gap-1 pl-3 pr-1 py-1.5 text-xs cursor-pointer transition-colors rounded-t-lg shrink-0 ${
                 isActive
                   ? "bg-card border-t border-x border-border text-foreground font-medium -mb-px"
@@ -200,8 +321,25 @@ export function SplitDocumentEditor({
               }`}
             >
               <FileText className="w-3 h-3 shrink-0" />
-              <span className="truncate max-w-[120px]">{tab.title}</span>
-              {tabs.length > 1 && (
+              {isEditing ? (
+                <Input
+                  ref={tabEditRef}
+                  value={editingTabValue}
+                  onChange={(e) => setEditingTabValue(e.target.value)}
+                  className="h-5 text-xs px-1 py-0 w-[100px] bg-background"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCommitRename();
+                    if (e.key === "Escape") handleCancelRename();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  onBlur={handleCommitRename}
+                />
+              ) : (
+                <span className="truncate max-w-[120px]">{tab.title}</span>
+              )}
+              {tabs.length > 1 && !isEditing && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -226,6 +364,65 @@ export function SplitDocumentEditor({
           </TooltipTrigger>
           <TooltipContent>New document tab</TooltipContent>
         </Tooltip>
+      </div>
+
+      {/* ─── Smart Buttons toolbar ─── */}
+      <div className="shrink-0 border-b bg-card">
+        <div className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto">
+          <Sparkles className="w-3 h-3 text-primary/50 shrink-0 mr-0.5" />
+          {SMART_BUTTONS.map((btn) => {
+            const Icon = btn.icon;
+            const isExpanded = expandedSmartBtn === btn.id;
+            return (
+              <button
+                key={btn.id}
+                onClick={() =>
+                  setExpandedSmartBtn(isExpanded ? null : btn.id)
+                }
+                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 ${
+                  isExpanded
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                }`}
+              >
+                <Icon className={`w-3 h-3 ${isExpanded ? "text-primary" : btn.color}`} />
+                {btn.label}
+              </button>
+            );
+          })}
+          <div className="ml-auto shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={handleDownload}
+              disabled={!text.trim()}
+              title="Download as .md"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Expanded sub-options */}
+        {expandedSmartBtn && (
+          <div className="flex items-center gap-1 px-3 pb-1.5 overflow-x-auto animate-in slide-in-from-top-1 duration-150">
+            <span className="text-[10px] text-muted-foreground/60 mr-1 shrink-0">Options:</span>
+            {SMART_BUTTONS.find((b) => b.id === expandedSmartBtn)?.options.map(
+              (opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() =>
+                    handleSmartAction(expandedSmartBtn, opt.id, opt.label)
+                  }
+                  className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors shrink-0"
+                >
+                  {opt.label}
+                </button>
+              ),
+            )}
+          </div>
+        )}
       </div>
 
       {/* Merging indicator */}
@@ -268,7 +465,6 @@ export function SplitDocumentEditor({
           value={text}
           onChange={onTextChange}
           placeholder="Start writing your document here... (Markdown supported)"
-          label="Document"
           headerActions={headerActions}
           beforeInput={objectiveSection}
           className="text-sm leading-relaxed font-serif"
