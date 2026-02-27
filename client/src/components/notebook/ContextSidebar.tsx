@@ -341,7 +341,7 @@ export function ContextSidebar({
     return (
       <div
         key={`d-${doc.id}`}
-        className={`flex items-center gap-1 group rounded-md transition-all ${
+        className={`flex items-center gap-1 group rounded-md transition-all min-w-0 ${
           isPinned
             ? "bg-green-500/10 border-l-2 border-green-500"
             : "hover:bg-muted/50"
@@ -479,7 +479,7 @@ export function ContextSidebar({
     return (
       <div key={`f-${folder.id}`}>
         <div
-          className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors"
+          className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors min-w-0"
           style={{ paddingLeft: `${indent}px` }}
         >
           {isEditing ? (
@@ -582,7 +582,7 @@ export function ContextSidebar({
   };
 
   return (
-    <div className={`h-full flex flex-col ${embedded ? "" : "bg-card border-r"}`}>
+    <div className={`h-full flex flex-col overflow-hidden ${embedded ? "" : "bg-card border-r"}`}>
       {/* ─── Header (hidden when embedded in tab panel) ─── */}
       {!embedded && (
         <div className="p-2 border-b flex items-center justify-between gap-1">
@@ -657,7 +657,7 @@ export function ContextSidebar({
 
       <ScrollArea className="flex-1">
         {/* ═══ SESSION CONTEXT ═══ */}
-        <div className="border-b">
+        <div className="border-b overflow-hidden">
           <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
             <Zap className="w-3 h-3 text-green-600" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 dark:text-green-400">
@@ -682,7 +682,7 @@ export function ContextSidebar({
               {pinnedDocs.map((doc) => (
                 <div
                   key={`session-${doc.id}`}
-                  className="flex items-center gap-1.5 py-1 px-2 rounded-md bg-green-500/10 border border-green-500/20 group"
+                  className="flex items-center gap-1.5 py-1 px-2 rounded-md bg-green-500/10 border border-green-500/20 group min-w-0"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
                   <span className="text-xs font-medium truncate flex-1 text-green-700 dark:text-green-400">
@@ -703,7 +703,7 @@ export function ContextSidebar({
         </div>
 
         {/* ═══ CONTEXT STORE (Persisted) ═══ */}
-        <div className="p-2">
+        <div className="p-2 overflow-hidden">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Context Store

@@ -20,6 +20,7 @@ import { ChatSessionPanel } from "@/components/ChatSessionPanel";
 import { DynamicSummaryPanel } from "@/components/DynamicSummaryPanel";
 import { ResearchNotesPanel } from "@/components/ResearchNotesPanel";
 import { SessionNotesPanel } from "@/components/SessionNotesPanel";
+import { GeneratePanel, type GeneratedDocument } from "@/components/GeneratePanel";
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
@@ -193,6 +194,14 @@ export default function Workspace() {
 
   // Model configuration state — used by text-to-infographic
   const [modelConfig, setModelConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
+
+  // Generated documents — session context from the Generate tab
+  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
+
+  // Document canvas tabs — "main" is the primary document, secondary tabs are dragged-in generated docs
+  const [canvasTabs, setCanvasTabs] = useState<GeneratedDocument[]>([]);
+  const [activeCanvasTab, setActiveCanvasTab] = useState<string>("main"); // "main" or a GeneratedDocument.id
+  const [canvasDropActive, setCanvasDropActive] = useState(false);
 
   // Agent editor state
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
@@ -1674,6 +1683,80 @@ RULES:
     return () => { if (previewSaveTimerRef.current) clearTimeout(previewSaveTimerRef.current); };
   }, [previewingDoc?.content, previewingDoc?.id]);
 
+  // ── Generate tab handlers ──
+
+  const handleGeneratedDoc = useCallback((doc: GeneratedDocument) => {
+    setGeneratedDocs((prev) => [doc, ...prev]);
+  }, []);
+
+  const handleRemoveGeneratedDoc = useCallback((id: string) => {
+    setGeneratedDocs((prev) => prev.filter((d) => d.id !== id));
+  }, []);
+
+  // ── Canvas tab handlers (drag-drop generated docs onto canvas) ──
+
+  const handleCanvasDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setCanvasDropActive(false);
+    const raw = e.dataTransfer.getData("application/x-generated-doc");
+    if (!raw) return;
+    try {
+      const doc = JSON.parse(raw) as GeneratedDocument;
+      // If canvas is empty, open the doc as the main document
+      if (!document.rawText.trim()) {
+        setDocument({ ...document, rawText: doc.content });
+        toast({ title: "Document opened", description: `"${doc.title}" loaded into the canvas.` });
+        return;
+      }
+      // Canvas has content — add as a secondary tab (if not already open)
+      setCanvasTabs((prev) => {
+        if (prev.some((t) => t.id === doc.id)) return prev;
+        return [...prev, doc];
+      });
+      setActiveCanvasTab(doc.id);
+    } catch { /* ignore malformed data */ }
+  }, [document, toast]);
+
+  const handleCanvasDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-generated-doc")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setCanvasDropActive(true);
+    }
+  }, []);
+
+  const handleCanvasDragLeave = useCallback((e: React.DragEvent) => {
+    // Only deactivate when leaving the container (not child elements)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setCanvasDropActive(false);
+    }
+  }, []);
+
+  const handleCloseCanvasTab = useCallback((tabId: string) => {
+    setCanvasTabs((prev) => prev.filter((t) => t.id !== tabId));
+    setActiveCanvasTab("main");
+  }, []);
+
+  const handleSaveCanvasTabToStore = useCallback(async (doc: GeneratedDocument) => {
+    try {
+      await apiRequest("POST", "/api/documents", {
+        title: doc.title,
+        content: doc.imageUrl
+          ? `${doc.content}\n\n---\n\n![Infographic](${doc.imageUrl})`
+          : doc.content,
+      });
+      toast({ title: "Saved to Context Store", description: `"${doc.title}" has been saved.` });
+    } catch {
+      toast({ title: "Save failed", description: "Could not save to Context Store.", variant: "destructive" });
+    }
+  }, [toast]);
+
+  const handleCanvasTabTextChange = useCallback((tabId: string, newText: string) => {
+    setCanvasTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, content: newText } : t)),
+    );
+  }, []);
+
   // Handle text edit from pencil icon prompt
   const handleTextEdit = useCallback((newText: string) => {
     if (document) {
@@ -2119,41 +2202,52 @@ RULES:
       } : undefined}
       onMergeToDraft={appFlowConfig.inlineDiscussion ? handleMergeToDraft : undefined}
       isMergeToDraftPending={interviewMergeMutation.isPending}
-      customTabContent={selectedTemplateId === "agent-editor" ? {
-        steps: (
-          <div className="flex flex-col h-full">
-            {adminEditTaskType && (
-              <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
-                <span className="text-xs text-muted-foreground flex-1">
-                  Editing: <span className="font-medium text-foreground">{adminEditTaskType}</span>
-                </span>
-                <Button
-                  size="sm"
-                  onClick={() => savePromptOverrideMutation.mutate()}
-                  disabled={savePromptOverrideMutation.isPending || agentSteps.length === 0}
-                >
-                  {savePromptOverrideMutation.isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                  ) : (
-                    <HardDrive className="w-3.5 h-3.5 mr-1.5" />
-                  )}
-                  Save Prompt Override
-                </Button>
-              </div>
-            )}
-            <div className="flex-1 overflow-auto">
-              <StepBuilder
-                steps={agentSteps}
-                onStepsChange={setAgentSteps}
-                selectedStepId={selectedStepId}
-                onSelectStep={setSelectedStepId}
-                persona={agentPersona}
-                agentName={agentName}
-              />
-            </div>
-          </div>
+      customTabContent={{
+        generate: (
+          <GeneratePanel
+            documentText={document.rawText}
+            objective={objective}
+            generatedDocs={generatedDocs}
+            onDocGenerated={handleGeneratedDoc}
+            onDocRemove={handleRemoveGeneratedDoc}
+          />
         ),
-      } : undefined}
+        ...(selectedTemplateId === "agent-editor" ? {
+          steps: (
+            <div className="flex flex-col h-full">
+              {adminEditTaskType && (
+                <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
+                  <span className="text-xs text-muted-foreground flex-1">
+                    Editing: <span className="font-medium text-foreground">{adminEditTaskType}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => savePromptOverrideMutation.mutate()}
+                    disabled={savePromptOverrideMutation.isPending || agentSteps.length === 0}
+                  >
+                    {savePromptOverrideMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <HardDrive className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    Save Prompt Override
+                  </Button>
+                </div>
+              )}
+              <div className="flex-1 overflow-auto">
+                <StepBuilder
+                  steps={agentSteps}
+                  onStepsChange={setAgentSteps}
+                  selectedStepId={selectedStepId}
+                  onSelectStep={setSelectedStepId}
+                  persona={agentPersona}
+                  agentName={agentName}
+                />
+              </div>
+            </div>
+          ),
+        } : {}),
+      }}
     />
   );
 
@@ -2320,11 +2414,109 @@ RULES:
     </div>
   );
 
-  const documentPanel = (
-    <div className="h-full flex flex-col relative min-h-0">
+  const activeTabDoc = canvasTabs.find((t) => t.id === activeCanvasTab);
+  const hasSecondaryTabs = canvasTabs.length > 0;
 
-      {/* Source document preview mode — editable, auto-saves */}
-      {previewingDoc ? (
+  const documentPanel = (
+    <div
+      className={`h-full flex flex-col relative min-h-0 ${canvasDropActive ? "ring-2 ring-primary/50 ring-inset bg-primary/5" : ""}`}
+      onDrop={handleCanvasDrop}
+      onDragOver={handleCanvasDragOver}
+      onDragLeave={handleCanvasDragLeave}
+    >
+
+      {/* ── Drop overlay hint ── */}
+      {canvasDropActive && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <div className="bg-primary/90 text-primary-foreground rounded-lg px-6 py-3 shadow-lg">
+            <p className="text-sm font-medium">
+              {document.rawText.trim() ? "Drop to open in new tab" : "Drop to open document"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab bar (only when secondary tabs exist) ── */}
+      {hasSecondaryTabs && (
+        <div className="flex items-center border-b bg-muted/20 shrink-0 overflow-x-auto">
+          {/* Main document tab */}
+          <button
+            onClick={() => setActiveCanvasTab("main")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-b-2 transition-colors shrink-0 ${
+              activeCanvasTab === "main"
+                ? "border-primary text-foreground font-medium"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
+            }`}
+          >
+            <FileText className="w-3 h-3" />
+            <span className="truncate max-w-[120px]">Document</span>
+          </button>
+
+          {/* Secondary tabs (generated docs) */}
+          {canvasTabs.map((tab) => (
+            <div key={tab.id} className="flex items-center shrink-0">
+              <button
+                onClick={() => setActiveCanvasTab(tab.id)}
+                className={`flex items-center gap-1.5 pl-3 pr-1 py-1.5 text-xs border-b-2 transition-colors ${
+                  activeCanvasTab === tab.id
+                    ? "border-primary text-foreground font-medium"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                }`}
+              >
+                {tab.imageUrl ? (
+                  <ImageIcon className="w-3 h-3 text-purple-500" />
+                ) : (
+                  <FileText className="w-3 h-3 text-amber-500" />
+                )}
+                <span className="truncate max-w-[120px]">{tab.title}</span>
+              </button>
+              {/* Save to Context Store */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 text-muted-foreground/50 hover:text-green-600"
+                    onClick={() => handleSaveCanvasTabToStore(tab)}
+                  >
+                    <Save className="w-2.5 h-2.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Save to Context Store</TooltipContent>
+              </Tooltip>
+              {/* Close tab */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 mr-1 text-muted-foreground/40 hover:text-foreground"
+                onClick={() => handleCloseCanvasTab(tab.id)}
+              >
+                <X className="w-2.5 h-2.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Tab content ── */}
+      {activeCanvasTab !== "main" && activeTabDoc ? (
+        /* ── Secondary tab: generated document ── */
+        <div className="flex-1 overflow-y-auto">
+          <ReadingPane
+            text={activeTabDoc.content}
+            onTextChange={(text) => handleCanvasTabTextChange(activeTabDoc.id, text)}
+            isMerging={false}
+            onTranscriptUpdate={() => {}}
+            onTextEdit={(text) => handleCanvasTabTextChange(activeTabDoc.id, text)}
+            onSendFeedback={() => {}}
+            draftWordCount={activeTabDoc.content.split(/\s+/).filter(Boolean).length}
+            onDocumentCopy={() => {}}
+            objective={objective}
+            templateName={selectedTemplateName}
+          />
+        </div>
+      ) : previewingDoc ? (
+        /* ── Source document preview mode ── */
         <div className="h-full flex flex-col">
           <div className="flex items-center gap-2 px-3 py-2 border-b bg-blue-50/50 dark:bg-blue-950/20 shrink-0">
             <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -2390,6 +2582,7 @@ RULES:
           />
         </Suspense>
       ) : (
+        /* ── Main document ── */
         <ReadingPane
           text={document.rawText}
           onTextChange={handleDocumentTextChange}
