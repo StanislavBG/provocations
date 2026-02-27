@@ -3,6 +3,7 @@ import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
@@ -242,6 +243,12 @@ export function NotebookResearchChat({
               }}
             />
           </div>
+          <VoiceRecorder
+            onTranscript={(text) => setInput(text)}
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+          />
           <Button
             size="icon"
             variant="ghost"
