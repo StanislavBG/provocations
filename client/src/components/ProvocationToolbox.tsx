@@ -41,6 +41,7 @@ import {
   Loader2 as Loader2Icon,
   MessageCircle,
   Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import type { ProvocationType, DirectionMode, ContextItem, ReferenceDocument, PersonaDomain, InterviewEntry, DiscussionMessage } from "@shared/schema";
 import type { LeftPanelTabConfig } from "@/lib/appWorkspaceConfig";
@@ -49,7 +50,7 @@ import { ChevronRight, Settings } from "lucide-react";
 
 // ── Toolbox app type ──
 
-export type ToolboxApp = "provoke" | "website" | "context" | "model-config" | "steps" | "generate";
+export type ToolboxApp = "provoke" | "website" | "context" | "model-config" | "steps" | "generate" | "chat";
 
 // ── Persona metadata (derived from centralized persona definitions) ──
 
@@ -169,6 +170,7 @@ const LEFT_TAB_ICONS: Record<string, typeof Blocks> = {
   "model-config": Settings,
   steps: ListOrdered,
   generate: Sparkles,
+  chat: MessageSquare,
 };
 
 export function ProvocationToolbox({
