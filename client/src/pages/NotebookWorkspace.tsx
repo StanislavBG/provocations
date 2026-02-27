@@ -356,8 +356,6 @@ export default function NotebookWorkspace() {
         onSessionNameChange={setSessionName}
         onNew={handleNewSession}
         isAdmin={isAdmin}
-        selectedTemplateId={selectedTemplateId}
-        onSelectTemplate={setSelectedTemplateId}
         versionCount={versions.length}
       />
 
