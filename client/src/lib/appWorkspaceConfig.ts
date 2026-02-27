@@ -109,7 +109,7 @@ const DEFAULT_OBJECTIVE_CONFIG: ObjectiveConfig = {
  * "infographic-studio"  — 3-panel infographic pipeline (raw text | summary + controls | image gallery).
  * "research-chat"       — 2-panel research session (chat panel | dynamic summary panel).
  */
-export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio" | "research-chat";
+export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio" | "research-chat" | "bs-chart";
 
 export interface AppFlowConfig {
   /** Top-level workspace layout. Defaults to "standard" (3-panel). */
@@ -461,6 +461,29 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       mode: "edit",
       outputFormat: "markdown",
       documentType: "agent workflow definition",
+      feedbackTone: "precise and architecture-focused",
+    },
+  },
+
+  "bs-chart": {
+    workspaceLayout: "bs-chart",
+    defaultToolboxTab: "context",
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "design", label: "Design Chart", description: "Build your diagram on the infinite canvas" },
+    ],
+
+    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_CHAT],
+
+    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_TRANSCRIPT],
+
+    writer: {
+      mode: "edit",
+      outputFormat: "markdown",
+      documentType: "diagram / chart",
       feedbackTone: "precise and architecture-focused",
     },
   },
