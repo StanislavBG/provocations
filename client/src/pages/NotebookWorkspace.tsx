@@ -79,6 +79,9 @@ export default function NotebookWorkspace() {
     Record<number, { title: string; content: string }>
   >({});
 
+  // ── Preview state for context documents ──
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; content: string } | null>(null);
+
   // ── Document versioning ──
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [editHistory, setEditHistory] = useState<EditHistoryEntry[]>([]);
@@ -322,6 +325,28 @@ export default function NotebookWorkspace() {
     [],
   );
 
+  const handleRemoveCapturedItem = useCallback((itemId: string) => {
+    setCapturedContext((prev) => prev.filter((i) => i.id !== itemId));
+  }, []);
+
+  // ── Open a context document for preview ──
+  const handleOpenDoc = useCallback(async (id: number, title: string) => {
+    // Check if already in pinned cache
+    const cached = pinnedDocContents[id];
+    if (cached) {
+      setPreviewDoc({ title: cached.title, content: cached.content });
+      return;
+    }
+    // Fetch from server
+    try {
+      const res = await apiRequest("GET", `/api/documents/${id}`);
+      const data = await res.json();
+      setPreviewDoc({ title: data.title || title, content: data.content || "" });
+    } catch {
+      toast({ title: "Failed to load document", variant: "destructive" });
+    }
+  }, [pinnedDocContents, toast]);
+
   // ── New session ──
   const handleNewSession = useCallback(() => {
     if (document.rawText || objective) {
@@ -356,8 +381,6 @@ export default function NotebookWorkspace() {
         onSessionNameChange={setSessionName}
         onNew={handleNewSession}
         isAdmin={isAdmin}
-        selectedTemplateId={selectedTemplateId}
-        onSelectTemplate={setSelectedTemplateId}
         versionCount={versions.length}
       />
 
@@ -384,6 +407,8 @@ export default function NotebookWorkspace() {
                   objective={objective}
                   onObjectiveChange={setObjective}
                   templateName={selectedTemplateName}
+                  previewDoc={previewDoc}
+                  onClosePreview={() => setPreviewDoc(null)}
                 />
               )}
               {mobileTab === "chat" && (
@@ -399,6 +424,8 @@ export default function NotebookWorkspace() {
                   hasDocument={!!document.rawText.trim()}
                   objective={objective}
                   onCaptureToContext={handleCaptureToContext}
+                  capturedContext={capturedContext}
+                  onRemoveCapturedItem={handleRemoveCapturedItem}
                 />
               )}
             </div>
@@ -440,6 +467,7 @@ export default function NotebookWorkspace() {
                 pinnedDocIds={pinnedDocIds}
                 onPinDoc={handlePinDoc}
                 onUnpinDoc={handleUnpinDoc}
+                onOpenDoc={handleOpenDoc}
                 chatSessionContext={{
                   objective,
                   templateName: selectedTemplateName ?? null,
@@ -463,6 +491,8 @@ export default function NotebookWorkspace() {
                 objective={objective}
                 onObjectiveChange={setObjective}
                 templateName={selectedTemplateName}
+                previewDoc={previewDoc}
+                onClosePreview={() => setPreviewDoc(null)}
               />
             </ResizablePanel>
 
@@ -482,6 +512,8 @@ export default function NotebookWorkspace() {
                 hasDocument={!!document.rawText.trim()}
                 objective={objective}
                 onCaptureToContext={handleCaptureToContext}
+                capturedContext={capturedContext}
+                onRemoveCapturedItem={handleRemoveCapturedItem}
               />
             </ResizablePanel>
           </ResizablePanelGroup>

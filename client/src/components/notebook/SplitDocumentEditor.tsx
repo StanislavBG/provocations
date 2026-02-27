@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { generateId } from "@/lib/utils";
 import {
   Eye,
-  Pencil,
   Download,
   Target,
   ChevronDown,
@@ -27,6 +26,11 @@ interface TabSnapshot {
   objective: string;
 }
 
+interface PreviewDoc {
+  title: string;
+  content: string;
+}
+
 interface SplitDocumentEditorProps {
   text: string;
   onTextChange: (text: string) => void;
@@ -34,6 +38,9 @@ interface SplitDocumentEditorProps {
   objective?: string;
   onObjectiveChange?: (objective: string) => void;
   templateName?: string;
+  /** When set, shows a read-only preview of a context document */
+  previewDoc?: PreviewDoc | null;
+  onClosePreview?: () => void;
 }
 
 export function SplitDocumentEditor({
@@ -43,8 +50,9 @@ export function SplitDocumentEditor({
   objective,
   onObjectiveChange,
   templateName,
+  previewDoc,
+  onClosePreview,
 }: SplitDocumentEditorProps) {
-  const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   const [objectiveExpanded, setObjectiveExpanded] = useState(
     !!(objective && objective.trim()),
   );
@@ -117,27 +125,8 @@ export function SplitDocumentEditor({
     URL.revokeObjectURL(url);
   };
 
-  const modeToggle = (
+  const headerActions = (
     <div className="flex items-center gap-1">
-      <Button
-        variant={viewMode === "edit" ? "secondary" : "ghost"}
-        size="sm"
-        className="h-6 text-xs gap-1"
-        onClick={() => setViewMode("edit")}
-      >
-        <Pencil className="w-3 h-3" />
-        Edit
-      </Button>
-      <Button
-        variant={viewMode === "preview" ? "secondary" : "ghost"}
-        size="sm"
-        className="h-6 text-xs gap-1"
-        onClick={() => setViewMode("preview")}
-      >
-        <Eye className="w-3 h-3" />
-        Preview
-      </Button>
-      <div className="w-px h-4 bg-border mx-1" />
       <Button
         variant="ghost"
         size="icon"
@@ -247,8 +236,31 @@ export function SplitDocumentEditor({
         </div>
       )}
 
-      {/* Edit mode: Unified card with objective + editor */}
-      {viewMode === "edit" && (
+      {/* Context document preview */}
+      {previewDoc ? (
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b shrink-0 bg-muted/30">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Eye className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+              <span className="text-xs font-semibold truncate">
+                {previewDoc.title}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs gap-1 shrink-0"
+              onClick={onClosePreview}
+            >
+              <X className="w-3 h-3" />
+              Close Preview
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <MarkdownRenderer content={previewDoc.content} />
+          </div>
+        </div>
+      ) : (
         <ProvokeText
           chrome="container"
           variant="editor"
@@ -257,33 +269,10 @@ export function SplitDocumentEditor({
           onChange={onTextChange}
           placeholder="Start writing your document here... (Markdown supported)"
           label="Document"
-          headerActions={modeToggle}
+          headerActions={headerActions}
           beforeInput={objectiveSection}
           className="text-sm leading-relaxed font-serif"
         />
-      )}
-
-      {/* Preview mode: rendered markdown */}
-      {viewMode === "preview" && (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex items-center justify-between px-3 py-1.5 border-b shrink-0">
-            <span className="text-xs font-semibold text-muted-foreground">
-              Document
-            </span>
-            {modeToggle}
-          </div>
-          {objectiveSection}
-          <div className="flex-1 overflow-y-auto p-4">
-            {text.trim() ? (
-              <MarkdownRenderer content={text} />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground/40">
-                <Eye className="w-8 h-8" />
-                <p className="text-sm">Preview will appear here</p>
-              </div>
-            )}
-          </div>
-        </div>
       )}
     </div>
   );
