@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProvokeText } from "@/components/ProvokeText";
-import { Eraser, Wand2, PenLine, Loader2, Mic } from "lucide-react";
+import { ImagePreviewDialog } from "@/components/ImagePreviewDialog";
+import { Eraser, Wand2, PenLine, Loader2, Mic, ImageIcon, Paintbrush } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/tracking";
@@ -19,6 +20,8 @@ interface TranscriptPanelProps {
   isWriting?: boolean;
   /** The selected text context from the document (for targeted writes) */
   selectedText?: string;
+  /** Called when user clicks Artify — opens the Artify panel with transcript text */
+  onArtify?: () => void;
 }
 
 export function TranscriptPanel({
@@ -27,10 +30,16 @@ export function TranscriptPanel({
   onWriteToDocument,
   isWriting,
   selectedText,
+  onArtify,
 }: TranscriptPanelProps) {
   const { toast } = useToast();
   const [isCleaning, setIsCleaning] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  // Text to Visual state
+  const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewPrompt, setPreviewPrompt] = useState("");
+  const [showImagePreview, setShowImagePreview] = useState(false);
 
   const handleClean = useCallback(async () => {
     if (!transcript.trim()) return;
@@ -86,8 +95,34 @@ export function TranscriptPanel({
     onWriteToDocument(transcript);
   }, [transcript, onWriteToDocument]);
 
+  const handleTextToVisual = useCallback(async () => {
+    if (!transcript.trim()) return;
+    setIsGeneratingVisual(true);
+    try {
+      const response = await apiRequest("POST", "/api/text-to-visual", { text: transcript });
+      const data = (await response.json()) as { images?: string[]; imagePrompt?: string; error?: string };
+      if (data.images && data.images.length > 0) {
+        setPreviewImageUrl(data.images[0]);
+        setPreviewPrompt(data.imagePrompt || "");
+        setShowImagePreview(true);
+        trackEvent("transcript_text_to_visual");
+      } else {
+        toast({
+          title: "No image generated",
+          description: data.error || "The image could not be generated.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("[text-to-visual] transcript error:", error);
+      toast({ title: "Generation failed", description: "Could not generate visual.", variant: "destructive" });
+    } finally {
+      setIsGeneratingVisual(false);
+    }
+  }, [transcript, toast]);
+
   const wordCount = transcript.trim() ? transcript.trim().split(/\s+/).length : 0;
-  const isProcessing = isCleaning || isSummarizing || isWriting;
+  const isProcessing = isCleaning || isSummarizing || isWriting || isGeneratingVisual;
 
   return (
     <div className="flex flex-col h-full">
@@ -106,6 +141,38 @@ export function TranscriptPanel({
           </Badge>
         )}
         <div className="flex-1" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+              onClick={handleTextToVisual}
+              disabled={!transcript.trim() || isProcessing}
+            >
+              {isGeneratingVisual ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <ImageIcon className="w-3 h-3" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Generate a visual from this transcript</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-purple-600 dark:hover:text-purple-400"
+              onClick={onArtify}
+              disabled={!transcript.trim()}
+            >
+              <Paintbrush className="w-3 h-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Artify — customize image generation style</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Transcript editor */}
@@ -190,6 +257,15 @@ export function TranscriptPanel({
           </TooltipContent>
         </Tooltip>
       </div>
+
+      {/* Image preview dialog for Text to Visual */}
+      <ImagePreviewDialog
+        open={showImagePreview}
+        onOpenChange={setShowImagePreview}
+        imageUrl={previewImageUrl}
+        prompt={previewPrompt}
+        title="Text to Visual"
+      />
     </div>
   );
 }
