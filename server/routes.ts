@@ -58,7 +58,7 @@ import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
 import { runWithGateway, isVerboseEnabled, getActiveScope as getActiveGatewayScope, type GatewayContext, type LlmVerboseMetadata } from "./llm-gateway";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 import { executeAgent } from "./agent-executor";
-import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema, saveSessionRequestSchema, updateSessionRequestSchema } from "@shared/schema";
+import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
 
 function getEncryptionKey(): string {
@@ -4368,10 +4368,9 @@ RULES:
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const update: Partial<{ autoDictate: boolean; verboseMode: boolean; autoSaveSession: boolean }> = {};
+      const update: Partial<{ autoDictate: boolean; verboseMode: boolean }> = {};
       if (typeof req.body.autoDictate === "boolean") update.autoDictate = req.body.autoDictate;
       if (typeof req.body.verboseMode === "boolean") update.verboseMode = req.body.verboseMode;
-      if (typeof req.body.autoSaveSession === "boolean") update.autoSaveSession = req.body.autoSaveSession;
 
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ error: "At least one preference field must be provided" });
@@ -4383,202 +4382,6 @@ RULES:
       console.error("Set preferences error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to set preferences", details: errorMessage });
-    }
-  });
-
-  // ==========================================
-  // Workspace Session Endpoints (Save/Resume)
-  // ==========================================
-
-  // Create a new workspace session
-  app.post("/api/sessions", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const parsed = saveSessionRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const { title, templateId, state } = parsed.data;
-      const key = getEncryptionKey();
-      const encryptedTitle = encrypt(title, key);
-      const encryptedState = encrypt(JSON.stringify(state), key);
-
-      const session = await storage.createWorkspaceSession({
-        userId,
-        templateId,
-        title: "[encrypted]",
-        titleCiphertext: encryptedTitle.ciphertext,
-        titleSalt: encryptedTitle.salt,
-        titleIv: encryptedTitle.iv,
-        ciphertext: encryptedState.ciphertext,
-        salt: encryptedState.salt,
-        iv: encryptedState.iv,
-      });
-
-      res.json({ id: session.id, createdAt: session.createdAt });
-    } catch (error) {
-      console.error("Create session error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to create session", details: errorMessage });
-    }
-  });
-
-  // List all sessions for the authenticated user
-  app.get("/api/sessions", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const key = getEncryptionKey();
-      const sessions = await storage.listWorkspaceSessions(userId);
-      const decrypted = sessions.map((s) => ({
-        id: s.id,
-        title: decryptField(s.title, s.titleCiphertext, s.titleSalt, s.titleIv, key),
-        templateId: s.templateId,
-        createdAt: s.createdAt.toISOString(),
-        updatedAt: s.updatedAt.toISOString(),
-      }));
-
-      res.json({ sessions: decrypted });
-    } catch (error) {
-      console.error("List sessions error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to list sessions", details: errorMessage });
-    }
-  });
-
-  // Get a specific session (decrypt state)
-  app.get("/api/sessions/:id", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) return res.status(400).json({ error: "Invalid session ID" });
-
-      const session = await storage.getWorkspaceSession(id);
-      if (!session) return res.status(404).json({ error: "Session not found" });
-      if (session.userId !== userId) return res.status(403).json({ error: "Not authorized" });
-
-      const key = getEncryptionKey();
-      const title = decryptField(session.title, session.titleCiphertext, session.titleSalt, session.titleIv, key);
-      const stateJson = decrypt({ ciphertext: session.ciphertext, salt: session.salt, iv: session.iv }, key);
-
-      res.json({
-        id: session.id,
-        title,
-        templateId: session.templateId,
-        state: JSON.parse(stateJson),
-        createdAt: session.createdAt.toISOString(),
-        updatedAt: session.updatedAt.toISOString(),
-      });
-    } catch (error) {
-      console.error("Get session error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to get session", details: errorMessage });
-    }
-  });
-
-  // Update an existing session
-  app.put("/api/sessions/:id", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) return res.status(400).json({ error: "Invalid session ID" });
-
-      const existing = await storage.getWorkspaceSession(id);
-      if (!existing) return res.status(404).json({ error: "Session not found" });
-      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
-
-      const parsed = updateSessionRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
-      }
-
-      const key = getEncryptionKey();
-      const updateData: Record<string, string> = {};
-
-      if (parsed.data.title) {
-        const encTitle = encrypt(parsed.data.title, key);
-        updateData.title = "[encrypted]";
-        updateData.titleCiphertext = encTitle.ciphertext;
-        updateData.titleSalt = encTitle.salt;
-        updateData.titleIv = encTitle.iv;
-      }
-      if (parsed.data.templateId) {
-        updateData.templateId = parsed.data.templateId;
-      }
-      if (parsed.data.state) {
-        const encState = encrypt(JSON.stringify(parsed.data.state), key);
-        updateData.ciphertext = encState.ciphertext;
-        updateData.salt = encState.salt;
-        updateData.iv = encState.iv;
-      }
-
-      const result = await storage.updateWorkspaceSession(id, updateData);
-      if (!result) return res.status(404).json({ error: "Session not found" });
-
-      res.json(result);
-    } catch (error) {
-      console.error("Update session error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to update session", details: errorMessage });
-    }
-  });
-
-  // Delete a session
-  app.delete("/api/sessions/:id", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) return res.status(400).json({ error: "Invalid session ID" });
-
-      const existing = await storage.getWorkspaceSession(id);
-      if (!existing) return res.status(404).json({ error: "Session not found" });
-      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
-
-      await storage.deleteWorkspaceSession(id);
-      res.json({ ok: true });
-    } catch (error) {
-      console.error("Delete session error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to delete session", details: errorMessage });
-    }
-  });
-
-  // Get latest session for a specific template (for resume prompt)
-  app.get("/api/sessions/latest/:templateId", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const { templateId } = req.params;
-      const session = await storage.getLatestSessionForTemplate(userId, templateId);
-      if (!session) return res.json({ session: null });
-
-      const key = getEncryptionKey();
-      const title = decryptField(session.title, session.titleCiphertext, session.titleSalt, session.titleIv, key);
-
-      res.json({
-        session: {
-          id: session.id,
-          title,
-          templateId: session.templateId,
-          createdAt: session.createdAt.toISOString(),
-          updatedAt: session.updatedAt.toISOString(),
-        },
-      });
-    } catch (error) {
-      console.error("Get latest session error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to get latest session", details: errorMessage });
     }
   });
 

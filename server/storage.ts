@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, workspaceSessions, connections, conversations, messages, chatPreferences } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredWorkspaceSession, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -77,8 +77,8 @@ export interface IStorage {
   deleteFolder(id: number): Promise<void>;
   getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null; locked: boolean } | null>;
   // User preferences
-  getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean; autoSaveSession: boolean }>;
-  setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean; autoSaveSession: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean; autoSaveSession: boolean }>;
+  getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean }>;
+  setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean }>;
   // LLM call logs
   insertLlmCallLog(data: InsertLlmCallLog): Promise<StoredLlmCallLog>;
   listLlmCallLogs(opts: { userId?: string; limit?: number; offset?: number }): Promise<StoredLlmCallLog[]>;
@@ -420,17 +420,17 @@ export class DatabaseStorage implements IStorage {
     await db.delete(folders).where(eq(folders.id, id));
   }
 
-  async getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean; autoSaveSession: boolean }> {
+  async getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean }> {
     const [row] = await db
-      .select({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode, autoSaveSession: userPreferences.autoSaveSession })
+      .select({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode })
       .from(userPreferences)
       .where(eq(userPreferences.userId, userId))
       .limit(1);
 
-    return { autoDictate: row?.autoDictate ?? false, verboseMode: row?.verboseMode ?? false, autoSaveSession: row?.autoSaveSession ?? true };
+    return { autoDictate: row?.autoDictate ?? false, verboseMode: row?.verboseMode ?? false };
   }
 
-  async setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean; autoSaveSession: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean; autoSaveSession: boolean }> {
+  async setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean }> {
     const now = new Date();
     const updateSet: Record<string, unknown> = { updatedAt: now };
     const insertValues: Record<string, unknown> = { userId, updatedAt: now };
@@ -442,10 +442,6 @@ export class DatabaseStorage implements IStorage {
       updateSet.verboseMode = prefs.verboseMode;
       insertValues.verboseMode = prefs.verboseMode;
     }
-    if (typeof prefs.autoSaveSession === "boolean") {
-      updateSet.autoSaveSession = prefs.autoSaveSession;
-      insertValues.autoSaveSession = prefs.autoSaveSession;
-    }
 
     const [row] = await db
       .insert(userPreferences)
@@ -454,9 +450,9 @@ export class DatabaseStorage implements IStorage {
         target: userPreferences.userId,
         set: updateSet as any,
       })
-      .returning({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode, autoSaveSession: userPreferences.autoSaveSession });
+      .returning({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode });
 
-    return { autoDictate: row.autoDictate, verboseMode: row.verboseMode, autoSaveSession: row.autoSaveSession };
+    return { autoDictate: row.autoDictate, verboseMode: row.verboseMode };
   }
 
   async insertLlmCallLog(data: InsertLlmCallLog): Promise<StoredLlmCallLog> {
@@ -1013,102 +1009,6 @@ export class DatabaseStorage implements IStorage {
     return Array.from(allIds);
   }
   // ── Workspace Sessions ──────────────────────────────────────────────
-
-  async createWorkspaceSession(data: {
-    userId: string;
-    templateId: string;
-    title: string;
-    titleCiphertext: string;
-    titleSalt: string;
-    titleIv: string;
-    ciphertext: string;
-    salt: string;
-    iv: string;
-  }): Promise<{ id: number; createdAt: string }> {
-    const [row] = await db
-      .insert(workspaceSessions)
-      .values({
-        userId: data.userId,
-        templateId: data.templateId,
-        title: data.title,
-        titleCiphertext: data.titleCiphertext,
-        titleSalt: data.titleSalt,
-        titleIv: data.titleIv,
-        ciphertext: data.ciphertext,
-        salt: data.salt,
-        iv: data.iv,
-      })
-      .returning({ id: workspaceSessions.id, createdAt: workspaceSessions.createdAt });
-
-    return { id: row.id, createdAt: row.createdAt.toISOString() };
-  }
-
-  async updateWorkspaceSession(
-    id: number,
-    data: {
-      title?: string;
-      titleCiphertext?: string;
-      titleSalt?: string;
-      titleIv?: string;
-      ciphertext?: string;
-      salt?: string;
-      iv?: string;
-      templateId?: string;
-    },
-  ): Promise<{ id: number; updatedAt: string } | null> {
-    const now = new Date();
-    const setData: Record<string, unknown> = { updatedAt: now };
-    if (data.title !== undefined) setData.title = data.title;
-    if (data.titleCiphertext !== undefined) setData.titleCiphertext = data.titleCiphertext;
-    if (data.titleSalt !== undefined) setData.titleSalt = data.titleSalt;
-    if (data.titleIv !== undefined) setData.titleIv = data.titleIv;
-    if (data.ciphertext !== undefined) setData.ciphertext = data.ciphertext;
-    if (data.salt !== undefined) setData.salt = data.salt;
-    if (data.iv !== undefined) setData.iv = data.iv;
-    if (data.templateId !== undefined) setData.templateId = data.templateId;
-
-    const rows = await db
-      .update(workspaceSessions)
-      .set(setData)
-      .where(eq(workspaceSessions.id, id))
-      .returning({ id: workspaceSessions.id, updatedAt: workspaceSessions.updatedAt });
-
-    if (rows.length === 0) return null;
-    return { id: rows[0].id, updatedAt: rows[0].updatedAt.toISOString() };
-  }
-
-  async getWorkspaceSession(id: number): Promise<StoredWorkspaceSession | null> {
-    const [row] = await db
-      .select()
-      .from(workspaceSessions)
-      .where(eq(workspaceSessions.id, id))
-      .limit(1);
-
-    return row ?? null;
-  }
-
-  async listWorkspaceSessions(userId: string): Promise<StoredWorkspaceSession[]> {
-    return db
-      .select()
-      .from(workspaceSessions)
-      .where(eq(workspaceSessions.userId, userId))
-      .orderBy(desc(workspaceSessions.updatedAt));
-  }
-
-  async getLatestSessionForTemplate(userId: string, templateId: string): Promise<StoredWorkspaceSession | null> {
-    const [row] = await db
-      .select()
-      .from(workspaceSessions)
-      .where(and(eq(workspaceSessions.userId, userId), eq(workspaceSessions.templateId, templateId)))
-      .orderBy(desc(workspaceSessions.updatedAt))
-      .limit(1);
-
-    return row ?? null;
-  }
-
-  async deleteWorkspaceSession(id: number): Promise<void> {
-    await db.delete(workspaceSessions).where(eq(workspaceSessions.id, id));
-  }
 
   // ── Payments ──────────────────────────────────────────────────────────
 

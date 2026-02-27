@@ -9,7 +9,6 @@ import {
   MessageSquare,
   Video,
   PanelLeftOpen,
-  Maximize2,
 } from "lucide-react";
 
 type LeftPanelTab = "context" | "chat" | "video";
@@ -25,9 +24,6 @@ interface NotebookLeftPanelProps {
   activeChatConversationId: number | null;
   onActiveChatConversationChange: (id: number | null) => void;
 
-  // Session Store
-  onOpenSessionStore: () => void;
-
   // Collapse
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -40,7 +36,6 @@ export function NotebookLeftPanel({
   chatSessionContext,
   activeChatConversationId,
   onActiveChatConversationChange,
-  onOpenSessionStore,
   isCollapsed,
   onToggleCollapse,
 }: NotebookLeftPanelProps) {
@@ -154,18 +149,6 @@ export function NotebookLeftPanel({
               onToggleCollapse={onToggleCollapse}
               embedded
             />
-            {/* Session Store access */}
-            <div className="border-t px-2 py-1.5 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2 h-7 text-xs text-muted-foreground hover:text-foreground"
-                onClick={onOpenSessionStore}
-              >
-                <Maximize2 className="w-3 h-3" />
-                Open Session Store
-              </Button>
-            </div>
           </div>
         )}
 
