@@ -65,9 +65,11 @@ interface ReadingPaneProps {
   objective?: string;
   /** The selected template/application name (e.g. "Product Requirement") */
   templateName?: string;
+  /** Called when a mic transcript is captured — routes to the Transcript panel */
+  onMicTranscript?: (transcript: string, selectedText?: string) => void;
 }
 
-export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount, onDocumentCopy, objective, templateName }: ReadingPaneProps) {
+export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount, onDocumentCopy, objective, templateName, onMicTranscript }: ReadingPaneProps) {
   const { toast } = useToast();
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
@@ -140,6 +142,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   // Store callbacks in refs to avoid re-initializing recognition
   const onVoiceMergeRef = useRef(onVoiceMerge);
   const onTranscriptUpdateRef = useRef(onTranscriptUpdate);
+  const onMicTranscriptRef = useRef(onMicTranscript);
   const selectedTextRef = useRef(selectedText);
 
   useEffect(() => {
@@ -149,6 +152,10 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   useEffect(() => {
     onTranscriptUpdateRef.current = onTranscriptUpdate;
   }, [onTranscriptUpdate]);
+
+  useEffect(() => {
+    onMicTranscriptRef.current = onMicTranscript;
+  }, [onMicTranscript]);
 
   useEffect(() => {
     selectedTextRef.current = selectedText;
@@ -164,6 +171,10 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     onTranscript: (text) => {
       const transcript = text.trim();
       const currentSelectedText = selectedTextRef.current;
+      // Route transcript to the Transcript panel for review/editing
+      if (transcript) {
+        onMicTranscriptRef.current?.(transcript, currentSelectedText || undefined);
+      }
       if (transcript && currentSelectedText && onVoiceMergeRef.current) {
         onVoiceMergeRef.current(currentSelectedText, transcript);
       }
@@ -767,7 +778,11 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
               />
             </div>
           ) : (
-            <div className="flex items-center gap-1 bg-card border rounded-lg shadow-lg p-1">
+            <div className="flex flex-col gap-1 bg-card border rounded-lg shadow-lg p-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-1">
+                Targeted feedback
+              </span>
+              <div className="flex items-center gap-1">
               <Button
                 data-testid="button-selection-voice"
                 size="sm"
@@ -775,7 +790,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
                 onClick={toggleRecording}
                 disabled={isMerging || isProcessingEdit || isTranscribing}
                 className={`gap-1.5 ${isRecording ? "animate-pulse" : ""}`}
-                title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Speak feedback about selection"}
+                title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Speak feedback about this selection"}
               >
                 {isTranscribing ? (
                   <>
@@ -806,6 +821,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
                 <Send className="w-3 h-3" />
                 Edit
               </Button>
+              </div>
             </div>
           )}
         </div>

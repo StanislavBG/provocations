@@ -23,6 +23,7 @@ import {
   ChevronUp,
   ArrowRightToLine,
   Reply,
+  PenLine,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import type {
@@ -55,6 +56,9 @@ interface InterviewPanelProps {
   onAcceptResponse?: (messageId: string) => void;
   onDismissResponse?: (messageId: string) => void;
   onRespondToMessage?: (messageId: string, response: string) => void;
+  // Writer: evolve the document with current discussion context
+  onWriteToDocument?: () => void;
+  isWriting?: boolean;
 }
 
 // Persona color lookup
@@ -92,6 +96,8 @@ export function InterviewPanel({
   onAcceptResponse,
   onDismissResponse,
   onRespondToMessage,
+  onWriteToDocument,
+  isWriting,
 }: InterviewPanelProps) {
   const [answerText, setAnswerText] = useState("");
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
@@ -429,6 +435,28 @@ export function InterviewPanel({
                       <Mic className="w-3 h-3" />
                       Listening... speak your answer
                     </div>
+                  )}
+                  {/* Writer button — evolve document with provocation context */}
+                  {onWriteToDocument && entries.length > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs h-7 w-full mt-1"
+                          onClick={onWriteToDocument}
+                          disabled={isWriting || isMerging}
+                        >
+                          {isWriting ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <PenLine className="w-3 h-3" />
+                          )}
+                          Writer — Evolve Document
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Merge discussion insights into the document</TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
               </CardContent>
