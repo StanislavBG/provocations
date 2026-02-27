@@ -341,7 +341,7 @@ export function ContextSidebar({
     return (
       <div
         key={`d-${doc.id}`}
-        className={`flex items-center gap-1 group rounded-md transition-all min-w-0 ${
+        className={`flex items-center gap-1 group rounded-md transition-all min-w-0 overflow-hidden ${
           isPinned
             ? "bg-green-500/10 border-l-2 border-green-500"
             : "hover:bg-muted/50"
@@ -479,7 +479,7 @@ export function ContextSidebar({
     return (
       <div key={`f-${folder.id}`}>
         <div
-          className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors min-w-0"
+          className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors min-w-0 overflow-hidden"
           style={{ paddingLeft: `${indent}px` }}
         >
           {isEditing ? (
@@ -655,7 +655,7 @@ export function ContextSidebar({
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-w-0">
         {/* ═══ SESSION CONTEXT ═══ */}
         <div className="border-b overflow-hidden">
           <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
@@ -682,7 +682,7 @@ export function ContextSidebar({
               {pinnedDocs.map((doc) => (
                 <div
                   key={`session-${doc.id}`}
-                  className="flex items-center gap-1.5 py-1 px-2 rounded-md bg-green-500/10 border border-green-500/20 group min-w-0"
+                  className="flex items-center gap-1.5 py-1 px-2 rounded-md bg-green-500/10 border border-green-500/20 group min-w-0 overflow-hidden"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
                   <span className="text-xs font-medium truncate flex-1 text-green-700 dark:text-green-400">
