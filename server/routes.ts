@@ -2287,6 +2287,124 @@ Output only valid JSON, no markdown.`;
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // GEMINI IMAGEN — generates images using Google's Imagen via @google/genai
+  // ═══════════════════════════════════════════════════════════════════════
+  app.post("/api/generate-imagen", async (req, res) => {
+    try {
+      const { prompt, aspectRatio, negativePrompt, style, numberOfImages } = req.body;
+      if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+        return res.status(400).json({ error: "prompt is required" });
+      }
+
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        return res.status(500).json({
+          error: "GEMINI_API_KEY is not configured. Image generation requires a Gemini API key.",
+        });
+      }
+
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+
+      // Build the final prompt: prepend style directive if provided
+      let fullPrompt = prompt.slice(0, 4000);
+      if (style && typeof style === "string") {
+        fullPrompt = `${style} style: ${fullPrompt}`;
+      }
+
+      const response = await ai.models.generateImages({
+        model: "imagen-3.0-generate-002",
+        prompt: fullPrompt,
+        config: {
+          numberOfImages: Math.min(Math.max(numberOfImages || 1, 1), 4),
+          aspectRatio: aspectRatio || "1:1",
+          ...(negativePrompt ? { negativePrompt } : {}),
+          outputMimeType: "image/png",
+          personGeneration: "allow_adult" as any,
+        },
+      });
+
+      const images = (response.generatedImages || []).map((img: any) => {
+        const bytes = img?.image?.imageBytes;
+        return bytes ? `data:image/png;base64,${bytes}` : null;
+      }).filter(Boolean);
+
+      if (images.length === 0) {
+        return res.json({
+          images: [],
+          error: "No images were generated. The prompt may have been filtered by safety settings.",
+        });
+      }
+
+      return res.json({ images });
+    } catch (error) {
+      console.error("[generate-imagen] error:", error);
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Imagen generation failed", details: msg });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // TEXT TO VISUAL — summarize text into an image prompt, then generate
+  // ═══════════════════════════════════════════════════════════════════════
+  app.post("/api/text-to-visual", async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text || typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ error: "text is required" });
+      }
+
+      // Step 1: Summarize the text into a visual description
+      const summaryResult = await llm.generate({
+        system: `You are a visual composition expert. Given a document or transcript, create a concise visual description (max 200 words) that captures the key concepts and themes as a vivid, detailed image prompt suitable for AI image generation. Focus on concrete visual elements, composition, color palette, and mood. Do not include any text or labels in the image description — only visual elements.`,
+        messages: [{ role: "user", content: text.slice(0, 8000) }],
+        maxTokens: 300,
+        temperature: 0.7,
+      });
+
+      const imagePrompt = summaryResult.text || "";
+      if (!imagePrompt.trim()) {
+        return res.status(500).json({ error: "Failed to generate visual description" });
+      }
+
+      // Step 2: Generate the image using Gemini Imagen
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        return res.json({
+          imagePrompt,
+          images: [],
+          error: "GEMINI_API_KEY is not configured. Returning the visual description only.",
+        });
+      }
+
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+
+      const response = await ai.models.generateImages({
+        model: "imagen-3.0-generate-002",
+        prompt: imagePrompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: "16:9",
+          outputMimeType: "image/png",
+          personGeneration: "allow_adult" as any,
+        },
+      });
+
+      const images = (response.generatedImages || []).map((img: any) => {
+        const bytes = img?.image?.imageBytes;
+        return bytes ? `data:image/png;base64,${bytes}` : null;
+      }).filter(Boolean);
+
+      return res.json({ imagePrompt, images });
+    } catch (error) {
+      console.error("[text-to-visual] error:", error);
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Text to visual failed", details: msg });
+    }
+  });
+
   // Unified write endpoint - single interface to the AI writer
   app.post("/api/write", async (req, res) => {
     try {
