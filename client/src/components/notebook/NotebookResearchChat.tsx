@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
@@ -12,11 +12,14 @@ interface NotebookResearchChatProps {
   objective: string;
   /** Called when user captures an AI response as session context */
   onCaptureToContext: (text: string, label: string) => void;
+  /** Reports message count changes to parent */
+  onMessageCountChange?: (count: number) => void;
 }
 
 export function NotebookResearchChat({
   objective,
   onCaptureToContext,
+  onMessageCountChange,
 }: NotebookResearchChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -29,6 +32,15 @@ export function NotebookResearchChat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, streamingContent]);
+
+  // Report message count to parent
+  useEffect(() => {
+    onMessageCountChange?.(messages.length);
+  }, [messages.length, onMessageCountChange]);
+
+  const handleClear = useCallback(() => {
+    setMessages([]);
+  }, []);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -109,8 +121,8 @@ export function NotebookResearchChat({
           : firstLine || "Research finding";
       onCaptureToContext(content, label);
       toast({
-        title: "Captured to context",
-        description: "Response added to your session context",
+        title: "Sent to Transcript",
+        description: "Response added to your transcript",
       });
     },
     [onCaptureToContext, toast],
@@ -141,6 +153,22 @@ export function NotebookResearchChat({
           </div>
         ) : (
           <div className="space-y-3">
+            {messages.length > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">
+                  {messages.length} message{messages.length !== 1 ? "s" : ""}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 text-[10px] gap-1 text-muted-foreground hover:text-destructive"
+                  onClick={handleClear}
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                  Clear
+                </Button>
+              </div>
+            )}
             {messages.map((msg, i) => (
               <div
                 key={i}
@@ -178,7 +206,7 @@ export function NotebookResearchChat({
                         onClick={() => handleCapture(msg.content)}
                       >
                         <BookmarkPlus className="w-3 h-3" />
-                        Capture to context
+                        Send to Transcript
                       </Button>
                     </div>
                   </div>

@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { PersonaAvatarRow } from "./PersonaAvatarRow";
 import { ChatThread } from "./ChatThread";
 import { NotebookResearchChat } from "./NotebookResearchChat";
+import { GeneratePanel, type GeneratedDocument } from "@/components/GeneratePanel";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
-import { Flame, Lightbulb, Sparkles, Users, FileText, Trash2, ClipboardList } from "lucide-react";
+import { Flame, Lightbulb, Sparkles, Users, FileText, Trash2, ClipboardList, Wand2, Zap, Loader2 } from "lucide-react";
 import type { ProvocationType, DiscussionMessage, ContextItem } from "@shared/schema";
 
-type RightPanelTab = "research" | "provo" | "transcript";
+type RightPanelTab = "research" | "provo" | "transcript" | "generate";
 
 interface NotebookRightPanelProps {
   activePersonas: Set<ProvocationType>;
@@ -30,6 +31,13 @@ interface NotebookRightPanelProps {
   // Transcript tab
   capturedContext: ContextItem[];
   onRemoveCapturedItem?: (itemId: string) => void;
+
+  // Evolve document (writer)
+  onEvolveDocument?: (instruction: string, description: string) => void;
+  isMerging?: boolean;
+
+  // Generate tab
+  documentText: string;
 }
 
 const PROVOKE_PROMPT =
@@ -52,9 +60,29 @@ export function NotebookRightPanel({
   onCaptureToContext,
   capturedContext,
   onRemoveCapturedItem,
+  onEvolveDocument,
+  isMerging = false,
+  documentText,
 }: NotebookRightPanelProps) {
   const [activeTab, setActiveTab] = useState<RightPanelTab>("research");
+  const [researchMsgCount, setResearchMsgCount] = useState(0);
+  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
   const canAct = hasDocument && !isChatLoading;
+
+  const handleEvolve = useCallback(() => {
+    if (!onEvolveDocument || capturedContext.length === 0) return;
+
+    const findings = capturedContext
+      .map((item, i) => {
+        const label = item.annotation || `Finding ${i + 1}`;
+        return `### ${label}\n${item.content}`;
+      })
+      .join("\n\n");
+
+    const instruction = `Evolve the document by integrating the following ${capturedContext.length} research finding${capturedContext.length !== 1 ? "s" : ""} and user feedback:\n\n${findings}\n\nRules:\n- PRESERVE the document's existing structure, voice, and content\n- WEAVE new information naturally into relevant sections\n- EXPAND sections where the research provides supporting evidence or new detail\n- ADD new sections only if the research covers topics not yet in the document\n- REMOVE nothing unless the research explicitly contradicts existing content\n- Maintain consistent formatting and style throughout`;
+
+    onEvolveDocument(instruction, `Evolved with ${capturedContext.length} transcript item${capturedContext.length !== 1 ? "s" : ""}`);
+  }, [onEvolveDocument, capturedContext]);
 
   return (
     <div className="h-full flex flex-col bg-card border-l">
@@ -70,6 +98,11 @@ export function NotebookRightPanel({
         >
           <Sparkles className="w-3.5 h-3.5" />
           Research
+          {researchMsgCount > 0 && (
+            <span className="text-[9px] bg-primary/20 text-primary px-1.5 rounded-full">
+              {researchMsgCount}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveTab("transcript")}
@@ -98,31 +131,49 @@ export function NotebookRightPanel({
           <Users className="w-3.5 h-3.5" />
           Provo
         </button>
+        <button
+          onClick={() => setActiveTab("generate")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
+            activeTab === "generate"
+              ? "text-primary border-b-2 border-primary -mb-px"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Wand2 className="w-3.5 h-3.5" />
+          Generate
+          {generatedDocs.length > 0 && (
+            <span className="text-[9px] bg-primary/20 text-primary px-1.5 rounded-full">
+              {generatedDocs.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* ─── Tab content ─── */}
-      {activeTab === "research" && (
-        <div className="flex-1 overflow-hidden">
-          <NotebookResearchChat
-            objective={objective}
-            onCaptureToContext={onCaptureToContext}
-          />
-        </div>
-      )}
+      {/* ─── Tab content (always mounted to preserve state) ─── */}
 
-      {activeTab === "transcript" && (
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {capturedContext.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground/40 p-6">
-              <ClipboardList className="w-8 h-8" />
-              <p className="text-sm text-center">
-                Captured context items will appear here.
-              </p>
-              <p className="text-xs text-center">
-                Use "Capture to context" on research responses to collect findings.
-              </p>
-            </div>
-          ) : (
+      {/* Research */}
+      <div className={activeTab === "research" ? "flex-1 overflow-hidden" : "hidden"}>
+        <NotebookResearchChat
+          objective={objective}
+          onCaptureToContext={onCaptureToContext}
+          onMessageCountChange={setResearchMsgCount}
+        />
+      </div>
+
+      {/* Transcript */}
+      <div className={activeTab === "transcript" ? "flex-1 overflow-hidden flex flex-col" : "hidden"}>
+        {capturedContext.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground/40 p-6">
+            <ClipboardList className="w-8 h-8" />
+            <p className="text-sm text-center">
+              Captured context items will appear here.
+            </p>
+            <p className="text-xs text-center">
+              Use "Send to Transcript" on research responses to collect findings.
+            </p>
+          </div>
+        ) : (
+          <>
             <ScrollArea className="flex-1">
               <div className="p-3 space-y-3">
                 {capturedContext.map((item) => (
@@ -160,56 +211,93 @@ export function NotebookRightPanel({
                 ))}
               </div>
             </ScrollArea>
-          )}
-        </div>
-      )}
 
-      {activeTab === "provo" && (
-        <>
-          {/* Persona selector + action buttons */}
-          <div className="px-3 py-2 border-b bg-muted/20 space-y-2 shrink-0">
-            <PersonaAvatarRow
-              activePersonas={activePersonas}
-              onToggle={onTogglePersona}
-              compact
-            />
-            <div className="flex gap-2">
+            {/* Evolve Document — sticky footer */}
+            <div className="shrink-0 border-t bg-card p-3">
               <Button
-                variant="default"
-                size="sm"
-                className="flex-1 gap-1.5 h-8 text-xs font-semibold"
-                disabled={!canAct}
-                onClick={() => onSendMessage(PROVOKE_PROMPT)}
+                onClick={handleEvolve}
+                disabled={!hasDocument || isMerging || capturedContext.length === 0}
+                className="w-full gap-2 h-10 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white"
               >
-                <Flame className="w-3.5 h-3.5" />
-                Provoke Me
+                {isMerging ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Evolving Document...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    Evolve Document
+                    <span className="text-[10px] opacity-80 font-normal ml-1">
+                      ({capturedContext.length} item{capturedContext.length !== 1 ? "s" : ""})
+                    </span>
+                  </>
+                )}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 gap-1.5 h-8 text-xs font-semibold"
-                disabled={!canAct}
-                onClick={() => onSendMessage(ADVICE_PROMPT)}
-              >
-                <Lightbulb className="w-3.5 h-3.5" />
-                Ask Advice
-              </Button>
+              <p className="text-[10px] text-muted-foreground/60 text-center mt-1.5">
+                Merges all transcript findings into your document
+              </p>
             </div>
-          </div>
+          </>
+        )}
+      </div>
 
-          {/* Persona chat thread */}
-          <div className="flex-1 overflow-hidden">
-            <ChatThread
-              messages={discussionMessages}
-              onSendMessage={onSendMessage}
-              onAcceptResponse={onAcceptResponse}
-              onDismissResponse={onDismissResponse}
-              onRespondToMessage={onRespondToMessage}
-              isLoading={isChatLoading}
-            />
+      {/* Provo */}
+      <div className={activeTab === "provo" ? "flex-1 overflow-hidden flex flex-col" : "hidden"}>
+        {/* Persona selector + action buttons */}
+        <div className="px-3 py-2 border-b bg-muted/20 space-y-2 shrink-0">
+          <PersonaAvatarRow
+            activePersonas={activePersonas}
+            onToggle={onTogglePersona}
+            compact
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              className="flex-1 gap-1.5 h-8 text-xs font-semibold"
+              disabled={!canAct}
+              onClick={() => onSendMessage(PROVOKE_PROMPT)}
+            >
+              <Flame className="w-3.5 h-3.5" />
+              Provoke Me
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5 h-8 text-xs font-semibold"
+              disabled={!canAct}
+              onClick={() => onSendMessage(ADVICE_PROMPT)}
+            >
+              <Lightbulb className="w-3.5 h-3.5" />
+              Ask Advice
+            </Button>
           </div>
-        </>
-      )}
+        </div>
+
+        {/* Persona chat thread */}
+        <div className="flex-1 overflow-hidden">
+          <ChatThread
+            messages={discussionMessages}
+            onSendMessage={onSendMessage}
+            onAcceptResponse={onAcceptResponse}
+            onDismissResponse={onDismissResponse}
+            onRespondToMessage={onRespondToMessage}
+            isLoading={isChatLoading}
+          />
+        </div>
+      </div>
+
+      {/* Generate */}
+      <div className={activeTab === "generate" ? "flex-1 overflow-hidden" : "hidden"}>
+        <GeneratePanel
+          documentText={documentText}
+          objective={objective}
+          generatedDocs={generatedDocs}
+          onDocGenerated={(doc) => setGeneratedDocs((prev) => [...prev, doc])}
+          onDocRemove={(id) => setGeneratedDocs((prev) => prev.filter((d) => d.id !== id))}
+        />
+      </div>
     </div>
   );
 }
