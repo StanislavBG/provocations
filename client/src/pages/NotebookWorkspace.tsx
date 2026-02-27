@@ -427,6 +427,8 @@ export default function NotebookWorkspace() {
                   onCaptureToContext={handleCaptureToContext}
                   capturedContext={capturedContext}
                   onRemoveCapturedItem={handleRemoveCapturedItem}
+                  onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
+                  isMerging={writeMutation.isPending}
                   documentText={document.rawText}
                 />
               )}
@@ -523,6 +525,8 @@ export default function NotebookWorkspace() {
                 onCaptureToContext={handleCaptureToContext}
                 capturedContext={capturedContext}
                 onRemoveCapturedItem={handleRemoveCapturedItem}
+                onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
+                isMerging={writeMutation.isPending}
                 documentText={document.rawText}
               />
             </ResizablePanel>
