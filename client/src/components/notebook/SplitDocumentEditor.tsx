@@ -21,6 +21,12 @@ interface DocTab {
   title: string;
 }
 
+/** Stored state for inactive tabs */
+interface TabSnapshot {
+  text: string;
+  objective: string;
+}
+
 interface SplitDocumentEditorProps {
   text: string;
   onTextChange: (text: string) => void;
@@ -48,47 +54,57 @@ export function SplitDocumentEditor({
     { id: "main", title: "Document 1" },
   ]);
   const [activeTabId, setActiveTabId] = useState("main");
-  // Stores content for inactive tabs (active tab uses `text` prop directly)
-  const tabContentRef = useRef<Map<string, string>>(new Map());
+  // Stores text + objective for inactive tabs
+  const tabSnapshotRef = useRef<Map<string, TabSnapshot>>(new Map());
 
   const handleSwitchTab = useCallback(
     (tabId: string) => {
       if (tabId === activeTabId) return;
-      // Save current content
-      tabContentRef.current.set(activeTabId, text);
-      // Load new tab
-      const newContent = tabContentRef.current.get(tabId) ?? "";
-      onTextChange(newContent);
+      // Save current tab state
+      tabSnapshotRef.current.set(activeTabId, {
+        text,
+        objective: objective || "",
+      });
+      // Load new tab state
+      const snapshot = tabSnapshotRef.current.get(tabId);
+      onTextChange(snapshot?.text ?? "");
+      onObjectiveChange?.(snapshot?.objective ?? "");
       setActiveTabId(tabId);
     },
-    [activeTabId, text, onTextChange],
+    [activeTabId, text, objective, onTextChange, onObjectiveChange],
   );
 
   const handleAddTab = useCallback(() => {
-    tabContentRef.current.set(activeTabId, text);
+    // Save current tab
+    tabSnapshotRef.current.set(activeTabId, {
+      text,
+      objective: objective || "",
+    });
     const newId = generateId("tab");
     const newTitle = `Document ${tabs.length + 1}`;
     setTabs((prev) => [...prev, { id: newId, title: newTitle }]);
     onTextChange("");
+    onObjectiveChange?.("");
     setActiveTabId(newId);
-  }, [activeTabId, text, onTextChange, tabs.length]);
+  }, [activeTabId, text, objective, onTextChange, onObjectiveChange, tabs.length]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
       if (tabs.length <= 1) return;
       const idx = tabs.findIndex((t) => t.id === tabId);
       const newTabs = tabs.filter((t) => t.id !== tabId);
-      tabContentRef.current.delete(tabId);
+      tabSnapshotRef.current.delete(tabId);
       setTabs(newTabs);
       if (tabId === activeTabId) {
         const nextIdx = Math.min(idx, newTabs.length - 1);
         const nextTab = newTabs[nextIdx];
-        const nextContent = tabContentRef.current.get(nextTab.id) ?? "";
-        onTextChange(nextContent);
+        const snapshot = tabSnapshotRef.current.get(nextTab.id);
+        onTextChange(snapshot?.text ?? "");
+        onObjectiveChange?.(snapshot?.objective ?? "");
         setActiveTabId(nextTab.id);
       }
     },
-    [tabs, activeTabId, onTextChange],
+    [tabs, activeTabId, onTextChange, onObjectiveChange],
   );
 
   const handleDownload = () => {
@@ -132,6 +148,49 @@ export function SplitDocumentEditor({
       >
         <Download className="w-3.5 h-3.5" />
       </Button>
+    </div>
+  );
+
+  // Objective bar rendered inside the document card
+  const objectiveSection = (
+    <div className="border-b shrink-0">
+      <button
+        type="button"
+        onClick={() => setObjectiveExpanded(!objectiveExpanded)}
+        className="w-full flex items-center gap-2 px-4 py-1.5 text-left hover:bg-muted/30 transition-colors"
+      >
+        <Target className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
+          Objective
+        </span>
+        {!objectiveExpanded && objective?.trim() && (
+          <span className="text-xs text-muted-foreground truncate flex-1">
+            {objective}
+          </span>
+        )}
+        {objectiveExpanded ? (
+          <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
+        )}
+      </button>
+      {objectiveExpanded && (
+        <div className="px-4 pb-2">
+          <ProvokeText
+            chrome="bare"
+            variant="textarea"
+            value={objective || ""}
+            onChange={onObjectiveChange || (() => {})}
+            placeholder="What are you trying to achieve with this document?"
+            className="text-sm"
+            minRows={2}
+            maxRows={5}
+            showCopy={false}
+            showClear={false}
+            readOnly={!onObjectiveChange}
+          />
+        </div>
+      )}
     </div>
   );
 
@@ -180,47 +239,6 @@ export function SplitDocumentEditor({
         </Tooltip>
       </div>
 
-      {/* ─── Objective bar (expandable) ─── */}
-      <div className="border-b shrink-0">
-        <button
-          type="button"
-          onClick={() => setObjectiveExpanded(!objectiveExpanded)}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-muted/30 transition-colors"
-        >
-          <Target className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
-            Objective
-          </span>
-          {!objectiveExpanded && objective?.trim() && (
-            <span className="text-xs text-muted-foreground truncate flex-1">
-              {objective}
-            </span>
-          )}
-          {objectiveExpanded ? (
-            <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
-          ) : (
-            <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
-          )}
-        </button>
-        {objectiveExpanded && (
-          <div className="px-3 pb-2">
-            <ProvokeText
-              chrome="bare"
-              variant="textarea"
-              value={objective || ""}
-              onChange={onObjectiveChange || (() => {})}
-              placeholder="What are you trying to achieve with this document?"
-              className="text-sm"
-              minRows={2}
-              maxRows={5}
-              showCopy={false}
-              showClear={false}
-              readOnly={!onObjectiveChange}
-            />
-          </div>
-        )}
-      </div>
-
       {/* Merging indicator */}
       {isMerging && (
         <div className="bg-primary/10 px-3 py-1.5 flex items-center gap-2 text-xs border-b shrink-0">
@@ -229,7 +247,7 @@ export function SplitDocumentEditor({
         </div>
       )}
 
-      {/* Edit mode: ProvokeText with full standard capabilities */}
+      {/* Edit mode: Unified card with objective + editor */}
       {viewMode === "edit" && (
         <ProvokeText
           chrome="container"
@@ -240,6 +258,7 @@ export function SplitDocumentEditor({
           placeholder="Start writing your document here... (Markdown supported)"
           label="Document"
           headerActions={modeToggle}
+          beforeInput={objectiveSection}
           className="text-sm leading-relaxed font-serif"
         />
       )}
@@ -253,6 +272,7 @@ export function SplitDocumentEditor({
             </span>
             {modeToggle}
           </div>
+          {objectiveSection}
           <div className="flex-1 overflow-y-auto p-4">
             {text.trim() ? (
               <MarkdownRenderer content={text} />
