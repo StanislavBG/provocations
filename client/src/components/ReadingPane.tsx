@@ -3,14 +3,12 @@ import { trackEvent } from "@/lib/tracking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, FileDown, FileArchive, Mic, Square, Send, X, Pencil, FileText, Copy, Image as ImageIcon, Info, Clock, Loader2 } from "lucide-react";
+import { Download, FileDown, FileArchive, Mic, Square, Send, X, FileText, Info, Clock, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useWhisperRecorder } from "@/hooks/use-whisper";
 import { ProvokeText } from "@/components/ProvokeText";
-import { MarkdownRenderer, markdownToHtml } from "@/components/MarkdownRenderer";
 import { BlankCanvasGuide } from "@/components/BlankCanvasGuide";
 
 /** Extract all markdown image entries (alt + src) from text */
@@ -77,7 +75,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [promptText, setPromptText] = useState("");
   const [isProcessingEdit, setIsProcessingEdit] = useState(false);
-  const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
+  // Document is always in edit mode — view/edit toggle removed
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -429,24 +427,16 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     });
   };
 
-  // Clear selection toolbar when clicking outside in preview mode
+  // Clear selection toolbar when clicking outside
   const handleContainerClick = useCallback(() => {
     if (!isRecordingRef.current && !showPromptInputRef.current) {
-      if (viewMode === "preview") {
-        const selection = window.getSelection();
-        if (!selection || selection.isCollapsed) {
-          setSelectedText("");
-          setSelectionPosition(null);
-        }
-      } else {
-        const textarea = editorRef.current as HTMLTextAreaElement | null;
-        if (textarea && textarea.selectionStart === textarea.selectionEnd) {
-          setSelectedText("");
-          setSelectionPosition(null);
-        }
+      const textarea = editorRef.current as HTMLTextAreaElement | null;
+      if (textarea && textarea.selectionStart === textarea.selectionEnd) {
+        setSelectedText("");
+        setSelectionPosition(null);
       }
     }
-  }, [viewMode]);
+  }, []);
 
   return (
     <div
@@ -503,7 +493,7 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             data-testid="button-document-mic"
             variant={showFeedbackInput ? "default" : "ghost"}
             size="icon"
-            className={`h-8 w-8 ${showFeedbackInput ? "" : "text-muted-foreground hover:text-foreground"}`}
+            className={`h-7 w-7 ${showFeedbackInput ? "" : "text-muted-foreground hover:text-foreground"}`}
             onClick={() => {
               if (showFeedbackInput) {
                 handleCloseFeedback();
@@ -513,120 +503,18 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
             }}
             title={showFeedbackInput ? "Close voice feedback" : "Voice feedback"}
           >
-            <Mic className="w-4 h-4" />
+            <Mic className="w-3.5 h-3.5" />
           </Button>
-          <Button
-            data-testid="button-document-pencil"
-            variant={viewMode === "edit" ? "default" : "ghost"}
-            size="icon"
-            className={`h-8 w-8 ${viewMode === "edit" ? "" : "text-muted-foreground hover:text-foreground"}`}
-            onClick={() => setViewMode(viewMode === "edit" ? "preview" : "edit")}
-            title={viewMode === "edit" ? "Switch to preview" : "Edit document"}
-          >
-            <Pencil className="w-4 h-4" />
-          </Button>
-          <Button
-            data-testid="button-copy-document"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              trackEvent("document_copied", { metadata: { type: "text" } });
-              const textOnly = text.replace(/!\[[^\]]*\]\([^)]+\)/g, "").replace(/\n{3,}/g, "\n\n").trim();
-              navigator.clipboard.writeText(textOnly);
-              onDocumentCopy?.();
-              toast({
-                title: "Copied",
-                description: "Document text copied to clipboard.",
-              });
-            }}
-            title="Copy document"
-          >
-            <Copy className="w-4 h-4" />
-          </Button>
-          {/* Copy Image button — only when document has images */}
-          {docImages.length === 1 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  data-testid="button-copy-image"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  disabled={copyingImage}
-                  onClick={() => handleCopyImage(docImages[0].src, docImages[0].alt)}
-                  title="Copy image to clipboard"
-                >
-                  {copyingImage ? (
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <ImageIcon className="w-4 h-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p className="text-xs">Copy image — paste into Claude</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {docImages.length > 1 && (
-            <Popover>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      data-testid="button-copy-image"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      disabled={copyingImage}
-                      title="Copy an image to clipboard"
-                    >
-                      {copyingImage ? (
-                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <ImageIcon className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">Copy an image — paste into Claude</p>
-                </TooltipContent>
-              </Tooltip>
-              <PopoverContent align="end" className="w-64 p-2">
-                <p className="text-xs text-muted-foreground mb-2 px-1">Select an image to copy</p>
-                <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
-                  {docImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleCopyImage(img.src, img.alt)}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted text-left text-sm transition-colors"
-                    >
-                      <img
-                        src={img.src}
-                        alt={img.alt}
-                        className="w-10 h-10 object-cover rounded border shrink-0"
-                      />
-                      <span className="truncate text-xs">
-                        {img.alt || `Image ${idx + 1}`}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 data-testid="button-download-document"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
                 title="Download"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -688,47 +576,38 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
               templateName={templateName}
               objective={objective}
               onFocusEditor={() => {
-                setViewMode("edit");
                 setTimeout(() => editorRef.current?.focus(), 100);
               }}
               onStartDictating={() => {
-                setViewMode("edit");
                 setTimeout(() => editorRef.current?.focus(), 100);
               }}
             />
           </div>
         )}
-        {viewMode === "preview" ? (
-          <MarkdownRenderer
-            content={text}
-            onSelectText={handlePreviewSelect}
-            className="font-serif"
-          />
-        ) : (
-          <ProvokeText
-            ref={editorRef}
-            variant="editor"
-            chrome="bare"
-            data-testid="editor-document"
-            value={text}
-            onChange={(val) => onTextChange?.(val)}
-            onSelect={handleSelect}
-            className="w-full text-foreground font-mono text-sm"
-            placeholder="Start typing your markdown document..."
-            showCopy={true}
-            showClear={false}
-            voice={{ mode: "append", inline: false }}
-            onVoiceTranscript={(transcript) => {
-              onTranscriptUpdate?.(transcript, false);
-            }}
-            onVoiceInterimTranscript={(interim) => {
-              onTranscriptUpdate?.(interim, true);
-            }}
-            onRecordingChange={(recording) => {
-              onTranscriptUpdate?.("", recording);
-            }}
-          />
-        )}
+        <ProvokeText
+          ref={editorRef}
+          variant="editor"
+          chrome="bare"
+          data-testid="editor-document"
+          value={text}
+          onChange={(val) => onTextChange?.(val)}
+          onSelect={handleSelect}
+          className="w-full text-foreground font-mono text-sm"
+          placeholder="Start typing your markdown document..."
+          showCopy={true}
+          showClear={true}
+          voice={{ mode: "append", inline: false }}
+          onVoiceTranscript={(transcript) => {
+            onTranscriptUpdate?.(transcript, false);
+            onMicTranscriptRef.current?.(transcript, undefined);
+          }}
+          onVoiceInterimTranscript={(interim) => {
+            onTranscriptUpdate?.(interim, true);
+          }}
+          onRecordingChange={(recording) => {
+            onTranscriptUpdate?.("", recording);
+          }}
+        />
       </div>
 
       {/* Floating toolbar on text selection */}
