@@ -30,6 +30,7 @@ import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { ContextSidebar } from "@/components/notebook/ContextSidebar";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
+import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import type { ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
@@ -482,23 +483,30 @@ export default function NotebookWorkspace() {
 
             <ResizableHandle withHandle />
 
-            {/* Center: Document */}
-            <ResizablePanel defaultSize={55} minSize={30}>
-              <NotebookCenterPanel
-                documentText={document.rawText}
-                onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
-                isMerging={writeMutation.isPending}
-                objective={objective}
-                onObjectiveChange={setObjective}
-                templateName={selectedTemplateName}
-                previewDoc={previewDoc}
-                onClosePreview={() => setPreviewDoc(null)}
-              />
+            {/* Center: Document or BS Chart */}
+            <ResizablePanel defaultSize={appFlowConfig.workspaceLayout === "bs-chart" ? 80 : 55} minSize={30}>
+              {appFlowConfig.workspaceLayout === "bs-chart" ? (
+                <BSChartWorkspace
+                  onSaveToContext={(json, label) => handleCaptureToContext(json, label)}
+                />
+              ) : (
+                <NotebookCenterPanel
+                  documentText={document.rawText}
+                  onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
+                  isMerging={writeMutation.isPending}
+                  objective={objective}
+                  onObjectiveChange={setObjective}
+                  templateName={selectedTemplateName}
+                  previewDoc={previewDoc}
+                  onClosePreview={() => setPreviewDoc(null)}
+                />
+              )}
             </ResizablePanel>
 
-            <ResizableHandle withHandle />
+            {appFlowConfig.workspaceLayout !== "bs-chart" && <ResizableHandle withHandle />}
 
-            {/* Right: Research + Provo tabs */}
+            {/* Right: Research + Provo tabs (hidden for bs-chart since it has its own properties panel) */}
+            {appFlowConfig.workspaceLayout !== "bs-chart" && (
             <ResizablePanel defaultSize={25} minSize={15}>
               <NotebookRightPanel
                 activePersonas={activePersonas}
@@ -516,6 +524,7 @@ export default function NotebookWorkspace() {
                 onRemoveCapturedItem={handleRemoveCapturedItem}
               />
             </ResizablePanel>
+            )}
           </ResizablePanelGroup>
         )}
       </div>
