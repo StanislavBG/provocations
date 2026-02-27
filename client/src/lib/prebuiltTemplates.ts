@@ -11,6 +11,7 @@ import {
   FileAudio,
   Mail,
   Workflow,
+  GitGraph,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -705,6 +706,46 @@ How sections are ordered — most impactful insight first, supporting details be
       { id: "steps", label: "Build Steps" },
       { id: "test", label: "Test & Refine" },
     ],
+  },
+  {
+    id: "bs-chart",
+    category: "build",
+    statusLabel: "alpha",
+    title: "BS Chart",
+    shortLabel: "Chart",
+    subtitle: "Infinite canvas diagrams & data flow charts",
+    description:
+      "An infinite canvas diagramming tool for creating data flow diagrams, architecture charts, ERD schemas, and process maps. Drag shapes from the toolbar, connect them with smart connectors, and annotate with text labels. Design with voice commands for hands-free chart building.",
+    howTo: "Drag shapes (tables, diamonds, rectangles, text) from the left toolbar onto the canvas. Connect them by dragging from port to port. Double-click to edit labels. Use voice commands to add and position elements hands-free. Save charts to Context Store to share with Provo members.",
+    useCases: [
+      "Creating data flow diagrams for system architecture",
+      "Building ERD schemas with table nodes and relationships",
+      "Mapping decision trees and process flows",
+      "Designing component diagrams with annotations",
+    ],
+    icon: GitGraph,
+    objective:
+      "Design a clear, well-structured diagram that communicates system architecture, data flows, or process logic",
+    starterText: "",
+    draftQuestions: [
+      "What type of diagram are you creating? (data flow, architecture, ERD, process map)",
+      "What are the main entities or components in your system?",
+      "How do data or control flows move between components?",
+      "What are the key decision points or branching logic?",
+    ],
+    templateContent: "",
+    provocationSources: [
+      "System Architect",
+      "Data Modeler",
+      "UX Reviewer",
+      "Process Analyst",
+    ],
+    provocationExamples: [
+      "Your data flow has a dead end — Component X receives data but never sends it anywhere. Is that intentional? — System Architect",
+      "Two tables share the same columns but aren't linked. Is there a missing relationship? — Data Modeler",
+      "This diagram has 15 elements but no labels on the connectors. How does a reader know what flows where? — UX Reviewer",
+    ],
+    steps: [{ id: "design", label: "Design your chart" }],
   },
 ];
 
