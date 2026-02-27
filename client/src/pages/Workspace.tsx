@@ -134,7 +134,7 @@ export default function Workspace() {
   const [, navigate] = useLocation();
   const [routeMatch, routeParams] = useRoute("/app/:templateId");
 
-  const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
+  const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: " " });
   const [objective, setObjective] = useState<string>("");
   const [secondaryObjective, setSecondaryObjectiveRaw] = useState<string>("");
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
@@ -154,7 +154,7 @@ export default function Workspace() {
   }, [objective]);
 
   // Which template was selected in step 1 — drives workspace behavior
-  const [selectedTemplateId, setSelectedTemplateIdRaw] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateIdRaw] = useState<string | null>("product-requirement");
 
   /** Set the selected template and sync the browser URL.
    *  URL updates stay within the same wouter route pattern to prevent
@@ -959,8 +959,24 @@ RULES:
   // ── Ask question mutation (user asks the persona team) ──
   const askQuestionMutation = useMutation({
     mutationFn: async (question: string) => {
+      // Step 1: Try live search for grounding context
+      let searchContext = "";
+      try {
+        const searchRes = await apiRequest("POST", "/api/search", { query: question });
+        const searchData = await searchRes.json() as { answer: string; sources: Array<{ title: string; url: string }> };
+        if (searchData.answer) {
+          searchContext = `\n\nLIVE SEARCH RESULTS (use these as grounding for your response):\n${searchData.answer}`;
+          if (searchData.sources?.length) {
+            searchContext += "\n\nSources:\n" + searchData.sources.map((s: { title: string; url: string }) => `- ${s.title}: ${s.url}`).join("\n");
+          }
+        }
+      } catch {
+        // Search is optional — proceed without it
+      }
+
+      // Step 2: Ask the persona team with search context
       const response = await apiRequest("POST", "/api/discussion/ask", {
-        question,
+        question: question + searchContext,
         document: document.rawText,
         objective,
         appType: validAppType,
