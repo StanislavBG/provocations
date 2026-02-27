@@ -655,7 +655,7 @@ export function ContextSidebar({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 min-w-0">
+      <ScrollArea className="flex-1 min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
         {/* ═══ SESSION CONTEXT ═══ */}
         <div className="border-b overflow-hidden">
           <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
