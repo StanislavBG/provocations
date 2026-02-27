@@ -12,10 +12,10 @@ import {
   Image as ImageIcon,
   Loader2,
   FileText,
-  ArrowRightToLine,
   Trash2,
   Eye,
   Sparkles,
+  GripVertical,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,8 +54,6 @@ interface GeneratePanelProps {
   onDocGenerated: (doc: GeneratedDocument) => void;
   /** Callback to remove a generated doc from session */
   onDocRemove: (id: string) => void;
-  /** Callback to move a generated doc to the main context store */
-  onDocPromote: (doc: GeneratedDocument) => void;
   /** Callback to preview a generated doc */
   onDocPreview?: (doc: GeneratedDocument) => void;
 }
@@ -89,7 +87,6 @@ export function GeneratePanel({
   generatedDocs,
   onDocGenerated,
   onDocRemove,
-  onDocPromote,
   onDocPreview,
 }: GeneratePanelProps) {
   const { toast } = useToast();
@@ -259,8 +256,8 @@ Make it visually compelling and information-dense.`,
           {generatedDocs.length === 0 ? (
             <div className="px-3 pb-4 pt-1">
               <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-                Generated artifacts will appear here as session context. You can
-                preview them or promote to your permanent Context Store.
+                Generated artifacts will appear here. Drag a document onto the
+                canvas to open it, or click to preview.
               </p>
             </div>
           ) : (
@@ -268,8 +265,16 @@ Make it visually compelling and information-dense.`,
               {generatedDocs.map((doc) => (
                 <div
                   key={doc.id}
-                  className="group flex items-start gap-2 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 transition-colors hover:bg-amber-500/10"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/x-generated-doc", JSON.stringify(doc));
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  className="group flex items-start gap-2 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 transition-colors hover:bg-amber-500/10 cursor-grab active:cursor-grabbing"
                 >
+                  {/* Drag grip */}
+                  <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 mt-1" />
+
                   {/* Thumbnail or icon */}
                   {doc.imageUrl ? (
                     <img
@@ -308,21 +313,6 @@ Make it visually compelling and information-dense.`,
                         <TooltipContent side="right">Preview</TooltipContent>
                       </Tooltip>
                     )}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5 text-muted-foreground/50 hover:text-green-600"
-                          onClick={() => onDocPromote(doc)}
-                        >
-                          <ArrowRightToLine className="w-2.5 h-2.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        Move to Context Store
-                      </TooltipContent>
-                    </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
