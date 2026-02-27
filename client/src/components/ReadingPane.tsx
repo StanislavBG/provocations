@@ -4,12 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, FileDown, FileArchive, Mic, Square, Send, X, FileText, Info, Clock, Loader2 } from "lucide-react";
+import { Download, FileDown, FileArchive, Mic, Square, Send, X, FileText, Info, Clock, Loader2, ImageIcon, Paintbrush } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useWhisperRecorder } from "@/hooks/use-whisper";
 import { ProvokeText } from "@/components/ProvokeText";
 import { BlankCanvasGuide } from "@/components/BlankCanvasGuide";
+import { ImagePreviewDialog } from "@/components/ImagePreviewDialog";
 
 /** Extract all markdown image entries (alt + src) from text */
 function extractMarkdownImages(md: string): { alt: string; src: string }[] {
@@ -65,9 +66,11 @@ interface ReadingPaneProps {
   templateName?: string;
   /** Called when a mic transcript is captured — routes to the Transcript panel */
   onMicTranscript?: (transcript: string, selectedText?: string) => void;
+  /** Called when user clicks Artify — opens the Artify panel with this document's text */
+  onArtify?: () => void;
 }
 
-export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount, onDocumentCopy, objective, templateName, onMicTranscript }: ReadingPaneProps) {
+export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount, onDocumentCopy, objective, templateName, onMicTranscript, onArtify }: ReadingPaneProps) {
   const { toast } = useToast();
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
@@ -78,6 +81,11 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
   // Document is always in edit mode — view/edit toggle removed
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
+  // Text to Visual state
+  const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewPrompt, setPreviewPrompt] = useState("");
+  const [showImagePreview, setShowImagePreview] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const transcriptRef = useRef("");
@@ -427,6 +435,36 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
     });
   };
 
+  // Text to Visual: generate an image from the current document
+  const handleTextToVisual = useCallback(async () => {
+    if (!text.trim()) {
+      toast({ title: "No content", description: "Document is empty.", variant: "destructive" });
+      return;
+    }
+    setIsGeneratingVisual(true);
+    try {
+      const response = await apiRequest("POST", "/api/text-to-visual", { text });
+      const data = (await response.json()) as { images?: string[]; imagePrompt?: string; error?: string };
+      if (data.images && data.images.length > 0) {
+        setPreviewImageUrl(data.images[0]);
+        setPreviewPrompt(data.imagePrompt || "");
+        setShowImagePreview(true);
+        trackEvent("text_to_visual_generated");
+      } else {
+        toast({
+          title: "No image generated",
+          description: data.error || "The image could not be generated.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("[text-to-visual] error:", error);
+      toast({ title: "Generation failed", description: "Could not generate visual.", variant: "destructive" });
+    } finally {
+      setIsGeneratingVisual(false);
+    }
+  }, [text, toast]);
+
   // Clear selection toolbar when clicking outside
   const handleContainerClick = useCallback(() => {
     if (!isRecordingRef.current && !showPromptInputRef.current) {
@@ -489,6 +527,42 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
         )}
         <div className="flex-1" />
         <div className="flex items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                data-testid="button-text-to-visual"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={handleTextToVisual}
+                disabled={isGeneratingVisual || !text.trim()}
+                title="Text to Visual"
+              >
+                {isGeneratingVisual ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ImageIcon className="w-3.5 h-3.5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Generate a visual from this document</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                data-testid="button-artify"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:text-purple-600 dark:hover:text-purple-400"
+                onClick={onArtify}
+                disabled={!text.trim()}
+                title="Artify"
+              >
+                <Paintbrush className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Artify — customize image generation style</TooltipContent>
+          </Tooltip>
           <Button
             data-testid="button-document-mic"
             variant={showFeedbackInput ? "default" : "ghost"}
@@ -705,6 +779,15 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
           )}
         </div>
       )}
+
+      {/* Image preview dialog for Text to Visual */}
+      <ImagePreviewDialog
+        open={showImagePreview}
+        onOpenChange={setShowImagePreview}
+        imageUrl={previewImageUrl}
+        prompt={previewPrompt}
+        title="Text to Visual"
+      />
     </div>
   );
 }

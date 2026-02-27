@@ -119,6 +119,7 @@ import { SessionResumePrompt } from "@/components/SessionResumePrompt";
 import { SessionStorePanel } from "@/components/SessionStorePanel";
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
+import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { documentTypes, documentTypeLabels, type DocumentType } from "@shared/schema";
 
 async function processObjectiveText(text: string, mode: string): Promise<string> {
@@ -306,6 +307,9 @@ export default function Workspace() {
 
   // App-picker popover state
   const [showAppPicker, setShowAppPicker] = useState(false);
+
+  // Artify panel state — "document" or "transcript" source, or null when closed
+  const [artifySource, setArtifySource] = useState<"document" | "transcript" | null>(null);
 
   // ── Document type — drives the Writer's mission (replaces per-app identity) ──
   const [documentType, setDocumentType] = useState<DocumentType>("notepad");
@@ -2434,6 +2438,7 @@ RULES:
             onWriteToDocument={handleTranscriptWrite}
             isWriting={writeMutation.isPending}
             selectedText={transcriptSelectedText}
+            onArtify={() => setArtifySource("transcript")}
           />
         </div>
       ) : null}
@@ -2705,6 +2710,7 @@ RULES:
           objective={objective}
           templateName={selectedTemplateName}
           onMicTranscript={handleMicTranscript}
+          onArtify={() => setArtifySource("document")}
         />
       )}
 
@@ -2730,54 +2736,8 @@ RULES:
       {/* ── Persistent global bar ── */}
       <header className="border-b bg-card shrink-0">
         <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
-          {/* Left: app-picker + New button */}
+          {/* Left: New button */}
           <div className="flex items-center gap-2">
-            {/* App-picker dropdown — shows selected app with icon, click to switch */}
-            {selectedTemplateId && (() => {
-              const currentTemplate = prebuiltTemplates.find((t) => t.id === selectedTemplateId);
-              const CurrentIcon = currentTemplate?.icon;
-              return (
-                <Popover open={showAppPicker} onOpenChange={setShowAppPicker}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs"
-                    >
-                      {CurrentIcon && <CurrentIcon className="w-4 h-4 text-primary" />}
-                      <span className="hidden sm:inline">{currentTemplate?.shortLabel || selectedTemplateName}</span>
-                      <LayoutGrid className="w-3 h-3 text-muted-foreground" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 p-2" align="start">
-                    <div className="grid grid-cols-3 gap-1">
-                      {prebuiltTemplates.filter((t) => !t.comingSoon).map((template) => {
-                        const Icon = template.icon;
-                        const isActive = template.id === selectedTemplateId;
-                        return (
-                          <button
-                            key={template.id}
-                            onClick={() => {
-                              setSelectedTemplateId(template.id);
-                              setShowAppPicker(false);
-                            }}
-                            className={`flex flex-col items-center gap-1 p-2 rounded-lg text-center transition-all ${
-                              isActive
-                                ? "bg-primary/10 border border-primary/30 ring-1 ring-primary/20"
-                                : "hover:bg-muted/50 border border-transparent"
-                            }`}
-                          >
-                            <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                            <span className="text-[10px] font-medium leading-tight">{template.shortLabel}</span>
-                            {isActive && <Check className="w-3 h-3 text-primary" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              );
-            })()}
             <Button
               data-testid="button-reset"
               variant="outline"
@@ -3214,7 +3174,13 @@ RULES:
           {/* Mobile: single visible panel with bottom tab bar */}
           <div className="flex-1 overflow-hidden">
             {mobileTab === "document" && documentPanel}
-            {mobileTab === "toolbox" && toolboxPanel}
+            {mobileTab === "toolbox" && (artifySource ? (
+              <ArtifyPanel
+                sourceText={artifySource === "transcript" ? transcriptText : document.rawText}
+                sourceLabel={artifySource === "transcript" ? "Transcript" : "Document"}
+                onClose={() => setArtifySource(null)}
+              />
+            ) : toolboxPanel)}
             {mobileTab === "discussion" && discussionPanel}
           </div>
 
@@ -3249,7 +3215,13 @@ RULES:
           <div className="flex-1 overflow-hidden">
             <ResizablePanelGroup direction="horizontal">
               <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
-                {toolboxPanel}
+                {artifySource ? (
+                  <ArtifyPanel
+                    sourceText={artifySource === "transcript" ? transcriptText : document.rawText}
+                    sourceLabel={artifySource === "transcript" ? "Transcript" : "Document"}
+                    onClose={() => setArtifySource(null)}
+                  />
+                ) : toolboxPanel}
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={40} minSize={20}>

@@ -770,6 +770,13 @@ export const trackingEventType = [
   "tab_created",              // User created a new tab
   "tab_closed",               // User closed a tab
   "tab_switched",             // User switched between tabs
+
+  // ── Image generation ──
+  "text_to_visual_generated", // User generated a visual from document/transcript
+  "artify_generated",         // User generated an image via Artify panel
+  "transcript_text_to_visual", // User generated a visual from transcript
+  "transcript_cleaned",       // User cleaned transcript text
+  "transcript_summarized",    // User summarized transcript text
 ] as const;
 
 export type TrackingEventType = typeof trackingEventType[number];
