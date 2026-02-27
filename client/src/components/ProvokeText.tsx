@@ -184,6 +184,8 @@ export interface ProvokeTextProps {
   /* ── Extra rendered slots ── */
   extraActions?: React.ReactNode;
   headerActions?: React.ReactNode;
+  /** Content rendered between the header and the input area (e.g. objective bar) */
+  beforeInput?: React.ReactNode;
   footerExtra?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
@@ -281,6 +283,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
       extraActions,
       headerActions,
+      beforeInput,
       footerExtra,
       children,
       footer,
@@ -822,6 +825,9 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
               {toolbarButtons}
             </div>
           </div>
+
+          {/* Before-input slot (e.g. objective bar) */}
+          {beforeInput}
 
           {/* Input */}
           <div className={cn("px-4", variant !== "input" && "flex-1 min-h-0 overflow-y-auto")}>{inputControl}</div>
