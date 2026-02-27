@@ -341,7 +341,7 @@ export function ContextSidebar({
     return (
       <div
         key={`d-${doc.id}`}
-        className={`flex items-center gap-1 group rounded-md transition-all min-w-0 pr-1 ${
+        className={`flex items-center gap-1 group rounded-md transition-all overflow-hidden pr-1 ${
           isPinned
             ? "bg-green-500/10 border-l-2 border-green-500"
             : "hover:bg-muted/50"
@@ -479,7 +479,7 @@ export function ContextSidebar({
     return (
       <div key={`f-${folder.id}`}>
         <div
-          className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors min-w-0 pr-1"
+          className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors overflow-hidden pr-1"
           style={{ paddingLeft: `${indent}px` }}
         >
           {isEditing ? (

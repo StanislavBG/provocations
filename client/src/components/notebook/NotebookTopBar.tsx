@@ -11,11 +11,9 @@ import { UserButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import { prebuiltTemplates, STATUS_LABEL_CONFIG } from "@/lib/prebuiltTemplates";
 import {
-  Save,
   FilePlus2,
   GitCompare,
   Shield,
-  Loader2,
   Sparkles,
   ChevronDown,
 } from "lucide-react";
@@ -23,9 +21,7 @@ import {
 interface NotebookTopBarProps {
   sessionName: string;
   onSessionNameChange: (name: string) => void;
-  onSave: () => void;
   onNew: () => void;
-  isSaving: boolean;
   isAdmin: boolean;
   /** Currently selected template ID */
   selectedTemplateId: string | null;
@@ -40,9 +36,7 @@ interface NotebookTopBarProps {
 export function NotebookTopBar({
   sessionName,
   onSessionNameChange,
-  onSave,
   onNew,
-  isSaving,
   isAdmin,
   selectedTemplateId,
   onSelectTemplate,
@@ -196,27 +190,6 @@ export function NotebookTopBar({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5">
-          {/* Save */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onSave}
-                disabled={isSaving}
-                className="gap-1.5 h-7"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Save className="w-3.5 h-3.5" />
-                )}
-                <span className="hidden sm:inline text-xs">Save</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Save session</TooltipContent>
-          </Tooltip>
-
           {/* New */}
           <Tooltip>
             <TooltipTrigger asChild>
