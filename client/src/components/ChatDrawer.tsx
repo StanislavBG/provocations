@@ -13,7 +13,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -33,6 +33,8 @@ import {
   Target,
   FileText,
   Paperclip,
+  Lock,
+  Clock,
 } from "lucide-react";
 import type {
   ConnectionItem,
@@ -211,32 +213,103 @@ function ConversationListView({
 
   const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
 
+  // Build active team members from accepted connections
+  const activeTeamMembers = connectionsList
+    .filter((c) => c.status === "accepted")
+    .map((c) => ({
+      userId: c.userId,
+      displayName: c.displayName,
+      email: c.email,
+      avatarUrl: c.avatarUrl,
+      conversationId: conversations.find(
+        (cv) => cv.otherUser.userId === c.userId,
+      )?.id ?? null,
+    }));
+
   return (
     <>
-      <SheetHeader className="px-4 pt-4 pb-2">
+      <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between">
-          <SheetTitle className="flex items-center gap-2 font-serif">
-            <MessageSquare className="w-5 h-5" />
-            Messages
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-primary" />
+            <span className="font-semibold text-sm">Chat</span>
             {totalUnread > 0 && (
-              <Badge variant="destructive" className="text-xs px-1.5 py-0">
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
                 {totalUnread}
               </Badge>
             )}
-          </SheetTitle>
-          <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={onOpenConnections} title="Connections" className="relative">
-              <UserPlus className="w-4 h-4" />
-              {pendingIncoming.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-destructive rounded-full" />
-              )}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onOpenSettings} title="Chat settings">
-              <Settings className="w-4 h-4" />
-            </Button>
+          </div>
+          <div className="flex gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onOpenConnections} title="Connections">
+                  <UserPlus className="w-3.5 h-3.5" />
+                  {pendingIncoming.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-destructive rounded-full" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Invite & manage connections</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onOpenSettings} title="Chat settings">
+                  <Settings className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Chat settings</TooltipContent>
+            </Tooltip>
           </div>
         </div>
-      </SheetHeader>
+        {/* Encryption & retention notice */}
+        <div className="flex items-center gap-1.5 mt-1.5 text-[9px] text-muted-foreground/60">
+          <Lock className="w-2.5 h-2.5" />
+          <span>End-to-end encrypted</span>
+          <span className="mx-0.5">&middot;</span>
+          <Clock className="w-2.5 h-2.5" />
+          <span>Auto-deletes after 7 days</span>
+        </div>
+      </div>
+
+      {/* ── Team members (accepted connections) ── */}
+      {activeTeamMembers.length > 0 && (
+        <div className="px-4 py-2 border-b">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">Team</p>
+          <div className="flex flex-wrap gap-1.5">
+            {activeTeamMembers.map((member) => (
+              <Tooltip key={member.userId}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      if (member.conversationId) {
+                        onOpenThread(member.conversationId, {
+                          userId: member.userId,
+                          displayName: member.displayName,
+                          email: member.email,
+                          avatarUrl: member.avatarUrl,
+                        });
+                      }
+                    }}
+                    disabled={!member.conversationId}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-background hover:bg-muted/60 transition-colors text-xs disabled:opacity-50 disabled:cursor-default"
+                  >
+                    <Avatar className="w-4 h-4">
+                      {member.avatarUrl && <AvatarImage src={member.avatarUrl} />}
+                      <AvatarFallback className="text-[8px]">
+                        {member.displayName.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="truncate max-w-[80px]">
+                      {member.displayName.split(" ")[0]}
+                    </span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{member.displayName} &middot; {member.email}</TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Current session context — what you're working on right now */}
       <SessionContextBanner ctx={sessionContext} />
