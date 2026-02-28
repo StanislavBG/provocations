@@ -2,11 +2,11 @@ import { useState } from "react";
 import { ProvoThread } from "./ProvoThread";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { NotebookResearchChat } from "./NotebookResearchChat";
-import { GeneratePanel, type GeneratedDocument } from "@/components/GeneratePanel";
-import { Sparkles, Users, ClipboardList, Wand2 } from "lucide-react";
+import { PainterPanel, type PainterConfig } from "./PainterPanel";
+import { Sparkles, Users, ClipboardList, Paintbrush } from "lucide-react";
 import type { ProvocationType, DiscussionMessage, ContextItem } from "@shared/schema";
 
-type RightPanelTab = "research" | "provo" | "transcript" | "generate";
+type RightPanelTab = "research" | "provo" | "transcript" | "painter";
 
 interface NotebookRightPanelProps {
   activePersonas: Set<ProvocationType>;
@@ -33,8 +33,14 @@ interface NotebookRightPanelProps {
   onEvolveDocument?: (instruction: string, description: string) => void;
   isMerging?: boolean;
 
-  // Generate tab
+  // Painter tab
   documentText: string;
+  onPaintImage: (config: {
+    painterConfigs: PainterConfig[];
+    painterObjective: string;
+    negativePrompt?: string;
+  }) => void;
+  isPainting?: boolean;
 }
 
 export function NotebookRightPanel({
@@ -54,10 +60,11 @@ export function NotebookRightPanel({
   onEvolveDocument,
   isMerging = false,
   documentText,
+  onPaintImage,
+  isPainting = false,
 }: NotebookRightPanelProps) {
   const [activeTab, setActiveTab] = useState<RightPanelTab>("research");
   const [researchMsgCount, setResearchMsgCount] = useState(0);
-  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
 
   return (
     <div className="h-full flex flex-col bg-card border-l">
@@ -107,20 +114,15 @@ export function NotebookRightPanel({
           Provo
         </button>
         <button
-          onClick={() => setActiveTab("generate")}
+          onClick={() => setActiveTab("painter")}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
-            activeTab === "generate"
+            activeTab === "painter"
               ? "text-primary border-b-2 border-primary -mb-px"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Wand2 className="w-3.5 h-3.5" />
-          Generate
-          {generatedDocs.length > 0 && (
-            <span className="text-[9px] bg-primary/20 text-primary px-1.5 rounded-full">
-              {generatedDocs.length}
-            </span>
-          )}
+          <Paintbrush className="w-3.5 h-3.5" />
+          Painter
         </button>
       </div>
 
@@ -159,14 +161,13 @@ export function NotebookRightPanel({
         />
       </div>
 
-      {/* Generate */}
-      <div className={activeTab === "generate" ? "flex-1 overflow-hidden" : "hidden"}>
-        <GeneratePanel
+      {/* Painter */}
+      <div className={activeTab === "painter" ? "flex-1 overflow-hidden" : "hidden"}>
+        <PainterPanel
           documentText={documentText}
           objective={objective}
-          generatedDocs={generatedDocs}
-          onDocGenerated={(doc) => setGeneratedDocs((prev) => [...prev, doc])}
-          onDocRemove={(id) => setGeneratedDocs((prev) => prev.filter((d) => d.id !== id))}
+          onPaintImage={onPaintImage}
+          isPainting={isPainting}
         />
       </div>
     </div>
