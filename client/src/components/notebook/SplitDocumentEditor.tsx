@@ -23,6 +23,9 @@ import {
   Lightbulb,
   Palette,
   Sparkles,
+  Save,
+  Loader2,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -121,6 +124,12 @@ interface SplitDocumentEditorProps {
   onClosePreview?: () => void;
   /** Notifies parent when the active tab type changes (chart vs document) */
   onChartActiveChange?: (isActive: boolean) => void;
+  /** Save the current document + objective to the Context Store */
+  onSaveToContext?: () => void;
+  isSaving?: boolean;
+  /** Evolve the document using the writer with a given instruction type + sub-option */
+  onEvolve?: (instructionType: string, subOption: string) => void;
+  isEvolving?: boolean;
 }
 
 export function SplitDocumentEditor({
@@ -133,6 +142,10 @@ export function SplitDocumentEditor({
   previewDoc,
   onClosePreview,
   onChartActiveChange,
+  onSaveToContext,
+  isSaving = false,
+  onEvolve,
+  isEvolving = false,
 }: SplitDocumentEditorProps) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
@@ -265,14 +278,15 @@ export function SplitDocumentEditor({
   }, []);
 
   const handleSmartAction = useCallback(
-    (btnId: string, optionId: string, optionLabel: string) => {
-      toast({
-        title: `${optionLabel}`,
-        description: "Smart actions coming soon — this will use AI to transform your document.",
-      });
-      setExpandedSmartBtn(null);
+    (btnId: string, optionId: string, _optionLabel: string) => {
+      if (onEvolve && text.trim()) {
+        onEvolve(btnId, optionId);
+        setExpandedSmartBtn(null);
+      } else if (!text.trim()) {
+        toast({ title: "Nothing to evolve", description: "Write some content first." });
+      }
     },
-    [toast],
+    [onEvolve, text, toast],
   );
 
   const handleDownload = () => {
@@ -404,6 +418,45 @@ export function SplitDocumentEditor({
                 </button>
               );
             })}
+
+            {/* Separator + action buttons */}
+            <div className="w-px h-4 bg-border/60 mx-1 shrink-0" />
+
+            {onSaveToContext && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={onSaveToContext}
+                    disabled={isSaving || !text.trim()}
+                    className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-colors shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-40"
+                  >
+                    {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    Save
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Save document to Context Store</TooltipContent>
+              </Tooltip>
+            )}
+
+            {onEvolve && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      if (text.trim()) {
+                        onEvolve(expandedSmartBtn || "general", "general");
+                      }
+                    }}
+                    disabled={isEvolving || !text.trim()}
+                    className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-colors shrink-0 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40"
+                  >
+                    {isEvolving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                    Evolve
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Evolve document using selected mode</TooltipContent>
+              </Tooltip>
+            )}
           </div>
 
           {/* Expanded sub-options */}
