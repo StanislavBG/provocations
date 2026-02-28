@@ -1,12 +1,22 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ProvokeText } from "@/components/ProvokeText";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
+import type { ResearchFocus } from "@shared/schema";
+import type { LucideIcon } from "lucide-react";
+
+const FOCUS_MODES: { id: ResearchFocus; label: string; icon: LucideIcon; description: string }[] = [
+  { id: "explore", label: "Explore", icon: Compass, description: "Discover angles, brainstorm, map the landscape" },
+  { id: "verify", label: "Verify", icon: ShieldCheck, description: "Fact-check claims, validate sources, find evidence" },
+  { id: "gather", label: "Gather", icon: Database, description: "Collect structured data, schemas, specifications" },
+  { id: "analyze", label: "Analyze", icon: FlaskConical, description: "Compare options, evaluate trade-offs, decide" },
+];
 
 interface NotebookResearchChatProps {
   objective: string;
@@ -25,6 +35,7 @@ export function NotebookResearchChat({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [focusMode, setFocusMode] = useState<ResearchFocus>("explore");
   const bottomRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -60,6 +71,7 @@ export function NotebookResearchChat({
           message: trimmed,
           objective: objective || "General research",
           history: messages.slice(-30),
+          researchFocus: focusMode,
         }),
       });
 
@@ -109,7 +121,7 @@ export function NotebookResearchChat({
       setIsLoading(false);
       setStreamingContent("");
     }
-  }, [input, isLoading, messages, objective, toast]);
+  }, [input, isLoading, messages, objective, focusMode, toast]);
 
   const handleCapture = useCallback(
     (content: string) => {
@@ -132,6 +144,53 @@ export function NotebookResearchChat({
 
   return (
     <div className="h-full flex flex-col">
+      {/* Sticky header: message count + Clear */}
+      {hasMessages && (
+        <div className="flex items-center justify-between px-3 py-1 border-b shrink-0">
+          <span className="text-[10px] text-muted-foreground">
+            {messages.length} message{messages.length !== 1 ? "s" : ""}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 text-[10px] gap-1 text-muted-foreground hover:text-destructive"
+            onClick={handleClear}
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Focus mode selector */}
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b shrink-0 bg-muted/20">
+        {FOCUS_MODES.map((mode) => {
+          const Icon = mode.icon;
+          const isActive = focusMode === mode.id;
+          return (
+            <Tooltip key={mode.id}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setFocusMode(mode.id)}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  {mode.label}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                {mode.description}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+
       {/* Messages */}
       <ScrollArea className="flex-1 p-3">
         {!hasMessages && !isLoading ? (
@@ -153,22 +212,6 @@ export function NotebookResearchChat({
           </div>
         ) : (
           <div className="space-y-3">
-            {messages.length > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">
-                  {messages.length} message{messages.length !== 1 ? "s" : ""}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 text-[10px] gap-1 text-muted-foreground hover:text-destructive"
-                  onClick={handleClear}
-                >
-                  <Trash2 className="w-2.5 h-2.5" />
-                  Clear
-                </Button>
-              </div>
-            )}
             {messages.map((msg, i) => (
               <div
                 key={i}
