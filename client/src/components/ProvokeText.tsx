@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, forwardRef } from "react";
+import { useState, useRef, useCallback, useEffect, forwardRef } from "react";
 import { AutoExpandTextarea } from "@/components/ui/auto-expand-textarea";
 import { Input } from "@/components/ui/input";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
@@ -303,6 +303,12 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     const [focusAutoRecord, setFocusAutoRecord] = useState(false);
     const internalRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
 
+    // Snapshot of the value when recording started — used to avoid word
+    // duplication when the speech API delivers accumulated transcripts.
+    const preVoiceContentRef = useRef("");
+    const valueRef = useRef(value);
+    useEffect(() => { valueRef.current = value; }, [value]);
+
     /* ── Smart action state (owned by ProvokeText) ── */
     const [processingMode, setProcessingMode] = useState<string | null>(null);
     const [rawSnapshot, setRawSnapshot] = useState<string | null>(null);
@@ -328,7 +334,11 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       onVoiceTranscript ??
       (selfContainedVoice
         ? (transcript: string) => {
-            onChange(value ? value + " " + transcript : transcript);
+            // Use the pre-voice snapshot so accumulated transcripts from the
+            // speech API don't cause word duplication. Each call replaces the
+            // voice portion rather than appending to the already-updated value.
+            const pre = preVoiceContentRef.current;
+            onChange(pre ? pre + " " + transcript : transcript);
           }
         : undefined);
 
@@ -366,6 +376,11 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       (recording: boolean) => {
         setIsRecording(recording);
         onRecordingChangeProp?.(recording);
+        if (recording) {
+          // Snapshot the current value so the voice handler can replace
+          // rather than append, avoiding word duplication.
+          preVoiceContentRef.current = valueRef.current;
+        }
         if (!recording) setInterimText("");
         // Reset the focus-triggered auto-record once recording actually starts
         if (recording && focusAutoRecord) {
@@ -480,7 +495,10 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       if (voiceMode === "replace") {
         displayValue = interimText;
       } else {
-        displayValue = value ? value + " " + interimText : interimText;
+        // Use the pre-voice snapshot so accumulated interim text from the
+        // speech API doesn't duplicate words already in the value.
+        const pre = preVoiceContentRef.current;
+        displayValue = pre ? pre + " " + interimText : interimText;
       }
     }
 
