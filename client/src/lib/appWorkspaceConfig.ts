@@ -203,7 +203,7 @@ const RIGHT_NOTES: RightPanelTabConfig = {
 
 const RIGHT_TRANSCRIPT: RightPanelTabConfig = {
   id: "transcript",
-  label: "Transcript",
+  label: "Notes",
 };
 
 const TAB_CHAT: LeftPanelTabConfig = {
