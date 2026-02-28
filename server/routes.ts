@@ -2419,13 +2419,21 @@ Output only valid JSON, no markdown.`;
         console.log(`[Write API] Cleaned voice transcript: "${rawInstruction.slice(0, 50)}..." → "${instruction.slice(0, 50)}..."`);
       }
 
+      // Detect multi-config instructions (from the multi-select writer controls)
+      const isMultiConfig = instruction.startsWith("Apply the following document evolution configurations");
+
       // Classify the instruction type
-      const instructionType = classifyInstruction(instruction);
-      const strategy = instructionStrategies[instructionType];
+      const instructionType = isMultiConfig ? "general" as const : classifyInstruction(instruction);
+      const strategy = isMultiConfig
+        ? "Apply multiple document evolution operations in a single coherent pass. " +
+          "Prioritize the user's holistic intent over individual operations. " +
+          "Where operations conflict, find the best synthesis — e.g., expand underserved " +
+          "areas while condensing redundant ones."
+        : instructionStrategies[instructionType];
 
       // Step 2: Generate plan for complex instructions
       let editPlan = "";
-      if (isComplexInstruction(instruction, instructionType)) {
+      if (!isMultiConfig && isComplexInstruction(instruction, instructionType)) {
         editPlan = await generateEditPlan(document, instruction, selectedText, objective);
         if (editPlan) {
           console.log(`[Write API] Generated plan for complex instruction`);
@@ -2436,8 +2444,22 @@ Output only valid JSON, no markdown.`;
       const contextParts: string[] = [];
 
       // Add instruction strategy
-      contextParts.push(`INSTRUCTION TYPE: ${instructionType}
+      if (isMultiConfig) {
+        contextParts.push(`INSTRUCTION MODE: Multi-configuration evolution
+STRATEGY: ${strategy}
+
+IMPORTANT — MULTI-CONFIG RULES:
+1. Each numbered configuration below is a CONCURRENT directive — apply ALL of them in one pass.
+2. Read ALL configurations before making any changes to understand the full intent.
+3. When configurations seem contradictory (e.g., Expand + Condense), interpret holistically:
+   expand THIN areas, condense REDUNDANT areas, improving overall balance.
+4. The user's intent is the synthesis of all configurations, not a sequential chain.
+5. For "general improvement" (no specific configs), focus on the objective and make the
+   document stronger, clearer, and more aligned with the stated goal.`);
+      } else {
+        contextParts.push(`INSTRUCTION TYPE: ${instructionType}
 STRATEGY: ${strategy}`);
+      }
 
       // Add edit plan if generated
       if (editPlan) {
@@ -2538,18 +2560,26 @@ The user's response should be integrated thoughtfully - don't just append it, we
         preservationDirectives.push("- PRESERVE all text outside the selected area unless the instruction explicitly affects it");
         preservationDirectives.push("- DO NOT reformat or restructure sections that weren't mentioned");
       }
-      if (instructionType === "correct") {
-        preservationDirectives.push("- ONLY fix the specific error mentioned - no other changes");
+      if (isMultiConfig) {
+        // Multi-config mode: more flexible — user explicitly asked for multiple changes
+        preservationDirectives.push("- The user has explicitly selected multiple evolution operations — you have permission to make substantial changes across multiple dimensions");
+        preservationDirectives.push("- PRESERVE the document's core meaning and key information");
+        preservationDirectives.push("- You MAY restructure, restyle, expand, and condense in the same pass as directed");
+        preservationDirectives.push("- DO NOT add entirely new topics or facts the user didn't mention");
+      } else {
+        if (instructionType === "correct") {
+          preservationDirectives.push("- ONLY fix the specific error mentioned - no other changes");
+        }
+        if (instructionType === "style") {
+          preservationDirectives.push("- PRESERVE the content and meaning - only change the voice/tone");
+        }
+        if (instructionType === "condense") {
+          preservationDirectives.push("- PRESERVE all key information - only remove redundancy and filler");
+        }
+        // Always include these for single-config
+        preservationDirectives.push("- DO NOT add information the user didn't mention or request");
+        preservationDirectives.push("- DO NOT remove content unless explicitly asked to");
       }
-      if (instructionType === "style") {
-        preservationDirectives.push("- PRESERVE the content and meaning - only change the voice/tone");
-      }
-      if (instructionType === "condense") {
-        preservationDirectives.push("- PRESERVE all key information - only remove redundancy and filler");
-      }
-      // Always include these
-      preservationDirectives.push("- DO NOT add information the user didn't mention or request");
-      preservationDirectives.push("- DO NOT remove content unless explicitly asked to");
       preservationDirectives.push("- PRESERVE markdown formatting and structure unless asked to change it");
 
       const preservationSection = preservationDirectives.length > 0
@@ -2566,10 +2596,11 @@ DOCUMENT OBJECTIVE: ${objective}
 Your role is to evolve the document based on the user's instruction while always keeping the objective in mind. The document should get better with each iteration - clearer, more compelling, better structured.
 
 APPROACH:
-1. First, understand exactly what the user wants changed
-2. Identify the minimal set of changes needed
-3. Execute those changes precisely
-4. Verify you haven't made unintended changes
+1. Read the FULL instruction to understand the user's complete intent before making any changes
+2. When multiple configurations are given, synthesize them into a unified editorial vision — do NOT apply them as isolated sequential steps
+3. Identify the changes needed and their interactions (e.g., expanding one section while condensing another)
+4. Execute changes precisely and verify you haven't made unintended alterations
+5. The output must be the COMPLETE evolved document — always match or exceed the quality of the input
 
 OUTPUT FORMAT: The document MUST be valid Markdown. Use:
 - # / ## / ### for headings (use heading hierarchy consistently)

@@ -5,6 +5,7 @@ import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { generateId } from "@/lib/utils";
 import {
@@ -22,10 +23,12 @@ import {
   ArrowUpDown,
   Lightbulb,
   Palette,
+  CheckCircle2,
   Sparkles,
   Save,
   Loader2,
   Wand2,
+  RotateCcw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,12 +49,27 @@ interface PreviewDoc {
   content: string;
 }
 
+interface SmartOption {
+  id: string;
+  label: string;
+  description: string;
+}
+
 interface SmartButtonDef {
   id: string;
   label: string;
   icon: LucideIcon;
   color: string;
-  options: { id: string; label: string }[];
+  activeBg: string;
+  options: SmartOption[];
+}
+
+/** A selected writer configuration passed to the evolve handler */
+export interface WriterConfig {
+  category: string;
+  option: string;
+  categoryLabel: string;
+  optionLabel: string;
 }
 
 const SMART_BUTTONS: SmartButtonDef[] = [
@@ -60,10 +78,11 @@ const SMART_BUTTONS: SmartButtonDef[] = [
     label: "Expand",
     icon: Maximize2,
     color: "text-blue-500",
+    activeBg: "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-400",
     options: [
-      { id: "add-examples", label: "Add examples" },
-      { id: "add-detail", label: "Add detail" },
-      { id: "add-data", label: "Supporting data" },
+      { id: "add-examples", label: "Add examples", description: "Concrete illustrations and use cases" },
+      { id: "add-detail", label: "Add detail", description: "Deeper explanations and supporting info" },
+      { id: "add-data", label: "Supporting data", description: "Statistics, evidence, and references" },
     ],
   },
   {
@@ -71,10 +90,11 @@ const SMART_BUTTONS: SmartButtonDef[] = [
     label: "Condense",
     icon: Minimize2,
     color: "text-amber-500",
+    activeBg: "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400",
     options: [
-      { id: "tighten", label: "Tighten prose" },
-      { id: "dedup", label: "Remove redundancy" },
-      { id: "exec-summary", label: "Executive summary" },
+      { id: "tighten", label: "Tighten prose", description: "Remove filler words and weak phrasing" },
+      { id: "dedup", label: "Remove redundancy", description: "Eliminate repeated ideas and content" },
+      { id: "exec-summary", label: "Executive summary", description: "Create a concise overview" },
     ],
   },
   {
@@ -82,10 +102,11 @@ const SMART_BUTTONS: SmartButtonDef[] = [
     label: "Restructure",
     icon: ArrowUpDown,
     color: "text-purple-500",
+    activeBg: "bg-purple-500/10 border-purple-500/30 text-purple-700 dark:text-purple-400",
     options: [
-      { id: "reorder", label: "Reorder sections" },
-      { id: "headings", label: "Add headings" },
-      { id: "outline", label: "Outline view" },
+      { id: "reorder", label: "Reorder sections", description: "Improve logical flow and progression" },
+      { id: "headings", label: "Add headings", description: "Create section hierarchy and navigation" },
+      { id: "outline", label: "Outline view", description: "Convert to structured outline format" },
     ],
   },
   {
@@ -93,10 +114,11 @@ const SMART_BUTTONS: SmartButtonDef[] = [
     label: "Clarify",
     icon: Lightbulb,
     color: "text-green-500",
+    activeBg: "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400",
     options: [
-      { id: "simplify", label: "Simplify language" },
-      { id: "define", label: "Define terms" },
-      { id: "context", label: "Add context" },
+      { id: "simplify", label: "Simplify language", description: "Make complex ideas accessible" },
+      { id: "define", label: "Define terms", description: "Add definitions for jargon and acronyms" },
+      { id: "context", label: "Add context", description: "Background info for new readers" },
     ],
   },
   {
@@ -104,10 +126,11 @@ const SMART_BUTTONS: SmartButtonDef[] = [
     label: "Style",
     icon: Palette,
     color: "text-pink-500",
+    activeBg: "bg-pink-500/10 border-pink-500/30 text-pink-700 dark:text-pink-400",
     options: [
-      { id: "professional", label: "Professional" },
-      { id: "casual", label: "Casual" },
-      { id: "academic", label: "Academic" },
+      { id: "professional", label: "Professional", description: "Formal business tone" },
+      { id: "casual", label: "Casual", description: "Conversational and friendly" },
+      { id: "academic", label: "Academic", description: "Scholarly and precise" },
     ],
   },
 ];
@@ -127,8 +150,8 @@ interface SplitDocumentEditorProps {
   /** Save the current document + objective to the Context Store */
   onSaveToContext?: () => void;
   isSaving?: boolean;
-  /** Evolve the document using the writer with a given instruction type + sub-option */
-  onEvolve?: (instructionType: string, subOption: string) => void;
+  /** Evolve the document using the writer with selected configurations */
+  onEvolve?: (configurations: WriterConfig[]) => void;
   isEvolving?: boolean;
 }
 
@@ -176,8 +199,83 @@ export function SplitDocumentEditor({
     }
   }, [editingTabId]);
 
-  // ── Smart buttons state ──
-  const [expandedSmartBtn, setExpandedSmartBtn] = useState<string | null>(null);
+  // ── Multi-select writer controls ──
+  // Which categories are expanded (showing sub-options)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Map of categoryId → Set of selected optionIds
+  const [selectedConfigs, setSelectedConfigs] = useState<Map<string, Set<string>>>(new Map());
+
+  const totalSelected = Array.from(selectedConfigs.values()).reduce(
+    (sum, s) => sum + s.size,
+    0,
+  );
+
+  const toggleCategory = useCallback((catId: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId);
+      else next.add(catId);
+      return next;
+    });
+  }, []);
+
+  const toggleOption = useCallback((catId: string, optId: string) => {
+    setSelectedConfigs((prev) => {
+      const next = new Map(prev);
+      const catSet = new Set(next.get(catId) || []);
+      if (catSet.has(optId)) catSet.delete(optId);
+      else catSet.add(optId);
+      if (catSet.size === 0) next.delete(catId);
+      else next.set(catId, catSet);
+      return next;
+    });
+  }, []);
+
+  const clearSelections = useCallback(() => {
+    setSelectedConfigs(new Map());
+  }, []);
+
+  /** Build the array of WriterConfig from current selections */
+  const buildConfigs = useCallback((): WriterConfig[] => {
+    const configs: WriterConfig[] = [];
+    SMART_BUTTONS.forEach((btn) => {
+      const optIds = selectedConfigs.get(btn.id);
+      if (!optIds || optIds.size === 0) return;
+      btn.options.forEach((opt) => {
+        if (optIds.has(opt.id)) {
+          configs.push({
+            category: btn.id,
+            option: opt.id,
+            categoryLabel: btn.label,
+            optionLabel: opt.label,
+          });
+        }
+      });
+    });
+    return configs;
+  }, [selectedConfigs]);
+
+  const handleEvolve = useCallback(() => {
+    if (!onEvolve || !text.trim()) {
+      if (!text.trim()) {
+        toast({ title: "Nothing to evolve", description: "Write some content first." });
+      }
+      return;
+    }
+    const configs = buildConfigs();
+    if (configs.length === 0) {
+      // No specific options selected — general evolve
+      onEvolve([{ category: "general", option: "general", categoryLabel: "General", optionLabel: "Improve" }]);
+    } else {
+      onEvolve(configs);
+    }
+    // Clear selections after evolving
+    clearSelections();
+  }, [onEvolve, text, buildConfigs, clearSelections, toast]);
+
+  // Count selected options per category (for badges)
+  const getCategorySelectedCount = (catId: string): number =>
+    selectedConfigs.get(catId)?.size || 0;
 
   const handleSwitchTab = useCallback(
     (tabId: string) => {
@@ -276,18 +374,6 @@ export function SplitDocumentEditor({
   const handleCancelRename = useCallback(() => {
     setEditingTabId(null);
   }, []);
-
-  const handleSmartAction = useCallback(
-    (btnId: string, optionId: string, _optionLabel: string) => {
-      if (onEvolve && text.trim()) {
-        onEvolve(btnId, optionId);
-        setExpandedSmartBtn(null);
-      } else if (!text.trim()) {
-        toast({ title: "Nothing to evolve", description: "Write some content first." });
-      }
-    },
-    [onEvolve, text, toast],
-  );
 
   const handleDownload = () => {
     const blob = new Blob([text], { type: "text/markdown" });
@@ -393,28 +479,35 @@ export function SplitDocumentEditor({
         </Tooltip>
       </div>
 
-      {/* ─── Smart Buttons toolbar (document tabs only) ─── */}
+      {/* ─── Writer Controls toolbar (document tabs only) ─── */}
       {!isChartActive && (
         <div className="shrink-0 border-b bg-card">
+          {/* Category row: clickable pills that expand sub-options */}
           <div className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto">
             <Sparkles className="w-3 h-3 text-primary/50 shrink-0 mr-0.5" />
             {SMART_BUTTONS.map((btn) => {
               const Icon = btn.icon;
-              const isExpanded = expandedSmartBtn === btn.id;
+              const isExpanded = expandedCategories.has(btn.id);
+              const selectedCount = getCategorySelectedCount(btn.id);
               return (
                 <button
                   key={btn.id}
-                  onClick={() =>
-                    setExpandedSmartBtn(isExpanded ? null : btn.id)
-                  }
+                  onClick={() => toggleCategory(btn.id)}
                   className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 ${
-                    isExpanded
-                      ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    selectedCount > 0
+                      ? `${btn.activeBg} border`
+                      : isExpanded
+                        ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                   }`}
                 >
-                  <Icon className={`w-3 h-3 ${isExpanded ? "text-primary" : btn.color}`} />
+                  <Icon className={`w-3 h-3 ${selectedCount > 0 ? "" : isExpanded ? "text-primary" : btn.color}`} />
                   {btn.label}
+                  {selectedCount > 0 && (
+                    <Badge className="h-3.5 min-w-[14px] px-1 text-[9px] bg-foreground/15 text-current">
+                      {selectedCount}
+                    </Badge>
+                  )}
                 </button>
               );
             })}
@@ -442,39 +535,80 @@ export function SplitDocumentEditor({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={() => {
-                      if (text.trim()) {
-                        onEvolve(expandedSmartBtn || "general", "general");
-                      }
-                    }}
+                    onClick={handleEvolve}
                     disabled={isEvolving || !text.trim()}
-                    className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-colors shrink-0 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40"
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 disabled:opacity-40 ${
+                      totalSelected > 0
+                        ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                        : "bg-primary/10 text-primary hover:bg-primary/20"
+                    }`}
                   >
                     {isEvolving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                    Evolve
+                    Evolve{totalSelected > 0 ? ` (${totalSelected})` : ""}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Evolve document using selected mode</TooltipContent>
+                <TooltipContent>
+                  {totalSelected > 0
+                    ? `Apply ${totalSelected} configuration${totalSelected > 1 ? "s" : ""} to evolve document`
+                    : "General document improvement"}
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {totalSelected > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={clearSelections}
+                    className="flex items-center justify-center w-5 h-5 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Clear all selections</TooltipContent>
               </Tooltip>
             )}
           </div>
 
-          {/* Expanded sub-options */}
-          {expandedSmartBtn && (
-            <div className="flex items-center gap-1 px-3 pb-1.5 overflow-x-auto animate-in slide-in-from-top-1 duration-150">
-              <span className="text-[10px] text-muted-foreground/60 mr-1 shrink-0">Options:</span>
-              {SMART_BUTTONS.find((b) => b.id === expandedSmartBtn)?.options.map(
-                (opt) => (
-                  <button
-                    key={opt.id}
-                    onClick={() =>
-                      handleSmartAction(expandedSmartBtn, opt.id, opt.label)
-                    }
-                    className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors shrink-0"
-                  >
-                    {opt.label}
-                  </button>
-                ),
+          {/* Expanded sub-options — multi-select chips */}
+          {expandedCategories.size > 0 && (
+            <div className="px-3 pb-2 space-y-1 animate-in slide-in-from-top-1 duration-150">
+              {SMART_BUTTONS.filter((b) => expandedCategories.has(b.id)).map(
+                (btn) => {
+                  const catSelected = selectedConfigs.get(btn.id);
+                  return (
+                    <div key={btn.id} className="flex items-center gap-1 flex-wrap">
+                      <span className={`text-[10px] font-semibold uppercase tracking-wider mr-1 shrink-0 ${btn.color}`}>
+                        {btn.label}
+                      </span>
+                      {btn.options.map((opt) => {
+                        const isSelected = catSelected?.has(opt.id) || false;
+                        return (
+                          <Tooltip key={opt.id}>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => toggleOption(btn.id, opt.id)}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all shrink-0 border ${
+                                  isSelected
+                                    ? `${btn.activeBg}`
+                                    : "bg-muted/40 border-transparent text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                                }`}
+                              >
+                                {isSelected && (
+                                  <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
+                                )}
+                                {opt.label}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-[11px]">
+                              {opt.description}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  );
+                },
               )}
             </div>
           )}

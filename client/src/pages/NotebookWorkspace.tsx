@@ -354,13 +354,38 @@ export default function NotebookWorkspace() {
     }
   }, [document.rawText, objective, toast]);
 
-  // ── Evolve document via writer ──
+  // ── Evolve document via writer (multi-config) ──
   const handleEvolve = useCallback(
-    (instructionType: string, subOption: string) => {
-      const instruction = subOption === "general"
-        ? `${instructionType} the document — improve it based on the objective.`
-        : `${instructionType}: ${subOption}`;
-      writeMutation.mutate({ instruction, description: `Evolve: ${instructionType}/${subOption}` });
+    (configurations: import("@/components/notebook/SplitDocumentEditor").WriterConfig[]) => {
+      if (configurations.length === 0) return;
+
+      // Single general config — simple instruction
+      if (configurations.length === 1 && configurations[0].category === "general") {
+        writeMutation.mutate({
+          instruction: "Improve the document — refine it based on the objective.",
+          description: "Evolve: general improvement",
+        });
+        return;
+      }
+
+      // Build a structured multi-config instruction
+      const configLines = configurations.map(
+        (c, i) => `${i + 1}. ${c.categoryLabel.toUpperCase()} — ${c.optionLabel}`,
+      );
+      const instruction = [
+        "Apply the following document evolution configurations simultaneously:",
+        ...configLines,
+        "",
+        "Where configurations may seem contradictory (e.g., Expand AND Condense), interpret holistically:",
+        "expand the UNDERSERVED areas while condensing the REDUNDANT ones.",
+        "Apply all configurations in a single coherent pass over the document.",
+      ].join("\n");
+
+      const description = configurations
+        .map((c) => `${c.categoryLabel}/${c.optionLabel}`)
+        .join(" + ");
+
+      writeMutation.mutate({ instruction, description: `Evolve: ${description}` });
     },
     [writeMutation],
   );
