@@ -100,11 +100,29 @@ export function GeneratePanel({
   // ── Fullscreen lightbox state ──
   const [lightboxDoc, setLightboxDoc] = useState<GeneratedDocument | null>(null);
 
-  // ── Save-to-context state ──
+  // ── Auto-save tracking: maps generated doc id → context store doc id ──
+  const [savedDocIds, setSavedDocIds] = useState<Set<string>>(new Set());
+
+  // ── Save-to-context state (for renaming / saving to specific folder) ──
   const [savingDocId, setSavingDocId] = useState<string | null>(null);
   const [saveFileName, setSaveFileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const saveInputRef = useRef<HTMLInputElement>(null);
+
+  /** Auto-save a generated doc to Context Store (fire-and-forget) */
+  const autoSaveToContext = useCallback(async (doc: GeneratedDocument) => {
+    try {
+      const content = doc.imageUrl
+        ? `![${doc.title}](${doc.imageUrl})\n\n${doc.content}`
+        : doc.content;
+      await apiRequest("POST", "/api/documents", { title: doc.title, content });
+      setSavedDocIds((prev) => new Set(prev).add(doc.id));
+      trackEvent("document_saved");
+    } catch {
+      // Auto-save failed silently — user can still manually save
+      console.warn("[GeneratePanel] Auto-save failed for", doc.title);
+    }
+  }, []);
 
   const handleStartSave = useCallback((doc: GeneratedDocument) => {
     setSavingDocId(doc.id);
@@ -200,7 +218,9 @@ Make it visually compelling and information-dense.`,
       };
       onDocGenerated(doc);
       setActiveApp(null);
-      toast({ title: "Infographic Generated", description: "Your infographic has been added to session context." });
+      // Auto-save to Context Store
+      autoSaveToContext(doc);
+      toast({ title: "Infographic Generated", description: "Saved to workspace and Context Store." });
     },
     onError: (error) => {
       const msg = error instanceof Error ? error.message : "Generation failed";
@@ -293,7 +313,7 @@ Make it visually compelling and information-dense.`,
           <div className="px-3 pt-3 pb-1 flex items-center gap-1.5">
             <FileText className="w-3 h-3 text-amber-600" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-              Generated — Session Context
+              Generated
             </span>
           </div>
 
@@ -346,7 +366,14 @@ Make it visually compelling and information-dense.`,
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{doc.title}</p>
+                        <div className="flex items-center gap-1">
+                          <p className="text-xs font-medium truncate">{doc.title}</p>
+                          {savedDocIds.has(doc.id) && (
+                            <Badge variant="outline" className="text-[8px] h-3.5 px-1 shrink-0 text-green-600 border-green-300">
+                              Saved
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-[10px] text-muted-foreground truncate">
                           {doc.content.slice(0, 80)}...
                         </p>
@@ -395,7 +422,7 @@ Make it visually compelling and information-dense.`,
                               <Save className="w-2.5 h-2.5" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="right">Save to Context Store</TooltipContent>
+                          <TooltipContent side="right">Save copy with new name</TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
