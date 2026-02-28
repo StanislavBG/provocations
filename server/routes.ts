@@ -1989,9 +1989,9 @@ Output only valid JSON, no markdown.`;
       const key = getEncryptionKey();
       const appsDir = path.resolve(process.cwd(), "apps");
 
-      // Build folder hierarchy: Applications → Provocations (locked — system-managed structure)
-      const applicationsFolderId = await findOrCreateFolder(userId, "Applications", null, key, true);
-      const provocationsFolderId = await findOrCreateFolder(userId, "Provocations", applicationsFolderId, key, true);
+      // Build folder hierarchy: Applications → Provocations
+      const applicationsFolderId = await findOrCreateFolder(userId, "Applications", null, key, false);
+      const provocationsFolderId = await findOrCreateFolder(userId, "Provocations", applicationsFolderId, key, false);
 
       const results: { templateId: string; action: string; docId?: number }[] = [];
 
@@ -2016,8 +2016,8 @@ Output only valid JSON, no markdown.`;
         const appTitle = APP_TITLES[templateId] || templateId;
         const docTitle = `${appTitle} — App Guide`;
 
-        // Find or create the app subfolder under Provocations (locked)
-        const appFolderId = await findOrCreateFolder(userId, appTitle, provocationsFolderId, key, true);
+        // Find or create the app subfolder under Provocations
+        const appFolderId = await findOrCreateFolder(userId, appTitle, provocationsFolderId, key, false);
 
         // Check if a document already exists in this folder
         const existingDocs = await storage.listDocuments(userId, appFolderId);
@@ -2150,8 +2150,8 @@ Output only valid JSON, no markdown.`;
       // Resolve effective personas (code defaults merged with DB overrides)
       const effectivePersonas = await getEffectivePersonas();
 
-      // Build folder hierarchy: Personas (locked — system-managed structure)
-      const personasFolderId = await findOrCreateFolder(userId, "Personas", null, key, true);
+      // Build folder hierarchy: Personas
+      const personasFolderId = await findOrCreateFolder(userId, "Personas", null, key, false);
 
       const results: { personaId: string; domain: string; action: string; docId?: number }[] = [];
 
@@ -2165,8 +2165,8 @@ Output only valid JSON, no markdown.`;
 
       for (const [domain, personas] of Array.from(byDomain.entries())) {
         const domainTitle = DOMAIN_TITLES[domain] || domain;
-        // Create locked domain subfolder under Personas
-        const domainFolderId = await findOrCreateFolder(userId, domainTitle, personasFolderId, key, true);
+        // Create domain subfolder under Personas
+        const domainFolderId = await findOrCreateFolder(userId, domainTitle, personasFolderId, key, false);
 
         for (const persona of personas) {
           const content = personaToMarkdown(persona);
@@ -3776,8 +3776,8 @@ RULES:
       const { title, researchTopic, objective, summary, notes, chatHistory } = parsed.data;
       const key = getEncryptionKey();
 
-      // 1. Ensure the locked "Chat to Context" system folder exists
-      const chatToContextFolderId = await findOrCreateFolder(userId, "Chat to Context", null, key, true);
+      // 1. Ensure the "Chat to Context" folder exists
+      const chatToContextFolderId = await findOrCreateFolder(userId, "Chat to Context", null, key, false);
 
       // 2. Build the primary document content (session summary + metadata)
       const sections: string[] = [];

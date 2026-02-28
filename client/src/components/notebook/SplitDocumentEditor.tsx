@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import {
   Plus,
   X,
   FileText,
+  GitGraph,
   Maximize2,
   Minimize2,
   ArrowUpDown,
@@ -27,6 +29,7 @@ import {
 interface DocTab {
   id: string;
   title: string;
+  type: "document" | "chart";
 }
 
 /** Stored state for inactive tabs */
@@ -133,10 +136,12 @@ export function SplitDocumentEditor({
 
   // ── Chrome-style document tabs ──
   const [tabs, setTabs] = useState<DocTab[]>(() => [
-    { id: "main", title: "Document 1" },
+    { id: "main", title: "Document 1", type: "document" },
   ]);
   const [activeTabId, setActiveTabId] = useState("main");
   const tabSnapshotRef = useRef<Map<string, TabSnapshot>>(new Map());
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const isChartActive = activeTab?.type === "chart";
 
   // ── Tab rename state ──
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -156,30 +161,57 @@ export function SplitDocumentEditor({
   const handleSwitchTab = useCallback(
     (tabId: string) => {
       if (tabId === activeTabId) return;
+      // Only save snapshot for document tabs
+      const currentTab = tabs.find((t) => t.id === activeTabId);
+      if (currentTab?.type === "document") {
+        tabSnapshotRef.current.set(activeTabId, {
+          text,
+          objective: objective || "",
+        });
+      }
+      // Only restore snapshot for document tabs
+      const targetTab = tabs.find((t) => t.id === tabId);
+      if (targetTab?.type === "document") {
+        const snapshot = tabSnapshotRef.current.get(tabId);
+        onTextChange(snapshot?.text ?? "");
+        onObjectiveChange?.(snapshot?.objective ?? "");
+      }
+      setActiveTabId(tabId);
+    },
+    [activeTabId, text, objective, onTextChange, onObjectiveChange, tabs],
+  );
+
+  const handleAddTab = useCallback(() => {
+    const currentTab = tabs.find((t) => t.id === activeTabId);
+    if (currentTab?.type === "document") {
       tabSnapshotRef.current.set(activeTabId, {
         text,
         objective: objective || "",
       });
-      const snapshot = tabSnapshotRef.current.get(tabId);
-      onTextChange(snapshot?.text ?? "");
-      onObjectiveChange?.(snapshot?.objective ?? "");
-      setActiveTabId(tabId);
-    },
-    [activeTabId, text, objective, onTextChange, onObjectiveChange],
-  );
-
-  const handleAddTab = useCallback(() => {
-    tabSnapshotRef.current.set(activeTabId, {
-      text,
-      objective: objective || "",
-    });
+    }
     const newId = generateId("tab");
-    const newTitle = `Document ${tabs.length + 1}`;
-    setTabs((prev) => [...prev, { id: newId, title: newTitle }]);
+    const docCount = tabs.filter((t) => t.type === "document").length;
+    const newTitle = `Document ${docCount + 1}`;
+    setTabs((prev) => [...prev, { id: newId, title: newTitle, type: "document" }]);
     onTextChange("");
     onObjectiveChange?.("");
     setActiveTabId(newId);
-  }, [activeTabId, text, objective, onTextChange, onObjectiveChange, tabs.length]);
+  }, [activeTabId, text, objective, onTextChange, onObjectiveChange, tabs]);
+
+  const handleAddChartTab = useCallback(() => {
+    const currentTab = tabs.find((t) => t.id === activeTabId);
+    if (currentTab?.type === "document") {
+      tabSnapshotRef.current.set(activeTabId, {
+        text,
+        objective: objective || "",
+      });
+    }
+    const newId = generateId("chart");
+    const chartCount = tabs.filter((t) => t.type === "chart").length;
+    const newTitle = `Chart ${chartCount + 1}`;
+    setTabs((prev) => [...prev, { id: newId, title: newTitle, type: "chart" }]);
+    setActiveTabId(newId);
+  }, [activeTabId, text, objective, tabs]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -191,9 +223,11 @@ export function SplitDocumentEditor({
       if (tabId === activeTabId) {
         const nextIdx = Math.min(idx, newTabs.length - 1);
         const nextTab = newTabs[nextIdx];
-        const snapshot = tabSnapshotRef.current.get(nextTab.id);
-        onTextChange(snapshot?.text ?? "");
-        onObjectiveChange?.(snapshot?.objective ?? "");
+        if (nextTab.type === "document") {
+          const snapshot = tabSnapshotRef.current.get(nextTab.id);
+          onTextChange(snapshot?.text ?? "");
+          onObjectiveChange?.(snapshot?.objective ?? "");
+        }
         setActiveTabId(nextTab.id);
       }
     },
@@ -276,7 +310,11 @@ export function SplitDocumentEditor({
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
               }`}
             >
-              <FileText className="w-3 h-3 shrink-0" />
+              {tab.type === "chart" ? (
+                <GitGraph className="w-3 h-3 shrink-0 text-cyan-500" />
+              ) : (
+                <FileText className="w-3 h-3 shrink-0" />
+              )}
               {isEditing ? (
                 <Input
                   ref={tabEditRef}
@@ -320,65 +358,92 @@ export function SplitDocumentEditor({
           </TooltipTrigger>
           <TooltipContent>New document tab</TooltipContent>
         </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleAddChartTab}
+              className="flex items-center justify-center h-7 w-7 rounded-t-lg text-muted-foreground hover:text-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-950/30 transition-colors shrink-0 mb-px"
+            >
+              <GitGraph className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>New chart tab</TooltipContent>
+        </Tooltip>
       </div>
 
-      {/* ─── Smart Buttons toolbar ─── */}
-      <div className="shrink-0 border-b bg-card">
-        <div className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto">
-          <Sparkles className="w-3 h-3 text-primary/50 shrink-0 mr-0.5" />
-          {SMART_BUTTONS.map((btn) => {
-            const Icon = btn.icon;
-            const isExpanded = expandedSmartBtn === btn.id;
-            return (
-              <button
-                key={btn.id}
-                onClick={() =>
-                  setExpandedSmartBtn(isExpanded ? null : btn.id)
-                }
-                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 ${
-                  isExpanded
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                }`}
-              >
-                <Icon className={`w-3 h-3 ${isExpanded ? "text-primary" : btn.color}`} />
-                {btn.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Expanded sub-options */}
-        {expandedSmartBtn && (
-          <div className="flex items-center gap-1 px-3 pb-1.5 overflow-x-auto animate-in slide-in-from-top-1 duration-150">
-            <span className="text-[10px] text-muted-foreground/60 mr-1 shrink-0">Options:</span>
-            {SMART_BUTTONS.find((b) => b.id === expandedSmartBtn)?.options.map(
-              (opt) => (
+      {/* ─── Smart Buttons toolbar (document tabs only) ─── */}
+      {!isChartActive && (
+        <div className="shrink-0 border-b bg-card">
+          <div className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto">
+            <Sparkles className="w-3 h-3 text-primary/50 shrink-0 mr-0.5" />
+            {SMART_BUTTONS.map((btn) => {
+              const Icon = btn.icon;
+              const isExpanded = expandedSmartBtn === btn.id;
+              return (
                 <button
-                  key={opt.id}
+                  key={btn.id}
                   onClick={() =>
-                    handleSmartAction(expandedSmartBtn, opt.id, opt.label)
+                    setExpandedSmartBtn(isExpanded ? null : btn.id)
                   }
-                  className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors shrink-0"
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 ${
+                    isExpanded
+                      ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  }`}
                 >
-                  {opt.label}
+                  <Icon className={`w-3 h-3 ${isExpanded ? "text-primary" : btn.color}`} />
+                  {btn.label}
                 </button>
-              ),
-            )}
+              );
+            })}
           </div>
-        )}
-      </div>
+
+          {/* Expanded sub-options */}
+          {expandedSmartBtn && (
+            <div className="flex items-center gap-1 px-3 pb-1.5 overflow-x-auto animate-in slide-in-from-top-1 duration-150">
+              <span className="text-[10px] text-muted-foreground/60 mr-1 shrink-0">Options:</span>
+              {SMART_BUTTONS.find((b) => b.id === expandedSmartBtn)?.options.map(
+                (opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() =>
+                      handleSmartAction(expandedSmartBtn, opt.id, opt.label)
+                    }
+                    className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-muted/60 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors shrink-0"
+                  >
+                    {opt.label}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Merging indicator */}
-      {isMerging && (
+      {isMerging && !isChartActive && (
         <div className="bg-primary/10 px-3 py-1.5 flex items-center gap-2 text-xs border-b shrink-0">
           <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <span>Integrating feedback into document...</span>
         </div>
       )}
 
+      {/* ─── Chart tab instances (always mounted to preserve state) ─── */}
+      {tabs
+        .filter((t) => t.type === "chart")
+        .map((tab) => (
+          <div
+            key={tab.id}
+            className={
+              tab.id === activeTabId ? "flex-1 min-h-0" : "hidden"
+            }
+          >
+            <BSChartWorkspace />
+          </div>
+        ))}
+
       {/* Context document preview */}
-      {previewDoc ? (
+      {!isChartActive && previewDoc ? (
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-3 py-1.5 border-b shrink-0 bg-muted/30">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -401,7 +466,7 @@ export function SplitDocumentEditor({
             <MarkdownRenderer content={previewDoc.content} />
           </div>
         </div>
-      ) : (
+      ) : !isChartActive ? (
         <div className="flex-1 flex flex-col min-h-0">
           {/* ─── Objective pane (20%, collapsible) ─── */}
           <div
@@ -455,7 +520,7 @@ export function SplitDocumentEditor({
             className="text-sm leading-relaxed font-serif"
           />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

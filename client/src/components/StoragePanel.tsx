@@ -127,7 +127,7 @@ export function StoragePanel({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isAdmin } = useRole();
-  const hasSyncedRef = useRef(false);
+
 
   // Navigation state
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
@@ -264,27 +264,6 @@ export function StoragePanel({
     staleTime: 30_000, // Cache for 30s — doc metadata rarely changes mid-session
     placeholderData: (prev) => prev, // Keep showing old data while refetching
   });
-
-  // ── Auto-sync locked folders for admin ──
-  // When an admin opens the storage panel, sync Personas and Applications
-  // folders from disk / persona definitions into the context store.
-  useEffect(() => {
-    if (!isOpen || !isAdmin || hasSyncedRef.current) return;
-    hasSyncedRef.current = true;
-    (async () => {
-      try {
-        await Promise.all([
-          apiRequest("POST", "/api/admin/sync-app-docs"),
-          apiRequest("POST", "/api/admin/sync-persona-docs"),
-        ]);
-        queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
-      } catch {
-        // Non-critical — folders may already exist or user isn't admin
-      }
-    })();
-  }, [isOpen, isAdmin, queryClient]);
 
   // ── Mutations ──
 
