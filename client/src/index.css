@@ -195,6 +195,325 @@
   --shadow-2xl: 0px 25px 50px -12px rgba(0, 0, 0, 0.50);
 }
 
+/* ── Color Palettes ──
+ * Each palette overrides the hue-bearing variables.
+ * The default (Ember) is defined in :root / .dark above.
+ * Palette classes are applied to <html> alongside optional .dark class.
+ * Notebook canvas vars are driven by --canvas-bg, --canvas-line, --canvas-shadow, --canvas-margin.
+ */
+
+/* ── Ocean — Deep blue, scholarly maritime ── */
+.palette-ocean {
+  --background: 210 30% 98%;
+  --foreground: 215 15% 15%;
+  --border: 210 18% 88%;
+  --card: 210 35% 99%;
+  --card-foreground: 215 15% 15%;
+  --card-border: 210 14% 85%;
+  --sidebar: 210 22% 96%;
+  --sidebar-foreground: 215 12% 25%;
+  --sidebar-border: 210 14% 88%;
+  --sidebar-primary: 205 65% 42%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 210 25% 92%;
+  --sidebar-accent-foreground: 215 12% 20%;
+  --sidebar-ring: 205 55% 48%;
+  --popover: 210 35% 99%;
+  --popover-foreground: 215 15% 15%;
+  --popover-border: 210 14% 85%;
+  --primary: 205 70% 42%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 18% 92%;
+  --secondary-foreground: 215 15% 25%;
+  --muted: 210 14% 94%;
+  --muted-foreground: 215 8% 45%;
+  --accent: 175 55% 40%;
+  --accent-foreground: 0 0% 100%;
+  --input: 210 14% 85%;
+  --ring: 205 55% 48%;
+  --chart-1: 205 65% 48%;
+  --chart-2: 175 55% 45%;
+  --chart-3: 150 45% 45%;
+  --chart-4: 260 45% 55%;
+  --chart-5: 40 70% 55%;
+  --canvas-bg: 210 35% 96%;
+  --canvas-line: 210 18% 85%;
+  --canvas-shadow: 210 18% 70%;
+  --canvas-margin: 205 40% 65%;
+}
+.palette-ocean.dark {
+  --background: 215 20% 10%;
+  --foreground: 210 18% 90%;
+  --border: 215 14% 20%;
+  --card: 215 16% 13%;
+  --card-foreground: 210 18% 90%;
+  --card-border: 215 12% 22%;
+  --sidebar: 215 16% 8%;
+  --sidebar-foreground: 210 14% 80%;
+  --sidebar-border: 215 12% 18%;
+  --sidebar-primary: 205 60% 52%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 14% 18%;
+  --sidebar-accent-foreground: 210 14% 85%;
+  --sidebar-ring: 205 55% 52%;
+  --popover: 215 16% 13%;
+  --popover-foreground: 210 18% 90%;
+  --popover-border: 215 12% 22%;
+  --primary: 205 60% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 215 14% 18%;
+  --secondary-foreground: 210 14% 85%;
+  --muted: 215 12% 16%;
+  --muted-foreground: 210 10% 55%;
+  --accent: 175 50% 48%;
+  --accent-foreground: 0 0% 100%;
+  --input: 215 12% 25%;
+  --ring: 205 55% 52%;
+  --chart-1: 205 60% 55%;
+  --chart-2: 175 50% 52%;
+  --chart-3: 150 42% 50%;
+  --chart-4: 260 42% 60%;
+  --chart-5: 40 65% 58%;
+  --canvas-bg: 215 16% 12%;
+  --canvas-line: 215 14% 20%;
+  --canvas-shadow: 215 12% 5%;
+  --canvas-margin: 205 30% 35%;
+}
+
+/* ── Forest — Rich green, earthy warmth ── */
+.palette-forest {
+  --background: 120 18% 97%;
+  --foreground: 140 12% 15%;
+  --border: 120 12% 87%;
+  --card: 120 22% 98%;
+  --card-foreground: 140 12% 15%;
+  --card-border: 120 10% 84%;
+  --sidebar: 120 16% 95%;
+  --sidebar-foreground: 140 10% 25%;
+  --sidebar-border: 120 10% 87%;
+  --sidebar-primary: 145 55% 36%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 120 18% 91%;
+  --sidebar-accent-foreground: 140 10% 20%;
+  --sidebar-ring: 145 45% 40%;
+  --popover: 120 22% 98%;
+  --popover-foreground: 140 12% 15%;
+  --popover-border: 120 10% 84%;
+  --primary: 145 58% 34%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 120 14% 91%;
+  --secondary-foreground: 140 12% 25%;
+  --muted: 120 10% 93%;
+  --muted-foreground: 140 6% 45%;
+  --accent: 30 60% 48%;
+  --accent-foreground: 0 0% 100%;
+  --input: 120 10% 84%;
+  --ring: 145 45% 40%;
+  --chart-1: 145 55% 42%;
+  --chart-2: 30 60% 50%;
+  --chart-3: 200 45% 48%;
+  --chart-4: 280 40% 55%;
+  --chart-5: 55 65% 52%;
+  --canvas-bg: 120 18% 95%;
+  --canvas-line: 120 12% 84%;
+  --canvas-shadow: 120 12% 68%;
+  --canvas-margin: 145 35% 58%;
+}
+.palette-forest.dark {
+  --background: 140 14% 9%;
+  --foreground: 120 14% 90%;
+  --border: 140 10% 19%;
+  --card: 140 12% 12%;
+  --card-foreground: 120 14% 90%;
+  --card-border: 140 8% 21%;
+  --sidebar: 140 12% 7%;
+  --sidebar-foreground: 120 10% 80%;
+  --sidebar-border: 140 8% 17%;
+  --sidebar-primary: 145 50% 45%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 140 10% 17%;
+  --sidebar-accent-foreground: 120 10% 85%;
+  --sidebar-ring: 145 45% 48%;
+  --popover: 140 12% 12%;
+  --popover-foreground: 120 14% 90%;
+  --popover-border: 140 8% 21%;
+  --primary: 145 50% 45%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 140 10% 17%;
+  --secondary-foreground: 120 10% 85%;
+  --muted: 140 8% 15%;
+  --muted-foreground: 120 8% 55%;
+  --accent: 30 55% 52%;
+  --accent-foreground: 0 0% 100%;
+  --input: 140 8% 24%;
+  --ring: 145 45% 48%;
+  --chart-1: 145 50% 50%;
+  --chart-2: 30 55% 55%;
+  --chart-3: 200 42% 52%;
+  --chart-4: 280 38% 58%;
+  --chart-5: 55 60% 55%;
+  --canvas-bg: 140 12% 11%;
+  --canvas-line: 140 10% 19%;
+  --canvas-shadow: 140 10% 5%;
+  --canvas-margin: 145 25% 30%;
+}
+
+/* ── Dusk — Purple/violet twilight ── */
+.palette-dusk {
+  --background: 270 22% 98%;
+  --foreground: 280 12% 15%;
+  --border: 270 14% 88%;
+  --card: 270 28% 99%;
+  --card-foreground: 280 12% 15%;
+  --card-border: 270 10% 85%;
+  --sidebar: 270 18% 96%;
+  --sidebar-foreground: 280 10% 25%;
+  --sidebar-border: 270 10% 88%;
+  --sidebar-primary: 265 55% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 270 20% 92%;
+  --sidebar-accent-foreground: 280 10% 20%;
+  --sidebar-ring: 265 48% 54%;
+  --popover: 270 28% 99%;
+  --popover-foreground: 280 12% 15%;
+  --popover-border: 270 10% 85%;
+  --primary: 265 58% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 270 14% 92%;
+  --secondary-foreground: 280 12% 25%;
+  --muted: 270 10% 94%;
+  --muted-foreground: 280 6% 45%;
+  --accent: 330 55% 52%;
+  --accent-foreground: 0 0% 100%;
+  --input: 270 10% 85%;
+  --ring: 265 48% 54%;
+  --chart-1: 265 55% 55%;
+  --chart-2: 330 50% 52%;
+  --chart-3: 200 45% 48%;
+  --chart-4: 145 40% 48%;
+  --chart-5: 40 65% 55%;
+  --canvas-bg: 270 22% 96%;
+  --canvas-line: 270 14% 85%;
+  --canvas-shadow: 270 14% 70%;
+  --canvas-margin: 265 35% 62%;
+}
+.palette-dusk.dark {
+  --background: 275 16% 10%;
+  --foreground: 270 14% 90%;
+  --border: 275 10% 20%;
+  --card: 275 12% 13%;
+  --card-foreground: 270 14% 90%;
+  --card-border: 275 8% 22%;
+  --sidebar: 275 12% 8%;
+  --sidebar-foreground: 270 10% 80%;
+  --sidebar-border: 275 8% 18%;
+  --sidebar-primary: 265 50% 58%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 275 10% 18%;
+  --sidebar-accent-foreground: 270 10% 85%;
+  --sidebar-ring: 265 45% 58%;
+  --popover: 275 12% 13%;
+  --popover-foreground: 270 14% 90%;
+  --popover-border: 275 8% 22%;
+  --primary: 265 50% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 275 10% 18%;
+  --secondary-foreground: 270 10% 85%;
+  --muted: 275 8% 16%;
+  --muted-foreground: 270 8% 55%;
+  --accent: 330 50% 58%;
+  --accent-foreground: 0 0% 100%;
+  --input: 275 8% 25%;
+  --ring: 265 45% 58%;
+  --chart-1: 265 50% 58%;
+  --chart-2: 330 48% 55%;
+  --chart-3: 200 42% 52%;
+  --chart-4: 145 38% 52%;
+  --chart-5: 40 60% 58%;
+  --canvas-bg: 275 12% 12%;
+  --canvas-line: 275 10% 20%;
+  --canvas-shadow: 275 10% 5%;
+  --canvas-margin: 265 25% 35%;
+}
+
+/* ── Slate — Cool neutral, minimal ── */
+.palette-slate {
+  --background: 220 14% 97%;
+  --foreground: 220 10% 14%;
+  --border: 220 10% 88%;
+  --card: 220 16% 99%;
+  --card-foreground: 220 10% 14%;
+  --card-border: 220 8% 85%;
+  --sidebar: 220 12% 95%;
+  --sidebar-foreground: 220 8% 25%;
+  --sidebar-border: 220 8% 88%;
+  --sidebar-primary: 220 18% 38%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 10% 92%;
+  --sidebar-accent-foreground: 220 8% 20%;
+  --sidebar-ring: 220 16% 44%;
+  --popover: 220 16% 99%;
+  --popover-foreground: 220 10% 14%;
+  --popover-border: 220 8% 85%;
+  --primary: 220 20% 38%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 10% 92%;
+  --secondary-foreground: 220 10% 25%;
+  --muted: 220 8% 94%;
+  --muted-foreground: 220 5% 45%;
+  --accent: 200 50% 45%;
+  --accent-foreground: 0 0% 100%;
+  --input: 220 8% 85%;
+  --ring: 220 16% 44%;
+  --chart-1: 220 18% 45%;
+  --chart-2: 200 50% 48%;
+  --chart-3: 150 35% 45%;
+  --chart-4: 280 30% 52%;
+  --chart-5: 40 50% 52%;
+  --canvas-bg: 220 12% 96%;
+  --canvas-line: 220 10% 86%;
+  --canvas-shadow: 220 10% 70%;
+  --canvas-margin: 220 12% 60%;
+}
+.palette-slate.dark {
+  --background: 220 12% 9%;
+  --foreground: 220 10% 90%;
+  --border: 220 8% 20%;
+  --card: 220 10% 12%;
+  --card-foreground: 220 10% 90%;
+  --card-border: 220 6% 22%;
+  --sidebar: 220 10% 7%;
+  --sidebar-foreground: 220 8% 80%;
+  --sidebar-border: 220 6% 18%;
+  --sidebar-primary: 220 16% 52%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 8% 17%;
+  --sidebar-accent-foreground: 220 8% 85%;
+  --sidebar-ring: 220 14% 52%;
+  --popover: 220 10% 12%;
+  --popover-foreground: 220 10% 90%;
+  --popover-border: 220 6% 22%;
+  --primary: 220 16% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 8% 17%;
+  --secondary-foreground: 220 8% 85%;
+  --muted: 220 6% 15%;
+  --muted-foreground: 220 6% 55%;
+  --accent: 200 45% 50%;
+  --accent-foreground: 0 0% 100%;
+  --input: 220 6% 24%;
+  --ring: 220 14% 52%;
+  --chart-1: 220 16% 55%;
+  --chart-2: 200 45% 52%;
+  --chart-3: 150 32% 50%;
+  --chart-4: 280 28% 56%;
+  --chart-5: 40 48% 55%;
+  --canvas-bg: 220 10% 11%;
+  --canvas-line: 220 8% 20%;
+  --canvas-shadow: 220 8% 5%;
+  --canvas-margin: 220 10% 32%;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -283,21 +602,23 @@
     inset: -1px;
   }
 
-  /* Notebook / draft canvas styling for the document pane */
+  /* Notebook / draft canvas styling for the document pane
+   * Uses --canvas-* vars so palettes can override colors.
+   * Defaults match the Ember palette when no palette class is set. */
   .notebook-canvas {
-    background-color: hsl(38 40% 96%);
+    background-color: hsl(var(--canvas-bg, 38 40% 96%));
     background-image:
       /* Faint ruled lines */
       repeating-linear-gradient(
         to bottom,
         transparent,
         transparent 27px,
-        hsl(30 20% 85% / 0.35) 27px,
-        hsl(30 20% 85% / 0.35) 28px
+        hsl(var(--canvas-line, 30 20% 85%) / 0.35) 27px,
+        hsl(var(--canvas-line, 30 20% 85%) / 0.35) 28px
       );
     background-position: 0 8px;
-    box-shadow: inset 0 1px 4px hsl(30 20% 70% / 0.12);
-    border-left: 3px solid hsl(0 45% 70% / 0.2);
+    box-shadow: inset 0 1px 4px hsl(var(--canvas-shadow, 30 20% 70%) / 0.12);
+    border-left: 3px solid hsl(var(--canvas-margin, 0 45% 70%) / 0.2);
   }
 
   /* Ensure scrollable content renders above decorative background */
@@ -306,17 +627,17 @@
   }
 
   .dark .notebook-canvas {
-    background-color: hsl(25 14% 12%);
+    background-color: hsl(var(--canvas-bg, 25 14% 12%));
     background-image:
       repeating-linear-gradient(
         to bottom,
         transparent,
         transparent 27px,
-        hsl(25 12% 20% / 0.4) 27px,
-        hsl(25 12% 20% / 0.4) 28px
+        hsl(var(--canvas-line, 25 12% 20%) / 0.4) 27px,
+        hsl(var(--canvas-line, 25 12% 20%) / 0.4) 28px
       );
-    box-shadow: inset 0 1px 4px hsl(25 10% 5% / 0.2);
-    border-left-color: hsl(0 30% 35% / 0.25);
+    box-shadow: inset 0 1px 4px hsl(var(--canvas-shadow, 25 10% 5%) / 0.2);
+    border-left-color: hsl(var(--canvas-margin, 0 30% 35%) / 0.25);
   }
 
 
