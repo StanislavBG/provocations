@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import {
   Image as ImageIcon,
   Loader2,
@@ -21,6 +22,7 @@ import {
   Save,
   X,
   Maximize,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -273,39 +275,13 @@ Make it visually compelling and information-dense.`,
             Generate artifacts from your document. Results are saved to Context Store.
           </p>
 
-          <div className="grid grid-cols-2 gap-2">
-            {GENERATE_APPS.map((app) => {
-              const Icon = app.icon;
-              const isActive = activeApp === app.id && isGenerating;
-              return (
-                <button
-                  key={app.id}
-                  disabled={!app.available || isGenerating}
-                  onClick={() => handleGenerate(app.id)}
-                  className={`relative flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all text-center ${
-                    app.available
-                      ? "hover:bg-muted/60 hover:border-primary/30 cursor-pointer border-border"
-                      : "opacity-40 cursor-not-allowed border-transparent"
-                  } ${isActive ? "bg-primary/5 border-primary/40 ring-1 ring-primary/20" : ""}`}
-                >
-                  {isActive ? (
-                    <Loader2 className={`w-6 h-6 animate-spin ${app.color}`} />
-                  ) : (
-                    <Icon className={`w-6 h-6 ${app.color}`} />
-                  )}
-                  <span className="text-xs font-medium">{app.label}</span>
-                  {!app.available && (
-                    <Badge
-                      variant="outline"
-                      className="absolute top-1 right-1 text-[8px] px-1 h-3.5"
-                    >
-                      Soon
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <GenerateAppCards
+            documentText={documentText}
+            objective={objective}
+            activeApp={activeApp}
+            isGenerating={isGenerating}
+            onGenerate={handleGenerate}
+          />
         </div>
 
         {/* GENERATED DOCUMENTS */}
@@ -522,6 +498,88 @@ Make it visually compelling and information-dense.`,
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── App cards with LLM hover preview ──
+
+function GenerateAppCards({
+  documentText,
+  objective,
+  activeApp,
+  isGenerating,
+  onGenerate,
+}: {
+  documentText: string;
+  objective: string;
+  activeApp: string | null;
+  isGenerating: boolean;
+  onGenerate: (appId: string) => void;
+}) {
+  const blocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt (2 calls)", chars: 1800, color: "text-purple-400" },
+    { label: "Document", chars: documentText.length, color: "text-blue-400" },
+    { label: "Objective", chars: objective.length, color: "text-amber-400" },
+    { label: "Image Generation", chars: 400, color: "text-pink-400" },
+  ], [documentText, objective]);
+
+  const summary: SummaryItem[] = useMemo(() => [
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Document", count: documentText.trim() ? 1 : 0, detail: `${documentText.split(/\s+/).filter(Boolean).length} words` },
+    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0, detail: objective.trim() ? objective.slice(0, 50) + (objective.length > 50 ? "..." : "") : undefined },
+    { icon: <Sparkles className="w-3 h-3 text-purple-400" />, label: "LLM Calls", count: 3, detail: "Summarize + Artistic + Image" },
+  ], [documentText, objective]);
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {GENERATE_APPS.map((app) => {
+        const Icon = app.icon;
+        const isActive = activeApp === app.id && isGenerating;
+        const card = (
+          <button
+            key={app.id}
+            disabled={!app.available || isGenerating}
+            onClick={() => onGenerate(app.id)}
+            className={`relative flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all text-center ${
+              app.available
+                ? "hover:bg-muted/60 hover:border-primary/30 cursor-pointer border-border"
+                : "opacity-40 cursor-not-allowed border-transparent"
+            } ${isActive ? "bg-primary/5 border-primary/40 ring-1 ring-primary/20" : ""}`}
+          >
+            {isActive ? (
+              <Loader2 className={`w-6 h-6 animate-spin ${app.color}`} />
+            ) : (
+              <Icon className={`w-6 h-6 ${app.color}`} />
+            )}
+            <span className="text-xs font-medium">{app.label}</span>
+            {!app.available && (
+              <Badge
+                variant="outline"
+                className="absolute top-1 right-1 text-[8px] px-1 h-3.5"
+              >
+                Soon
+              </Badge>
+            )}
+          </button>
+        );
+
+        // Only wrap available apps with LLM preview
+        if (app.available) {
+          return (
+            <LlmHoverButton
+              key={app.id}
+              previewTitle={`Generate ${app.label}`}
+              previewBlocks={blocks}
+              previewSummary={summary}
+              side="left"
+              align="start"
+            >
+              {card}
+            </LlmHoverButton>
+          );
+        }
+        return card;
+      })}
     </div>
   );
 }
