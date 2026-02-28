@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { PaletteToggle } from "@/components/PaletteToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { VerboseModeToggle } from "@/components/VerboseModeToggle";
 import { DebugButton } from "@/components/DebugButton";
@@ -76,6 +77,7 @@ export function NotebookTopBar({
 
           <AutoDictateToggle />
           <VerboseModeToggle />
+          <PaletteToggle />
           <ThemeToggle />
 
           {isAdmin && (
