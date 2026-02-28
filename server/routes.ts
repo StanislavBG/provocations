@@ -3229,6 +3229,26 @@ RULES FOR PERSONA QUESTIONS:
 - Rotate between active personas across questions. Check PREVIOUS Q&A to avoid repeating the same persona.${ceoContext}`;
       }
 
+      // Build universal thinking lenses block (when no personas are active)
+      let universalLensesBlock = "";
+      if (!directionPersonas || directionPersonas.length === 0) {
+        universalLensesBlock = `\n\n## UNIVERSAL THINKING LENSES (no personas selected)
+When no specific personas are active, rotate between these universal thinking lenses:
+
+WRITER lenses (analytical, structured):
+- Devil's Advocate: Challenge assumptions, argue the opposite. "You're assuming X — what if the opposite is true?"
+- First Principles: Strip to fundamentals, question premises. "Strip away the context — what's the actual core problem?"
+- Next Step: Push for concrete, actionable specifics. "What's the smallest concrete action you could take tomorrow?"
+
+PAINTER lenses (creative, intuitive):
+- Empathy: Explore human impact, stakeholder feelings, relationships. "Who else is affected? How would they feel about this?"
+- Patterns: Draw parallels to history, other domains, precedent. "Has something like this played out before? What happened?"
+- Bigger Picture: Zoom out to systemic connections, unintended consequences. "Zoom out — what does this connect to that you haven't considered?"
+
+Your "topic" field should use the lens name (e.g., "Devil's Advocate: Core Assumption", "Empathy: Family Impact").
+Rotate between Writer and Painter lenses for balance.`;
+      }
+
       // Build guidance context
       const guidanceContext = directionGuidance
         ? `\n\nUSER GUIDANCE: ${directionGuidance}`
@@ -3239,24 +3259,28 @@ RULES FOR PERSONA QUESTIONS:
         ? ` You are acting as one of: ${activePersonaLabels.join(", ")}. Your question MUST reflect that persona's unique expertise. Your topic MUST be prefixed with the persona name.`
         : "";
 
-      const response = await llm.generate({
-        maxTokens: 1024,
-        temperature: 0.9,
-        system: `${appContext ? appContext + "\n\n" : ""}You are a ${appConfig?.outputFormat === "sql" ? "supportive SQL peer reviewer gathering context about the user's query" : "thought-provoking interviewer"} who reads the user's ACTUAL ${appConfig?.documentType || "document"} and objectives carefully, then asks deeply personal, specific questions that only make sense for THIS ${appConfig?.documentType || "document"}. You are NOT a generic questionnaire.
-${directionContext}
+      // Adaptive rule 1: reference document or previous answers
+      const ruleOne = docText
+        ? `1. **Be specific to THIS document.** Reference concrete details from the document — names, numbers, claims, sections, phrases the user actually wrote. NEVER ask a generic question like "How will this scale to 100k users?" unless the user's document is literally about scaling.`
+        : `1. **Be specific to what the user has SAID.** Reference their previous answers — quote phrases, notice contradictions, follow threads they started. NEVER ask generic questions. Each question must prove you were listening.`;
 
-OBJECTIVE: ${objective}
-${templateContext}${documentContext}${provocationsContext}${guidanceContext}
+      // Adaptive opening line
+      const openingRole = docText
+        ? `who reads the user's ACTUAL ${appConfig?.documentType || "document"} and objectives carefully, then asks deeply personal, specific questions that only make sense for THIS ${appConfig?.documentType || "document"}`
+        : `who helps the user develop their thinking by asking deeply personal, specific questions based on their objective and previous answers`;
 
-PREVIOUS Q&A:
-${previousContext}
+      // Adaptive question instruction
+      const hasPersonas = directionPersonas && directionPersonas.length > 0;
+      const questionMaxChars = appType ? 200 : 300;
+      const questionRefInstruction = docText
+        ? "MUST reference something specific from the document."
+        : "MUST reference something specific the user said or implied.";
+      const topicInstruction = hasPersonas
+        ? "MUST be prefixed with the active persona name (e.g. \"Architect: API Contracts\", \"QA: Error Recovery\")."
+        : "MUST be prefixed with the lens name (e.g. \"Devil's Advocate: Core Assumption\", \"Empathy: Family Impact\"). If personas are active, use persona name instead.";
 
-## CRITICAL RULES — read carefully
-
-1. **Be specific to THIS document.** Reference concrete details from the document — names, numbers, claims, sections, phrases the user actually wrote. NEVER ask a generic question like "How will this scale to 100k users?" unless the user's document is literally about scaling.
-
-2. **Be a thought partner, not a checklist.** Your question should feel like a smart colleague who read their draft and noticed something interesting, contradictory, or unexplored. Ask the question that would make them say "oh, I hadn't thought of that."
-
+      // Persona-specific rules (only when personas are active)
+      const personaRules = hasPersonas ? `
 3. **Vary your question types through the persona lens.** Each persona has a unique vocabulary and set of concerns:
    - Architect: system boundaries, API contracts, coupling, data flow, separation of concerns
    - QA Engineer: test gaps, edge cases, failure modes, acceptance criteria, regression risk
@@ -3270,15 +3294,39 @@ ${previousContext}
 
 4. **NEVER repeat the same pattern.** Check PREVIOUS Q&A above. If the last question was from the Architect about API contracts, the NEXT question must come from a DIFFERENT persona or a completely different angle.
 
-5. **The persona IS the question.** Don't just ask a generic question and label it with a persona name. The question itself should only make sense coming from that specific expert. An Architect would never ask about test coverage; a QA Engineer would never ask about API contracts.
+5. **The persona IS the question.** Don't just ask a generic question and label it with a persona name. The question itself should only make sense coming from that specific expert. An Architect would never ask about test coverage; a QA Engineer would never ask about API contracts.` : `
+3. **Rotate between thinking lenses.** Check PREVIOUS Q&A above. If the last question used Devil's Advocate, the NEXT question must come from a DIFFERENT lens. Alternate between Writer (analytical) and Painter (creative) lenses for balance.
+
+4. **NEVER repeat the same pattern.** Each question must come from a different angle. If you just challenged an assumption, next explore empathy or patterns.
+
+5. **The lens IS the question.** Don't just ask a generic question and label it with a lens name. A Devil's Advocate question must genuinely challenge; an Empathy question must genuinely explore human impact.`;
+
+      const response = await llm.generate({
+        maxTokens: 1024,
+        temperature: 0.9,
+        system: `${appContext ? appContext + "\n\n" : ""}You are a ${appConfig?.outputFormat === "sql" ? "supportive SQL peer reviewer gathering context about the user's query" : "thought-provoking interviewer"} ${openingRole}. You are NOT a generic questionnaire.
+${directionContext}${universalLensesBlock}
+
+OBJECTIVE: ${objective}
+${templateContext}${documentContext}${provocationsContext}${guidanceContext}
+
+PREVIOUS Q&A:
+${previousContext}
+
+## CRITICAL RULES — read carefully
+
+${ruleOne}
+
+2. **Be a thought partner, not a checklist.** Your question should feel like a smart colleague who ${docText ? "read their draft" : "heard their thinking"} and noticed something interesting, contradictory, or unexplored. Ask the question that would make them say "oh, I hadn't thought of that."
+${personaRules}
 
 6. **Keep it conversational and direct.** Write like a human, not a form. "You mention X — but what happens when Y?" is better than "How does X handle Y at scale?"
 
 Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
 {"question": "...", "topic": "PersonaName: Specific Topic", "reasoning": "..."}
 
-- question: Conversational, direct, max 200 chars. MUST reference something specific from the document.
-- topic: Max 40 chars. MUST be prefixed with the active persona name (e.g. "Architect: API Contracts", "QA: Error Recovery").
+- question: Conversational, direct, max ${questionMaxChars} chars. ${questionRefInstruction}
+- topic: Max 40 chars. ${topicInstruction}
 - reasoning: Brief internal reasoning, max 100 chars.`,
         messages: [
           {
