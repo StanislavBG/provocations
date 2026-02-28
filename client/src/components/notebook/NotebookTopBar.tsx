@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { PaletteToggle } from "@/components/PaletteToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { VerboseModeToggle } from "@/components/VerboseModeToggle";
 import { DebugButton } from "@/components/DebugButton";
@@ -11,6 +12,7 @@ import {
   GitCompare,
   Shield,
 } from "lucide-react";
+import { ProvoIcon } from "@/components/ProvoIcon";
 
 interface NotebookTopBarProps {
   onNew: () => void;
@@ -34,7 +36,7 @@ export function NotebookTopBar({
       <div className="flex items-center justify-between gap-2 px-3 py-1.5">
         {/* Left: Logo + Brand */}
         <Link href="/" className="flex items-center gap-2 min-w-0 no-underline">
-          <img src="/favicon.png" alt="Provocations" className="w-5 h-5" />
+          <ProvoIcon className="w-5 h-5 text-primary" />
           <span className="text-sm font-bold font-serif tracking-tight text-foreground">
             Provocations
           </span>
@@ -75,6 +77,7 @@ export function NotebookTopBar({
 
           <AutoDictateToggle />
           <VerboseModeToggle />
+          <PaletteToggle />
           <ThemeToggle />
 
           {isAdmin && (

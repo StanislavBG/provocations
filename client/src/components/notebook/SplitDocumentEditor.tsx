@@ -5,10 +5,13 @@ import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { ImageCanvas } from "./ImageCanvas";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { EvolveContextPreview } from "./EvolveContextPreview";
 import { useToast } from "@/hooks/use-toast";
 import { generateId } from "@/lib/utils";
+import type { ContextItem, EditHistoryEntry } from "@shared/schema";
 import {
   Eye,
   Download,
@@ -168,6 +171,12 @@ interface SplitDocumentEditorProps {
   onAddImageTab?: (tabId: string) => void;
   /** Notifies parent when the active tab type changes to image */
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
+  /** Context data for the Evolve hover preview */
+  capturedContext?: ContextItem[];
+  pinnedDocContents?: Record<number, { title: string; content: string }>;
+  sessionNotes?: string;
+  editHistory?: EditHistoryEntry[];
+  appType?: string;
 }
 
 /** Imperative handle for parent to add image tabs */
@@ -192,6 +201,11 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   imageTabData,
   onAddImageTab,
   onImageActiveChange,
+  capturedContext,
+  pinnedDocContents,
+  sessionNotes,
+  editHistory,
+  appType,
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
@@ -602,8 +616,8 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
             )}
 
             {onEvolve && (
-              <Tooltip>
-                <TooltipTrigger asChild>
+              <HoverCard openDelay={300} closeDelay={150}>
+                <HoverCardTrigger asChild>
                   <button
                     onClick={handleEvolve}
                     disabled={isEvolving || !text.trim()}
@@ -616,13 +630,24 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
                     {isEvolving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
                     Writer{totalSelected > 0 ? ` (${totalSelected})` : ""}
                   </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {totalSelected > 0
-                    ? `Apply ${totalSelected} configuration${totalSelected > 1 ? "s" : ""} to write document`
-                    : "General document improvement"}
-                </TooltipContent>
-              </Tooltip>
+                </HoverCardTrigger>
+                <HoverCardContent
+                  side="bottom"
+                  align="end"
+                  className="w-auto p-0 border-0 bg-transparent shadow-none"
+                >
+                  <EvolveContextPreview
+                    text={text}
+                    objective={objective}
+                    configurations={buildConfigs()}
+                    capturedContext={capturedContext}
+                    pinnedDocContents={pinnedDocContents}
+                    sessionNotes={sessionNotes}
+                    editHistory={editHistory}
+                    appType={appType}
+                  />
+                </HoverCardContent>
+              </HoverCard>
             )}
 
             {totalSelected > 0 && (

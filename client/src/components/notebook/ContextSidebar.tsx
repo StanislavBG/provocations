@@ -145,9 +145,10 @@ export function ContextSidebar({
     type: "doc" | "folder";
     name: string;
   } | null>(null);
-  const [creatingFolder, setCreatingFolder] = useState(false);
+  // parentFolderId for new item: null = root, number = inside that folder, false = not creating
+  const [creatingFolderIn, setCreatingFolderIn] = useState<number | null | false>(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [creatingDoc, setCreatingDoc] = useState(false);
+  const [creatingDocIn, setCreatingDocIn] = useState<number | null | false>(false);
   const [newDocTitle, setNewDocTitle] = useState("");
 
   // Drag-and-drop state
@@ -196,33 +197,38 @@ export function ContextSidebar({
   });
 
   const createDocMutation = useMutation({
-    mutationFn: async (title: string) => {
+    mutationFn: async ({ title, folderId }: { title: string; folderId: number | null }) => {
       const res = await apiRequest("POST", "/api/documents", {
         title,
         content: " ",
+        folderId,
       });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
-      setCreatingDoc(false);
+      setCreatingDocIn(false);
       setNewDocTitle("");
       toast({ title: "Created", description: "New document created" });
     },
   });
 
   const createFolderMutation = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async ({ name, parentFolderId }: { name: string; parentFolderId: number | null }) => {
       const res = await apiRequest("POST", "/api/folders", {
         name,
-        parentFolderId: null,
+        parentFolderId,
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
-      setCreatingFolder(false);
+      setCreatingFolderIn(false);
       setNewFolderName("");
+      // Auto-expand parent folder so the new subfolder is visible
+      if (variables.parentFolderId !== null) {
+        setExpandedFolders((prev) => new Set(prev).add(variables.parentFolderId!));
+      }
       toast({ title: "Created", description: "New folder created" });
     },
   });
@@ -441,7 +447,7 @@ export function ContextSidebar({
   }
 
   // ── Document row renderer (Context Store tree) ──
-  const renderDocRow = (doc: DocumentListItem, indent: number) => {
+  const renderDocRow = (doc: DocumentListItem, indent: number, hasTreeLine = false) => {
     const isPinned = pinnedDocIds.has(doc.id);
     const isEditing =
       editingItem?.id === doc.id && editingItem?.type === "doc";
@@ -460,6 +466,14 @@ export function ContextSidebar({
         }`}
         style={{ paddingLeft: `${isPinned ? indent - 2 : indent}px` }}
       >
+        {/* Tree connector line: tiny gray angled line from parent folder */}
+        {hasTreeLine && !isPinned && (
+          <span className="inline-flex items-center h-full shrink-0 text-muted-foreground/25 select-none" style={{ width: '10px', marginRight: '-2px' }}>
+            <svg width="10" height="20" viewBox="0 0 10 20" fill="none" className="shrink-0">
+              <path d="M1 0 L1 10 L9 10" stroke="currentColor" strokeWidth="1" fill="none" />
+            </svg>
+          </span>
+        )}
         {isEditing ? (
           <div className="flex-1 py-1 px-1">
             <InlineRenameInput
@@ -648,6 +662,47 @@ export function ContextSidebar({
 
               {/* Hover actions */}
               <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Add document / subfolder — hidden at max depth (10th level = depth 9) */}
+                {depth < 9 && (
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-muted-foreground/50 hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCreatingDocIn(folder.id);
+                            setNewDocTitle("");
+                            setExpandedFolders((prev) => new Set(prev).add(folder.id));
+                          }}
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">New document</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-muted-foreground/50 hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCreatingFolderIn(folder.id);
+                            setNewFolderName("");
+                            setExpandedFolders((prev) => new Set(prev).add(folder.id));
+                          }}
+                        >
+                          <FolderPlus className="w-2.5 h-2.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">New subfolder</TooltipContent>
+                    </Tooltip>
+                  </>
+                )}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -695,9 +750,57 @@ export function ContextSidebar({
 
         {isExpanded && (
           <div>
+            {/* Inline create subfolder */}
+            {creatingFolderIn === folder.id && (
+              <div
+                className="flex items-center gap-1 my-0.5"
+                style={{ paddingLeft: `${treeIndent(depth + 1)}px` }}
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <Input
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="Folder name..."
+                  className="h-6 text-xs flex-1"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFolderName.trim() && !createFolderMutation.isPending)
+                      createFolderMutation.mutate({ name: newFolderName.trim(), parentFolderId: folder.id });
+                    if (e.key === "Escape") setCreatingFolderIn(false);
+                  }}
+                  onBlur={() => {
+                    if (!newFolderName.trim()) setCreatingFolderIn(false);
+                  }}
+                />
+              </div>
+            )}
             {children.map((child) => renderFolder(child, depth + 1))}
+            {/* Inline create document in folder */}
+            {creatingDocIn === folder.id && (
+              <div
+                className="flex items-center gap-1 my-0.5"
+                style={{ paddingLeft: `${treeIndent(depth + 1)}px` }}
+              >
+                <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <Input
+                  value={newDocTitle}
+                  onChange={(e) => setNewDocTitle(e.target.value)}
+                  placeholder="Document title..."
+                  className="h-6 text-xs flex-1"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newDocTitle.trim() && !createDocMutation.isPending)
+                      createDocMutation.mutate({ title: newDocTitle.trim(), folderId: folder.id });
+                    if (e.key === "Escape") setCreatingDocIn(false);
+                  }}
+                  onBlur={() => {
+                    if (!newDocTitle.trim()) setCreatingDocIn(false);
+                  }}
+                />
+              </div>
+            )}
             {folderDocs.map((doc) =>
-              renderDocRow(doc, treeIndent(depth + 1)),
+              renderDocRow(doc, treeIndent(depth + 1), true),
             )}
           </div>
         )}
@@ -823,7 +926,7 @@ export function ContextSidebar({
                     size="icon"
                     className="h-5 w-5"
                     onClick={() => {
-                      setCreatingDoc(true);
+                      setCreatingDocIn(null);
                       setNewDocTitle("");
                     }}
                   >
@@ -839,7 +942,7 @@ export function ContextSidebar({
                     size="icon"
                     className="h-5 w-5"
                     onClick={() => {
-                      setCreatingFolder(true);
+                      setCreatingFolderIn(null);
                       setNewFolderName("");
                     }}
                   >
@@ -858,8 +961,8 @@ export function ContextSidebar({
             </div>
           )}
 
-          {/* Create new folder inline */}
-          {creatingFolder && (
+          {/* Create new folder inline (root level) */}
+          {creatingFolderIn === null && (
             <div className="flex items-center gap-1 mb-1 pl-1">
               <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
               <Input
@@ -870,18 +973,18 @@ export function ContextSidebar({
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && newFolderName.trim() && !createFolderMutation.isPending)
-                    createFolderMutation.mutate(newFolderName.trim());
-                  if (e.key === "Escape") setCreatingFolder(false);
+                    createFolderMutation.mutate({ name: newFolderName.trim(), parentFolderId: null });
+                  if (e.key === "Escape") setCreatingFolderIn(false);
                 }}
                 onBlur={() => {
-                  if (!newFolderName.trim()) setCreatingFolder(false);
+                  if (!newFolderName.trim()) setCreatingFolderIn(false);
                 }}
               />
             </div>
           )}
 
-          {/* Create new document inline */}
-          {creatingDoc && (
+          {/* Create new document inline (root level) */}
+          {creatingDocIn === null && (
             <div className="flex items-center gap-1 mb-1 pl-1">
               <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <Input
@@ -892,11 +995,11 @@ export function ContextSidebar({
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && newDocTitle.trim() && !createDocMutation.isPending)
-                    createDocMutation.mutate(newDocTitle.trim());
-                  if (e.key === "Escape") setCreatingDoc(false);
+                    createDocMutation.mutate({ title: newDocTitle.trim(), folderId: null });
+                  if (e.key === "Escape") setCreatingDocIn(false);
                 }}
                 onBlur={() => {
-                  if (!newDocTitle.trim()) setCreatingDoc(false);
+                  if (!newDocTitle.trim()) setCreatingDocIn(false);
                 }}
               />
             </div>
@@ -911,7 +1014,7 @@ export function ContextSidebar({
           )}
 
           {/* Empty state */}
-          {docs.length === 0 && !creatingDoc && !creatingFolder && (
+          {docs.length === 0 && creatingDocIn === false && creatingFolderIn === false && (
             <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground/50">
               <FileText className="w-6 h-6" />
               <p className="text-xs text-center">

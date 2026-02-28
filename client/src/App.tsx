@@ -13,7 +13,8 @@ import {
   UserButton,
 } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { LogIn, Sparkles, Quote, Brain, MessageCircleQuestion, Mic } from "lucide-react";
+import { LogIn, Quote, Brain, MessageCircleQuestion, Mic } from "lucide-react";
+import { ProvoIcon } from "@/components/ProvoIcon";
 import NotebookWorkspace from "@/pages/NotebookWorkspace";
 import Admin from "@/pages/Admin";
 import ContextStore from "@/pages/ContextStore";
@@ -49,7 +50,7 @@ function LandingPage() {
       {/* Top bar — sign in top-right */}
       <header className="flex items-center justify-between px-6 py-4 border-b bg-card/50">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-primary" />
+          <ProvoIcon className="w-5 h-5 text-primary" />
           <span className="font-serif font-bold text-lg tracking-tight">Provocations</span>
         </div>
         <SignInButton mode="modal">
@@ -64,22 +65,22 @@ function LandingPage() {
       <section className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
         <div className="max-w-2xl space-y-6">
           <h1 className="text-4xl sm:text-5xl font-serif font-bold tracking-tight leading-tight">
-            A tool that makes you <span className="text-primary">think</span>,
-            <br />not one that thinks for you
+            Work smarter <span className="text-primary">with</span> AI,
+            <br />not replaced by it
           </h1>
           <p className="text-lg text-muted-foreground font-serif leading-relaxed max-w-xl mx-auto">
-            Most AI tools generate slop. Provocations is different — it challenges
-            your assumptions, stress-tests your ideas through expert personas, and
-            helps you shape raw, messy thinking into polished documents.
+            Provocations is a productivity suite that enhances how you work with LLMs.
+            It challenges your assumptions, stress-tests your ideas through expert personas,
+            and helps you shape raw thinking into polished documents — together.
           </p>
           <p className="text-base text-muted-foreground/80 font-serif italic">
-            You bring the ideas. AI brings the tough questions. The document is yours.
+            You bring the ideas. AI brings the tough questions. Better work, together.
           </p>
 
           <div className="pt-4">
             <SignInButton mode="modal">
               <Button size="lg" className="gap-2 text-base px-8">
-                <Sparkles className="w-5 h-5" />
+                <ProvoIcon className="w-5 h-5" />
                 Get Started
               </Button>
             </SignInButton>
@@ -146,7 +147,7 @@ function LandingPage() {
       {/* Footer */}
       <footer className="border-t py-6 text-center">
         <p className="text-xs text-muted-foreground">
-          Would you rather have a tool that thinks for you, or a tool that makes you think?
+          A productivity suite designed to enhance how you work with LLMs.
         </p>
       </footer>
     </div>
@@ -161,7 +162,7 @@ function App() {
         <ClerkLoading>
           <div className="flex items-center justify-center min-h-screen bg-background">
             <div className="flex flex-col items-center gap-4">
-              <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+              <ProvoIcon className="w-8 h-8 text-primary animate-pulse" />
               <p className="text-sm text-muted-foreground">Loading...</p>
             </div>
           </div>

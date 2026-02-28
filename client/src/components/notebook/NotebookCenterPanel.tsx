@@ -5,6 +5,7 @@ import {
   type SplitDocumentEditorHandle,
   type ImageTabData,
 } from "./SplitDocumentEditor";
+import type { ContextItem, EditHistoryEntry } from "@shared/schema";
 
 interface NotebookCenterPanelProps {
   documentText: string;
@@ -23,6 +24,12 @@ interface NotebookCenterPanelProps {
   imageTabData?: Map<string, ImageTabData>;
   onAddImageTab?: (tabId: string) => void;
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
+  /** Context data for the Evolve hover preview */
+  capturedContext?: ContextItem[];
+  pinnedDocContents?: Record<number, { title: string; content: string }>;
+  sessionNotes?: string;
+  editHistory?: EditHistoryEntry[];
+  appType?: string;
 }
 
 export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, NotebookCenterPanelProps>(
@@ -44,6 +51,11 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
       imageTabData,
       onAddImageTab,
       onImageActiveChange,
+      capturedContext,
+      pinnedDocContents,
+      sessionNotes,
+      editHistory,
+      appType,
     },
     ref,
   ) {
@@ -67,6 +79,11 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
           imageTabData={imageTabData}
           onAddImageTab={onAddImageTab}
           onImageActiveChange={onImageActiveChange}
+          capturedContext={capturedContext}
+          pinnedDocContents={pinnedDocContents}
+          sessionNotes={sessionNotes}
+          editHistory={editHistory}
+          appType={appType}
         />
       </div>
     );

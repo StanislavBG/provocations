@@ -2,11 +2,12 @@ import { useState } from "react";
 import { ProvoThread } from "./ProvoThread";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { NotebookResearchChat } from "./NotebookResearchChat";
+import { InterviewTab } from "./InterviewTab";
 import { PainterPanel, type PainterConfig } from "./PainterPanel";
-import { Sparkles, Users, ClipboardList, Paintbrush } from "lucide-react";
+import { Sparkles, Users, ClipboardList, Paintbrush, MessageCircleQuestion } from "lucide-react";
 import type { ProvocationType, DiscussionMessage, ContextItem } from "@shared/schema";
 
-type RightPanelTab = "research" | "provo" | "transcript" | "painter";
+type RightPanelTab = "research" | "interview" | "provo" | "transcript" | "painter";
 
 interface NotebookRightPanelProps {
   activePersonas: Set<ProvocationType>;
@@ -21,7 +22,7 @@ interface NotebookRightPanelProps {
   isChatLoading: boolean;
   hasDocument?: boolean;
 
-  // Research tab
+  // Research tab + Interview tab
   objective: string;
   onCaptureToContext: (text: string, label: string) => void;
 
@@ -33,7 +34,7 @@ interface NotebookRightPanelProps {
   onEvolveDocument?: (instruction: string, description: string) => void;
   isMerging?: boolean;
 
-  // Painter tab
+  // Painter tab + Interview tab
   documentText: string;
   onPaintImage: (config: {
     painterConfigs: PainterConfig[];
@@ -41,6 +42,9 @@ interface NotebookRightPanelProps {
     negativePrompt?: string;
   }) => void;
   isPainting?: boolean;
+
+  // Interview tab
+  appType?: string;
 }
 
 export function NotebookRightPanel({
@@ -62,6 +66,7 @@ export function NotebookRightPanel({
   documentText,
   onPaintImage,
   isPainting = false,
+  appType,
 }: NotebookRightPanelProps) {
   const [activeTab, setActiveTab] = useState<RightPanelTab>("research");
   const [researchMsgCount, setResearchMsgCount] = useState(0);
@@ -72,7 +77,7 @@ export function NotebookRightPanel({
       <div className="flex border-b shrink-0">
         <button
           onClick={() => setActiveTab("research")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-colors ${
             activeTab === "research"
               ? "text-primary border-b-2 border-primary -mb-px"
               : "text-muted-foreground hover:text-foreground"
@@ -87,8 +92,19 @@ export function NotebookRightPanel({
           )}
         </button>
         <button
+          onClick={() => setActiveTab("interview")}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-colors ${
+            activeTab === "interview"
+              ? "text-primary border-b-2 border-primary -mb-px"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <MessageCircleQuestion className="w-3.5 h-3.5" />
+          Interview
+        </button>
+        <button
           onClick={() => setActiveTab("transcript")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-colors ${
             activeTab === "transcript"
               ? "text-primary border-b-2 border-primary -mb-px"
               : "text-muted-foreground hover:text-foreground"
@@ -104,7 +120,7 @@ export function NotebookRightPanel({
         </button>
         <button
           onClick={() => setActiveTab("provo")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-colors ${
             activeTab === "provo"
               ? "text-primary border-b-2 border-primary -mb-px"
               : "text-muted-foreground hover:text-foreground"
@@ -115,7 +131,7 @@ export function NotebookRightPanel({
         </button>
         <button
           onClick={() => setActiveTab("painter")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-colors ${
             activeTab === "painter"
               ? "text-primary border-b-2 border-primary -mb-px"
               : "text-muted-foreground hover:text-foreground"
@@ -134,6 +150,18 @@ export function NotebookRightPanel({
           objective={objective}
           onCaptureToContext={onCaptureToContext}
           onMessageCountChange={setResearchMsgCount}
+        />
+      </div>
+
+      {/* Interview */}
+      <div className={activeTab === "interview" ? "flex-1 overflow-hidden" : "hidden"}>
+        <InterviewTab
+          objective={objective}
+          documentText={documentText}
+          appType={appType}
+          onEvolveDocument={onEvolveDocument}
+          isMerging={isMerging}
+          onCaptureToContext={onCaptureToContext}
         />
       </div>
 

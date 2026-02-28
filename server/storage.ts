@@ -290,6 +290,70 @@ export class DatabaseStorage implements IStorage {
     await db.delete(documents).where(eq(documents.id, id));
   }
 
+  /**
+   * Delete a document only if it belongs to the given user.
+   * Returns true if a row was actually deleted, false if not found or not owned.
+   */
+  async deleteDocumentForUser(id: number, userId: string): Promise<boolean> {
+    const rows = await db
+      .delete(documents)
+      .where(and(eq(documents.id, id), eq(documents.userId, userId)))
+      .returning({ id: documents.id });
+    return rows.length > 0;
+  }
+
+  /**
+   * Move a document only if it belongs to the given user.
+   * Returns the updated row or null if not found/not owned.
+   */
+  async moveDocumentForUser(id: number, userId: string, folderId: number | null): Promise<{ id: number; updatedAt: string } | null> {
+    const now = new Date();
+    const rows = await db
+      .update(documents)
+      .set({ folderId, updatedAt: now })
+      .where(and(eq(documents.id, id), eq(documents.userId, userId)))
+      .returning({ id: documents.id, updatedAt: documents.updatedAt });
+    if (rows.length === 0) return null;
+    return { id: rows[0].id, updatedAt: rows[0].updatedAt.toISOString() };
+  }
+
+  /**
+   * Rename a document only if it belongs to the given user.
+   * Returns the updated row or null if not found/not owned.
+   */
+  async renameDocumentForUser(
+    id: number,
+    userId: string,
+    data: { title: string; titleCiphertext: string; titleSalt: string; titleIv: string },
+  ): Promise<{ id: number; updatedAt: string } | null> {
+    const now = new Date();
+    const rows = await db
+      .update(documents)
+      .set({
+        title: data.title,
+        titleCiphertext: data.titleCiphertext,
+        titleSalt: data.titleSalt,
+        titleIv: data.titleIv,
+        updatedAt: now,
+      })
+      .where(and(eq(documents.id, id), eq(documents.userId, userId)))
+      .returning({ id: documents.id, updatedAt: documents.updatedAt });
+    if (rows.length === 0) return null;
+    return { id: rows[0].id, updatedAt: rows[0].updatedAt.toISOString() };
+  }
+
+  /**
+   * Get a document's userId only (for auth checks without loading ciphertext).
+   */
+  async getDocumentOwner(id: number): Promise<string | null> {
+    const [row] = await db
+      .select({ userId: documents.userId })
+      .from(documents)
+      .where(eq(documents.id, id))
+      .limit(1);
+    return row?.userId ?? null;
+  }
+
   // ── Folder CRUD ──
 
   async createFolder(
@@ -418,6 +482,83 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFolder(id: number): Promise<void> {
     await db.delete(folders).where(eq(folders.id, id));
+  }
+
+  /**
+   * Delete a folder only if it belongs to the given user.
+   * Returns true if a row was actually deleted, false if not found or not owned.
+   */
+  async deleteFolderForUser(id: number, userId: string): Promise<boolean> {
+    const rows = await db
+      .delete(folders)
+      .where(and(eq(folders.id, id), eq(folders.userId, userId)))
+      .returning({ id: folders.id });
+    return rows.length > 0;
+  }
+
+  /**
+   * Move a folder only if it belongs to the given user.
+   * Returns the updated row or null if not found/not owned.
+   */
+  async moveFolderForUser(id: number, userId: string, parentFolderId: number | null): Promise<{ id: number; parentFolderId: number | null; updatedAt: string } | null> {
+    const now = new Date();
+    const rows = await db
+      .update(folders)
+      .set({ parentFolderId, updatedAt: now })
+      .where(and(eq(folders.id, id), eq(folders.userId, userId)))
+      .returning({ id: folders.id, parentFolderId: folders.parentFolderId, updatedAt: folders.updatedAt });
+    if (rows.length === 0) return null;
+    return { id: rows[0].id, parentFolderId: rows[0].parentFolderId, updatedAt: rows[0].updatedAt.toISOString() };
+  }
+
+  /**
+   * Rename a folder only if it belongs to the given user.
+   * Returns the updated row or null if not found/not owned.
+   */
+  async renameFolderForUser(
+    id: number,
+    userId: string,
+    name: string,
+    encrypted?: { nameCiphertext: string; nameSalt: string; nameIv: string },
+  ): Promise<(FolderItem & { nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null }) | null> {
+    const now = new Date();
+    const rows = await db
+      .update(folders)
+      .set({
+        name,
+        nameCiphertext: encrypted?.nameCiphertext ?? null,
+        nameSalt: encrypted?.nameSalt ?? null,
+        nameIv: encrypted?.nameIv ?? null,
+        updatedAt: now,
+      })
+      .where(and(eq(folders.id, id), eq(folders.userId, userId)))
+      .returning();
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      id: r.id,
+      name: r.name,
+      nameCiphertext: r.nameCiphertext,
+      nameSalt: r.nameSalt,
+      nameIv: r.nameIv,
+      parentFolderId: r.parentFolderId,
+      locked: r.locked,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Get folder-id-to-parentFolderId map for a user (lightweight, for cycle detection).
+   */
+  async getFolderHierarchy(userId: string): Promise<Map<number, number | null>> {
+    const rows = await db
+      .select({ id: folders.id, parentFolderId: folders.parentFolderId })
+      .from(folders)
+      .where(eq(folders.userId, userId));
+    const map = new Map<number, number | null>();
+    for (const r of rows) map.set(r.id, r.parentFolderId);
+    return map;
   }
 
   async getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean }> {
