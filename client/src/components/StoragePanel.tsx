@@ -275,7 +275,6 @@ export function StoragePanel({
     },
     onSuccess: () => {
       trackEvent("folder_created");
-      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
       setIsCreatingFolder(false);
       setNewFolderName("");
@@ -289,7 +288,6 @@ export function StoragePanel({
     },
     onSuccess: () => {
       trackEvent("folder_renamed");
-      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
       setRenamingFolderId(null);
       setRenameText("");
@@ -302,7 +300,6 @@ export function StoragePanel({
     },
     onSuccess: () => {
       trackEvent("folder_deleted");
-      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
     },

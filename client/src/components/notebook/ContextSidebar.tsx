@@ -441,7 +441,7 @@ export function ContextSidebar({
   }
 
   // ── Document row renderer (Context Store tree) ──
-  const renderDocRow = (doc: DocumentListItem, indent: number) => {
+  const renderDocRow = (doc: DocumentListItem, indent: number, hasTreeLine = false) => {
     const isPinned = pinnedDocIds.has(doc.id);
     const isEditing =
       editingItem?.id === doc.id && editingItem?.type === "doc";
@@ -460,6 +460,14 @@ export function ContextSidebar({
         }`}
         style={{ paddingLeft: `${isPinned ? indent - 2 : indent}px` }}
       >
+        {/* Tree connector line: tiny gray angled line from parent folder */}
+        {hasTreeLine && !isPinned && (
+          <span className="inline-flex items-center h-full shrink-0 text-muted-foreground/25 select-none" style={{ width: '10px', marginRight: '-2px' }}>
+            <svg width="10" height="20" viewBox="0 0 10 20" fill="none" className="shrink-0">
+              <path d="M1 0 L1 10 L9 10" stroke="currentColor" strokeWidth="1" fill="none" />
+            </svg>
+          </span>
+        )}
         {isEditing ? (
           <div className="flex-1 py-1 px-1">
             <InlineRenameInput
@@ -697,7 +705,7 @@ export function ContextSidebar({
           <div>
             {children.map((child) => renderFolder(child, depth + 1))}
             {folderDocs.map((doc) =>
-              renderDocRow(doc, treeIndent(depth + 1)),
+              renderDocRow(doc, treeIndent(depth + 1), true),
             )}
           </div>
         )}
