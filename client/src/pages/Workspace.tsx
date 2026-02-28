@@ -74,7 +74,6 @@ import {
   Shield,
   ImageIcon,
   FolderOpen,
-  Lock,
   CreditCard,
   StickyNote,
   Save,
@@ -2906,11 +2905,6 @@ RULES:
                           <FolderOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         )}
                         <span className="truncate flex-1 font-medium">{folder.name}</span>
-                        {folder.locked && (
-                          <span title="System-managed">
-                            <Lock className="w-3 h-3 text-muted-foreground/40" />
-                          </span>
-                        )}
                       </button>
                       {isExpanded && (
                         <div>

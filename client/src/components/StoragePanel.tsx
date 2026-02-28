@@ -32,7 +32,6 @@ import {
   Eye,
   GripVertical,
   FolderInput,
-  Lock,
   Upload,
   Search,
   ArrowUpDown,
@@ -110,7 +109,6 @@ interface PreviewDoc {
   id: number;
   title: string;
   content: string;
-  locked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -190,7 +188,7 @@ export function StoragePanel({
         // Delete selected doc
         if (selectedDocId) {
           const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
-          if (doc && !doc.locked && window.confirm(`Delete "${doc.title}"?`)) {
+          if (doc && window.confirm(`Delete "${doc.title}"?`)) {
             deleteDocMutation.mutate(doc.id);
           }
         }
@@ -199,7 +197,7 @@ export function StoragePanel({
         // Rename selected doc
         if (selectedDocId) {
           const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
-          if (doc && !doc.locked) {
+          if (doc) {
             e.preventDefault();
             setRenamingDocId(doc.id);
             setRenameText(doc.title);
@@ -492,7 +490,6 @@ export function StoragePanel({
         id: data.id,
         title: data.title,
         content: data.content,
-        locked: !!data.locked,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
       });
@@ -1032,8 +1029,6 @@ export function StoragePanel({
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="text-sm font-semibold leading-tight flex-1 break-words">{previewDoc.title}</h3>
                   <div className="flex items-center gap-1 shrink-0">
-                    {!previewDoc.locked && (
-                      <>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -1068,8 +1063,6 @@ export function StoragePanel({
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
-                      </>
-                    )}
                     <Button
                       size="sm"
                       onClick={() => handleOpenDocument(previewDoc.id)}
@@ -1346,17 +1339,14 @@ function FolderTreeBranch({
   const isDragOver = dragOverFolderId === folder.id;
   const totalDocs = getTotalDocCount(folder.id);
 
-  const isLocked = !!folder.locked;
-
   const handleDragStart = (e: React.DragEvent) => {
-    if (isLocked) { e.preventDefault(); return; }
     e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: "folder", id: folder.id, title: folder.name }));
     e.dataTransfer.effectAllowed = "move";
   };
 
   return (
     <>
-      {isRenaming && !isLocked ? (
+      {isRenaming ? (
         <div
           className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/30"
           style={{ paddingLeft: `${treeIndent(depth) + (depth > 0 ? 12 : 0)}px` }}
@@ -1376,7 +1366,7 @@ function FolderTreeBranch({
       ) : (
         <div
           className="group relative"
-          draggable={!isLocked}
+          draggable
           onDragStart={handleDragStart}
           onDragOver={(e) => {
             e.preventDefault();
@@ -1430,12 +1420,7 @@ function FolderTreeBranch({
               )}
             </button>
 
-            {/* Lock icon for system-managed folders, drag grip for user folders */}
-            {isLocked ? (
-              <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
-            ) : (
-              <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-30 group-hover:opacity-70 transition-opacity cursor-grab" />
-            )}
+            <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-30 group-hover:opacity-70 transition-opacity cursor-grab" />
 
             {/* Folder icon + label */}
             <button
@@ -1458,38 +1443,36 @@ function FolderTreeBranch({
             )}
           </div>
 
-          {/* Hover actions — hidden for locked folders */}
-          {!isLocked && (
-            <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5"
-                title="Move to..."
-                onClick={(e) => { e.stopPropagation(); onMoveTo({ type: "folder", id: folder.id, title: folder.name }); }}
-              >
-                <FolderInput className="w-2.5 h-2.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5"
-                title="Rename folder"
-                onClick={(e) => { e.stopPropagation(); onStartRename(folder.id, folder.name); }}
-              >
-                <Pencil className="w-2.5 h-2.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-destructive"
-                title="Delete folder"
-                onClick={(e) => { e.stopPropagation(); onDelete(folder.id); }}
-              >
-                <Trash2 className="w-2.5 h-2.5" />
-              </Button>
-            </div>
-          )}
+          {/* Hover actions */}
+          <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5"
+              title="Move to..."
+              onClick={(e) => { e.stopPropagation(); onMoveTo({ type: "folder", id: folder.id, title: folder.name }); }}
+            >
+              <FolderInput className="w-2.5 h-2.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5"
+              title="Rename folder"
+              onClick={(e) => { e.stopPropagation(); onStartRename(folder.id, folder.name); }}
+            >
+              <Pencil className="w-2.5 h-2.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5 text-destructive"
+              title="Delete folder"
+              onClick={(e) => { e.stopPropagation(); onDelete(folder.id); }}
+            >
+              <Trash2 className="w-2.5 h-2.5" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1577,14 +1560,12 @@ function StorageItemRow({
   onMoveTo: () => void;
 }) {
   const isDoc = item.kind === "document";
-  const isLocked = isDoc ? !!item.doc.locked : !!item.folder.locked;
   const isCurrent = isDoc ? item.isCurrent : false;
   const title = isDoc ? item.doc.title : item.folder.name;
   const id = isDoc ? item.doc.id : item.folder.id;
   const updatedAt = isDoc ? item.doc.updatedAt : item.folder.updatedAt;
 
   const handleDragStart = (e: React.DragEvent) => {
-    if (isLocked) { e.preventDefault(); return; }
     const dragType: DragItemType = isDoc ? "document" : "folder";
     e.dataTransfer.setData(DRAG_MIME, encodeDragData({ type: dragType, id, title }));
     e.dataTransfer.effectAllowed = "move";
@@ -1599,15 +1580,10 @@ function StorageItemRow({
             ? "bg-muted/50 border border-muted"
             : "hover:bg-muted/40 border border-transparent"
       } cursor-pointer`}
-      draggable={!isRenaming && !isLocked}
+      draggable={!isRenaming}
       onDragStart={handleDragStart}
     >
-      {/* Drag handle or lock icon */}
-      {isLocked ? (
-        <span title="System-managed"><Lock className="w-3 h-3 text-muted-foreground/50 shrink-0" /></span>
-      ) : (
-        <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-30 group-hover:opacity-70 transition-opacity cursor-grab" />
-      )}
+      <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 opacity-30 group-hover:opacity-70 transition-opacity cursor-grab" />
 
       {/* Click area — icon + title/meta */}
       <button
@@ -1624,7 +1600,7 @@ function StorageItemRow({
         )}
 
         <div className="flex-1 min-w-0">
-          {isRenaming && !isLocked ? (
+          {isRenaming ? (
             <Input
               value={renameText}
               onChange={(e) => onRenameTextChange(e.target.value)}
@@ -1647,7 +1623,6 @@ function StorageItemRow({
                   : `${item.docCount} item${item.docCount !== 1 ? "s" : ""}`
                 }
               </span>
-              {!isLocked && (
                 <button
                   type="button"
                   className="shrink-0 p-0.5 rounded hover:bg-muted/60 text-muted-foreground/30 hover:text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"
@@ -1656,7 +1631,6 @@ function StorageItemRow({
                 >
                   <Pencil className="w-2.5 h-2.5" />
                 </button>
-              )}
             </div>
           )}
         </div>
@@ -1669,76 +1643,71 @@ function StorageItemRow({
 
       {/* Actions — visible on hover */}
       <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        {!isLocked && (
+        {isDoc && (
           <>
-            {isDoc && (
-              <>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  title="Copy content"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Fetch and copy document content
-                    apiRequest("GET", `/api/documents/${id}`)
-                      .then((r) => r.json())
-                      .then((data) => {
-                        navigator.clipboard.writeText(data.content || "");
-                      })
-                      .catch(() => {});
-                  }}
-                >
-                  <Copy className="w-3 h-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  title="Download"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    apiRequest("GET", `/api/documents/${id}`)
-                      .then((r) => r.json())
-                      .then((data) => {
-                        downloadDocumentAsFile(title, data.content || "");
-                      })
-                      .catch(() => {});
-                  }}
-                >
-                  <Download className="w-3 h-3" />
-                </Button>
-              </>
-            )}
             <Button
               size="icon"
               variant="ghost"
               className="h-6 w-6"
-              title="Rename"
-              onClick={(e) => { e.stopPropagation(); onStartRename(); }}
+              title="Copy content"
+              onClick={(e) => {
+                e.stopPropagation();
+                apiRequest("GET", `/api/documents/${id}`)
+                  .then((r) => r.json())
+                  .then((data) => {
+                    navigator.clipboard.writeText(data.content || "");
+                  })
+                  .catch(() => {});
+              }}
             >
-              <Pencil className="w-3 h-3" />
+              <Copy className="w-3 h-3" />
             </Button>
             <Button
               size="icon"
               variant="ghost"
               className="h-6 w-6"
-              title="Move to..."
-              onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
+              title="Download"
+              onClick={(e) => {
+                e.stopPropagation();
+                apiRequest("GET", `/api/documents/${id}`)
+                  .then((r) => r.json())
+                  .then((data) => {
+                    downloadDocumentAsFile(title, data.content || "");
+                  })
+                  .catch(() => {});
+              }}
             >
-              <FolderInput className="w-3 h-3" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 text-destructive/60 hover:text-destructive"
-              title="Delete"
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            >
-              <Trash2 className="w-3 h-3" />
+              <Download className="w-3 h-3" />
             </Button>
           </>
         )}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6"
+          title="Rename"
+          onClick={(e) => { e.stopPropagation(); onStartRename(); }}
+        >
+          <Pencil className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6"
+          title="Move to..."
+          onClick={(e) => { e.stopPropagation(); onMoveTo(); }}
+        >
+          <FolderInput className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 text-destructive/60 hover:text-destructive"
+          title="Delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        >
+          <Trash2 className="w-3 h-3" />
+        </Button>
       </div>
     </div>
   );
