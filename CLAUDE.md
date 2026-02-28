@@ -531,6 +531,47 @@ All ProvokeText panels must provide a **consistent set of capabilities** based o
 5. Small inline inputs (chat inputs, heading editors) may set `showCopy={false}` and `showClear={false}` — they are intentionally minimal.
 6. To override any default, explicitly pass the prop (e.g., `showWordCount={false}` to suppress word count on a specific panel).
 
+### ADR: LLM Button Widget (Pre-Call Transparency)
+
+**Every user-facing button that triggers an LLM API call MUST be wrapped with `LlmHoverButton`** (from `@/components/LlmHoverButton`). On hover, the button shows a two-tab `LlmCallPreview` widget with:
+
+- **Perf tab** — Context blocks (chars, tokens, %), stacked bar, estimated cost, model info
+- **Summary tab** — Human-readable breakdown of what the call will include (inputs, counts, labels)
+
+**Why:** Users need pre-call transparency — knowing what context, tokens, and cost each AI action involves before they click. This is the mirror of the post-call `LlmContextPlan` (verbose mode): one shows what *will* happen, the other shows what *did* happen.
+
+**Architecture:**
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `LlmCallPreview` | `@/components/LlmCallPreview.tsx` | Generic two-tab widget (Perf + Summary). Renders context blocks and summary items. |
+| `LlmHoverButton` | `@/components/LlmHoverButton.tsx` | HoverCard wrapper. Accepts `previewTitle`, `previewBlocks`, `previewSummary` + children (the button). |
+| `EvolveContextPreview` | `@/components/notebook/EvolveContextPreview.tsx` | Adapter: builds blocks/items specific to the Evolve button's context (document, configs, pinned docs, notes, edit history). |
+
+**Currently wired to:**
+
+| Component | Button | Endpoint |
+|-----------|--------|----------|
+| `SplitDocumentEditor` | Evolve | `/api/write` |
+| `ProvoThread` | Generate Provocations | `/api/generate-challenges` |
+| `TranscriptPanel` | Summarize Notes | `/api/summarize-intent` |
+| `TranscriptPanel` | Evolve Document | `/api/write` |
+| `NotebookResearchChat` | Send (research query) | `/api/chat/stream` |
+| `GeneratePanel` | Infographic (and future cards) | `/api/summarize-intent` + `/api/generate-image` |
+
+**Rules:**
+1. When adding a **new LLM-triggering button** anywhere in the app, wrap it with `LlmHoverButton`.
+2. Build `ContextBlock[]` describing what context chunks will be sent (system prompt, document, user input, etc.). Each block needs `label`, `chars`, and `color`.
+3. Build `SummaryItem[]` for human-readable rows (icon, label, count, optional detail text).
+4. For complex contexts (like Evolve with its configs + pinned docs + edit history), create a dedicated adapter component (like `EvolveContextPreview`). For simpler buttons, build blocks/items inline with `useMemo`.
+5. `LlmCallPreview` auto-fetches the active model via `/api/chat/models` and uses a client-side `LLM_COST_TABLE` (mirrored from `server/llm-gateway.ts`) for cost estimation.
+6. Keep `LLM_COST_TABLE` in `LlmCallPreview.tsx` in sync with `COST_TABLE` in `server/llm-gateway.ts` when model pricing changes.
+7. Token estimation uses `chars / 4` (same `CHARS_PER_TOKEN` ratio as the server).
+
+**Exported utilities from `LlmCallPreview`:** `LLM_COST_TABLE`, `CHARS_PER_TOKEN`, `estimateTokens()`, `estimateInputCost()`, `useActiveModel()`, `ContextBlock`, `SummaryItem`.
+
+**Exported utilities from `LlmHoverButton`:** Re-exports `ContextBlock`, `SummaryItem`, `estimateTokens`, `CHARS_PER_TOKEN` for convenience.
+
 ### ADR: Adding a New Application (Three-Layer Contract)
 
 Every application (template) in Provocations is defined across **three files** that must stay in sync. The `TemplateId` type in `shared/schema.ts` enforces this at build time — if you add a new ID, TypeScript will error until all three layers have a matching entry.

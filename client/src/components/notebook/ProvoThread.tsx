@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProvokeText } from "@/components/ProvokeText";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import {
   Flame,
   Loader2,
@@ -19,6 +20,9 @@ import {
   Quote,
   Send,
   X,
+  FileText,
+  Target,
+  Users,
 } from "lucide-react";
 import type { ProvocationType, Challenge, Advice } from "@shared/schema";
 
@@ -204,6 +208,20 @@ export function ProvoThread({
   const canGenerate =
     hasDocument && activePersonas.size > 0 && !generateMutation.isPending;
 
+  // ── LLM preview data for Generate Provocations ──
+  const provoBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 1200, color: "text-purple-400" },
+    { label: "Document", chars: documentText.length, color: "text-blue-400" },
+    { label: "Objective", chars: objective.length, color: "text-amber-400" },
+    { label: "Persona IDs", chars: activePersonas.size * 20, color: "text-emerald-400" },
+  ], [documentText, objective, activePersonas]);
+
+  const provoSummary: SummaryItem[] = useMemo(() => [
+    { icon: <Users className="w-3 h-3 text-emerald-400" />, label: "Active Personas", count: activePersonas.size, detail: `${activePersonas.size} selected` },
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Document", count: documentText.trim() ? 1 : 0, detail: documentText.trim() ? `${documentText.split(/\s+/).filter(Boolean).length} words` : undefined },
+    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0, detail: objective.trim() ? objective.slice(0, 60) + (objective.length > 60 ? "..." : "") : undefined },
+  ], [activePersonas, documentText, objective]);
+
   return (
     <div className="h-full flex flex-col">
       {/* ─── Persona selector + Generate button ─── */}
@@ -213,29 +231,36 @@ export function ProvoThread({
           onToggle={onTogglePersona}
           compact
         />
-        <Button
-          onClick={() => generateMutation.mutate()}
-          disabled={!canGenerate}
-          className="w-full gap-2 h-9 text-xs font-semibold"
+        <LlmHoverButton
+          previewTitle="Generate Provocations"
+          previewBlocks={provoBlocks}
+          previewSummary={provoSummary}
+          align="start"
         >
-          {generateMutation.isPending ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Generating provocations...
-            </>
-          ) : (
-            <>
-              <Flame className="w-3.5 h-3.5" />
-              Generate Provocations
-              {activePersonas.size > 0 && (
-                <span className="text-[10px] opacity-70 font-normal">
-                  ({activePersonas.size} persona
-                  {activePersonas.size !== 1 ? "s" : ""})
-                </span>
-              )}
-            </>
-          )}
-        </Button>
+          <Button
+            onClick={() => generateMutation.mutate()}
+            disabled={!canGenerate}
+            className="w-full gap-2 h-9 text-xs font-semibold"
+          >
+            {generateMutation.isPending ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Generating provocations...
+              </>
+            ) : (
+              <>
+                <Flame className="w-3.5 h-3.5" />
+                Generate Provocations
+                {activePersonas.size > 0 && (
+                  <span className="text-[10px] opacity-70 font-normal">
+                    ({activePersonas.size} persona
+                    {activePersonas.size !== 1 ? "s" : ""})
+                  </span>
+                )}
+              </>
+            )}
+          </Button>
+        </LlmHoverButton>
       </div>
 
       {/* ─── Challenges list ─── */}
