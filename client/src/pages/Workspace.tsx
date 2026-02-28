@@ -38,17 +38,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
 // Lazy load heavy components
 const DiffView = lazy(() => import("@/components/DiffView").then(m => ({ default: m.DiffView })));
 import { ScreenCaptureButton, type CaptureAnnotation } from "@/components/ScreenCaptureButton";
@@ -188,6 +177,9 @@ export default function Workspace() {
     ? selectedTemplateId
     : undefined;
 
+  // Fallback objective for API calls — prevents validation errors when the user hasn't set one
+  const effectiveObjective = objective.trim() || `Improve and refine this ${appFlowConfig.writer.documentType || "document"}`;
+
   // Toolbox app state — controls which app is active in the left panel
   const [activeToolboxApp, setActiveToolboxApp] = useState<ToolboxApp>("provoke");
 
@@ -283,8 +275,7 @@ export default function Workspace() {
   const [showLogPanel, setShowLogPanel] = useState(false);
   const lastAnalyzedUrl = useRef<string>("");
 
-  // New button confirmation
-  const [showNewConfirm, setShowNewConfirm] = useState(false);
+
   const [savedDocId, setSavedDocId] = useState<number | null>(null);
   const [savedDocTitle, setSavedDocTitle] = useState<string>("");
 
@@ -603,7 +594,7 @@ RULES:
 
         const response = await apiRequest("POST", "/api/write", {
           document: document.rawText,
-          objective,
+          objective: effectiveObjective,
           secondaryObjective: secondaryObjective.trim() || undefined,
           appType: validAppType,
           referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
@@ -619,7 +610,7 @@ RULES:
       // ── EDIT mode (default): rewrite/evolve document ──
       const response = await apiRequest("POST", "/api/write", {
         document: document.rawText,
-        objective,
+        objective: effectiveObjective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         appType: validAppType,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
@@ -746,7 +737,7 @@ RULES:
       const entries = overrideEntries ?? interviewEntries;
       const dir = direction ?? interviewDirection;
       const response = await apiRequest("POST", "/api/interview/question", {
-        objective,
+        objective: effectiveObjective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         document: document.rawText,
         appType: validAppType,
@@ -793,7 +784,7 @@ RULES:
 
       // Step 1: Get summarized instruction from interview entries
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
-        objective,
+        objective: effectiveObjective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
@@ -809,7 +800,7 @@ RULES:
       // Step 2: Use the writer to merge into document
       const writeResponse = await apiRequest("POST", "/api/write", {
         document: document.rawText,
-        objective,
+        objective: effectiveObjective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         appType: validAppType,
         instruction: effectiveInstruction,
@@ -870,7 +861,7 @@ RULES:
 
 
       const summaryResponse = await apiRequest("POST", "/api/interview/summary", {
-        objective,
+        objective: effectiveObjective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         entries: interviewEntries,
         document: document.rawText,
@@ -884,7 +875,7 @@ RULES:
 
       const writeResponse = await apiRequest("POST", "/api/write", {
         document: document.rawText,
-        objective,
+        objective: effectiveObjective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         appType: validAppType,
         instruction: effectiveInstruction,
@@ -956,7 +947,7 @@ RULES:
 
       const response = await apiRequest("POST", "/api/generate-advice", {
         document: document.rawText,
-        objective,
+        objective: effectiveObjective,
         appType: validAppType,
         challengeId: `interview-${Date.now()}`,
         challengeTitle: topic,
@@ -1000,7 +991,7 @@ RULES:
       const response = await apiRequest("POST", "/api/discussion/ask", {
         question: question + searchContext,
         document: document.rawText,
-        objective,
+        objective: effectiveObjective,
         appType: validAppType,
         secondaryObjective: secondaryObjective.trim() || undefined,
         activePersonas: interviewDirection?.personas || [],
@@ -1041,7 +1032,7 @@ RULES:
   const streamingAnalysisMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/streaming/wireframe-analysis", {
-        objective,
+        objective: effectiveObjective,
         secondaryObjective: secondaryObjective.trim() || undefined,
         websiteUrl: websiteUrl || undefined,
         wireframeNotes,
@@ -1245,7 +1236,7 @@ RULES:
     setIsSummaryUpdating(true);
     try {
       const res = await apiRequest("POST", "/api/chat/summarize", {
-        objective,
+        objective: effectiveObjective,
         researchTopic: researchTopic || undefined,
         notes: researchNotes || undefined,
         chatHistory: messages.length > 0 ? messages : [{ role: "user" as const, content: "No chat messages yet" }],
@@ -1280,7 +1271,7 @@ RULES:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
-          objective,
+          objective: effectiveObjective,
           researchTopic: researchTopic || undefined,
           notes: researchNotes || undefined,
           history: chatMessages,
@@ -1361,7 +1352,7 @@ RULES:
       const res = await apiRequest("POST", "/api/chat/save-session", {
         title: sessionTitle,
         researchTopic: researchTopic || undefined,
-        objective,
+        objective: effectiveObjective,
         summary: researchSummary || undefined,
         notes: researchNotes || undefined,
         chatHistory: chatMessages.length > 0 ? chatMessages : undefined,
@@ -1482,15 +1473,7 @@ RULES:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Show confirmation when there's work in progress, otherwise reset immediately
-  const handleNewClick = useCallback(() => {
-    const hasWork = document.rawText.trim().length > 0;
-    if (hasWork) {
-      setShowNewConfirm(true);
-    } else {
-      handleReset();
-    }
-  }, [document.rawText, handleReset]);
+
 
   // ── Defensive overlay cleanup ──
   // Close all overlays on Escape key — prevents any overlay from getting stuck
@@ -2631,20 +2614,6 @@ RULES:
       {/* ── Persistent global bar ── */}
       <header className="border-b bg-card shrink-0">
         <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-2">
-          {/* Left: New button */}
-          <div className="flex items-center gap-2">
-            <Button
-              data-testid="button-reset"
-              variant="outline"
-              size="sm"
-              onClick={handleNewClick}
-              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-            >
-              <Zap className="w-4 h-4" />
-              New
-            </Button>
-          </div>
-
           {/* Right: workspace tools + toggles + user */}
           <div className="flex items-center gap-1 sm:gap-2">
             {isStandardWorkspace && canShowDiff && (
@@ -2809,24 +2778,6 @@ RULES:
           </div>
         )}
       </header>
-
-      {/* ── New button confirmation dialog ── */}
-      <AlertDialog open={showNewConfirm} onOpenChange={setShowNewConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Start a new document?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved work in progress. Starting a new document will discard your current changes.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setShowNewConfirm(false); handleReset(); }}>
-              Start New
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* ── Load from Context Store dialog ── */}
       <Dialog open={objectiveStoreOpen} onOpenChange={setObjectiveStoreOpen}>
