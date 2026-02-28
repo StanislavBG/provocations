@@ -131,17 +131,43 @@ export function TranscriptPanel({
     <div className="h-full flex flex-col">
       {/* ─── Add Note input ─── */}
       <div className="shrink-0 px-3 pt-3 pb-2 border-b bg-muted/30">
-        <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background p-2">
-          <div className="flex-1 min-w-0">
+        <div className="rounded-lg border border-border bg-background overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30">
+            <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+              <ClipboardList className="w-3 h-3" />
+              Add Notes
+            </span>
+            <div className="flex items-center gap-0.5">
+              <VoiceRecorder
+                onTranscript={(t) =>
+                  setNoteText((prev) => (prev ? `${prev} ${t}` : t))
+                }
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 shrink-0 text-muted-foreground"
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 shrink-0"
+                disabled={!noteText.trim()}
+                onClick={handleAddNote}
+                title="Add note (Enter)"
+              >
+                <Send className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+          <div className="p-2">
             <ProvokeText
               chrome="bare"
               variant="textarea"
               value={noteText}
               onChange={setNoteText}
-              placeholder="Add a note..."
+              placeholder="Type a note... (Enter to add)"
               className="text-xs"
-              minRows={1}
-              maxRows={3}
+              minRows={3}
+              maxRows={5}
               showCopy={false}
               showClear={false}
               onKeyDown={(e) => {
@@ -152,23 +178,6 @@ export function TranscriptPanel({
               }}
             />
           </div>
-          <VoiceRecorder
-            onTranscript={(t) =>
-              setNoteText((prev) => (prev ? `${prev} ${t}` : t))
-            }
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 shrink-0 text-muted-foreground"
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 shrink-0"
-            disabled={!noteText.trim()}
-            onClick={handleAddNote}
-          >
-            <Send className="w-3.5 h-3.5" />
-          </Button>
         </div>
       </div>
 
