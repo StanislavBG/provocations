@@ -27,12 +27,12 @@ import {
 
 import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
-import { ContextSidebar } from "@/components/notebook/ContextSidebar";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
 import type { PainterConfig } from "@/components/notebook/PainterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
+import { MobileCapture } from "@/components/notebook/MobileCapture";
 import type { ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
@@ -564,11 +564,13 @@ export default function NotebookWorkspace() {
     setShowNewConfirm(false);
   }, []);
 
-  // ── Mobile tab state ──
-  type MobileTab = "context" | "document" | "chat";
-  const [mobileTab, setMobileTab] = useState<MobileTab>("document");
-
   // ── Render ──
+
+  // Mobile: completely separate note-capture experience
+  if (isMobile) {
+    return <MobileCapture />;
+  }
+
   return (
     <div className="h-screen flex flex-col">
       {/* Top bar */}
@@ -580,94 +582,11 @@ export default function NotebookWorkspace() {
 
       {/* Main layout */}
       <div className="flex-1 overflow-hidden">
-        {isMobile ? (
-          /* Mobile: tabbed single-panel view */
-          <>
-            <div className="flex-1 h-[calc(100%-48px)] overflow-hidden">
-              {mobileTab === "context" && (
-                <ContextSidebar
-                  pinnedDocIds={pinnedDocIds}
-                  onPinDoc={handlePinDoc}
-                  onUnpinDoc={handleUnpinDoc}
-                  isCollapsed={false}
-                  onToggleCollapse={() => setMobileTab("document")}
-                />
-              )}
-              {mobileTab === "document" && (
-                <NotebookCenterPanel
-                  documentText={document.rawText}
-                  onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
-                  isMerging={writeMutation.isPending}
-                  objective={objective}
-                  onObjectiveChange={setObjective}
-                  templateName={selectedTemplateName}
-                  previewDoc={previewDoc}
-                  onClosePreview={() => setPreviewDoc(null)}
-                  onSaveToContext={handleSaveToContext}
-                  isSaving={isSavingToContext}
-                  onEvolve={handleEvolve}
-                  isEvolving={writeMutation.isPending}
-                  imageTabData={imageTabData}
-                  onImageActiveChange={handleImageActiveChange}
-                  capturedContext={capturedContext}
-                  pinnedDocContents={pinnedDocContents}
-                  sessionNotes={sessionNotes}
-                  editHistory={editHistory}
-                  appType={validAppType}
-                />
-              )}
-              {mobileTab === "chat" && (
-                <NotebookRightPanel
-                  activePersonas={activePersonas}
-                  onTogglePersona={handleTogglePersona}
-                  discussionMessages={discussionMessages}
-                  onSendMessage={handleSendMessage}
-                  onAcceptResponse={handleAcceptResponse}
-                  onDismissResponse={handleDismissResponse}
-                  onRespondToMessage={handleRespondToMessage}
-                  isChatLoading={askQuestionMutation.isPending}
-                  hasDocument={!!document.rawText.trim()}
-                  objective={objective}
-                  onCaptureToContext={handleCaptureToContext}
-                  capturedContext={capturedContext}
-                  onRemoveCapturedItem={handleRemoveCapturedItem}
-                  onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
-                  isMerging={writeMutation.isPending}
-                  documentText={document.rawText}
-                  onPaintImage={handlePaintImage}
-                  isPainting={isPainting}
-                  appType={validAppType}
-                />
-              )}
-            </div>
-
-            {/* Mobile bottom tab bar */}
-            <div className="h-12 shrink-0 border-t bg-card flex">
-              {([
-                { id: "context" as MobileTab, label: "Sources" },
-                { id: "document" as MobileTab, label: "Document" },
-                { id: "chat" as MobileTab, label: "Chat" },
-              ] as const).map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setMobileTab(tab.id)}
-                  className={`flex-1 flex items-center justify-center text-xs transition-colors ${
-                    mobileTab === tab.id
-                      ? "text-primary font-semibold border-t-2 border-primary -mt-px"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          /* Desktop: 3-column resizable layout — side panels swap based on active tab type */
-          <ResizablePanelGroup
-            key={isChartActive ? "chart-layout" : appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : "doc-layout"}
-            direction="horizontal"
-          >
+        {/* Desktop: 3-column resizable layout — side panels swap based on active tab type */}
+        <ResizablePanelGroup
+          key={isChartActive ? "chart-layout" : appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : "doc-layout"}
+          direction="horizontal"
+        >
             {/* Left panel (hidden when chart tab is active or bs-chart app) */}
             {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && (
               <>
@@ -761,8 +680,7 @@ export default function NotebookWorkspace() {
                 </ResizablePanel>
               </>
             )}
-          </ResizablePanelGroup>
-        )}
+        </ResizablePanelGroup>
       </div>
 
       {/* New workspace confirmation */}
