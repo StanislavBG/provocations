@@ -1,10 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ImagePreviewDialog } from "@/components/ImagePreviewDialog";
-import { PenLine, Loader2, StickyNote, ImageIcon, Paintbrush, Save, Trash2, Check, Plus } from "lucide-react";
+import { PenLine, Loader2, StickyNote, ImageIcon, Paintbrush, Save, Trash2, Check, Send } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/tracking";
@@ -42,6 +42,8 @@ export function TranscriptPanel({
 }: TranscriptPanelProps) {
   const { toast } = useToast();
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
+  const [quickNoteText, setQuickNoteText] = useState("");
+  const notesEndRef = useRef<HTMLDivElement>(null);
   // Text to Visual state
   const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -50,6 +52,15 @@ export function TranscriptPanel({
 
   const allText = notes.map((n) => n.text).join("\n\n");
   const wordCount = allText.trim() ? allText.trim().split(/\s+/).length : 0;
+
+  // Auto-scroll to bottom when new notes are added
+  const prevNoteCountRef = useRef(notes.length);
+  useEffect(() => {
+    if (notes.length > prevNoteCountRef.current) {
+      notesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevNoteCountRef.current = notes.length;
+  }, [notes.length]);
 
   const handleSaveNote = useCallback(async (note: NoteEntry) => {
     if (!note.text.trim()) return;
@@ -78,14 +89,16 @@ export function TranscriptPanel({
     onNotesChange(notes.map((n) => n.id === noteId ? { ...n, text, savedToContext: false } : n));
   }, [notes, onNotesChange]);
 
-  const handleAddNote = useCallback(() => {
+  const handleSubmitQuickNote = useCallback(() => {
+    if (!quickNoteText.trim()) return;
     const newNote: NoteEntry = {
       id: generateId("note"),
-      text: "",
+      text: quickNoteText.trim(),
       createdAt: Date.now(),
     };
     onNotesChange([...notes, newNote]);
-  }, [notes, onNotesChange]);
+    setQuickNoteText("");
+  }, [quickNoteText, notes, onNotesChange]);
 
   const handleWriteAll = useCallback(() => {
     if (!allText.trim()) return;
@@ -126,66 +139,79 @@ export function TranscriptPanel({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b shrink-0">
-        <StickyNote className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-semibold">Notes</span>
-        {wordCount > 0 && (
-          <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
-            {notes.length} {notes.length === 1 ? "note" : "notes"}
-          </Badge>
+      {/* Quick-add note input — pinned at top with clear visual separation */}
+      <div className="shrink-0 px-3 pt-3 pb-2 border-b bg-muted/30">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <ProvokeText
+              variant="input"
+              chrome="bare"
+              value={quickNoteText}
+              onChange={setQuickNoteText}
+              placeholder="Add a note..."
+              showCopy={false}
+              showClear={false}
+              className="text-sm rounded-lg border border-border bg-background px-3 py-2"
+              voice={{ mode: "replace" }}
+              onVoiceTranscript={(text) => setQuickNoteText(text)}
+              onSubmit={handleSubmitQuickNote}
+              submitIcon={Send}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmitQuickNote();
+                }
+              }}
+            />
+          </div>
+        </div>
+        {(notes.length > 0 || selectedText) && (
+          <div className="flex items-center gap-2 mt-1.5">
+            {notes.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                {notes.length} {notes.length === 1 ? "note" : "notes"}
+              </Badge>
+            )}
+            {selectedText && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-500/50 text-amber-700 dark:text-amber-400">
+                Selection target
+              </Badge>
+            )}
+            <div className="flex-1" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                  onClick={handleTextToVisual}
+                  disabled={!allText.trim() || isProcessing}
+                >
+                  {isGeneratingVisual ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <ImageIcon className="w-3 h-3" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Generate a visual from notes</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 text-muted-foreground hover:text-purple-600 dark:hover:text-purple-400"
+                  onClick={onArtify}
+                  disabled={!allText.trim()}
+                >
+                  <Paintbrush className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Artify — customize image generation style</TooltipContent>
+            </Tooltip>
+          </div>
         )}
-        {selectedText && (
-          <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-500/50 text-amber-700 dark:text-amber-400">
-            Selection target
-          </Badge>
-        )}
-        <div className="flex-1" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground"
-              onClick={handleAddNote}
-            >
-              <Plus className="w-3 h-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Add a new note</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground"
-              onClick={handleTextToVisual}
-              disabled={!allText.trim() || isProcessing}
-            >
-              {isGeneratingVisual ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <ImageIcon className="w-3 h-3" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Generate a visual from notes</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-purple-600 dark:hover:text-purple-400"
-              onClick={onArtify}
-              disabled={!allText.trim()}
-            >
-              <Paintbrush className="w-3 h-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Artify — customize image generation style</TooltipContent>
-        </Tooltip>
       </div>
 
       {/* Notes list */}
@@ -195,17 +221,8 @@ export function TranscriptPanel({
             <StickyNote className="w-8 h-8 text-muted-foreground/30 mb-2" />
             <p className="text-sm text-muted-foreground/60">No notes yet</p>
             <p className="text-xs text-muted-foreground/40 mt-1">
-              Voice transcripts appear as notes here. You can also add notes manually.
+              Voice transcripts will appear as notes here.
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-3 gap-1.5 text-xs"
-              onClick={handleAddNote}
-            >
-              <Plus className="w-3 h-3" />
-              Add Note
-            </Button>
           </div>
         ) : (
           notes.map((note) => (
@@ -293,6 +310,7 @@ export function TranscriptPanel({
             </div>
           ))
         )}
+        <div ref={notesEndRef} />
       </div>
 
       {/* Bottom action bar */}
