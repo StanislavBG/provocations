@@ -129,9 +129,7 @@ export function SplitDocumentEditor({
   onClosePreview,
 }: SplitDocumentEditorProps) {
   const { toast } = useToast();
-  const [objectiveExpanded, setObjectiveExpanded] = useState(
-    !!(objective && objective.trim()),
-  );
+  const [objectiveExpanded, setObjectiveExpanded] = useState(true);
 
   // ── Chrome-style document tabs ──
   const [tabs, setTabs] = useState<DocTab[]>(() => [
@@ -245,7 +243,7 @@ export function SplitDocumentEditor({
     URL.revokeObjectURL(url);
   };
 
-  const headerActions = (
+  const documentHeaderActions = (
     <div className="flex items-center gap-1">
       <Button
         variant="ghost"
@@ -257,48 +255,6 @@ export function SplitDocumentEditor({
       >
         <Download className="w-3.5 h-3.5" />
       </Button>
-    </div>
-  );
-
-  const objectiveSection = (
-    <div className="border-b shrink-0">
-      <button
-        type="button"
-        onClick={() => setObjectiveExpanded(!objectiveExpanded)}
-        className="w-full flex items-center gap-2 px-4 py-1.5 text-left hover:bg-muted/30 transition-colors"
-      >
-        <Target className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-        <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
-          Objective
-        </span>
-        {!objectiveExpanded && objective?.trim() && (
-          <span className="text-xs text-muted-foreground truncate flex-1">
-            {objective}
-          </span>
-        )}
-        {objectiveExpanded ? (
-          <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
-        ) : (
-          <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
-        )}
-      </button>
-      {objectiveExpanded && (
-        <div className="px-4 pb-2">
-          <ProvokeText
-            chrome="bare"
-            variant="textarea"
-            value={objective || ""}
-            onChange={onObjectiveChange || (() => {})}
-            placeholder="What are you trying to achieve with this document?"
-            className="text-sm"
-            minRows={2}
-            maxRows={5}
-            showCopy={false}
-            showClear={false}
-            readOnly={!onObjectiveChange}
-          />
-        </div>
-      )}
     </div>
   );
 
@@ -390,18 +346,6 @@ export function SplitDocumentEditor({
               </button>
             );
           })}
-          <div className="ml-auto shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={handleDownload}
-              disabled={!text.trim()}
-              title="Download as .md"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </Button>
-          </div>
         </div>
 
         {/* Expanded sub-options */}
@@ -458,17 +402,59 @@ export function SplitDocumentEditor({
           </div>
         </div>
       ) : (
-        <ProvokeText
-          chrome="container"
-          variant="editor"
-          containerClassName="flex-1 min-h-0"
-          value={text}
-          onChange={onTextChange}
-          placeholder="Start writing your document here... (Markdown supported)"
-          headerActions={headerActions}
-          beforeInput={objectiveSection}
-          className="text-sm leading-relaxed font-serif"
-        />
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* ─── Objective pane (20%, collapsible) ─── */}
+          <div
+            className={`shrink-0 flex flex-col border-b ${
+              objectiveExpanded ? "h-[20%] min-h-[80px]" : ""
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setObjectiveExpanded(!objectiveExpanded)}
+              className="w-full flex items-center gap-2 px-4 py-1.5 text-left hover:bg-muted/30 transition-colors shrink-0"
+            >
+              <Target className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
+                Objective
+              </span>
+              {!objectiveExpanded && objective?.trim() && (
+                <span className="text-xs text-muted-foreground truncate flex-1">
+                  {objective}
+                </span>
+              )}
+              {objectiveExpanded ? (
+                <ChevronDown className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
+              ) : (
+                <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
+              )}
+            </button>
+            {objectiveExpanded && (
+              <ProvokeText
+                chrome="container"
+                variant="textarea"
+                containerClassName="flex-1 min-h-0"
+                value={objective || ""}
+                onChange={onObjectiveChange || (() => {})}
+                placeholder="What are you trying to achieve with this document?"
+                className="text-sm"
+                readOnly={!onObjectiveChange}
+              />
+            )}
+          </div>
+
+          {/* ─── Document pane (remaining ~80%) ─── */}
+          <ProvokeText
+            chrome="container"
+            variant="editor"
+            containerClassName="flex-1 min-h-0"
+            value={text}
+            onChange={onTextChange}
+            placeholder="Start writing your document here... (Markdown supported)"
+            headerActions={documentHeaderActions}
+            className="text-sm leading-relaxed font-serif"
+          />
+        </div>
       )}
     </div>
   );
