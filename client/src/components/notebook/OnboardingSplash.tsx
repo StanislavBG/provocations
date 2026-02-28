@@ -8,7 +8,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  Sparkles,
   ArrowRight,
   Dices,
   RotateCcw,
@@ -26,6 +25,7 @@ import {
   Search,
   Upload,
 } from "lucide-react";
+import { ProvoIcon } from "@/components/ProvoIcon";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
 type Phase = "app-select" | "configure";
@@ -281,7 +281,7 @@ export function OnboardingSplash({
           {/* Header */}
           <div className="py-8 text-center shrink-0">
             <div className="flex items-center justify-center gap-2 mb-3">
-              <Sparkles className="w-7 h-7 text-primary" />
+              <ProvoIcon className="w-7 h-7 text-primary" />
               <h1 className="text-3xl font-serif font-bold">What are you working on?</h1>
             </div>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">
