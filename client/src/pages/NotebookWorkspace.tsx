@@ -532,6 +532,7 @@ export default function NotebookWorkspace() {
                   onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                   isMerging={writeMutation.isPending}
                   documentText={document.rawText}
+                  appType={validAppType}
                 />
               )}
             </div>
@@ -646,6 +647,7 @@ export default function NotebookWorkspace() {
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
                     documentText={document.rawText}
+                    appType={validAppType}
                   />
                 </ResizablePanel>
               </>

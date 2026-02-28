@@ -10,6 +10,7 @@ import {
   generateAdviceRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
+  podcastRequestSchema,
   askQuestionRequestSchema,
   saveDocumentRequestSchema,
   updateDocumentRequestSchema,
@@ -33,6 +34,8 @@ import {
   type ChangeEntry,
   type InterviewQuestionResponse,
   type AskQuestionResponse,
+  type PodcastSegment,
+  type PodcastResponse,
   type PersonaPerspective,
   type StreamingQuestionResponse,
   type WireframeAnalysisResponse,
@@ -58,6 +61,7 @@ import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
 import { runWithGateway, isVerboseEnabled, getActiveScope as getActiveGatewayScope, type GatewayContext, type LlmVerboseMetadata } from "./llm-gateway";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 import { executeAgent } from "./agent-executor";
+import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
@@ -3381,6 +3385,138 @@ Output only the instruction text. No meta-commentary.`,
       console.error("Interview summary error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to summarize interview", details: errorMessage });
+    }
+  });
+
+  // ── Generate podcast from interview Q&A ──
+  // Creates a two-host conversational podcast script via LLM, then converts
+  // each speaker turn to audio using TTS with distinct voices.
+  app.post("/api/interview/podcast", async (req, res) => {
+    try {
+      const parsed = podcastRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, entries, document: docText, appType } = parsed.data;
+
+      const appContext = formatAppTypeContext(appType);
+
+      // Format interview Q&A for the script generator
+      const qaText = entries
+        .map((e) => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`)
+        .join("\n\n---\n\n");
+
+      // ── Step 1: Generate podcast script via LLM ──
+      const scriptResponse = await llm.generate({
+        maxTokens: 4096,
+        temperature: 0.85,
+        system: `${appContext ? appContext + "\n\n" : ""}You are a world-class podcast producer creating an intimate, high-signal episode from interview research.
+
+## FORMAT
+Generate a natural conversation between two podcast hosts discussing insights from a document interview. Output ONLY a raw JSON array (no markdown, no code fences).
+
+## HOSTS
+- **Alex** (Lead Host): Warm, empathetic, journalist-trained. Masterful at the "funnel technique" — starts with big-picture context, then zooms into specifics. Synthesizes complex ideas into vivid, relatable language. Uses active listening cues: "So what you're really saying is..." / "That connects to something interesting..."
+- **Jordan** (Expert Analyst): Sharp, pattern-obsessed, contrarian thinker. Notices what's missing, not just what's present. Provides the "second-order" insight — consequences of consequences. Challenges assumptions with respect: "I'd push back gently on that..." / "Here's what most people miss..."
+
+## JOURNALISTIC PRINCIPLES (2026 Best Practices)
+1. **Lead with the lede** — Open with the single most surprising, counterintuitive, or consequential insight. Not a greeting, not context-setting — the hook.
+2. **Show, don't tell** — Quote specific answers from the interview. "The interviewee said [X]" is 10x more compelling than "They discussed [topic]."
+3. **Steelman before challenging** — Present ideas at their strongest before exploring weaknesses.
+4. **Connect the dots** — Your highest-value move is connecting two separate interview answers to reveal a pattern the interviewee themselves may not have noticed.
+5. **Concrete over abstract** — Replace "scalability concerns" with the specific bottleneck mentioned. Replace "user needs" with the actual user story.
+6. **Tension drives engagement** — Every segment needs a question, a tension, or a surprise. No segment should just be "here's a summary."
+7. **Actionable close** — End with 2-3 specific next steps derived from the interview, not generic advice.
+
+## STRUCTURE (10-18 exchanges total)
+1. **Cold Open** (1-2 exchanges): Hook with the most surprising insight. No "welcome to the show."
+2. **Context Frame** (2-3 exchanges): What's the objective? Why does this matter? Set stakes.
+3. **Deep Dive** (4-8 exchanges): Walk through the richest interview findings. Connect themes. Challenge assumptions.
+4. **The Blind Spot** (2-3 exchanges): What did the interview NOT cover? What questions should have been asked?
+5. **Actionable Close** (2-3 exchanges): Specific next steps. What should the listener do Monday morning?
+
+## STYLE RULES
+- Conversational interruptions: "Wait, say that again—" / "Oh, that's the key insight—"
+- Short turns. No monologues. 2-4 sentences per turn maximum.
+- Specific references to interview answers — quote them.
+- Each exchange must add NEW information or a NEW angle. Zero filler.
+- Vary sentence rhythm. Mix short punchy statements with one longer analytical sentence.
+
+## OUTPUT FORMAT
+Raw JSON array. No explanation. No wrapping.
+[{"speaker":"alex","text":"..."},{"speaker":"jordan","text":"..."},...]`,
+        messages: [
+          {
+            role: "user",
+            content: `Generate a podcast episode about this interview.
+
+OBJECTIVE: ${objective}
+
+${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&A:\n\n${qaText}`,
+          },
+        ],
+      });
+
+      // Parse the script
+      let scriptContent = (scriptResponse.text || "[]").trim();
+      // Strip markdown code fences if present
+      const fenceMatch = scriptContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        scriptContent = fenceMatch[1].trim();
+      }
+
+      let script: PodcastSegment[];
+      try {
+        const parsed = JSON.parse(scriptContent);
+        if (!Array.isArray(parsed)) throw new Error("Script is not an array");
+        script = parsed.map((s: any) => ({
+          speaker: s.speaker === "jordan" ? "jordan" : "alex",
+          text: typeof s.text === "string" ? s.text : "",
+        }));
+      } catch (parseErr) {
+        console.error("[podcast] Script parse error:", parseErr, "Raw:", scriptContent.slice(0, 500));
+        return res.status(500).json({ error: "Failed to parse podcast script" });
+      }
+
+      // ── Step 2: Generate audio for each segment using TTS ──
+      const voiceMap: Record<string, "nova" | "onyx"> = {
+        alex: "nova",
+        jordan: "onyx",
+      };
+
+      const audioBuffers: Buffer[] = [];
+      for (const segment of script) {
+        if (!segment.text.trim()) continue;
+        try {
+          const voice = voiceMap[segment.speaker] || "nova";
+          const audioBuffer = await textToSpeech(segment.text, voice, "mp3");
+          audioBuffers.push(audioBuffer);
+        } catch (ttsErr) {
+          console.error(`[podcast] TTS error for segment (${segment.speaker}):`, ttsErr);
+          // Continue with remaining segments — skip failed ones
+        }
+      }
+
+      if (audioBuffers.length === 0) {
+        return res.status(500).json({ error: "Failed to generate podcast audio" });
+      }
+
+      // ── Step 3: Concatenate MP3 buffers ──
+      const combinedAudio = Buffer.concat(audioBuffers);
+      const audioBase64 = combinedAudio.toString("base64");
+
+      const result: PodcastResponse = {
+        audio: audioBase64,
+        mimeType: "audio/mp3",
+        script,
+      };
+
+      res.json(result);
+    } catch (error) {
+      console.error("Podcast generation error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate podcast", details: errorMessage });
     }
   });
 
