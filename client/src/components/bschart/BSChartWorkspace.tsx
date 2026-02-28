@@ -15,7 +15,10 @@ import {
   Download, Upload, Save,
   HelpCircle, List, CheckCircle2, XCircle,
   ChevronDown, ChevronUp,
+  Undo2, Redo2, ZoomIn, ZoomOut, Maximize, Grid3X3, Mic,
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface BSChartWorkspaceProps {
   /** Callback to export chart as markdown for document integration */
@@ -283,6 +286,87 @@ export function BSChartWorkspace({
           )}
         </div>
         <div className="flex items-center gap-1">
+          {/* Undo / Redo */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={undo}>
+                <Undo2 className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Undo (Ctrl+Z)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={redo}>
+                <Redo2 className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Redo (Ctrl+Y)</TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+
+          {/* Zoom */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleZoomIn}>
+                <ZoomIn className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Zoom In</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleZoomOut}>
+                <ZoomOut className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Zoom Out</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleZoomFit}>
+                <Maximize className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Zoom to Fit</TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+
+          {/* Snap to Grid */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={chart.snapToGrid ? "default" : "ghost"}
+                size="sm"
+                className="h-6 text-xs gap-1"
+                onClick={toggleSnapToGrid}
+              >
+                <Grid3X3 className="w-3 h-3" /> Snap to Grid
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle grid snapping</TooltipContent>
+          </Tooltip>
+
+          {/* Design with Voice */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={voiceMode ? "default" : "ghost"}
+                size="sm"
+                className="h-6 text-xs gap-1"
+                onClick={() => setVoiceMode(!voiceMode)}
+              >
+                <Mic className={`w-3 h-3 ${voiceMode ? "animate-pulse" : ""}`} /> Design with Voice
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Use voice commands to add, move, and connect elements</TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+
+          {/* Import / Export */}
           {onSaveToContext && (
             <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={handleSaveToContext}>
               <Save className="w-3 h-3" /> Save to Context
