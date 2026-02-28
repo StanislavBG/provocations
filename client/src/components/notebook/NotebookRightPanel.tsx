@@ -1,11 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { ProvoThread } from "./ProvoThread";
+import { TranscriptPanel } from "./TranscriptPanel";
 import { NotebookResearchChat } from "./NotebookResearchChat";
 import { GeneratePanel, type GeneratedDocument } from "@/components/GeneratePanel";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { MarkdownRenderer } from "@/components/MarkdownRenderer";
-import { Sparkles, Users, FileText, Trash2, ClipboardList, Wand2, Zap, Loader2 } from "lucide-react";
+import { Sparkles, Users, ClipboardList, Wand2 } from "lucide-react";
 import type { ProvocationType, DiscussionMessage, ContextItem } from "@shared/schema";
 
 type RightPanelTab = "research" | "provo" | "transcript" | "generate";
@@ -60,21 +58,6 @@ export function NotebookRightPanel({
   const [activeTab, setActiveTab] = useState<RightPanelTab>("research");
   const [researchMsgCount, setResearchMsgCount] = useState(0);
   const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
-
-  const handleEvolve = useCallback(() => {
-    if (!onEvolveDocument || capturedContext.length === 0) return;
-
-    const findings = capturedContext
-      .map((item, i) => {
-        const label = item.annotation || `Finding ${i + 1}`;
-        return `### ${label}\n${item.content}`;
-      })
-      .join("\n\n");
-
-    const instruction = `Evolve the document by integrating the following ${capturedContext.length} research finding${capturedContext.length !== 1 ? "s" : ""} and user feedback:\n\n${findings}\n\nRules:\n- PRESERVE the document's existing structure, voice, and content\n- WEAVE new information naturally into relevant sections\n- EXPAND sections where the research provides supporting evidence or new detail\n- ADD new sections only if the research covers topics not yet in the document\n- REMOVE nothing unless the research explicitly contradicts existing content\n- Maintain consistent formatting and style throughout`;
-
-    onEvolveDocument(instruction, `Evolved with ${capturedContext.length} transcript item${capturedContext.length !== 1 ? "s" : ""}`);
-  }, [onEvolveDocument, capturedContext]);
 
   return (
     <div className="h-full flex flex-col bg-card border-l">
@@ -153,85 +136,15 @@ export function NotebookRightPanel({
       </div>
 
       {/* Transcript */}
-      <div className={activeTab === "transcript" ? "flex-1 overflow-hidden flex flex-col" : "hidden"}>
-        {capturedContext.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground/40 p-6">
-            <ClipboardList className="w-8 h-8" />
-            <p className="text-sm text-center">
-              Captured context items will appear here.
-            </p>
-            <p className="text-xs text-center">
-              Use "Send to Transcript" on research responses to collect findings.
-            </p>
-          </div>
-        ) : (
-          <>
-            <ScrollArea className="flex-1">
-              <div className="p-3 space-y-3">
-                {capturedContext.map((item) => (
-                  <div
-                    key={item.id}
-                    className="group border rounded-lg bg-card overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-muted/30">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <FileText className="w-3 h-3 text-primary/70 shrink-0" />
-                        <span className="text-[10px] font-semibold text-muted-foreground truncate">
-                          {item.annotation || "Captured item"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-[9px] text-muted-foreground/50">
-                          {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                        {onRemoveCapturedItem && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                            onClick={() => onRemoveCapturedItem(item.id)}
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="px-3 py-2 text-xs max-h-[200px] overflow-y-auto">
-                      <MarkdownRenderer content={item.content} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-
-            {/* Evolve Document — sticky footer */}
-            <div className="shrink-0 border-t bg-card p-3">
-              <Button
-                onClick={handleEvolve}
-                disabled={!hasDocument || isMerging || capturedContext.length === 0}
-                className="w-full gap-2 h-10 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                {isMerging ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Evolving Document...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    Evolve Document
-                    <span className="text-[10px] opacity-80 font-normal ml-1">
-                      ({capturedContext.length} item{capturedContext.length !== 1 ? "s" : ""})
-                    </span>
-                  </>
-                )}
-              </Button>
-              <p className="text-[10px] text-muted-foreground/60 text-center mt-1.5">
-                Merges all transcript findings into your document
-              </p>
-            </div>
-          </>
-        )}
+      <div className={activeTab === "transcript" ? "flex-1 overflow-hidden" : "hidden"}>
+        <TranscriptPanel
+          capturedContext={capturedContext}
+          onCaptureToContext={onCaptureToContext}
+          onRemoveCapturedItem={onRemoveCapturedItem}
+          onEvolveDocument={onEvolveDocument}
+          hasDocument={hasDocument}
+          isMerging={isMerging}
+        />
       </div>
 
       {/* Provo */}
