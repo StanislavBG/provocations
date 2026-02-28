@@ -331,6 +331,40 @@ export default function NotebookWorkspace() {
     setCapturedContext((prev) => prev.filter((i) => i.id !== itemId));
   }, []);
 
+  // ── Save document to Context Store ──
+  const [isSavingToContext, setIsSavingToContext] = useState(false);
+  const handleSaveToContext = useCallback(async () => {
+    if (!document.rawText.trim()) return;
+    setIsSavingToContext(true);
+    try {
+      const title = objective?.trim()
+        ? objective.trim().slice(0, 120)
+        : `Document ${new Date().toLocaleDateString()}`;
+      // Store objective as a header in the content so it travels with the document
+      const content = objective?.trim()
+        ? `> **Objective:** ${objective.trim()}\n\n${document.rawText}`
+        : document.rawText;
+      await apiRequest("POST", "/api/documents", { title, content });
+      trackEvent("document_saved_to_context");
+      toast({ title: "Saved to Context Store", description: title });
+    } catch {
+      toast({ title: "Save failed", description: "Could not save document.", variant: "destructive" });
+    } finally {
+      setIsSavingToContext(false);
+    }
+  }, [document.rawText, objective, toast]);
+
+  // ── Evolve document via writer ──
+  const handleEvolve = useCallback(
+    (instructionType: string, subOption: string) => {
+      const instruction = subOption === "general"
+        ? `${instructionType} the document — improve it based on the objective.`
+        : `${instructionType}: ${subOption}`;
+      writeMutation.mutate({ instruction, description: `Evolve: ${instructionType}/${subOption}` });
+    },
+    [writeMutation],
+  );
+
   // ── Open a context document for preview ──
   const handleOpenDoc = useCallback(async (id: number, title: string) => {
     // Check if already in pinned cache
@@ -411,6 +445,10 @@ export default function NotebookWorkspace() {
                   templateName={selectedTemplateName}
                   previewDoc={previewDoc}
                   onClosePreview={() => setPreviewDoc(null)}
+                  onSaveToContext={handleSaveToContext}
+                  isSaving={isSavingToContext}
+                  onEvolve={handleEvolve}
+                  isEvolving={writeMutation.isPending}
                 />
               )}
               {mobileTab === "chat" && (
@@ -510,6 +548,10 @@ export default function NotebookWorkspace() {
                   previewDoc={previewDoc}
                   onClosePreview={() => setPreviewDoc(null)}
                   onChartActiveChange={setIsChartActive}
+                  onSaveToContext={handleSaveToContext}
+                  isSaving={isSavingToContext}
+                  onEvolve={handleEvolve}
+                  isEvolving={writeMutation.isPending}
                 />
               )}
             </ResizablePanel>
