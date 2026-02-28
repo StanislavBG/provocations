@@ -50,15 +50,39 @@ interface ContextSidebarProps {
   embedded?: boolean;
 }
 
-/** Compute tree indent padding */
+/** Compute tree indent padding — depth 0 is fully left-aligned, scales to 10+ levels */
 function treeIndent(depth: number): number {
-  let px = 4;
+  if (depth === 0) return 0;
+  let px = 0;
   for (let i = 1; i <= depth; i++) {
-    if (i <= 4) px += 12;
-    else if (i <= 7) px += 8;
-    else px += 5;
+    if (i <= 4) px += 14;
+    else if (i <= 7) px += 10;
+    else px += 7;
   }
   return px;
+}
+
+/* ── Drag-and-drop helpers ── */
+interface DragData {
+  type: "folder" | "document";
+  id: number;
+  title: string;
+}
+
+const DRAG_MIME = "application/x-context-sidebar-drag";
+
+function encodeDragData(data: DragData, dt: DataTransfer) {
+  dt.setData(DRAG_MIME, JSON.stringify(data));
+  dt.effectAllowed = "move";
+}
+
+function decodeDragData(dt: DataTransfer): DragData | null {
+  try {
+    const raw = dt.getData(DRAG_MIME);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Inline rename input — auto-focuses, submits on Enter, cancels on Escape */
@@ -128,6 +152,9 @@ export function ContextSidebar({
   const [creatingDoc, setCreatingDoc] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState("");
 
+  // Drag-and-drop state
+  const [dragOverFolderId, setDragOverFolderId] = useState<number | "root" | null>(null);
+
   // ── Data queries ──
   const { data: docsData } = useQuery<{ documents: DocumentListItem[] }>({
     queryKey: ["/api/documents"],
@@ -161,9 +188,11 @@ export function ContextSidebar({
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
-      toast({ title: "Uploaded", description: "File added to your documents" });
+      // Auto-pin uploaded file to session context
+      if (data?.id) onPinDoc(data.id);
+      toast({ title: "Uploaded", description: "File added to session context" });
     },
   });
 
@@ -241,6 +270,28 @@ export function ContextSidebar({
     },
   });
 
+  // ── Move mutations (drag-and-drop) ──
+  const moveDocMutation = useMutation({
+    mutationFn: async ({ id, folderId }: { id: number; folderId: number | null }) => {
+      await apiRequest("PATCH", `/api/documents/${id}/move`, { folderId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+    },
+  });
+
+  const moveFolderMutation = useMutation({
+    mutationFn: async ({ id, parentFolderId }: { id: number; parentFolderId: number | null }) => {
+      await apiRequest("PATCH", `/api/folders/${id}/move`, { parentFolderId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders/all"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Cannot move folder", description: err.message, variant: "destructive" });
+    },
+  });
+
   // ── Helpers ──
   const handleFileUpload = useCallback(() => {
     const input = document.createElement("input");
@@ -261,6 +312,40 @@ export function ContextSidebar({
       return next;
     });
   };
+
+  // ── Drag-and-drop handlers ──
+  const handleDrop = useCallback(
+    (targetFolderId: number | null, e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOverFolderId(null);
+      const data = decodeDragData(e.dataTransfer);
+      if (!data) return;
+      if (data.type === "document") {
+        moveDocMutation.mutate({ id: data.id, folderId: targetFolderId });
+      } else if (data.type === "folder") {
+        if (data.id === targetFolderId) return;
+        moveFolderMutation.mutate({ id: data.id, parentFolderId: targetFolderId });
+      }
+    },
+    [moveDocMutation, moveFolderMutation],
+  );
+
+  const handleDragOver = useCallback(
+    (folderId: number | "root", e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "move";
+      setDragOverFolderId(folderId);
+    },
+    [],
+  );
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverFolderId(null);
+    }
+  }, []);
 
   // ── Filtering ──
   const q = searchQuery.toLowerCase();
@@ -333,7 +418,7 @@ export function ContextSidebar({
     );
   }
 
-  // ── Document row renderer ──
+  // ── Document row renderer (Context Store tree) ──
   const renderDocRow = (doc: DocumentListItem, indent: number) => {
     const isPinned = pinnedDocIds.has(doc.id);
     const isEditing =
@@ -342,7 +427,11 @@ export function ContextSidebar({
     return (
       <div
         key={`d-${doc.id}`}
-        className={`flex items-center gap-1 group rounded-md transition-all overflow-hidden pr-1 ${
+        draggable={!isEditing}
+        onDragStart={(e) => {
+          encodeDragData({ type: "document", id: doc.id, title: doc.title }, e.dataTransfer);
+        }}
+        className={`flex items-center gap-1 group rounded-md transition-all overflow-hidden pr-1 cursor-grab active:cursor-grabbing ${
           isPinned
             ? "bg-green-500/10 border-l-2 border-green-500"
             : "hover:bg-muted/50"
@@ -471,8 +560,9 @@ export function ContextSidebar({
     const indent = treeIndent(depth);
     const isEditing =
       editingItem?.id === folder.id && editingItem?.type === "folder";
+    const isDragOver = dragOverFolderId === folder.id;
 
-    // Count how many docs in this folder (recursively) are pinned
+    // Count how many docs in this folder are pinned
     const pinnedInFolder = folderDocs.filter((d) =>
       pinnedDocIds.has(d.id),
     ).length;
@@ -480,8 +570,19 @@ export function ContextSidebar({
     return (
       <div key={`f-${folder.id}`}>
         <div
-          className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors overflow-hidden pr-1"
+          className={`flex items-center gap-0.5 group rounded-md transition-colors overflow-hidden pr-1 ${
+            isDragOver
+              ? "bg-amber-500/15 ring-1 ring-amber-500/40"
+              : "hover:bg-muted/50"
+          }`}
           style={{ paddingLeft: `${indent}px` }}
+          draggable={!isEditing}
+          onDragStart={(e) => {
+            encodeDragData({ type: "folder", id: folder.id, title: folder.name }, e.dataTransfer);
+          }}
+          onDragOver={(e) => handleDragOver(folder.id, e)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(folder.id, e)}
         >
           {isEditing ? (
             <div className="flex-1 py-1 px-1">
@@ -590,69 +691,27 @@ export function ContextSidebar({
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Context
           </span>
-          <div className="flex items-center gap-0.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={handleFileUpload}
-                  disabled={uploadMutation.isPending}
-                >
-                  {uploadMutation.isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Upload file</TooltipContent>
-            </Tooltip>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={onToggleCollapse}
-            >
-              <PanelLeftClose className="w-3.5 h-3.5" />
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={onToggleCollapse}
+          >
+            <PanelLeftClose className="w-3.5 h-3.5" />
+          </Button>
         </div>
       )}
 
       {/* ─── Search ─── */}
       <div className="p-2 border-b">
-        <div className="flex items-center gap-1.5">
-          <div className="relative flex-1">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
-              className="h-7 text-xs pl-7"
-            />
-          </div>
-          {embedded && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={handleFileUpload}
-                  disabled={uploadMutation.isPending}
-                >
-                  {uploadMutation.isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Upload file</TooltipContent>
-            </Tooltip>
-          )}
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search..."
+            className="h-7 text-xs pl-7"
+          />
         </div>
       </div>
 
@@ -669,12 +728,30 @@ export function ContextSidebar({
                 {pinnedDocs.length}
               </Badge>
             )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-5 w-5 shrink-0 ${pinnedDocs.length > 0 ? "" : "ml-auto"}`}
+                  onClick={handleFileUpload}
+                  disabled={uploadMutation.isPending}
+                >
+                  {uploadMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Upload className="w-3 h-3" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Upload file to session</TooltipContent>
+            </Tooltip>
           </div>
 
           {pinnedDocs.length === 0 ? (
             <div className="px-3 pb-3 pt-1">
               <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-                Click any document below to add it as context for this session.
+                Upload files or click documents below to add them as context.
                 Only selected documents are shared with your AI advisors.
               </p>
             </div>
@@ -703,8 +780,15 @@ export function ContextSidebar({
           )}
         </div>
 
-        {/* ═══ CONTEXT STORE (Persisted) ═══ */}
-        <div className="p-2 overflow-hidden">
+        {/* ═══ CONTEXT STORE (Persisted) — root drop zone ═══ */}
+        <div
+          className={`p-2 overflow-hidden min-h-[60px] ${
+            dragOverFolderId === "root" ? "bg-amber-500/5" : ""
+          }`}
+          onDragOver={(e) => handleDragOver("root", e)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(null, e)}
+        >
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Context Store
@@ -745,6 +829,13 @@ export function ContextSidebar({
             </div>
           </div>
 
+          {/* Root drop indicator */}
+          {dragOverFolderId === "root" && (
+            <div className="mb-1 py-1 px-2 rounded border border-dashed border-amber-500/50 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-400 text-center">
+              Drop here to move to root
+            </div>
+          )}
+
           {/* Create new folder inline */}
           {creatingFolder && (
             <div className="flex items-center gap-1 mb-1 pl-1">
@@ -756,7 +847,7 @@ export function ContextSidebar({
                 className="h-6 text-xs flex-1"
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newFolderName.trim())
+                  if (e.key === "Enter" && newFolderName.trim() && !createFolderMutation.isPending)
                     createFolderMutation.mutate(newFolderName.trim());
                   if (e.key === "Escape") setCreatingFolder(false);
                 }}
@@ -778,7 +869,7 @@ export function ContextSidebar({
                 className="h-6 text-xs flex-1"
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newDocTitle.trim())
+                  if (e.key === "Enter" && newDocTitle.trim() && !createDocMutation.isPending)
                     createDocMutation.mutate(newDocTitle.trim());
                   if (e.key === "Escape") setCreatingDoc(false);
                 }}
