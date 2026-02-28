@@ -85,38 +85,75 @@ provocations/
 │   └── agent-editor/CLAUDE.md
 ├── client/src/
 │   ├── pages/
-│   │   ├── Workspace.tsx           # Main app orchestrator
+│   │   ├── NotebookWorkspace.tsx   # Primary 3-panel workspace (replaced old Workspace.tsx)
+│   │   ├── Workspace.tsx           # Legacy workspace (still used for some layouts)
+│   │   ├── ContextStore.tsx        # Standalone /store page for context management
+│   │   ├── Admin.tsx               # Admin analytics dashboard
+│   │   ├── Pricing.tsx             # Pricing page
 │   │   └── not-found.tsx           # 404 page
 │   ├── components/
 │   │   ├── ui/                     # 47 shadcn/ui primitives (Radix-based)
+│   │   ├── notebook/               # Notebook layout components (see below)
+│   │   │   ├── NotebookTopBar.tsx      # Session header with name, version count, admin controls
+│   │   │   ├── NotebookLeftPanel.tsx   # Left panel: Context | Chat | Video tabs
+│   │   │   ├── NotebookCenterPanel.tsx # Center: document editor + objective
+│   │   │   ├── NotebookRightPanel.tsx  # Right panel: Research | Notes | Provo | Generate tabs
+│   │   │   ├── ContextSidebar.tsx      # Document/folder tree with pin, search, inline edit
+│   │   │   ├── NotebookResearchChat.tsx # Streaming research chat (SSE via /api/chat/stream)
+│   │   │   ├── ProvoThread.tsx         # Persona discussion thread with accept/respond
+│   │   │   ├── TranscriptPanel.tsx     # Notes panel: add/remove notes, save to context, evolve doc
+│   │   │   ├── SplitDocumentEditor.tsx # Multi-tab editor with smart buttons (Expand/Condense/...)
+│   │   │   ├── PersonaAvatarRow.tsx    # Persona toggle row with avatars
+│   │   │   ├── ChatThread.tsx          # User-to-user chat thread rendering
+│   │   │   └── OnboardingSplash.tsx    # Welcome screen when no document loaded
+│   │   ├── bschart/                # BS Chart visual diagramming tool
+│   │   │   ├── BSChartWorkspace.tsx    # Main chart workspace with canvas, toolbar, properties
+│   │   │   ├── BSChartCanvas.tsx       # Canvas rendering layer
+│   │   │   ├── BSChartToolbar.tsx      # Node creation and format controls
+│   │   │   ├── BSChartProperties.tsx   # Property editor for nodes/connectors
+│   │   │   ├── BSConnectorLayer.tsx    # Edge/connector rendering
+│   │   │   ├── types.ts               # Chart type definitions
+│   │   │   ├── nodes/BSNodeRenderer.tsx # Renders node types (table, diamond, rect, text, badge)
+│   │   │   └── hooks/                  # useChartState, useCanvasInteraction, useVoiceChartCommands
 │   │   ├── ProvokeText.tsx          # Smart text area with voice + processing (ADR: all text must use this)
-│   │   ├── TextInputForm.tsx       # Landing page input (template selection + URL)
-│   │   ├── ProvocationsDisplay.tsx  # Challenge cards with voice response
-│   │   ├── ProvocationToolbox.tsx   # Mode selector (challenge/advise/interview)
-│   │   ├── ReadingPane.tsx          # Editable document canvas
-│   │   ├── InterviewPanel.tsx       # Multi-turn interview Q&A flow
+│   │   ├── ReadingPane.tsx          # Editable document canvas with save-to-context
+│   │   ├── StoragePanel.tsx         # Context Store browser (embeddable or standalone)
+│   │   ├── ChatDrawer.tsx           # User-to-user messaging drawer
+│   │   ├── GeneratePanel.tsx        # Document generation panel
+│   │   ├── ArtifyPanel.tsx          # Image generation from text
 │   │   └── ...                     # See apps/*/CLAUDE.md for app-specific components
 │   ├── hooks/
+│   │   ├── use-whisper.ts          # Whisper-based voice recording
+│   │   ├── use-role.ts             # Admin role detection
+│   │   ├── use-app-favorites.ts    # App favorites persistence
+│   │   └── ...
 │   ├── lib/
 │   │   ├── queryClient.ts          # React Query config + apiRequest helper
-│   │   ├── prebuiltTemplates.ts    # Template definitions (12 app types)
+│   │   ├── prebuiltTemplates.ts    # Template definitions (15 app types)
 │   │   ├── appWorkspaceConfig.ts   # App workspace behavior configs
-│   │   └── utils.ts                # Tailwind merge utilities
-│   ├── App.tsx                     # Router setup
+│   │   ├── workspace-context.tsx   # Shared workspace context provider
+│   │   ├── tracking.ts             # Client-side usage tracking
+│   │   ├── errorLog.ts             # Error log store
+│   │   ├── featureFlags.ts         # Feature flag management
+│   │   └── utils.ts                # Tailwind merge utilities, generateId
+│   ├── App.tsx                     # Router setup (NotebookWorkspace is default)
 │   └── main.tsx                    # Entry point
 ├── server/
 │   ├── index.ts                    # Express app setup
 │   ├── routes.ts                   # All API endpoints
 │   ├── llm.ts                      # Configurable LLM provider (OpenAI/Gemini/Anthropic)
+│   ├── llm-gateway.ts              # LLM call logging and cost tracking
 │   ├── context-builder.ts          # Per-app LLM system prompts & output config
 │   ├── storage.ts                  # Database operations (Drizzle ORM)
 │   ├── crypto.ts                   # AES-256-GCM encryption/decryption (zero-knowledge)
 │   ├── agent-executor.ts           # Agent workflow execution engine
+│   ├── invoke.ts                   # Task type routing for LLM calls
+│   ├── static.ts                   # Static file serving
 │   └── db.ts                       # Database connection
 ├── shared/
 │   ├── schema.ts                   # Zod schemas & TypeScript types (templateIds source of truth)
 │   ├── personas.ts                 # 14 built-in persona definitions
-│   └── models/chat.ts             # Drizzle ORM table definitions
+│   └── models/chat.ts             # Drizzle ORM table definitions (connections, conversations, messages)
 └── script/build.ts                 # Production build configuration
 ```
 
@@ -145,6 +182,9 @@ Each of the 12 applications has its own `apps/<templateId>/CLAUDE.md` containing
 | `text-to-infographic` | Text to Infographic | capture | infographic-studio | edit |
 | `email-composer` | Email Composer | write | standard | edit |
 | `agent-editor` | Agent Editor | build | standard | edit |
+| `gpt-to-context` | GPT to Context | capture | research-chat | aggregate |
+| `bs-chart` | BS Chart | build | bs-chart | edit |
+| `query-editor` | Query Editor | analyze | external | — |
 
 ### Context Store Sync
 
@@ -196,6 +236,27 @@ All endpoints use Zod validation. Document endpoints require Clerk authenticatio
 | `/api/interview/question` | POST | Generate next interview question |
 | `/api/interview/summary` | POST | Synthesize interview entries into instructions |
 | `/api/discussion/ask` | POST | Multi-persona response to user questions |
+
+### Research Chat Endpoints (NotebookWorkspace)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/chat/stream` | POST | Streaming research chat (SSE) |
+| `/api/chat/summarize` | POST | Summarize a research chat session |
+| `/api/chat/save-session` | POST | Save research chat session to context |
+| `/api/chat/models` | GET | List available chat models |
+
+### User-to-User Messaging Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/chat/connections/invite` | POST | Send connection invitation |
+| `/api/chat/connections` | GET | List user's connections |
+| `/api/chat/connections/respond` | POST | Accept/reject connection |
+| `/api/chat/conversations` | GET | List conversations with users |
+| `/api/chat/messages` | POST | Send message in conversation |
+| `/api/chat/messages/:id` | GET | Fetch conversation history |
+| `/api/chat/messages/:id/read` | POST | Mark messages as read |
 
 ### Shared Data Endpoints
 
@@ -294,24 +355,44 @@ The `/api/write` endpoint classifies instructions before processing:
 
 ## Key Shared Components
 
-### Workspace.tsx (Orchestrator)
-Central hub managing all apps:
-- **Phases**: `input` → `workspace` (layout determined by `AppFlowConfig.workspaceLayout`)
-- **State**: document, personas, challenges, interview entries, versions
-- **Versioning**: Full history with diff comparison
-- **Layout routing**: Routes to standard, voice-capture, or infographic-studio layout based on app config
+### NotebookWorkspace.tsx (Primary Orchestrator)
+The main interface since the notebook refactor. Unified 3-panel resizable layout:
+- **Left panel**: ContextSidebar (document/folder tree, pin, search) + ChatDrawer (user-to-user messaging)
+- **Center panel**: SplitDocumentEditor (multi-tab document + chart editing) + objective input
+- **Right panel**: Research (streaming AI chat) | Notes (captured context + voice transcripts) | Provo (persona discussion) | Generate (document generation)
+- **State**: document, objective, personas, capturedContext, pinnedDocIds, discussionMessages, versions, editHistory
+- **Mobile**: Falls back to tabbed single-panel layout (context | document | chat tabs)
+
+### Workspace.tsx (Legacy Orchestrator)
+Still exists for some layout types (voice-capture, infographic-studio). Uses the older tab-based left/right panel system with `AppFlowConfig`.
+
+### notebook/ Components
+| Component | Purpose |
+|-----------|---------|
+| `NotebookTopBar.tsx` | Session header: name, version count, New Session, admin controls |
+| `NotebookLeftPanel.tsx` | Collapsible left panel with Context / Chat / Video tabs |
+| `ContextSidebar.tsx` | Full document/folder tree browser with pin/unpin, search, inline rename/delete |
+| `NotebookCenterPanel.tsx` | Document editor + objective, preview overlay for context docs |
+| `NotebookRightPanel.tsx` | 4-tab right panel: Research, Notes, Provo, Generate |
+| `NotebookResearchChat.tsx` | Streaming research chat via `/api/chat/stream` (SSE) |
+| `ProvoThread.tsx` | Multi-persona discussion thread: challenges, accept/dismiss, respond |
+| `TranscriptPanel.tsx` | Notes management: add notes (text/voice), save to Context Store, evolve document |
+| `SplitDocumentEditor.tsx` | Multi-tab editor with smart buttons (Expand/Condense/Restructure/Clarify/Style/Correct) |
+| `PersonaAvatarRow.tsx` | Persona selector row with toggle avatars |
+
+### bschart/ Components
+Visual diagram/flowchart designer on infinite canvas:
+- `BSChartWorkspace.tsx` — Main container with state management and voice command integration
+- `hooks/useVoiceChartCommands.ts` — Natural language voice commands → chart operations
+- `hooks/useChartState.ts` — Node/connector state management
+- Supports: ERD, flowcharts, architecture diagrams with drag/drop and voice creation
 
 ### ReadingPane.tsx
-The document canvas (used by all standard-layout apps):
+The document canvas (used by legacy workspace standard-layout apps):
 - Editable mode (pencil toggle)
 - Text selection → voice/edit actions
 - Markdown rendering and download
-
-### ProvocationsDisplay.tsx
-Challenge cards that drive iteration (used by all apps):
-- Voice recording on each card
-- Status: pending, addressed, rejected, highlighted
-- Context passed to write endpoint for intelligent integration
+- **Save to Context Store** button in toolbar
 
 ### ProvokeText.tsx (ADR-mandated)
 Universal text component — see ADR below. All text display/editing must use this.
@@ -360,10 +441,31 @@ The LLM adapter in `server/llm.ts` auto-detects these variables. You can verify 
 3. Use `safeParse()` for validation
 4. All LLM calls go through `llm.generate()` / `llm.stream()` from `server/llm.ts`
 
+### Routing (`App.tsx`)
+
+| Route | Component | Purpose |
+|-------|-----------|---------|
+| `/` | `NotebookWorkspace` | Default home — notebook 3-panel layout |
+| `/app/:templateId` | `NotebookWorkspace` | Template-specific workspace |
+| `/store` | `ContextStore` | Standalone Context Store page |
+| `/admin` | `Admin` | Admin analytics dashboard |
+| `/pricing` | `Pricing` | Pricing page |
+
 ### State Management
-- Local state in Workspace.tsx for app-wide concerns
+- Local state in NotebookWorkspace.tsx (primary) and Workspace.tsx (legacy) for app-wide concerns
 - React Query for server state caching
+- Context pinning: `pinnedDocIds` (Set) + `pinnedDocContents` (cache) in NotebookWorkspace
+- Captured context: `capturedContext` (ContextItem[]) passed to all LLM calls
 - No Redux/Zustand — keep it simple
+
+### Database Tables (`shared/models/chat.ts`)
+
+| Table | Purpose |
+|-------|---------|
+| `connections` | User-to-user connections (pending/accepted/blocked) |
+| `conversations` | Chat conversations between users |
+| `messages` | Individual chat messages |
+| `chatPreferences` | User chat settings |
 
 ### Error Handling
 - Zod validation on all API inputs
@@ -448,7 +550,7 @@ Every application (template) in Provocations is defined across **three files** t
    - `steps` (workflow progress steps)
    - `category` (`"build"` | `"write"` | `"analyze"` | `"capture"`)
 3. **Add the `AppFlowConfig`** entry in `appWorkspaceConfig.ts` with:
-   - `workspaceLayout` (`"standard"` or `"voice-capture"`)
+   - `workspaceLayout` (`"standard"`, `"voice-capture"`, `"research-chat"`, `"bs-chart"`)
    - `defaultToolboxTab` (which left panel tab opens first)
    - `autoStartInterview` + `autoStartPersonas`
    - `leftPanelTabs` and `rightPanelTabs` (ordered tab configs)
