@@ -1082,6 +1082,9 @@ export interface PipelineStatus {
 
 // ── Clean-context chat schemas (research session) ──
 
+export const researchFocusModes = ["explore", "verify", "gather", "analyze"] as const;
+export type ResearchFocus = (typeof researchFocusModes)[number];
+
 export const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
@@ -1097,6 +1100,7 @@ export const chatRequestSchema = z.object({
   history: z.array(chatMessageSchema).optional(),
   appType: z.enum(templateIds).optional(),
   chatModel: z.string().optional(),
+  researchFocus: z.enum(researchFocusModes).optional(),
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
