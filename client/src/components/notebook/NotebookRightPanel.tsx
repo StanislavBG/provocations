@@ -88,7 +88,7 @@ export function NotebookRightPanel({
           }`}
         >
           <ClipboardList className="w-3.5 h-3.5" />
-          Transcript
+          Notes
           {capturedContext.length > 0 && (
             <span className="text-[9px] bg-primary/20 text-primary px-1.5 rounded-full">
               {capturedContext.length}

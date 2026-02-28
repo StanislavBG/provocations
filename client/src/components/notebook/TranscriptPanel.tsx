@@ -16,7 +16,10 @@ import {
   Loader2,
   Send,
   Sparkles,
+  Save,
+  Check,
 } from "lucide-react";
+import { trackEvent } from "@/lib/tracking";
 import type { ContextItem } from "@shared/schema";
 
 interface TranscriptPanelProps {
@@ -38,6 +41,25 @@ export function TranscriptPanel({
 }: TranscriptPanelProps) {
   const { toast } = useToast();
   const [noteText, setNoteText] = useState("");
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
+  const [savedNoteIds, setSavedNoteIds] = useState<Set<string>>(new Set());
+
+  // ── Save individual note to Context Store ──
+  const handleSaveToStore = useCallback(async (item: ContextItem) => {
+    if (!item.content.trim()) return;
+    setSavingNoteId(item.id);
+    try {
+      const title = `Note: ${item.content.trim().slice(0, 80).replace(/\n/g, " ")}`;
+      await apiRequest("POST", "/api/documents", { title, content: item.content.trim() });
+      setSavedNoteIds(prev => new Set(prev).add(item.id));
+      trackEvent("note_saved_to_context");
+      toast({ title: "Saved to Context Store", description: title });
+    } catch {
+      toast({ title: "Save failed", description: "Could not save note.", variant: "destructive" });
+    } finally {
+      setSavingNoteId(null);
+    }
+  }, [toast]);
 
   // ── Add note ──
   const handleAddNote = useCallback(() => {
@@ -67,7 +89,7 @@ export function TranscriptPanel({
       onCaptureToContext(data.summary, "Summary");
       toast({
         title: "Notes summarized",
-        description: "Summary added to transcript",
+        description: "Summary added to notes",
       });
     },
     onError: (error) => {
@@ -108,9 +130,9 @@ export function TranscriptPanel({
   return (
     <div className="h-full flex flex-col">
       {/* ─── Add Note input ─── */}
-      <div className="px-3 py-2 border-b bg-muted/20 shrink-0">
-        <div className="flex items-end gap-1.5">
-          <div className="flex-1">
+      <div className="shrink-0 px-3 pt-3 pb-2 border-b bg-muted/30">
+        <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background p-2">
+          <div className="flex-1 min-w-0">
             <ProvokeText
               chrome="bare"
               variant="textarea"
@@ -158,7 +180,7 @@ export function TranscriptPanel({
             Your operational notes will appear here.
           </p>
           <p className="text-xs text-center">
-            Add notes above, or use "Send to Transcript" from Research and Provo
+            Add notes above, or use "Send to Notes" from Research and Provo
             tabs.
           </p>
         </div>
@@ -185,6 +207,26 @@ export function TranscriptPanel({
                           minute: "2-digit",
                         })}
                       </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-5 w-5 transition-opacity ${
+                          savedNoteIds.has(item.id)
+                            ? "text-green-600 dark:text-green-400 opacity-100"
+                            : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-green-600 dark:hover:text-green-400"
+                        }`}
+                        onClick={() => handleSaveToStore(item)}
+                        disabled={!item.content.trim() || savingNoteId === item.id}
+                        title={savedNoteIds.has(item.id) ? "Saved to store" : "Save to Context Store"}
+                      >
+                        {savingNoteId === item.id ? (
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        ) : savedNoteIds.has(item.id) ? (
+                          <Check className="w-2.5 h-2.5" />
+                        ) : (
+                          <Save className="w-2.5 h-2.5" />
+                        )}
+                      </Button>
                       {onRemoveCapturedItem && (
                         <Button
                           variant="ghost"
@@ -258,7 +300,7 @@ export function TranscriptPanel({
               )}
             </Button>
             <p className="text-[10px] text-muted-foreground/60 text-center">
-              Merges all transcript findings into your document
+              Merges all notes into your document
             </p>
           </div>
         </>

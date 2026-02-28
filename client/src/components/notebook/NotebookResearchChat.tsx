@@ -121,8 +121,8 @@ export function NotebookResearchChat({
           : firstLine || "Research finding";
       onCaptureToContext(content, label);
       toast({
-        title: "Sent to Transcript",
-        description: "Response added to your transcript",
+        title: "Sent to Notes",
+        description: "Response added to your notes",
       });
     },
     [onCaptureToContext, toast],
@@ -206,7 +206,7 @@ export function NotebookResearchChat({
                         onClick={() => handleCapture(msg.content)}
                       >
                         <BookmarkPlus className="w-3 h-3" />
-                        Send to Transcript
+                        Send to Notes
                       </Button>
                     </div>
                   </div>
