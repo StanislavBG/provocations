@@ -24,6 +24,10 @@ import {
   Square,
   X,
   CheckCircle2,
+  Pencil,
+  Paintbrush,
+  Scale,
+  Target,
 } from "lucide-react";
 import type {
   InterviewEntry,
@@ -31,6 +35,21 @@ import type {
   PodcastResponse,
   PodcastSegment,
 } from "@shared/schema";
+
+// ── Interview stance ──
+
+type InterviewStance = "writer" | "painter" | "balanced";
+
+function buildGuidance(stance: InterviewStance, focus: string): string | undefined {
+  const parts: string[] = [];
+  if (stance === "writer") {
+    parts.push("STANCE: Writer — be analytical, structured. Break things down, find logical gaps, demand specifics and evidence. Ask the hard 'how' and 'why' questions.");
+  } else if (stance === "painter") {
+    parts.push("STANCE: Painter — be creative, exploratory. Ask 'what if', draw unexpected connections, explore emotional and human dimensions. Open new possibilities.");
+  }
+  if (focus.trim()) parts.push(focus.trim());
+  return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
 
 // ── Props ──
 
@@ -63,6 +82,10 @@ export function InterviewTab({
   const [answerText, setAnswerText] = useState("");
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
 
+  // ── Stance & focus state ──
+  const [stance, setStance] = useState<InterviewStance>("balanced");
+  const [focusText, setFocusText] = useState("");
+
   // ── Podcast state ──
   const [podcastAudioUrl, setPodcastAudioUrl] = useState<string | null>(null);
   const [podcastScript, setPodcastScript] = useState<PodcastSegment[] | null>(null);
@@ -94,6 +117,8 @@ export function InterviewTab({
         document: documentText,
         appType,
         previousEntries: entries.length > 0 ? entries : undefined,
+        directionMode: stance === "writer" ? "challenge" : stance === "painter" ? "advise" : undefined,
+        directionGuidance: buildGuidance(stance, focusText),
       });
       return (await response.json()) as InterviewQuestionResponse;
     },
@@ -267,6 +292,13 @@ export function InterviewTab({
     toast({ title: "Saved to notes", description: `${entries.length} Q&A pairs captured` });
   }, [entries, onCaptureToContext, toast]);
 
+  // ── Stance cycle helper ──
+  const cycleStance = useCallback(() => {
+    setStance((prev) =>
+      prev === "balanced" ? "writer" : prev === "writer" ? "painter" : "balanced"
+    );
+  }, []);
+
   // ── Render: Not started ──
   if (!isActive && entries.length === 0) {
     return (
@@ -282,14 +314,66 @@ export function InterviewTab({
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Guided Interview</h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                A journalist-trained AI interviewer will ask you targeted questions about your document.
-                Questions start broad and narrow as you share your thinking.
-              </p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                After the interview, generate a <strong>summary</strong> to merge insights into your document,
-                or create a <strong>podcast</strong> episode from the Q&A.
+                A thought-provoking AI interviewer asks targeted questions about your document.
+                Choose a stance to shape the style of questioning.
               </p>
             </div>
+
+            {/* Stance toggle */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Interview Stance</p>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={() => setStance("writer")}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                    stance === "writer"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                  }`}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <div className="text-left">
+                    <div>Writer</div>
+                    <div className="text-[9px] opacity-70">Analytical</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setStance("painter")}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                    stance === "painter"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                  }`}
+                >
+                  <Paintbrush className="w-3.5 h-3.5" />
+                  <div className="text-left">
+                    <div>Painter</div>
+                    <div className="text-[9px] opacity-70">Exploratory</div>
+                  </div>
+                </button>
+              </div>
+              {stance !== "balanced" && (
+                <button
+                  onClick={() => setStance("balanced")}
+                  className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                >
+                  Reset to balanced
+                </button>
+              )}
+            </div>
+
+            {/* Focus input */}
+            <div className="space-y-1.5 text-left">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Focus (optional)</p>
+              <input
+                type="text"
+                value={focusText}
+                onChange={(e) => setFocusText(e.target.value)}
+                placeholder="e.g. Push me on pricing strategy"
+                className="w-full px-3 py-2 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+              />
+            </div>
+
             <Button
               size="sm"
               className="gap-1.5"
@@ -322,6 +406,24 @@ export function InterviewTab({
               {entries.length} Q&A
             </Badge>
           )}
+          {/* Stance pill — tap to cycle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={cycleStance}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors hover:bg-muted/50"
+              >
+                {stance === "writer" ? (
+                  <><Pencil className="w-3 h-3" /> Writer</>
+                ) : stance === "painter" ? (
+                  <><Paintbrush className="w-3 h-3" /> Painter</>
+                ) : (
+                  <><Scale className="w-3 h-3" /> Balanced</>
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Tap to cycle: Balanced → Writer → Painter</TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex items-center gap-1">
           {/* Podcast button */}
