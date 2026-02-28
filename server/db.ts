@@ -4,6 +4,10 @@ import * as schema from "../shared/models/chat";
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
+  min: 5,
+  max: 20,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
 });
 
 // Prevent unhandled 'error' events from crashing the process
@@ -293,6 +297,23 @@ export async function ensureTables(): Promise<void> {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_preferences_user ON chat_preferences(user_id);
+
+      -- Active Context table (hot storage → cold store reflection)
+      CREATE TABLE IF NOT EXISTS active_context (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        document_id INTEGER NOT NULL,
+        pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE(user_id, document_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_active_context_user ON active_context(user_id);
+
+      -- Document & folder indexes (critical for Context Store performance)
+      CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+      CREATE INDEX IF NOT EXISTS idx_documents_user_folder ON documents(user_id, folder_id);
+      CREATE INDEX IF NOT EXISTS idx_documents_user_updated ON documents(user_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_folders_user_id ON folders(user_id);
+      CREATE INDEX IF NOT EXISTS idx_folders_user_parent ON folders(user_id, parent_folder_id);
 
       CREATE INDEX IF NOT EXISTS idx_tracking_events_user ON tracking_events(user_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_type ON tracking_events(event_type);

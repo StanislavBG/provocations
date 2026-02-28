@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getAuth, clerkClient } from "@clerk/express";
 import { storage } from "./storage";
-import { encrypt, decrypt } from "./crypto";
+import { encrypt, decrypt, encryptAsync, decryptAsync, decryptFieldAsync, decryptFieldsBatch } from "./crypto";
 import { llm } from "./llm";
 import {
   writeRequestSchema,
@@ -10,6 +10,7 @@ import {
   generateAdviceRequestSchema,
   interviewQuestionRequestSchema,
   interviewSummaryRequestSchema,
+  podcastRequestSchema,
   askQuestionRequestSchema,
   saveDocumentRequestSchema,
   updateDocumentRequestSchema,
@@ -33,6 +34,8 @@ import {
   type ChangeEntry,
   type InterviewQuestionResponse,
   type AskQuestionResponse,
+  type PodcastSegment,
+  type PodcastResponse,
   type PersonaPerspective,
   type StreamingQuestionResponse,
   type WireframeAnalysisResponse,
@@ -58,8 +61,11 @@ import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
 import { runWithGateway, isVerboseEnabled, getActiveScope as getActiveGatewayScope, type GatewayContext, type LlmVerboseMetadata } from "./llm-gateway";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 import { executeAgent } from "./agent-executor";
+import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
+import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
+import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable } from "../shared/models/chat";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -3382,6 +3388,138 @@ Output only the instruction text. No meta-commentary.`,
     }
   });
 
+  // ── Generate podcast from interview Q&A ──
+  // Creates a two-host conversational podcast script via LLM, then converts
+  // each speaker turn to audio using TTS with distinct voices.
+  app.post("/api/interview/podcast", async (req, res) => {
+    try {
+      const parsed = podcastRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { objective, entries, document: docText, appType } = parsed.data;
+
+      const appContext = formatAppTypeContext(appType);
+
+      // Format interview Q&A for the script generator
+      const qaText = entries
+        .map((e) => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`)
+        .join("\n\n---\n\n");
+
+      // ── Step 1: Generate podcast script via LLM ──
+      const scriptResponse = await llm.generate({
+        maxTokens: 4096,
+        temperature: 0.85,
+        system: `${appContext ? appContext + "\n\n" : ""}You are a world-class podcast producer creating an intimate, high-signal episode from interview research.
+
+## FORMAT
+Generate a natural conversation between two podcast hosts discussing insights from a document interview. Output ONLY a raw JSON array (no markdown, no code fences).
+
+## HOSTS
+- **Alex** (Lead Host): Warm, empathetic, journalist-trained. Masterful at the "funnel technique" — starts with big-picture context, then zooms into specifics. Synthesizes complex ideas into vivid, relatable language. Uses active listening cues: "So what you're really saying is..." / "That connects to something interesting..."
+- **Jordan** (Expert Analyst): Sharp, pattern-obsessed, contrarian thinker. Notices what's missing, not just what's present. Provides the "second-order" insight — consequences of consequences. Challenges assumptions with respect: "I'd push back gently on that..." / "Here's what most people miss..."
+
+## JOURNALISTIC PRINCIPLES (2026 Best Practices)
+1. **Lead with the lede** — Open with the single most surprising, counterintuitive, or consequential insight. Not a greeting, not context-setting — the hook.
+2. **Show, don't tell** — Quote specific answers from the interview. "The interviewee said [X]" is 10x more compelling than "They discussed [topic]."
+3. **Steelman before challenging** — Present ideas at their strongest before exploring weaknesses.
+4. **Connect the dots** — Your highest-value move is connecting two separate interview answers to reveal a pattern the interviewee themselves may not have noticed.
+5. **Concrete over abstract** — Replace "scalability concerns" with the specific bottleneck mentioned. Replace "user needs" with the actual user story.
+6. **Tension drives engagement** — Every segment needs a question, a tension, or a surprise. No segment should just be "here's a summary."
+7. **Actionable close** — End with 2-3 specific next steps derived from the interview, not generic advice.
+
+## STRUCTURE (10-18 exchanges total)
+1. **Cold Open** (1-2 exchanges): Hook with the most surprising insight. No "welcome to the show."
+2. **Context Frame** (2-3 exchanges): What's the objective? Why does this matter? Set stakes.
+3. **Deep Dive** (4-8 exchanges): Walk through the richest interview findings. Connect themes. Challenge assumptions.
+4. **The Blind Spot** (2-3 exchanges): What did the interview NOT cover? What questions should have been asked?
+5. **Actionable Close** (2-3 exchanges): Specific next steps. What should the listener do Monday morning?
+
+## STYLE RULES
+- Conversational interruptions: "Wait, say that again—" / "Oh, that's the key insight—"
+- Short turns. No monologues. 2-4 sentences per turn maximum.
+- Specific references to interview answers — quote them.
+- Each exchange must add NEW information or a NEW angle. Zero filler.
+- Vary sentence rhythm. Mix short punchy statements with one longer analytical sentence.
+
+## OUTPUT FORMAT
+Raw JSON array. No explanation. No wrapping.
+[{"speaker":"alex","text":"..."},{"speaker":"jordan","text":"..."},...]`,
+        messages: [
+          {
+            role: "user",
+            content: `Generate a podcast episode about this interview.
+
+OBJECTIVE: ${objective}
+
+${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&A:\n\n${qaText}`,
+          },
+        ],
+      });
+
+      // Parse the script
+      let scriptContent = (scriptResponse.text || "[]").trim();
+      // Strip markdown code fences if present
+      const fenceMatch = scriptContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        scriptContent = fenceMatch[1].trim();
+      }
+
+      let script: PodcastSegment[];
+      try {
+        const parsed = JSON.parse(scriptContent);
+        if (!Array.isArray(parsed)) throw new Error("Script is not an array");
+        script = parsed.map((s: any) => ({
+          speaker: s.speaker === "jordan" ? "jordan" : "alex",
+          text: typeof s.text === "string" ? s.text : "",
+        }));
+      } catch (parseErr) {
+        console.error("[podcast] Script parse error:", parseErr, "Raw:", scriptContent.slice(0, 500));
+        return res.status(500).json({ error: "Failed to parse podcast script" });
+      }
+
+      // ── Step 2: Generate audio for each segment using TTS ──
+      const voiceMap: Record<string, "nova" | "onyx"> = {
+        alex: "nova",
+        jordan: "onyx",
+      };
+
+      const audioBuffers: Buffer[] = [];
+      for (const segment of script) {
+        if (!segment.text.trim()) continue;
+        try {
+          const voice = voiceMap[segment.speaker] || "nova";
+          const audioBuffer = await textToSpeech(segment.text, voice, "mp3");
+          audioBuffers.push(audioBuffer);
+        } catch (ttsErr) {
+          console.error(`[podcast] TTS error for segment (${segment.speaker}):`, ttsErr);
+          // Continue with remaining segments — skip failed ones
+        }
+      }
+
+      if (audioBuffers.length === 0) {
+        return res.status(500).json({ error: "Failed to generate podcast audio" });
+      }
+
+      // ── Step 3: Concatenate MP3 buffers ──
+      const combinedAudio = Buffer.concat(audioBuffers);
+      const audioBase64 = combinedAudio.toString("base64");
+
+      const result: PodcastResponse = {
+        audio: audioBase64,
+        mimeType: "audio/mp3",
+        script,
+      };
+
+      res.json(result);
+    } catch (error) {
+      console.error("Podcast generation error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to generate podcast", details: errorMessage });
+    }
+  });
+
   // ── Ask question to the persona team ──
   // The user asks a question and the system identifies the 3 most relevant
   // personas, then composes a multi-perspective response.
@@ -4061,7 +4199,7 @@ RULES:
     }
   });
 
-  // List documents for the authenticated user (titles decrypted server-side)
+  // List documents for the authenticated user (titles decrypted server-side, async batch)
   app.get("/api/documents", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4069,13 +4207,16 @@ RULES:
 
       const key = getEncryptionKey();
       const items = await storage.listDocuments(userId);
-      const decrypted = items.map((item) => ({
-        id: item.id,
-        title: decryptField(item.title, item.titleCiphertext, item.titleSalt, item.titleIv, key),
-        folderId: item.folderId,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      }));
+      // Batch-decrypt all titles concurrently (async PBKDF2 on thread pool + LRU cache)
+      const decrypted = await Promise.all(
+        items.map(async (item) => ({
+          id: item.id,
+          title: await decryptFieldAsync(item.title, item.titleCiphertext, item.titleSalt, item.titleIv, key),
+          folderId: item.folderId,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        })),
+      );
       res.json({ documents: decrypted });
     } catch (error) {
       console.error("List documents error:", error);
@@ -4137,7 +4278,7 @@ RULES:
     }
   });
 
-  // Rename a document (title encrypted before storing)
+  // Rename a document (title encrypted before storing, single query with ownership check)
   app.patch("/api/documents/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4153,23 +4294,17 @@ RULES:
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const existing = await storage.getDocument(id);
-      if (!existing) {
-        return res.status(404).json({ error: "Document not found" });
-      }
-      if (existing.userId !== userId) {
-        return res.status(403).json({ error: "Not authorized to rename this document" });
-      }
       const key = getEncryptionKey();
-      const encryptedTitle = encrypt(parsed.data.title, key);
-      const result = await storage.renameDocument(id, {
+      const encryptedTitle = await encryptAsync(parsed.data.title, key);
+      // Single query: UPDATE ... WHERE id = ? AND user_id = ?
+      const result = await storage.renameDocumentForUser(id, userId, {
         title: "[encrypted]",
         titleCiphertext: encryptedTitle.ciphertext,
         titleSalt: encryptedTitle.salt,
         titleIv: encryptedTitle.iv,
       });
       if (!result) {
-        return res.status(404).json({ error: "Document not found" });
+        return res.status(404).json({ error: "Document not found or not authorized" });
       }
 
       res.json(result);
@@ -4180,7 +4315,7 @@ RULES:
     }
   });
 
-  // Move a document to a different folder
+  // Move a document to a different folder (single query with ownership check)
   app.patch("/api/documents/:id/move", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4194,12 +4329,9 @@ RULES:
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const existing = await storage.getDocument(id);
-      if (!existing) return res.status(404).json({ error: "Document not found" });
-      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
-
-      const result = await storage.moveDocument(id, parsed.data.folderId);
-      if (!result) return res.status(404).json({ error: "Document not found" });
+      // Single query: UPDATE ... WHERE id = ? AND user_id = ?
+      const result = await storage.moveDocumentForUser(id, userId, parsed.data.folderId);
+      if (!result) return res.status(404).json({ error: "Document not found or not authorized" });
 
       res.json(result);
     } catch (error) {
@@ -4209,7 +4341,7 @@ RULES:
     }
   });
 
-  // Delete a document (ownership verified via Clerk userId)
+  // Delete a document (single query with ownership check)
   app.delete("/api/documents/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4220,14 +4352,11 @@ RULES:
         return res.status(400).json({ error: "Invalid document ID" });
       }
 
-      const existing = await storage.getDocument(id);
-      if (!existing) {
-        return res.status(404).json({ error: "Document not found" });
+      // Single query: DELETE ... WHERE id = ? AND user_id = ?
+      const deleted = await storage.deleteDocumentForUser(id, userId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Document not found or not authorized" });
       }
-      if (existing.userId !== userId) {
-        return res.status(403).json({ error: "Not authorized to delete this document" });
-      }
-      await storage.deleteDocument(id);
       res.json({ success: true });
     } catch (error) {
       console.error("Delete document error:", error);
@@ -4240,7 +4369,7 @@ RULES:
   // Folder Management (hierarchical document organization)
   // ==========================================
 
-  // List folders for a user (folder names decrypted server-side)
+  // List folders for a user (folder names decrypted server-side, async batch)
   app.get("/api/folders", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4260,13 +4389,16 @@ RULES:
 
       const key = getEncryptionKey();
       const items = await storage.listFolders(userId, parentFolderFilter);
-      const decrypted = items.map((item) => ({
-        id: item.id,
-        name: decryptField(item.name, item.nameCiphertext, item.nameSalt, item.nameIv, key),
-        parentFolderId: item.parentFolderId,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      }));
+      // Batch-decrypt all folder names concurrently (async PBKDF2 + LRU cache)
+      const decrypted = await Promise.all(
+        items.map(async (item) => ({
+          id: item.id,
+          name: await decryptFieldAsync(item.name, item.nameCiphertext, item.nameSalt, item.nameIv, key),
+          parentFolderId: item.parentFolderId,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        })),
+      );
       res.json({ folders: decrypted });
     } catch (error) {
       console.error("List folders error:", error);
@@ -4275,7 +4407,7 @@ RULES:
     }
   });
 
-  // Create a new folder (name encrypted before storing)
+  // Create a new folder (name encrypted before storing, async encryption)
   app.post("/api/folders", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4288,7 +4420,7 @@ RULES:
 
       const { name, parentFolderId } = parsed.data;
       const key = getEncryptionKey();
-      const encryptedName = encrypt(name, key);
+      const encryptedName = await encryptAsync(name, key);
       const folder = await storage.createFolder(
         userId,
         "[encrypted]",
@@ -4311,7 +4443,7 @@ RULES:
     }
   });
 
-  // Rename a folder (name encrypted before storing)
+  // Rename a folder (single query with ownership check, async encryption)
   app.patch("/api/folders/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4325,19 +4457,17 @@ RULES:
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const existing = await storage.getFolder(id);
-      if (!existing) return res.status(404).json({ error: "Folder not found" });
-      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
-
       const key = getEncryptionKey();
-      const encryptedName = encrypt(parsed.data.name, key);
-      const result = await storage.renameFolder(
+      const encryptedName = await encryptAsync(parsed.data.name, key);
+      // Single query: UPDATE ... WHERE id = ? AND user_id = ?
+      const result = await storage.renameFolderForUser(
         id,
+        userId,
         "[encrypted]",
         { nameCiphertext: encryptedName.ciphertext, nameSalt: encryptedName.salt, nameIv: encryptedName.iv },
       );
 
-      if (!result) return res.status(404).json({ error: "Folder not found" });
+      if (!result) return res.status(404).json({ error: "Folder not found or not authorized" });
 
       // Return decrypted name to the client
       res.json({
@@ -4354,7 +4484,7 @@ RULES:
     }
   });
 
-  // Move a folder to a different parent folder
+  // Move a folder to a different parent folder (optimized cycle detection + single query)
   app.patch("/api/folders/:id/move", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4373,26 +4503,21 @@ RULES:
         return res.status(400).json({ error: "Cannot move a folder into itself" });
       }
 
-      // Prevent moving into own descendant (cycle detection)
+      // Prevent moving into own descendant (optimized: lightweight id→parent map, O(depth) walk)
       if (parsed.data.parentFolderId !== null) {
-        const allFoldersForUser = await storage.listFolders(userId);
-        const isDescendant = (folderId: number, ancestorId: number): boolean => {
-          const folder = allFoldersForUser.find(f => f.id === folderId);
-          if (!folder || !folder.parentFolderId) return false;
-          if (folder.parentFolderId === ancestorId) return true;
-          return isDescendant(folder.parentFolderId, ancestorId);
-        };
-        if (isDescendant(parsed.data.parentFolderId, id)) {
-          return res.status(400).json({ error: "Cannot move a folder into its own descendant" });
+        const hierarchy = await storage.getFolderHierarchy(userId);
+        let current: number | null = parsed.data.parentFolderId;
+        while (current !== null) {
+          if (current === id) {
+            return res.status(400).json({ error: "Cannot move a folder into its own descendant" });
+          }
+          current = hierarchy.get(current) ?? null;
         }
       }
 
-      const existing = await storage.getFolder(id);
-      if (!existing) return res.status(404).json({ error: "Folder not found" });
-      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
-
-      const result = await storage.moveFolder(id, parsed.data.parentFolderId);
-      if (!result) return res.status(404).json({ error: "Folder not found" });
+      // Single query: UPDATE ... WHERE id = ? AND user_id = ?
+      const result = await storage.moveFolderForUser(id, userId, parsed.data.parentFolderId);
+      if (!result) return res.status(404).json({ error: "Folder not found or not authorized" });
 
       res.json(result);
     } catch (error) {
@@ -4402,7 +4527,7 @@ RULES:
     }
   });
 
-  // Delete a folder (cascade deletes children)
+  // Delete a folder (single query with ownership check, cascade deletes children)
   app.delete("/api/folders/:id", async (req, res) => {
     try {
       const { userId } = getAuth(req);
@@ -4411,11 +4536,11 @@ RULES:
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid folder ID" });
 
-      const existing = await storage.getFolder(id);
-      if (!existing) return res.status(404).json({ error: "Folder not found" });
-      if (existing.userId !== userId) return res.status(403).json({ error: "Not authorized" });
-
-      await storage.deleteFolder(id);
+      // Single query: DELETE ... WHERE id = ? AND user_id = ?
+      const deleted = await storage.deleteFolderForUser(id, userId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Folder not found or not authorized" });
+      }
       res.json({ success: true });
     } catch (error) {
       console.error("Delete folder error:", error);
@@ -4425,20 +4550,31 @@ RULES:
   });
 
   // ==========================================
-  // Storage API aliases — /api/storage/* redirects to /api/documents/* & /api/folders/*
-  // Streamlined naming for microservice-style access
+  // Context Store microservice — active context endpoints + storage alias
+  // The full Context Store service is available at services/context-store/
+  // and can be mounted independently. Here we mount only the active-context
+  // endpoints (hot storage → cold store reflection) alongside the existing routes.
   // ==========================================
 
-  app.use("/api/storage", (req, _res, next) => {
-    // Rewrite /api/storage/documents/* → /api/documents/*
-    // Rewrite /api/storage/folders/* → /api/folders/*
-    if (req.url.startsWith("/documents")) {
-      req.url = `/api${req.url}`;
-    } else if (req.url.startsWith("/folders")) {
-      req.url = `/api${req.url}`;
+  const contextStoreStorage = new ContextStoreStorage(
+    (await import("./db")).db,
+    { documents: documentsTable, folders: foldersTable, activeContext: activeContextTable },
+  );
+  const contextStoreRouter = createContextStoreRouter(
+    { getAuth: (req: any) => getAuth(req), encryptionKey: getEncryptionKey() },
+    contextStoreStorage,
+  );
+  // Mount active-context endpoints under /api/
+  app.use("/api", (req, res, next) => {
+    // Only route active-context requests to the context-store service
+    if (req.path.startsWith("/active-context")) {
+      return contextStoreRouter(req, res, next);
     }
-    next("route");
+    next();
   });
+
+  // Storage API aliases — /api/storage/* also routes through the context-store service
+  app.use("/api/storage", contextStoreRouter);
 
   // ==========================================
   // User Preferences
