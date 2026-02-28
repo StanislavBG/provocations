@@ -82,7 +82,6 @@ import {
   Plus,
   PenLine,
   ChevronRight,
-  Mic as MicIcon,
 } from "lucide-react";
 import { builtInPersonas } from "@shared/personas";
 import { parseAppLaunchParams, clearLaunchParams } from "@/lib/appLaunchParams";
@@ -113,7 +112,7 @@ import type {
   ChatMessage,
 } from "@shared/schema";
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
-import { TranscriptPanel } from "@/components/TranscriptPanel";
+import { TranscriptPanel, type NoteEntry } from "@/components/TranscriptPanel";
 import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { documentTypes, documentTypeLabels, type DocumentType } from "@shared/schema";
 
@@ -307,8 +306,8 @@ export default function Workspace() {
   // ── Document type — drives the Writer's mission (replaces per-app identity) ──
   const [documentType, setDocumentType] = useState<DocumentType>("notepad");
 
-  // ── Transcript panel state — shared across all mic inputs ──
-  const [transcriptText, setTranscriptText] = useState<string>("");
+  // ── Notes panel state — shared across all mic inputs ──
+  const [noteEntries, setNoteEntries] = useState<NoteEntry[]>([]);
   const [transcriptSelectedText, setTranscriptSelectedText] = useState<string | undefined>(undefined);
 
   // Document preview from Sources panel — shows selected doc in reading pane
@@ -1218,22 +1217,27 @@ RULES:
     trackEvent("writer_invoked", { metadata: { source: "writer_button", documentType } });
   }, [writeMutation, documentType]);
 
-  // ── Transcript → Writer handler ──
-  const handleTranscriptWrite = useCallback((transcriptContent: string) => {
+  // ── Notes → Writer handler ──
+  const handleNotesWrite = useCallback((notesContent: string) => {
     const instruction = transcriptSelectedText
-      ? `Use the following voice transcript/feedback to evolve the selected portion of the document:\n\n${transcriptContent}`
-      : `Incorporate the following voice transcript/feedback into the document, evolving it accordingly:\n\n${transcriptContent}`;
+      ? `Use the following notes/feedback to evolve the selected portion of the document:\n\n${notesContent}`
+      : `Incorporate the following notes/feedback into the document, evolving it accordingly:\n\n${notesContent}`;
     writeMutation.mutate({
       instruction,
       selectedText: transcriptSelectedText,
-      description: "Transcript merged into document",
+      description: "Notes merged into document",
     });
-    trackEvent("writer_invoked", { metadata: { source: "transcript_panel" } });
+    trackEvent("writer_invoked", { metadata: { source: "notes_panel" } });
   }, [writeMutation, transcriptSelectedText]);
 
-  // ── Mic → Transcript tab activation ──
+  // ── Mic → Notes tab activation ──
   const handleMicTranscript = useCallback((transcript: string, selectedText?: string) => {
-    setTranscriptText(prev => prev ? prev + "\n\n" + transcript : transcript);
+    const newNote: NoteEntry = {
+      id: generateId("note"),
+      text: transcript,
+      createdAt: Date.now(),
+    };
+    setNoteEntries(prev => [...prev, newNote]);
     if (selectedText) setTranscriptSelectedText(selectedText);
     setRightPanelMode("transcript");
   }, []);
@@ -1582,6 +1586,28 @@ RULES:
     }
     recordUsageMetrics("save");
   }, [document, savedDocId, recordUsageMetrics]);
+
+  // ── Quick save document to Context Store (from ReadingPane save button) ──
+  const [isSavingDocToContext, setIsSavingDocToContext] = useState(false);
+  const handleSaveDocToContext = useCallback(async () => {
+    if (!document.rawText.trim()) return;
+    setIsSavingDocToContext(true);
+    try {
+      const title = objective
+        ? `Document: ${objective.slice(0, 80).replace(/\n/g, " ")}`
+        : `Document: ${document.rawText.trim().slice(0, 80).replace(/\n/g, " ")}`;
+      await apiRequest("POST", "/api/documents", {
+        title,
+        content: document.rawText,
+      });
+      trackEvent("document_saved_to_context");
+      toast({ title: "Saved to Context", description: title });
+    } catch {
+      toast({ title: "Save failed", description: "Could not save document to context.", variant: "destructive" });
+    } finally {
+      setIsSavingDocToContext(false);
+    }
+  }, [document.rawText, objective, toast]);
 
   /** Load a document from Context Store into the objective (replace) */
   const handleLoadObjectiveFromStore = useCallback(async (docId: number, docTitle: string) => {
@@ -2201,7 +2227,7 @@ RULES:
       {/* Right panel tab toggle — driven by app config */}
       <div className="flex items-center border-b bg-muted/20 shrink-0">
         {appFlowConfig.rightPanelTabs.map((tab) => {
-          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : tab.id === "transcript" ? MicIcon : Zap;
+          const Icon = tab.id === "discussion" ? MessageCircle : tab.id === "image-preview" ? ImageIcon : tab.id === "execution" ? Zap : tab.id === "notes" ? StickyNote : tab.id === "transcript" ? StickyNote : Zap;
           return (
             <button
               key={tab.id}
@@ -2328,9 +2354,9 @@ RULES:
       ) : rightPanelMode === "transcript" ? (
         <div className="flex-1 overflow-hidden">
           <TranscriptPanel
-            transcript={transcriptText}
-            onTranscriptChange={setTranscriptText}
-            onWriteToDocument={handleTranscriptWrite}
+            notes={noteEntries}
+            onNotesChange={setNoteEntries}
+            onWriteToDocument={handleNotesWrite}
             isWriting={writeMutation.isPending}
             selectedText={transcriptSelectedText}
             onArtify={() => setArtifySource("transcript")}
@@ -2606,6 +2632,8 @@ RULES:
           templateName={selectedTemplateName}
           onMicTranscript={handleMicTranscript}
           onArtify={() => setArtifySource("document")}
+          onSaveToContext={handleSaveDocToContext}
+          isSavingToContext={isSavingDocToContext}
         />
       )}
 
@@ -3054,8 +3082,8 @@ RULES:
             {mobileTab === "document" && documentPanel}
             {mobileTab === "toolbox" && (artifySource ? (
               <ArtifyPanel
-                sourceText={artifySource === "transcript" ? transcriptText : document.rawText}
-                sourceLabel={artifySource === "transcript" ? "Transcript" : "Document"}
+                sourceText={artifySource === "transcript" ? noteEntries.map(n => n.text).join("\n\n") : document.rawText}
+                sourceLabel={artifySource === "transcript" ? "Notes" : "Document"}
                 onClose={() => setArtifySource(null)}
               />
             ) : toolboxPanel)}
@@ -3095,8 +3123,8 @@ RULES:
               <ResizablePanel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
                 {artifySource ? (
                   <ArtifyPanel
-                    sourceText={artifySource === "transcript" ? transcriptText : document.rawText}
-                    sourceLabel={artifySource === "transcript" ? "Transcript" : "Document"}
+                    sourceText={artifySource === "transcript" ? noteEntries.map(n => n.text).join("\n\n") : document.rawText}
+                    sourceLabel={artifySource === "transcript" ? "Notes" : "Document"}
                     onClose={() => setArtifySource(null)}
                   />
                 ) : toolboxPanel}
