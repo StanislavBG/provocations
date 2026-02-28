@@ -552,19 +552,19 @@ export function SplitDocumentEditor({
               )}
             </button>
             {objectiveExpanded && (
-              <div className="px-3 pb-2">
+              <div className="px-3 pb-1.5">
                 <ProvokeText
-                  chrome="inline"
-                  variant="textarea"
+                  chrome="bare"
+                  variant="input"
                   value={objective || ""}
                   onChange={onObjectiveChange || (() => {})}
-                  placeholder="What are you trying to achieve with this document?"
-                  className="text-sm"
+                  placeholder="What are you trying to achieve?"
+                  className="text-xs"
                   readOnly={!onObjectiveChange}
+                  showCopy={false}
+                  showClear={false}
                   showWordCount={false}
                   showReadingTime={false}
-                  minRows={2}
-                  maxRows={4}
                 />
               </div>
             )}
