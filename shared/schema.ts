@@ -778,6 +778,12 @@ export const trackingEventType = [
   "transcript_text_to_visual", // User generated a visual from transcript
   "transcript_cleaned",       // User cleaned transcript text
   "transcript_summarized",    // User summarized transcript text
+
+  // ── Notes management ──
+  "note_saved_to_context",    // User saved an individual note to Context Store
+  "note_text_to_visual",      // User generated a visual from notes
+  "document_saved_to_context", // User saved the document to Context Store
+  "writer_invoked",           // Writer was called to evolve document
 ] as const;
 
 export type TrackingEventType = typeof trackingEventType[number];
