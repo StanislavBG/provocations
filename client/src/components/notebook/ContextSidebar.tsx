@@ -154,6 +154,7 @@ export function ContextSidebar({
 
   // Drag-and-drop state
   const [dragOverFolderId, setDragOverFolderId] = useState<number | "root" | null>(null);
+  const dragExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Data queries ──
   const { data: docsData } = useQuery<{ documents: DocumentListItem[] }>({
@@ -318,6 +319,10 @@ export function ContextSidebar({
     (targetFolderId: number | null, e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (dragExpandTimerRef.current) {
+        clearTimeout(dragExpandTimerRef.current);
+        dragExpandTimerRef.current = null;
+      }
       setDragOverFolderId(null);
       const data = decodeDragData(e.dataTransfer);
       if (!data) return;
@@ -336,13 +341,32 @@ export function ContextSidebar({
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = "move";
-      setDragOverFolderId(folderId);
+      setDragOverFolderId((prev) => {
+        // When entering a new folder, start auto-expand timer
+        if (prev !== folderId) {
+          if (dragExpandTimerRef.current) clearTimeout(dragExpandTimerRef.current);
+          if (typeof folderId === "number") {
+            dragExpandTimerRef.current = setTimeout(() => {
+              setExpandedFolders((folders) => {
+                const next = new Set(folders);
+                next.add(folderId);
+                return next;
+              });
+            }, 600);
+          }
+        }
+        return folderId;
+      });
     },
     [],
   );
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      if (dragExpandTimerRef.current) {
+        clearTimeout(dragExpandTimerRef.current);
+        dragExpandTimerRef.current = null;
+      }
       setDragOverFolderId(null);
     }
   }, []);
