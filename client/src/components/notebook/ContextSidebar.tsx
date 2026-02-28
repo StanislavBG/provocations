@@ -846,7 +846,18 @@ export function ContextSidebar({
           if (!open) setDeletingItem(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (!deletingItem) return;
+              if (deletingItem.type === "doc")
+                deleteDocMutation.mutate(deletingItem.id);
+              else deleteFolderMutation.mutate(deletingItem.id);
+              setDeletingItem(null);
+            }
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>
               Delete {deletingItem?.type === "folder" ? "folder" : "document"}?
