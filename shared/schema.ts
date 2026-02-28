@@ -482,6 +482,28 @@ export const interviewSummaryRequestSchema = z.object({
 
 export type InterviewSummaryRequest = z.infer<typeof interviewSummaryRequestSchema>;
 
+// Podcast generation request - generates a podcast from interview Q&A
+export const podcastRequestSchema = z.object({
+  objective: z.string().min(1, "Objective is required"),
+  entries: z.array(interviewEntrySchema).min(1, "At least one entry is required"),
+  document: z.string().optional(),
+  appType: z.enum(templateIds).optional(),
+});
+
+export type PodcastRequest = z.infer<typeof podcastRequestSchema>;
+
+// Podcast generation response
+export interface PodcastResponse {
+  audio: string;       // base64-encoded audio (mp3)
+  mimeType: string;    // "audio/mp3"
+  script: PodcastSegment[];
+}
+
+export interface PodcastSegment {
+  speaker: "alex" | "jordan";
+  text: string;
+}
+
 export interface WorkspaceState {
   document: Document | null;
   objective: string;
@@ -784,6 +806,9 @@ export const trackingEventType = [
   "note_text_to_visual",      // User generated a visual from notes
   "document_saved_to_context", // User saved the document to Context Store
   "writer_invoked",           // Writer was called to evolve document
+
+  // ── Podcast ──
+  "podcast_generated",        // User generated a podcast from interview Q&A
 ] as const;
 
 export type TrackingEventType = typeof trackingEventType[number];
