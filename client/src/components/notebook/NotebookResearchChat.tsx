@@ -132,6 +132,24 @@ export function NotebookResearchChat({
 
   return (
     <div className="h-full flex flex-col">
+      {/* Sticky header: message count + Clear */}
+      {hasMessages && (
+        <div className="flex items-center justify-between px-3 py-1 border-b shrink-0">
+          <span className="text-[10px] text-muted-foreground">
+            {messages.length} message{messages.length !== 1 ? "s" : ""}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 text-[10px] gap-1 text-muted-foreground hover:text-destructive"
+            onClick={handleClear}
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+            Clear
+          </Button>
+        </div>
+      )}
+
       {/* Messages */}
       <ScrollArea className="flex-1 p-3">
         {!hasMessages && !isLoading ? (
@@ -153,22 +171,6 @@ export function NotebookResearchChat({
           </div>
         ) : (
           <div className="space-y-3">
-            {messages.length > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">
-                  {messages.length} message{messages.length !== 1 ? "s" : ""}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 text-[10px] gap-1 text-muted-foreground hover:text-destructive"
-                  onClick={handleClear}
-                >
-                  <Trash2 className="w-2.5 h-2.5" />
-                  Clear
-                </Button>
-              </div>
-            )}
             {messages.map((msg, i) => (
               <div
                 key={i}
