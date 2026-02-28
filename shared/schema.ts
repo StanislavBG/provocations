@@ -806,6 +806,7 @@ export const trackingEventType = [
   "note_text_to_visual",      // User generated a visual from notes
   "document_saved_to_context", // User saved the document to Context Store
   "writer_invoked",           // Writer was called to evolve document
+  "painter_generated",        // User generated an image via Painter panel
 
   // ── Mobile capture ──
   "mobile_note_captured",     // User captured a note from mobile
