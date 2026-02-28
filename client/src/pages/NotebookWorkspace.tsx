@@ -64,6 +64,7 @@ export default function NotebookWorkspace() {
 
   // ── Layout state ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isChartActive, setIsChartActive] = useState(false);
   const [showNewConfirm, setShowNewConfirm] = useState(false);
 
   // ── User-to-user chat state (embedded in left panel) ──
@@ -456,38 +457,44 @@ export default function NotebookWorkspace() {
             </div>
           </>
         ) : (
-          /* Desktop: 3-column resizable layout */
-          <ResizablePanelGroup direction="horizontal">
-            {/* Left: Tabbed panel (Context / Chat / Video) */}
-            <ResizablePanel
-              defaultSize={20}
-              minSize={4}
-              collapsible
-              collapsedSize={4}
-              onCollapse={() => setSidebarCollapsed(true)}
-              onExpand={() => setSidebarCollapsed(false)}
-            >
-              <NotebookLeftPanel
-                pinnedDocIds={pinnedDocIds}
-                onPinDoc={handlePinDoc}
-                onUnpinDoc={handleUnpinDoc}
-                onOpenDoc={handleOpenDoc}
-                chatSessionContext={{
-                  objective,
-                  templateName: selectedTemplateName ?? null,
-                  documentExcerpt: document.rawText.slice(0, 200),
-                } satisfies ChatSessionContext}
-                activeChatConversationId={activeChatConversationId}
-                onActiveChatConversationChange={setActiveChatConversationId}
-                isCollapsed={sidebarCollapsed}
-                onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-              />
-            </ResizablePanel>
+          /* Desktop: 3-column resizable layout — side panels swap based on active tab type */
+          <ResizablePanelGroup
+            key={isChartActive ? "chart-layout" : appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : "doc-layout"}
+            direction="horizontal"
+          >
+            {/* Left panel (hidden when chart tab is active or bs-chart app) */}
+            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && (
+              <>
+                <ResizablePanel
+                  defaultSize={20}
+                  minSize={4}
+                  collapsible
+                  collapsedSize={4}
+                  onCollapse={() => setSidebarCollapsed(true)}
+                  onExpand={() => setSidebarCollapsed(false)}
+                >
+                  <NotebookLeftPanel
+                    pinnedDocIds={pinnedDocIds}
+                    onPinDoc={handlePinDoc}
+                    onUnpinDoc={handleUnpinDoc}
+                    onOpenDoc={handleOpenDoc}
+                    chatSessionContext={{
+                      objective,
+                      templateName: selectedTemplateName ?? null,
+                      documentExcerpt: document.rawText.slice(0, 200),
+                    } satisfies ChatSessionContext}
+                    activeChatConversationId={activeChatConversationId}
+                    onActiveChatConversationChange={setActiveChatConversationId}
+                    isCollapsed={sidebarCollapsed}
+                    onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  />
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+              </>
+            )}
 
-            <ResizableHandle withHandle />
-
-            {/* Center: Document or BS Chart */}
-            <ResizablePanel defaultSize={appFlowConfig.workspaceLayout === "bs-chart" ? 80 : 55} minSize={30}>
+            {/* Center: Document editor (with chart tabs) or BS Chart app */}
+            <ResizablePanel defaultSize={isChartActive || appFlowConfig.workspaceLayout === "bs-chart" ? 100 : 55} minSize={30}>
               {appFlowConfig.workspaceLayout === "bs-chart" ? (
                 <BSChartWorkspace
                   onSaveToContext={(json, label) => handleCaptureToContext(json, label)}
@@ -502,34 +509,36 @@ export default function NotebookWorkspace() {
                   templateName={selectedTemplateName}
                   previewDoc={previewDoc}
                   onClosePreview={() => setPreviewDoc(null)}
+                  onChartActiveChange={setIsChartActive}
                 />
               )}
             </ResizablePanel>
 
-            {appFlowConfig.workspaceLayout !== "bs-chart" && <ResizableHandle withHandle />}
-
-            {/* Right: Research + Provo tabs (hidden for bs-chart since it has its own properties panel) */}
-            {appFlowConfig.workspaceLayout !== "bs-chart" && (
-            <ResizablePanel defaultSize={25} minSize={15}>
-              <NotebookRightPanel
-                activePersonas={activePersonas}
-                onTogglePersona={handleTogglePersona}
-                discussionMessages={discussionMessages}
-                onSendMessage={handleSendMessage}
-                onAcceptResponse={handleAcceptResponse}
-                onDismissResponse={handleDismissResponse}
-                onRespondToMessage={handleRespondToMessage}
-                isChatLoading={askQuestionMutation.isPending}
-                hasDocument={!!document.rawText.trim()}
-                objective={objective}
-                onCaptureToContext={handleCaptureToContext}
-                capturedContext={capturedContext}
-                onRemoveCapturedItem={handleRemoveCapturedItem}
-                onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
-                isMerging={writeMutation.isPending}
-                documentText={document.rawText}
-              />
-            </ResizablePanel>
+            {/* Right panel (hidden when chart tab is active or bs-chart app) */}
+            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={25} minSize={15}>
+                  <NotebookRightPanel
+                    activePersonas={activePersonas}
+                    onTogglePersona={handleTogglePersona}
+                    discussionMessages={discussionMessages}
+                    onSendMessage={handleSendMessage}
+                    onAcceptResponse={handleAcceptResponse}
+                    onDismissResponse={handleDismissResponse}
+                    onRespondToMessage={handleRespondToMessage}
+                    isChatLoading={askQuestionMutation.isPending}
+                    hasDocument={!!document.rawText.trim()}
+                    objective={objective}
+                    onCaptureToContext={handleCaptureToContext}
+                    capturedContext={capturedContext}
+                    onRemoveCapturedItem={handleRemoveCapturedItem}
+                    onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
+                    isMerging={writeMutation.isPending}
+                    documentText={document.rawText}
+                  />
+                </ResizablePanel>
+              </>
             )}
           </ResizablePanelGroup>
         )}
