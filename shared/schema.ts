@@ -808,6 +808,9 @@ export const trackingEventType = [
   "writer_invoked",           // Writer was called to evolve document
   "painter_generated",        // User generated an image via Painter panel
 
+  // ── Mobile capture ──
+  "mobile_note_captured",     // User captured a note from mobile
+
   // ── Podcast ──
   "podcast_generated",        // User generated a podcast from interview Q&A
 ] as const;
