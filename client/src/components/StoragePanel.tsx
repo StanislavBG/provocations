@@ -176,63 +176,7 @@ export function StoragePanel({
     if (currentTitle) setSaveTitle(currentTitle);
   }, [currentTitle]);
 
-  // Keyboard hotkeys for selected document
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      // Only handle when no input is focused
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-
-      if (e.key === "Delete" || e.key === "Backspace") {
-        // Delete selected doc
-        if (selectedDocId) {
-          const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
-          if (doc && window.confirm(`Delete "${doc.title}"?`)) {
-            deleteDocMutation.mutate(doc.id);
-          }
-        }
-      }
-      if (e.key === "F2" || (e.key === "r" && !e.metaKey && !e.ctrlKey)) {
-        // Rename selected doc
-        if (selectedDocId) {
-          const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
-          if (doc) {
-            e.preventDefault();
-            setRenamingDocId(doc.id);
-            setRenameText(doc.title);
-          }
-        }
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
-        // Copy selected doc content
-        if (selectedDocId) {
-          apiRequest("GET", `/api/documents/${selectedDocId}`)
-            .then((r) => r.json())
-            .then((data) => {
-              navigator.clipboard.writeText(data.content || "");
-              toast({ title: "Copied", description: "Document content copied to clipboard" });
-            })
-            .catch(() => {});
-        }
-      }
-      if (e.key === "s" && !e.metaKey && !e.ctrlKey) {
-        // Summarize selected doc
-        if (selectedDocId && previewDoc?.content && !isSummarizing) {
-          e.preventDefault();
-          handleSummarize();
-        }
-      }
-      if (e.key === "Home") {
-        // Jump to top of tree
-        treeScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, selectedDocId, allDocsQuery.data, toast, previewDoc, isSummarizing, handleSummarize]);
-
-  // ── Queries ──
+  // ── Queries ── (keyboard hotkeys useEffect moved below handleSummarize)
 
   // Fetch ALL folders in a single request (no parentFolderId param = all folders)
   const allFoldersQuery = useQuery({
@@ -531,6 +475,57 @@ export function StoragePanel({
       setIsSummarizing(false);
     }
   }, [previewDoc, toast]);
+
+  // Keyboard hotkeys for selected document (placed after allDocsQuery, deleteDocMutation, handleSummarize)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      // Only handle when no input is focused
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedDocId) {
+          const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
+          if (doc && window.confirm(`Delete "${doc.title}"?`)) {
+            deleteDocMutation.mutate(doc.id);
+          }
+        }
+      }
+      if (e.key === "F2" || (e.key === "r" && !e.metaKey && !e.ctrlKey)) {
+        if (selectedDocId) {
+          const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
+          if (doc) {
+            e.preventDefault();
+            setRenamingDocId(doc.id);
+            setRenameText(doc.title);
+          }
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
+        if (selectedDocId) {
+          apiRequest("GET", `/api/documents/${selectedDocId}`)
+            .then((r) => r.json())
+            .then((data) => {
+              navigator.clipboard.writeText(data.content || "");
+              toast({ title: "Copied", description: "Document content copied to clipboard" });
+            })
+            .catch(() => {});
+        }
+      }
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) {
+        if (selectedDocId && previewDoc?.content && !isSummarizing) {
+          e.preventDefault();
+          handleSummarize();
+        }
+      }
+      if (e.key === "Home") {
+        treeScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isOpen, selectedDocId, allDocsQuery.data, toast, previewDoc, isSummarizing, handleSummarize, deleteDocMutation]);
 
   const handleSave = useCallback(async () => {
     if (!saveTitle.trim()) return;

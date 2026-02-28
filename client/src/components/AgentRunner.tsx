@@ -125,7 +125,7 @@ export default function AgentRunner({
                   ...prev,
                   [event.stepId]: event.result,
                 }));
-                setExpandedSteps((prev) => new Set([...prev, event.stepId]));
+                setExpandedSteps((prev) => new Set([...Array.from(prev), event.stepId]));
               } else if (event.type === "step-error") {
                 setStepStatuses((prev) => ({ ...prev, [event.stepId]: "error" }));
                 setStepResults((prev) => ({
@@ -182,7 +182,7 @@ export default function AgentRunner({
             ...prev,
             [sr.stepId]: sr,
           }));
-          setExpandedSteps((prev) => new Set([...prev, sr.stepId]));
+          setExpandedSteps((prev) => new Set([...Array.from(prev), sr.stepId]));
         }
         setFinalOutput(result.finalOutput);
       } catch (err: any) {

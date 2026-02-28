@@ -165,7 +165,7 @@ export async function gatewayGenerate(
       responseCharacters: responseChars,
       responseTokensEstimate: outputTokens,
       maxTokens: req.maxTokens,
-      temperatureX100: req.temperature != null ? Math.round(req.temperature * 100) : null,
+      temperature: req.temperature != null ? Math.round(req.temperature * 100) : null,
       estimatedCostMicrodollars: costMicro,
       durationMs,
       status,
@@ -298,7 +298,7 @@ export function gatewayStream(
         responseCharacters: totalResponseChars,
         responseTokensEstimate: outputTokens,
         maxTokens: req.maxTokens,
-        temperatureX100: req.temperature != null ? Math.round(req.temperature * 100) : null,
+        temperature: req.temperature != null ? Math.round(req.temperature * 100) : null,
         estimatedCostMicrodollars: costMicro,
         durationMs,
         status,
@@ -401,13 +401,14 @@ llm.stream = function interceptedStream(req: LLMRequest): AsyncGenerator<string,
   const scope = gatewayScope.getStore();
   if (!scope) return _origStream(req);
 
-  const { stream, getVerboseMetadata } = gatewayStream(req, scope.ctx);
+  const capturedScope = scope;
+  const { stream, getVerboseMetadata } = gatewayStream(req, capturedScope.ctx);
 
   // Wrap to capture verbose metadata after stream completes
   async function* wrappedStream(): AsyncGenerator<string, void, unknown> {
     yield* stream;
     const meta = getVerboseMetadata();
-    if (meta) scope.verboseList.push(meta);
+    if (meta) capturedScope.verboseList.push(meta);
   }
 
   return wrappedStream();
@@ -432,12 +433,13 @@ llm.streamWithModel = function interceptedStreamWithModel(
   const scope = gatewayScope.getStore();
   if (!scope) return _origStreamWithModel(model, req);
 
-  const { stream, getVerboseMetadata } = gatewayStream(req, scope.ctx, { model });
+  const capturedScope = scope;
+  const { stream, getVerboseMetadata } = gatewayStream(req, capturedScope.ctx, { model });
 
   async function* wrappedStream(): AsyncGenerator<string, void, unknown> {
     yield* stream;
     const meta = getVerboseMetadata();
-    if (meta) scope.verboseList.push(meta);
+    if (meta) capturedScope.verboseList.push(meta);
   }
 
   return wrappedStream();
