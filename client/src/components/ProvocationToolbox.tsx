@@ -298,6 +298,7 @@ export function ProvocationToolbox({
             referenceDocuments={referenceDocuments}
             capturedContext={capturedContext}
             onCapturedContextChange={onCapturedContextChange}
+            onDocumentPreview={onDocumentPreview}
           />
         ) : (
           <BrowserExplorer
@@ -966,6 +967,7 @@ interface ContextTabContentProps {
   referenceDocuments?: ReferenceDocument[];
   capturedContext?: ContextItem[];
   onCapturedContextChange?: (items: ContextItem[]) => void;
+  onDocumentPreview?: (docId: number, title: string, content: string) => void;
 }
 
 function ContextTabContent({
@@ -973,6 +975,7 @@ function ContextTabContent({
   referenceDocuments,
   capturedContext,
   onCapturedContextChange,
+  onDocumentPreview,
 }: ContextTabContentProps) {
   const [showAddContextModal, setShowAddContextModal] = useState(false);
 
