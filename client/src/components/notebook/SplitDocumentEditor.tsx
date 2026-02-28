@@ -530,7 +530,7 @@ export function SplitDocumentEditor({
       ) : !isChartActive ? (
         <div className="flex-1 flex flex-col min-h-0">
           {/* ─── Objective pane (collapsible) ─── */}
-          <div className="shrink-0 border-b">
+          <div className="shrink-0 border-b overflow-hidden max-h-[180px]">
             <button
               type="button"
               onClick={() => setObjectiveExpanded(!objectiveExpanded)}
@@ -552,19 +552,19 @@ export function SplitDocumentEditor({
               )}
             </button>
             {objectiveExpanded && (
-              <div className="px-3 pb-1.5">
+              <div className="px-3 pb-2">
                 <ProvokeText
-                  chrome="bare"
-                  variant="input"
+                  chrome="inline"
+                  variant="textarea"
                   value={objective || ""}
                   onChange={onObjectiveChange || (() => {})}
-                  placeholder="What are you trying to achieve?"
-                  className="text-xs"
+                  placeholder="What are you trying to achieve with this document?"
+                  className="text-sm"
                   readOnly={!onObjectiveChange}
-                  showCopy={false}
-                  showClear={false}
                   showWordCount={false}
                   showReadingTime={false}
+                  minRows={2}
+                  maxRows={3}
                 />
               </div>
             )}
