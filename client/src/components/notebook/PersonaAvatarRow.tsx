@@ -105,7 +105,6 @@ export function PersonaAvatarRow({
                                     backgroundColor: `${persona.color.accent}18`,
                                     color: persona.color.accent,
                                     borderColor: `${persona.color.accent}40`,
-                                    ringColor: `${persona.color.accent}40`,
                                     boxShadow: `0 0 6px ${persona.color.accent}20`,
                                   }
                                 : undefined

@@ -23,6 +23,9 @@ import {
   Square,
   Play,
   Target,
+  Pencil,
+  Paintbrush,
+  Scale,
 } from "lucide-react";
 import type { InterviewEntry, InterviewQuestionResponse } from "@shared/schema";
 
@@ -311,6 +314,19 @@ function QuickCaptureView({
 // Interview View
 // ═══════════════════════════════════════════════════════════════════
 
+type InterviewStance = "writer" | "painter" | "balanced";
+
+function buildInterviewGuidance(stance: InterviewStance, focus: string): string | undefined {
+  const parts: string[] = [];
+  if (stance === "writer") {
+    parts.push("STANCE: Writer — be analytical, structured. Break things down, find logical gaps, demand specifics and evidence. Ask the hard 'how' and 'why' questions.");
+  } else if (stance === "painter") {
+    parts.push("STANCE: Painter — be creative, exploratory. Ask 'what if', draw unexpected connections, explore emotional and human dimensions. Open new possibilities.");
+  }
+  if (focus.trim()) parts.push(focus.trim());
+  return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
 function InterviewView({
   toast,
   queryClient,
@@ -327,6 +343,10 @@ function InterviewView({
   const [answerText, setAnswerText] = useState("");
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
   const [savingEntryId, setSavingEntryId] = useState<string | null>(null);
+
+  // ── Stance & focus state ──
+  const [stance, setStance] = useState<InterviewStance>("balanced");
+  const [focusText, setFocusText] = useState("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const objectiveRef = useRef<HTMLTextAreaElement>(null);
@@ -346,12 +366,21 @@ function InterviewView({
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   }, [objective]);
 
+  // ── Stance cycle helper ──
+  const cycleStance = useCallback(() => {
+    setStance((prev) =>
+      prev === "balanced" ? "writer" : prev === "writer" ? "painter" : "balanced"
+    );
+  }, []);
+
   // ── Fetch next question ──
   const questionMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/interview/question", {
         objective,
         previousEntries: entries.length > 0 ? entries : undefined,
+        directionMode: stance === "writer" ? "challenge" : stance === "painter" ? "advise" : undefined,
+        directionGuidance: buildInterviewGuidance(stance, focusText),
       });
       return (await response.json()) as InterviewQuestionResponse;
     },
@@ -487,6 +516,61 @@ function InterviewView({
               </div>
             </div>
 
+            {/* Interview Stance */}
+            <div className="space-y-2 text-left">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Interview Stance</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setStance("writer")}
+                  className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                    stance === "writer"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Pencil className="w-4 h-4" />
+                  <div className="text-left">
+                    <div className="text-xs font-semibold">Writer</div>
+                    <div className="text-[10px] opacity-70">Analytical</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setStance("painter")}
+                  className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                    stance === "painter"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Paintbrush className="w-4 h-4" />
+                  <div className="text-left">
+                    <div className="text-xs font-semibold">Painter</div>
+                    <div className="text-[10px] opacity-70">Exploratory</div>
+                  </div>
+                </button>
+              </div>
+              {stance !== "balanced" && (
+                <button
+                  onClick={() => setStance("balanced")}
+                  className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                >
+                  Reset to balanced
+                </button>
+              )}
+            </div>
+
+            {/* Focus input */}
+            <div className="space-y-1.5 text-left">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Focus (optional)</p>
+              <input
+                type="text"
+                value={focusText}
+                onChange={(e) => setFocusText(e.target.value)}
+                placeholder="Push me on pricing strategy"
+                className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-xl outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50 font-serif"
+              />
+            </div>
+
             <Button
               size="lg"
               className="gap-2 w-full h-12 text-sm font-semibold"
@@ -509,9 +593,19 @@ function InterviewView({
       {/* Interview header strip */}
       <div className="shrink-0 px-4 py-2 border-b bg-muted/20 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-semibold text-muted-foreground truncate">
-            {objective.slice(0, 50)}{objective.length > 50 ? "..." : ""}
-          </span>
+          {/* Stance pill — tap to cycle */}
+          <button
+            onClick={cycleStance}
+            className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors hover:bg-muted/50"
+          >
+            {stance === "writer" ? (
+              <><Pencil className="w-3 h-3" /> Writer</>
+            ) : stance === "painter" ? (
+              <><Paintbrush className="w-3 h-3" /> Painter</>
+            ) : (
+              <><Scale className="w-3 h-3" /> Balanced</>
+            )}
+          </button>
           <span className="shrink-0 text-[10px] text-muted-foreground bg-muted rounded-full px-2 py-0.5">
             {entries.length} Q&A
           </span>

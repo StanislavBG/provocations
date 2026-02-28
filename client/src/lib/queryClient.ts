@@ -22,7 +22,7 @@ export function onVerboseData(listener: VerboseListener): () => void {
 
 /** Emit verbose data to all listeners */
 export function emitVerboseData(data: unknown) {
-  for (const listener of verboseListeners) {
+  for (const listener of Array.from(verboseListeners)) {
     try { listener(data); } catch { /* ignore listener errors */ }
   }
 }
