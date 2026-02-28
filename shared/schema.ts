@@ -1137,7 +1137,7 @@ export type SaveChatSessionRequest = z.infer<typeof saveChatSessionRequestSchema
 export interface SaveChatSessionResponse {
   /** ID of the saved summary document (primary artifact) */
   documentId: number;
-  /** ID of the locked system folder ("Chat to Context") */
+  /** ID of the "Chat to Context" folder */
   folderId: number;
   /** Optional: ID of the chat-log document (when chat history was provided) */
   chatLogDocumentId?: number;

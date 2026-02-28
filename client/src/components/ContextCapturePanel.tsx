@@ -20,7 +20,6 @@ import {
   Loader2,
   Upload,
   Folder,
-  Lock,
   ChevronRight,
   ClipboardPaste,
 } from "lucide-react";
@@ -51,7 +50,7 @@ export function ContextCapturePanel({ items, onItemsChange, onDocumentPreview }:
   const pasteAreaRef = useRef<HTMLDivElement>(null);
 
   // Fetch saved documents for Context Store picker
-  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; folderId?: number | null; locked?: boolean; updatedAt: string }[] }>({
+  const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; folderId?: number | null; updatedAt: string }[] }>({
     queryKey: ["/api/documents"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/documents");
@@ -343,9 +342,6 @@ export function ContextCapturePanel({ items, onItemsChange, onDocumentPreview }:
                           style={{ paddingLeft: `${indent}px` }}
                         >
                           {isExpanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
-                          {folder.locked ? (
-                            <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
-                          ) : null}
                           <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
                           <span className="font-medium truncate">{folder.name}</span>
                         </button>
