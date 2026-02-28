@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ProvokeText } from "@/components/ProvokeText";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
@@ -323,17 +324,73 @@ export function NotebookResearchChat({
             variant="ghost"
             className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
           />
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            className="h-8 w-8 shrink-0"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
+          <ResearchSendButton
+            input={input}
+            isLoading={isLoading}
+            objective={objective}
+            messages={messages}
+            focusMode={focusMode}
+            onSend={handleSend}
+          />
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Send button with LLM hover preview ──
+
+function ResearchSendButton({
+  input,
+  isLoading,
+  objective,
+  messages,
+  focusMode,
+  onSend,
+}: {
+  input: string;
+  isLoading: boolean;
+  objective: string;
+  messages: ChatMessage[];
+  focusMode: ResearchFocus;
+  onSend: () => void;
+}) {
+  const historyChars = useMemo(
+    () => messages.reduce((s, m) => s + m.content.length, 0),
+    [messages],
+  );
+
+  const blocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 1500, color: "text-purple-400" },
+    { label: "User Query", chars: input.length, color: "text-blue-400" },
+    { label: "Objective", chars: objective.length, color: "text-amber-400" },
+    { label: "Chat History", chars: historyChars, color: "text-cyan-400" },
+  ], [input, objective, historyChars]);
+
+  const summary: SummaryItem[] = useMemo(() => [
+    { icon: <MessageSquare className="w-3 h-3 text-blue-400" />, label: "Query", count: input.trim() ? 1 : 0, detail: input.trim() ? input.slice(0, 60) + (input.length > 60 ? "..." : "") : undefined },
+    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0, detail: objective.trim() ? objective.slice(0, 50) + (objective.length > 50 ? "..." : "") : undefined },
+    { icon: <FileText className="w-3 h-3 text-cyan-400" />, label: "Chat History", count: messages.length, detail: messages.length > 0 ? `${messages.length} message${messages.length !== 1 ? "s" : ""}` : undefined },
+    { icon: <Compass className="w-3 h-3 text-emerald-400" />, label: "Focus Mode", count: 1, detail: focusMode },
+  ], [input, objective, messages, focusMode]);
+
+  return (
+    <LlmHoverButton
+      previewTitle="Research Chat"
+      previewBlocks={blocks}
+      previewSummary={summary}
+      side="top"
+      align="end"
+    >
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={onSend}
+        disabled={!input.trim() || isLoading}
+        className="h-8 w-8 shrink-0"
+      >
+        <Send className="w-4 h-4" />
+      </Button>
+    </LlmHoverButton>
   );
 }
