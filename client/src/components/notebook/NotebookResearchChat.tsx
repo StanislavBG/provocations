@@ -20,7 +20,7 @@ const FOCUS_MODES: { id: ResearchFocus; label: string; icon: LucideIcon; descrip
 
 interface NotebookResearchChatProps {
   objective: string;
-  /** Called when user captures an AI response as session context */
+  /** Called when user captures an AI response as active context */
   onCaptureToContext: (text: string, label: string) => void;
   /** Reports message count changes to parent */
   onMessageCountChange?: (count: number) => void;

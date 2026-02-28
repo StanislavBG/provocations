@@ -5,7 +5,7 @@
  *
  * Views:
  *   1. Conversation list (default)
- *   2. Active message thread — with session context banner
+ *   2. Active message thread — with workspace context banner
  *   3. Chat settings
  *   4. Connections manager
  */
@@ -311,7 +311,7 @@ function ConversationListView({
         </div>
       )}
 
-      {/* Current session context — what you're working on right now */}
+      {/* Current workspace context — what you're working on right now */}
       <SessionContextBanner ctx={sessionContext} />
 
       <Separator className="mt-1" />
@@ -481,7 +481,7 @@ function ThreadView({
       parts.push(`---\n${sessionContext.documentExcerpt}`);
     }
     if (parts.length === 0) {
-      toast({ title: "No session context to share", variant: "destructive" });
+      toast({ title: "No context to share", variant: "destructive" });
       return;
     }
     sendMutation.mutate({
@@ -538,7 +538,7 @@ function ThreadView({
         )}
       </div>
 
-      {/* Compact session context banner inside thread */}
+      {/* Compact workspace context banner inside thread */}
       {sessionContext.objective && (
         <div className="px-3 py-1.5 bg-muted/30 border-b flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Target className="w-3 h-3 shrink-0" />
