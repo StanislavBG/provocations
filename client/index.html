@@ -31,24 +31,56 @@
             root.addEventListener(evt, function(e) { e.stopPropagation(); }, true);
           });
         }
-        // Shield existing AIQA elements
+
+        function makeDraggable(el) {
+          if (el._aiqaDraggable) return;
+          el._aiqaDraggable = true;
+          var style = window.getComputedStyle(el);
+          if (style.position === 'static') el.style.position = 'fixed';
+          el.style.cursor = 'move';
+          el.style.zIndex = '99999';
+          var offsetX = 0, offsetY = 0, dragging = false;
+          el.addEventListener('mousedown', function(e) {
+            // Only drag from the element itself or its header area (top 32px)
+            var rect = el.getBoundingClientRect();
+            if (e.clientY - rect.top > 40 && e.target === el) return;
+            dragging = true;
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            e.preventDefault();
+          });
+          document.addEventListener('mousemove', function(e) {
+            if (!dragging) return;
+            el.style.left = (e.clientX - offsetX) + 'px';
+            el.style.top = (e.clientY - offsetY) + 'px';
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+          });
+          document.addEventListener('mouseup', function() { dragging = false; });
+        }
+
+        function processNode(el) {
+          if (el.id === 'aiqa-widget' || (el.id && el.id.indexOf('aiqa') !== -1) ||
+              (el.className && typeof el.className === 'string' && el.className.indexOf('aiqa') !== -1) ||
+              el.hasAttribute('data-aiqa') ||
+              (el.tagName === 'IFRAME' && el.src && el.src.indexOf('aiqastudio') !== -1)) {
+            shield(el);
+            makeDraggable(el);
+          }
+        }
+
+        // Watch for AIQA elements being added to the DOM
         var obs = new MutationObserver(function(mutations) {
           mutations.forEach(function(m) {
             m.addedNodes.forEach(function(node) {
               if (node.nodeType !== 1) return;
-              var el = node;
-              if (el.id === 'aiqa-widget' || (el.id && el.id.indexOf('aiqa') !== -1) ||
-                  (el.className && typeof el.className === 'string' && el.className.indexOf('aiqa') !== -1) ||
-                  el.hasAttribute('data-aiqa') ||
-                  (el.tagName === 'IFRAME' && el.src && el.src.indexOf('aiqastudio') !== -1)) {
-                shield(el);
-              }
+              processNode(node);
             });
           });
         });
         obs.observe(document.body, { childList: true, subtree: true });
-        // Also shield any already-existing elements
-        document.querySelectorAll('#aiqa-widget, [data-aiqa], div[id*="aiqa"], div[class*="aiqa"], iframe[src*="aiqastudio"]').forEach(shield);
+        // Process any already-existing elements
+        document.querySelectorAll('#aiqa-widget, [data-aiqa], div[id*="aiqa"], div[class*="aiqa"], iframe[src*="aiqastudio"]').forEach(processNode);
       })();
     </script>
   </body>
