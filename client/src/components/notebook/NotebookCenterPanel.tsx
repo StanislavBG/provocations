@@ -1,4 +1,5 @@
 import { SplitDocumentEditor, type WriterConfig } from "./SplitDocumentEditor";
+import type { ContextItem, EditHistoryEntry } from "@shared/schema";
 
 interface NotebookCenterPanelProps {
   documentText: string;
@@ -14,6 +15,12 @@ interface NotebookCenterPanelProps {
   isSaving?: boolean;
   onEvolve?: (configurations: WriterConfig[]) => void;
   isEvolving?: boolean;
+  /** Context data for the Evolve hover preview */
+  capturedContext?: ContextItem[];
+  pinnedDocContents?: Record<number, { title: string; content: string }>;
+  sessionNotes?: string;
+  editHistory?: EditHistoryEntry[];
+  appType?: string;
 }
 
 export function NotebookCenterPanel({
@@ -30,6 +37,11 @@ export function NotebookCenterPanel({
   isSaving,
   onEvolve,
   isEvolving,
+  capturedContext,
+  pinnedDocContents,
+  sessionNotes,
+  editHistory,
+  appType,
 }: NotebookCenterPanelProps) {
   return (
     <div className="h-full flex flex-col">
@@ -47,6 +59,11 @@ export function NotebookCenterPanel({
         isSaving={isSaving}
         onEvolve={onEvolve}
         isEvolving={isEvolving}
+        capturedContext={capturedContext}
+        pinnedDocContents={pinnedDocContents}
+        sessionNotes={sessionNotes}
+        editHistory={editHistory}
+        appType={appType}
       />
     </div>
   );
