@@ -438,6 +438,10 @@ The LLM adapter in `server/llm.ts` auto-detects these variables. You can verify 
 
 ## Development Notes
 
+### Code Quality — Fix Pre-existing Errors
+
+When running `npm run check` or `npm run build`, **always fix all TypeScript errors** — including pre-existing ones in files you didn't change. Do not ignore or skip errors just because they existed before your changes. Every check run should leave the codebase in a better state. If a pre-existing error would take significant effort to fix, flag it to the user rather than silently ignoring it.
+
 ### Adding API Routes
 1. Define Zod schema in `shared/schema.ts`
 2. Add endpoint in `server/routes.ts`

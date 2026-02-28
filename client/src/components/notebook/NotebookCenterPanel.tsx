@@ -10,6 +10,10 @@ interface NotebookCenterPanelProps {
   previewDoc?: { title: string; content: string } | null;
   onClosePreview?: () => void;
   onChartActiveChange?: (isActive: boolean) => void;
+  onSaveToContext?: () => void;
+  isSaving?: boolean;
+  onEvolve?: (instructionType: string, subOption: string) => void;
+  isEvolving?: boolean;
 }
 
 export function NotebookCenterPanel({
@@ -22,6 +26,10 @@ export function NotebookCenterPanel({
   previewDoc,
   onClosePreview,
   onChartActiveChange,
+  onSaveToContext,
+  isSaving,
+  onEvolve,
+  isEvolving,
 }: NotebookCenterPanelProps) {
   return (
     <div className="h-full flex flex-col">
@@ -35,6 +43,10 @@ export function NotebookCenterPanel({
         previewDoc={previewDoc}
         onClosePreview={onClosePreview}
         onChartActiveChange={onChartActiveChange}
+        onSaveToContext={onSaveToContext}
+        isSaving={isSaving}
+        onEvolve={onEvolve}
+        isEvolving={isEvolving}
       />
     </div>
   );
