@@ -110,6 +110,7 @@ export function ContextSidebar({
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
+  const [rootDocsExpanded, setRootDocsExpanded] = useState(true);
 
   // CRUD state
   const [editingItem, setEditingItem] = useState<{
@@ -790,10 +791,39 @@ export function ContextSidebar({
 
           {/* Folder tree */}
           {rootFolders.map((folder) => renderFolder(folder, 0))}
-          {rootFolders.length > 0 && rootDocs.length > 0 && (
-            <div className="border-t my-1" />
+
+          {/* Root documents — collapsible group matching folder style */}
+          {rootDocs.length > 0 && (
+            <div>
+              <div
+                className="flex items-center gap-0.5 group hover:bg-muted/50 rounded-md transition-colors overflow-hidden pr-1"
+                style={{ paddingLeft: `${treeIndent(0)}px` }}
+              >
+                <button
+                  onClick={() => setRootDocsExpanded((prev) => !prev)}
+                  className="flex-1 text-left py-1.5 px-1 text-xs flex items-center gap-1.5 min-w-0 cursor-pointer"
+                >
+                  {rootDocsExpanded ? (
+                    <ChevronDown className="w-3 h-3 shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3 shrink-0" />
+                  )}
+                  <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate font-medium">Documents</span>
+                  <Badge variant="secondary" className="text-[8px] h-3.5 px-1 ml-auto shrink-0">
+                    {rootDocs.length}
+                  </Badge>
+                </button>
+              </div>
+              {rootDocsExpanded && (
+                <div>
+                  {rootDocs.map((doc) =>
+                    renderDocRow(doc, treeIndent(1)),
+                  )}
+                </div>
+              )}
+            </div>
           )}
-          {rootDocs.map((doc) => renderDocRow(doc, 4))}
 
           {/* Empty state */}
           {docs.length === 0 && !creatingDoc && !creatingFolder && (
