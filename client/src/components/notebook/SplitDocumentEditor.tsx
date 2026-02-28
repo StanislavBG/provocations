@@ -476,18 +476,14 @@ export function SplitDocumentEditor({
         </div>
       ) : !isChartActive ? (
         <div className="flex-1 flex flex-col min-h-0">
-          {/* ─── Objective pane (20%, collapsible) ─── */}
-          <div
-            className={`shrink-0 flex flex-col border-b ${
-              objectiveExpanded ? "h-[20%] min-h-[80px]" : ""
-            }`}
-          >
+          {/* ─── Objective pane (collapsible) ─── */}
+          <div className="shrink-0 border-b">
             <button
               type="button"
               onClick={() => setObjectiveExpanded(!objectiveExpanded)}
-              className="w-full flex items-center gap-2 px-4 py-1.5 text-left hover:bg-muted/30 transition-colors shrink-0"
+              className="w-full flex items-center gap-1.5 px-3 py-1 text-left hover:bg-muted/30 transition-colors"
             >
-              <Target className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+              <Target className="w-3 h-3 text-primary/70 shrink-0" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">
                 Objective
               </span>
@@ -503,16 +499,21 @@ export function SplitDocumentEditor({
               )}
             </button>
             {objectiveExpanded && (
-              <ProvokeText
-                chrome="container"
-                variant="textarea"
-                containerClassName="flex-1 min-h-0"
-                value={objective || ""}
-                onChange={onObjectiveChange || (() => {})}
-                placeholder="What are you trying to achieve with this document?"
-                className="text-sm"
-                readOnly={!onObjectiveChange}
-              />
+              <div className="px-3 pb-2">
+                <ProvokeText
+                  chrome="inline"
+                  variant="textarea"
+                  value={objective || ""}
+                  onChange={onObjectiveChange || (() => {})}
+                  placeholder="What are you trying to achieve with this document?"
+                  className="text-sm"
+                  readOnly={!onObjectiveChange}
+                  showWordCount={false}
+                  showReadingTime={false}
+                  minRows={2}
+                  maxRows={4}
+                />
+              </div>
             )}
           </div>
 
