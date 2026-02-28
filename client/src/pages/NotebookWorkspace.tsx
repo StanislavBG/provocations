@@ -75,11 +75,43 @@ export default function NotebookWorkspace() {
     () => new Set<ProvocationType>(["architect", "product_manager", "ux_designer", "quality_engineer"]),
   );
 
-  // ── Context pinning ──
+  // ── Context pinning (persisted to active_context table) ──
   const [pinnedDocIds, setPinnedDocIds] = useState<Set<number>>(new Set());
   const [pinnedDocContents, setPinnedDocContents] = useState<
     Record<number, { title: string; content: string }>
   >({});
+
+  // Load persisted active context on mount
+  const { data: savedActiveContext } = useQuery<{ documentIds: number[] }>({
+    queryKey: ["/api/active-context"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/active-context");
+      return res.json();
+    },
+    staleTime: Infinity, // Load once per session
+  });
+
+  // Hydrate pinned docs from persisted state (runs once when data arrives)
+  useEffect(() => {
+    if (!savedActiveContext?.documentIds?.length) return;
+    const ids = savedActiveContext.documentIds;
+    setPinnedDocIds((prev) => {
+      if (prev.size > 0) return prev; // Don't overwrite user's in-session changes
+      return new Set(ids);
+    });
+    // Fetch content for each pinned doc
+    for (const id of ids) {
+      apiRequest("GET", `/api/documents/${id}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setPinnedDocContents((prev) => ({
+            ...prev,
+            [id]: { title: data.title, content: data.content },
+          }));
+        })
+        .catch(() => {/* Non-fatal: doc may have been deleted */});
+    }
+  }, [savedActiveContext]);
 
   // ── Preview state for context documents ──
   const [previewDoc, setPreviewDoc] = useState<{ title: string; content: string } | null>(null);
@@ -281,6 +313,8 @@ export default function NotebookWorkspace() {
         next.add(id);
         return next;
       });
+      // Persist pin to cold store (fire-and-forget)
+      apiRequest("POST", "/api/active-context/pin", { documentId: id }).catch(() => {});
       try {
         const res = await apiRequest("GET", `/api/documents/${id}`);
         const data = await res.json();
@@ -310,6 +344,8 @@ export default function NotebookWorkspace() {
       delete next[id];
       return next;
     });
+    // Persist unpin to cold store (fire-and-forget)
+    apiRequest("POST", "/api/active-context/unpin", { documentId: id }).catch(() => {});
   }, []);
 
   // ── Capture research response to active context ──

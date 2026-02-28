@@ -81,6 +81,16 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
 export type StoredDocument = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 
+// Active Context — persists which documents a user has pinned (hot → cold store reflection)
+export const activeContext = pgTable("active_context", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  documentId: integer("document_id").notNull(),
+  pinnedAt: timestamp("pinned_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type StoredActiveContext = typeof activeContext.$inferSelect;
+
 // User preferences - persisted settings per Clerk userId
 export const userPreferences = pgTable("user_preferences", {
   id: serial("id").primaryKey(),

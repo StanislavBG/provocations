@@ -60,6 +60,8 @@ import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 import { executeAgent } from "./agent-executor";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
+import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
+import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable } from "../shared/models/chat";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -4412,20 +4414,31 @@ RULES:
   });
 
   // ==========================================
-  // Storage API aliases — /api/storage/* redirects to /api/documents/* & /api/folders/*
-  // Streamlined naming for microservice-style access
+  // Context Store microservice — active context endpoints + storage alias
+  // The full Context Store service is available at services/context-store/
+  // and can be mounted independently. Here we mount only the active-context
+  // endpoints (hot storage → cold store reflection) alongside the existing routes.
   // ==========================================
 
-  app.use("/api/storage", (req, _res, next) => {
-    // Rewrite /api/storage/documents/* → /api/documents/*
-    // Rewrite /api/storage/folders/* → /api/folders/*
-    if (req.url.startsWith("/documents")) {
-      req.url = `/api${req.url}`;
-    } else if (req.url.startsWith("/folders")) {
-      req.url = `/api${req.url}`;
+  const contextStoreStorage = new ContextStoreStorage(
+    (await import("./db")).db,
+    { documents: documentsTable, folders: foldersTable, activeContext: activeContextTable },
+  );
+  const contextStoreRouter = createContextStoreRouter(
+    { getAuth: (req: any) => getAuth(req), encryptionKey: getEncryptionKey() },
+    contextStoreStorage,
+  );
+  // Mount active-context endpoints under /api/
+  app.use("/api", (req, res, next) => {
+    // Only route active-context requests to the context-store service
+    if (req.path.startsWith("/active-context")) {
+      return contextStoreRouter(req, res, next);
     }
-    next("route");
+    next();
   });
+
+  // Storage API aliases — /api/storage/* also routes through the context-store service
+  app.use("/api/storage", contextStoreRouter);
 
   // ==========================================
   // User Preferences
