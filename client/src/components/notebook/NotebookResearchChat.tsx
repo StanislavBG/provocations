@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -16,6 +16,9 @@ const FOCUS_MODES: { id: ResearchFocus; label: string; icon: LucideIcon; descrip
   { id: "verify", label: "Verify", icon: ShieldCheck, description: "Fact-check claims, validate sources, find evidence" },
   { id: "gather", label: "Gather", icon: Database, description: "Collect structured data, schemas, specifications" },
   { id: "analyze", label: "Analyze", icon: FlaskConical, description: "Compare options, evaluate trade-offs, decide" },
+  { id: "synthesize", label: "Synthesize", icon: Layers, description: "Weave sources into coherent narratives, find themes" },
+  { id: "reason", label: "Reason", icon: BrainCircuit, description: "Step-by-step logical reasoning, break down complexity" },
+  { id: "deep-research", label: "Deep Research", icon: Microscope, description: "Deep multi-step investigation with cited findings" },
 ];
 
 interface NotebookResearchChatProps {

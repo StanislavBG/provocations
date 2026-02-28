@@ -3634,6 +3634,42 @@ You are operating in analysis mode. Your primary goal is to compare options, eva
 - End with a clear recommendation or decision framework, stating your reasoning.
 - Flag any criteria where you lack sufficient data to compare fairly.`;
 
+      case "synthesize":
+        return `ACTIVE FOCUS: SYNTHESIZE — Cross-Source Narrative Weaving
+You are operating in synthesis mode. Your primary goal is to weave multiple sources, perspectives, and data points into a coherent, unified narrative that the user can directly use in their document.
+- Identify **recurring themes** across the conversation history and any context provided. Name the themes explicitly.
+- Resolve contradictions: when sources disagree, explain why and state which view has stronger support.
+- Structure output as polished prose with clear topic sentences and logical flow — not bullet lists.
+- Highlight **emergent insights** — conclusions that only become visible when combining multiple sources.
+- Preserve nuance: do not flatten complex positions into oversimplified summaries.
+- End each synthesis with a "Gaps remaining" section listing what the narrative still lacks.
+- If the conversation is too thin to synthesize meaningfully, say so and suggest what to explore first.`;
+
+      case "reason":
+        return `ACTIVE FOCUS: REASON — Step-by-Step Logical Reasoning
+You are operating in reasoning mode. Your primary goal is to break down complex problems into explicit, validated reasoning steps that the user can follow and challenge.
+- **Show your work**: number each reasoning step. Use connectors like "therefore", "however", "this implies", "assuming that".
+- Before answering, identify and state the **key assumptions** your reasoning depends on.
+- Break complex questions into **sub-problems**. Solve each sub-problem before combining into a final answer.
+- After each major step, briefly validate it: "This step holds because..." or "This step is weak because...".
+- When there are multiple valid reasoning paths, show at least two and explain why you prefer one.
+- Flag **logical dependencies** — which conclusions would change if an earlier assumption were wrong.
+- Distinguish between deductive (certain) and inductive (probabilistic) reasoning. Label which you are using.
+- End with a confidence assessment and the strongest counterargument to your conclusion.`;
+
+      case "deep-research":
+        return `ACTIVE FOCUS: DEEP RESEARCH — Comprehensive Multi-Step Investigation
+You are operating in deep research mode. Your primary goal is to conduct a thorough, multi-layered investigation and deliver a comprehensive, well-cited report.
+- Begin with a **research plan**: state the key questions you'll investigate and your approach.
+- Cover the topic systematically: history/background, current state, key players, competing approaches, emerging trends, and open questions.
+- **Cite everything**: every factual claim must reference a specific source (name, organization, date, URL when available).
+- Go **beyond surface-level**: look for primary sources, not just summaries. Distinguish between first-hand data and secondary reporting.
+- Include a **"Conflicting views"** section when experts disagree — present the debate fairly.
+- Use structured formatting: clear headings, numbered findings, summary tables for key data.
+- Assess **source quality**: flag which sources are authoritative vs. speculative, peer-reviewed vs. blog posts.
+- End with an **Executive Summary** (3-5 key findings) and **Further Investigation** (what questions remain unanswered).
+- Prioritize depth and rigor over speed. A thorough answer is more valuable than a quick one.`;
+
       case "explore":
       default:
         return `ACTIVE FOCUS: EXPLORE — Discovery & Ideation
