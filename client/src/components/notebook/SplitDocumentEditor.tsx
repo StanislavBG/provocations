@@ -119,6 +119,8 @@ interface SplitDocumentEditorProps {
   /** When set, shows a read-only preview of a context document */
   previewDoc?: PreviewDoc | null;
   onClosePreview?: () => void;
+  /** Notifies parent when the active tab type changes (chart vs document) */
+  onChartActiveChange?: (isActive: boolean) => void;
 }
 
 export function SplitDocumentEditor({
@@ -130,6 +132,7 @@ export function SplitDocumentEditor({
   templateName,
   previewDoc,
   onClosePreview,
+  onChartActiveChange,
 }: SplitDocumentEditorProps) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
@@ -142,6 +145,11 @@ export function SplitDocumentEditor({
   const tabSnapshotRef = useRef<Map<string, TabSnapshot>>(new Map());
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const isChartActive = activeTab?.type === "chart";
+
+  // Notify parent when chart active state changes
+  useEffect(() => {
+    onChartActiveChange?.(isChartActive);
+  }, [isChartActive, onChartActiveChange]);
 
   // ── Tab rename state ──
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
