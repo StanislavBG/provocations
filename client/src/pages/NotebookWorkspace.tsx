@@ -471,6 +471,11 @@ export default function NotebookWorkspace() {
                   isSaving={isSavingToContext}
                   onEvolve={handleEvolve}
                   isEvolving={writeMutation.isPending}
+                  capturedContext={capturedContext}
+                  pinnedDocContents={pinnedDocContents}
+                  sessionNotes={sessionNotes}
+                  editHistory={editHistory}
+                  appType={validAppType}
                 />
               )}
               {mobileTab === "chat" && (
@@ -574,6 +579,11 @@ export default function NotebookWorkspace() {
                   isSaving={isSavingToContext}
                   onEvolve={handleEvolve}
                   isEvolving={writeMutation.isPending}
+                  capturedContext={capturedContext}
+                  pinnedDocContents={pinnedDocContents}
+                  sessionNotes={sessionNotes}
+                  editHistory={editHistory}
+                  appType={validAppType}
                 />
               )}
             </ResizablePanel>

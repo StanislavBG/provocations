@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { ProvokeText } from "@/components/ProvokeText";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import {
   ClipboardList,
   FileText,
@@ -18,6 +19,7 @@ import {
   Sparkles,
   Save,
   Check,
+  StickyNote,
 } from "lucide-react";
 import { trackEvent } from "@/lib/tracking";
 import type { ContextItem } from "@shared/schema";
@@ -257,63 +259,125 @@ export function TranscriptPanel({
           </ScrollArea>
 
           {/* ─── Footer actions ─── */}
-          <div className="shrink-0 border-t bg-card p-3 space-y-2">
-            {/* Summarize */}
-            <Button
-              variant="outline"
-              onClick={() => summarizeMutation.mutate()}
-              disabled={
-                summarizeMutation.isPending || capturedContext.length < 2
-              }
-              className="w-full gap-2 h-8 text-xs font-semibold"
-            >
-              {summarizeMutation.isPending ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Summarizing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Summarize Notes
-                  <span className="text-[10px] opacity-70 font-normal ml-1">
-                    ({capturedContext.length} item
-                    {capturedContext.length !== 1 ? "s" : ""})
-                  </span>
-                </>
-              )}
-            </Button>
-
-            {/* Evolve Document */}
-            <Button
-              onClick={handleEvolve}
-              disabled={
-                !hasDocument || isMerging || capturedContext.length === 0
-              }
-              className="w-full gap-2 h-10 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white"
-            >
-              {isMerging ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Evolving Document...
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4" />
-                  Evolve Document
-                  <span className="text-[10px] opacity-80 font-normal ml-1">
-                    ({capturedContext.length} item
-                    {capturedContext.length !== 1 ? "s" : ""})
-                  </span>
-                </>
-              )}
-            </Button>
-            <p className="text-[10px] text-muted-foreground/60 text-center">
-              Merges all notes into your document
-            </p>
-          </div>
+          <TranscriptFooter
+            capturedContext={capturedContext}
+            summarizeMutation={summarizeMutation}
+            handleEvolve={handleEvolve}
+            hasDocument={hasDocument}
+            isMerging={isMerging}
+          />
         </>
       )}
+    </div>
+  );
+}
+
+// ── Footer with LLM hover buttons ──
+
+function TranscriptFooter({
+  capturedContext,
+  summarizeMutation,
+  handleEvolve,
+  hasDocument,
+  isMerging,
+}: {
+  capturedContext: ContextItem[];
+  summarizeMutation: { mutate: () => void; isPending: boolean };
+  handleEvolve: () => void;
+  hasDocument: boolean;
+  isMerging: boolean;
+}) {
+  const notesChars = useMemo(
+    () => capturedContext.reduce((s, c) => s + c.content.length, 0),
+    [capturedContext],
+  );
+
+  const summarizeBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 600, color: "text-purple-400" },
+    { label: "Notes Content", chars: notesChars, color: "text-orange-400" },
+  ], [notesChars]);
+
+  const summarizeSummary: SummaryItem[] = useMemo(() => [
+    { icon: <StickyNote className="w-3 h-3 text-orange-400" />, label: "Notes to Summarize", count: capturedContext.length, detail: `${notesChars.toLocaleString()} chars` },
+  ], [capturedContext.length, notesChars]);
+
+  const evolveBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 1200, color: "text-purple-400" },
+    { label: "Document", chars: hasDocument ? 2000 : 0, color: "text-blue-400" },
+    { label: "Notes / Findings", chars: notesChars, color: "text-orange-400" },
+    { label: "Merge Instructions", chars: 400, color: "text-emerald-400" },
+  ], [hasDocument, notesChars]);
+
+  const evolveSummary: SummaryItem[] = useMemo(() => [
+    { icon: <StickyNote className="w-3 h-3 text-orange-400" />, label: "Notes to Merge", count: capturedContext.length, detail: `${capturedContext.length} item${capturedContext.length !== 1 ? "s" : ""}` },
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Target Document", count: hasDocument ? 1 : 0 },
+  ], [capturedContext.length, hasDocument]);
+
+  return (
+    <div className="shrink-0 border-t bg-card p-3 space-y-2">
+      {/* Summarize */}
+      <LlmHoverButton
+        previewTitle="Summarize Notes"
+        previewBlocks={summarizeBlocks}
+        previewSummary={summarizeSummary}
+        align="end"
+      >
+        <Button
+          variant="outline"
+          onClick={() => summarizeMutation.mutate()}
+          disabled={summarizeMutation.isPending || capturedContext.length < 2}
+          className="w-full gap-2 h-8 text-xs font-semibold"
+        >
+          {summarizeMutation.isPending ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Summarizing...
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-3.5 h-3.5" />
+              Summarize Notes
+              <span className="text-[10px] opacity-70 font-normal ml-1">
+                ({capturedContext.length} item
+                {capturedContext.length !== 1 ? "s" : ""})
+              </span>
+            </>
+          )}
+        </Button>
+      </LlmHoverButton>
+
+      {/* Evolve Document */}
+      <LlmHoverButton
+        previewTitle="Evolve Document"
+        previewBlocks={evolveBlocks}
+        previewSummary={evolveSummary}
+        align="end"
+      >
+        <Button
+          onClick={handleEvolve}
+          disabled={!hasDocument || isMerging || capturedContext.length === 0}
+          className="w-full gap-2 h-10 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+        >
+          {isMerging ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Evolving Document...
+            </>
+          ) : (
+            <>
+              <Zap className="w-4 h-4" />
+              Evolve Document
+              <span className="text-[10px] opacity-80 font-normal ml-1">
+                ({capturedContext.length} item
+                {capturedContext.length !== 1 ? "s" : ""})
+              </span>
+            </>
+          )}
+        </Button>
+      </LlmHoverButton>
+      <p className="text-[10px] text-muted-foreground/60 text-center">
+        Merges all notes into your document
+      </p>
     </div>
   );
 }
