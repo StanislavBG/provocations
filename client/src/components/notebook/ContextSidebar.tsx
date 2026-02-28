@@ -189,9 +189,9 @@ export function ContextSidebar({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
-      // Auto-pin uploaded file to session context
+      // Auto-pin uploaded file to active context
       if (data?.id) onPinDoc(data.id);
-      toast({ title: "Uploaded", description: "File added to session context" });
+      toast({ title: "Uploaded", description: "File added to active context" });
     },
   });
 
@@ -418,7 +418,7 @@ export function ContextSidebar({
             </TooltipTrigger>
             <TooltipContent side="right">
               {pinnedDocIds.size} document{pinnedDocIds.size > 1 ? "s" : ""} in
-              session context
+              active context
             </TooltipContent>
           </Tooltip>
         )}
@@ -483,8 +483,8 @@ export function ContextSidebar({
               }}
               title={
                 isPinned
-                  ? `${doc.title} (in session context)`
-                  : `Click to add "${doc.title}" to session context`
+                  ? `${doc.title} (in active context)`
+                  : `Click to add "${doc.title}" to active context`
               }
             >
               {isPinned ? (
@@ -519,7 +519,7 @@ export function ContextSidebar({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    Remove from session
+                    Remove from active context
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -738,12 +738,12 @@ export function ContextSidebar({
       </div>
 
       <ScrollArea className="flex-1 min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
-        {/* ═══ SESSION CONTEXT ═══ */}
+        {/* ═══ ACTIVE CONTEXT ═══ */}
         <div className="border-b overflow-hidden">
           <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
             <Zap className="w-3 h-3 text-green-600" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 dark:text-green-400">
-              Session Context
+              Active Context
             </span>
             {pinnedDocs.length > 0 && (
               <Badge className="text-[9px] h-4 px-1.5 bg-green-600 ml-auto">
@@ -766,7 +766,7 @@ export function ContextSidebar({
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Upload file to session</TooltipContent>
+              <TooltipContent>Upload file to active context</TooltipContent>
             </Tooltip>
           </div>
 
@@ -774,14 +774,14 @@ export function ContextSidebar({
             <div className="px-3 pb-3 pt-1">
               <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
                 Upload files or click documents below to add them as context.
-                Only selected documents are shared with your AI advisors.
+                Only documents in Active Context are shared with your AI advisors.
               </p>
             </div>
           ) : (
             <div className="px-2 pb-2 space-y-0.5">
               {pinnedDocs.map((doc) => (
                 <div
-                  key={`session-${doc.id}`}
+                  key={`active-${doc.id}`}
                   className="flex items-center gap-1.5 py-1 px-2 rounded-md bg-green-500/10 border border-green-500/20 group min-w-0"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />

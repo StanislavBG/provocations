@@ -1,4 +1,4 @@
-import { SplitDocumentEditor } from "./SplitDocumentEditor";
+import { SplitDocumentEditor, type WriterConfig } from "./SplitDocumentEditor";
 
 interface NotebookCenterPanelProps {
   documentText: string;
@@ -12,7 +12,7 @@ interface NotebookCenterPanelProps {
   onChartActiveChange?: (isActive: boolean) => void;
   onSaveToContext?: () => void;
   isSaving?: boolean;
-  onEvolve?: (instructionType: string, subOption: string) => void;
+  onEvolve?: (configurations: WriterConfig[]) => void;
   isEvolving?: boolean;
 }
 

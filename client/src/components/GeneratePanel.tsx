@@ -38,7 +38,7 @@ interface GenerateAppCard {
   available: boolean;
 }
 
-/** A generated document in session context */
+/** A generated document in active context */
 export interface GeneratedDocument {
   id: string;
   appId: string;
@@ -51,13 +51,13 @@ export interface GeneratedDocument {
 interface GeneratePanelProps {
   /** Current document text to use as generation input */
   documentText: string;
-  /** Objective text for the current session */
+  /** Objective text */
   objective: string;
-  /** Generated documents held in session context */
+  /** Generated documents held in active context */
   generatedDocs: GeneratedDocument[];
   /** Callback when a new document is generated */
   onDocGenerated: (doc: GeneratedDocument) => void;
-  /** Callback to remove a generated doc from session */
+  /** Callback to remove a generated doc */
   onDocRemove: (id: string) => void;
   /** Callback to preview a generated doc */
   onDocPreview?: (doc: GeneratedDocument) => void;
@@ -270,7 +270,7 @@ Make it visually compelling and information-dense.`,
         {/* APPLICATION CARDS */}
         <div className="p-3">
           <p className="text-[10px] text-muted-foreground/60 mb-2">
-            Generate artifacts from your document. Results are added as session context.
+            Generate artifacts from your document. Results are saved to Context Store.
           </p>
 
           <div className="grid grid-cols-2 gap-2">
@@ -308,7 +308,7 @@ Make it visually compelling and information-dense.`,
           </div>
         </div>
 
-        {/* GENERATED DOCUMENTS (Session Context) */}
+        {/* GENERATED DOCUMENTS */}
         <div className="border-t">
           <div className="px-3 pt-3 pb-1 flex items-center gap-1.5">
             <FileText className="w-3 h-3 text-amber-600" />

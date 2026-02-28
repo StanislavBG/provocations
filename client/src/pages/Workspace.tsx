@@ -185,7 +185,7 @@ export default function Workspace() {
   // Model configuration state — used by text-to-infographic
   const [modelConfig, setModelConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
 
-  // Generated documents — session context from the Generate tab
+  // Generated documents — active context from the Generate tab
   const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
 
   // Document canvas tabs — "main" is the primary document, secondary tabs are dragged-in generated docs

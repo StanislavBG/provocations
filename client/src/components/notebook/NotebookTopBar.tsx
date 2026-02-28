@@ -1,4 +1,3 @@
-import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -14,8 +13,6 @@ import {
 } from "lucide-react";
 
 interface NotebookTopBarProps {
-  sessionName: string;
-  onSessionNameChange: (name: string) => void;
   onNew: () => void;
   isAdmin: boolean;
   /** Version count for diff view toggle */
@@ -25,70 +22,23 @@ interface NotebookTopBarProps {
 }
 
 export function NotebookTopBar({
-  sessionName,
-  onSessionNameChange,
   onNew,
   isAdmin,
   versionCount = 0,
   showVersions,
   onToggleVersions,
 }: NotebookTopBarProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(sessionName);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [isEditing]);
-
-  const handleSubmit = () => {
-    const trimmed = editValue.trim();
-    if (trimmed && trimmed !== sessionName) {
-      onSessionNameChange(trimmed);
-    } else {
-      setEditValue(sessionName);
-    }
-    setIsEditing(false);
-  };
-
   return (
     <header className="border-b bg-card shrink-0">
       {/* Main bar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-        {/* Left: App picker + Session name */}
-        <div className="flex items-center gap-2 min-w-0">
-          {/* Session name */}
-          {isEditing ? (
-            <input
-              ref={inputRef}
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={handleSubmit}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSubmit();
-                if (e.key === "Escape") {
-                  setEditValue(sessionName);
-                  setIsEditing(false);
-                }
-              }}
-              className="bg-transparent border-b border-primary text-sm font-semibold font-serif outline-none min-w-[120px] max-w-[300px] py-0.5"
-            />
-          ) : (
-            <button
-              onClick={() => {
-                setEditValue(sessionName);
-                setIsEditing(true);
-              }}
-              className="text-sm font-semibold font-serif text-foreground hover:text-primary transition-colors truncate max-w-[300px]"
-              title="Click to rename"
-            >
-              {sessionName || "Untitled Session"}
-            </button>
-          )}
-        </div>
+        {/* Left: Logo + Brand */}
+        <Link href="/" className="flex items-center gap-2 min-w-0 no-underline">
+          <img src="/favicon.png" alt="Provocations" className="w-5 h-5" />
+          <span className="text-sm font-bold font-serif tracking-tight text-foreground">
+            Provocations
+          </span>
+        </Link>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5">
@@ -105,7 +55,7 @@ export function NotebookTopBar({
                 <span className="hidden sm:inline text-xs">New</span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Start a new session</TooltipContent>
+            <TooltipContent>Start new workspace</TooltipContent>
           </Tooltip>
 
           {/* Versions */}
