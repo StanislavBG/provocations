@@ -46,12 +46,15 @@ All endpoints require `X-API-Key: {AIQA_API_KEY}` header.
 ## Quick Commands
 
 ```bash
+npm install      # Install dependencies (REQUIRED before any other command)
 npm run dev      # Start development server (Express + Vite HMR on port 5000)
 npm run build    # Build for production (outputs to dist/)
 npm run start    # Run production build
 npm run check    # TypeScript type checking
 npm run db:push  # Push Drizzle schema to database
 ```
+
+> **Important:** You must run `npm install` before `npm run check` or `npm run build`. Without full dependencies installed, TypeScript will report false errors like `Cannot find type definition file for 'node'` and `Cannot find type definition file for 'vite/client'`. These are **not real code errors** — they indicate missing `node_modules` (specifically `@types/node` and `vite`). Always ensure dependencies are installed first.
 
 ## Tech Stack
 
