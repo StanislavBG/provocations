@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -30,6 +30,8 @@ import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { ContextSidebar } from "@/components/notebook/ContextSidebar";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
+import type { PainterConfig } from "@/components/notebook/PainterPanel";
+import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import type { ChatSessionContext } from "@/components/ChatDrawer";
 
@@ -66,6 +68,12 @@ export default function NotebookWorkspace() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isChartActive, setIsChartActive] = useState(false);
   const [showNewConfirm, setShowNewConfirm] = useState(false);
+
+  // ── Painter state ──
+  const [isPainting, setIsPainting] = useState(false);
+  const [imageTabData, setImageTabData] = useState<Map<string, ImageTabData>>(new Map());
+  const [activeImageTabId, setActiveImageTabId] = useState<string | null>(null);
+  const centerPanelRef = useRef<SplitDocumentEditorHandle>(null);
 
   // ── User-to-user chat state (embedded in left panel) ──
   const [activeChatConversationId, setActiveChatConversationId] = useState<number | null>(null);
@@ -390,6 +398,98 @@ export default function NotebookWorkspace() {
     [writeMutation],
   );
 
+  // ── Paint image via Painter configs ──
+  const handlePaintImage = useCallback(
+    async (config: {
+      painterConfigs: PainterConfig[];
+      painterObjective: string;
+      negativePrompt?: string;
+    }) => {
+      const { painterConfigs, painterObjective, negativePrompt } = config;
+
+      // Build prompt from configs
+      const parts: string[] = [];
+      let aspectRatio = "1:1";
+      let stylePart = "";
+
+      for (const cfg of painterConfigs) {
+        if (cfg.category === "format") {
+          aspectRatio = cfg.option;
+        } else if (cfg.category === "style") {
+          stylePart = cfg.optionLabel;
+        } else if (cfg.category === "mood") {
+          parts.push(`${cfg.optionLabel} mood`);
+        } else if (cfg.category === "composition") {
+          parts.push(`${cfg.optionLabel} composition`);
+        } else if (cfg.category === "detail") {
+          parts.push(`${cfg.optionLabel} detail level`);
+        }
+      }
+
+      const prompt = [painterObjective, ...parts].filter(Boolean).join(", ");
+      const style = [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
+
+      // Create or reuse the active image tab
+      const tabId = activeImageTabId || generateId("img");
+      if (!activeImageTabId) {
+        centerPanelRef.current?.addImageTab(tabId);
+      }
+
+      // Mark as generating
+      setImageTabData((prev) => {
+        const next = new Map(prev);
+        next.set(tabId, { imageUrl: null, prompt, isGenerating: true });
+        return next;
+      });
+      setIsPainting(true);
+
+      try {
+        const response = await apiRequest("POST", "/api/generate-imagen", {
+          prompt,
+          style: stylePart || undefined,
+          aspectRatio,
+          negativePrompt: negativePrompt || undefined,
+          numberOfImages: 1,
+        });
+
+        const data = (await response.json()) as { images?: string[]; error?: string };
+
+        if (data.error && (!data.images || data.images.length === 0)) {
+          toast({ title: "Painting failed", description: data.error, variant: "destructive" });
+          setImageTabData((prev) => {
+            const next = new Map(prev);
+            next.set(tabId, { imageUrl: null, prompt, isGenerating: false });
+            return next;
+          });
+          return;
+        }
+
+        const imageUrl = data.images?.[0] ?? null;
+        setImageTabData((prev) => {
+          const next = new Map(prev);
+          next.set(tabId, { imageUrl, prompt, isGenerating: false });
+          return next;
+        });
+        trackEvent("painter_generated", { metadata: { configs: painterConfigs.length.toString(), aspectRatio } });
+      } catch (error) {
+        console.error("[painter] generation error:", error);
+        toast({ title: "Painting failed", description: "Could not generate image.", variant: "destructive" });
+        setImageTabData((prev) => {
+          const next = new Map(prev);
+          next.set(tabId, { imageUrl: null, prompt, isGenerating: false });
+          return next;
+        });
+      } finally {
+        setIsPainting(false);
+      }
+    },
+    [activeImageTabId, toast],
+  );
+
+  const handleImageActiveChange = useCallback((isActive: boolean, tabId: string | null) => {
+    setActiveImageTabId(isActive ? tabId : null);
+  }, []);
+
   // ── Open a context document for preview ──
   const handleOpenDoc = useCallback(async (id: number, title: string) => {
     // Check if already in pinned cache
@@ -471,6 +571,8 @@ export default function NotebookWorkspace() {
                   isSaving={isSavingToContext}
                   onEvolve={handleEvolve}
                   isEvolving={writeMutation.isPending}
+                  imageTabData={imageTabData}
+                  onImageActiveChange={handleImageActiveChange}
                 />
               )}
               {mobileTab === "chat" && (
@@ -491,6 +593,8 @@ export default function NotebookWorkspace() {
                   onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                   isMerging={writeMutation.isPending}
                   documentText={document.rawText}
+                  onPaintImage={handlePaintImage}
+                  isPainting={isPainting}
                 />
               )}
             </div>
@@ -561,6 +665,7 @@ export default function NotebookWorkspace() {
                 />
               ) : (
                 <NotebookCenterPanel
+                  ref={centerPanelRef}
                   documentText={document.rawText}
                   onDocumentTextChange={(text) => setDocument({ ...document, rawText: text })}
                   isMerging={writeMutation.isPending}
@@ -574,6 +679,8 @@ export default function NotebookWorkspace() {
                   isSaving={isSavingToContext}
                   onEvolve={handleEvolve}
                   isEvolving={writeMutation.isPending}
+                  imageTabData={imageTabData}
+                  onImageActiveChange={handleImageActiveChange}
                 />
               )}
             </ResizablePanel>
@@ -600,6 +707,8 @@ export default function NotebookWorkspace() {
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
                     documentText={document.rawText}
+                    onPaintImage={handlePaintImage}
+                    isPainting={isPainting}
                   />
                 </ResizablePanel>
               </>

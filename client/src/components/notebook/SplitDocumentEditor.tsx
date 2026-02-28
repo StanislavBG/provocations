@@ -1,7 +1,8 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
+import { ImageCanvas } from "./ImageCanvas";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import {
   Save,
   Loader2,
   Wand2,
+  Paintbrush,
   RotateCcw,
   type LucideIcon,
 } from "lucide-react";
@@ -35,13 +37,20 @@ import {
 interface DocTab {
   id: string;
   title: string;
-  type: "document" | "chart";
+  type: "document" | "chart" | "image";
 }
 
 /** Stored state for inactive tabs */
 interface TabSnapshot {
   text: string;
   objective: string;
+}
+
+/** Data for an image tab */
+export interface ImageTabData {
+  imageUrl: string | null;
+  prompt: string;
+  isGenerating: boolean;
 }
 
 interface PreviewDoc {
@@ -153,9 +162,20 @@ interface SplitDocumentEditorProps {
   /** Evolve the document using the writer with selected configurations */
   onEvolve?: (configurations: WriterConfig[]) => void;
   isEvolving?: boolean;
+  /** Image tab data keyed by tab ID */
+  imageTabData?: Map<string, ImageTabData>;
+  /** Callback when an image tab is added externally (e.g. from Painter) */
+  onAddImageTab?: (tabId: string) => void;
+  /** Notifies parent when the active tab type changes to image */
+  onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
 }
 
-export function SplitDocumentEditor({
+/** Imperative handle for parent to add image tabs */
+export interface SplitDocumentEditorHandle {
+  addImageTab: (tabId?: string) => void;
+}
+
+export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDocumentEditorProps>(function SplitDocumentEditor({
   text,
   onTextChange,
   isMerging = false,
@@ -169,7 +189,10 @@ export function SplitDocumentEditor({
   isSaving = false,
   onEvolve,
   isEvolving = false,
-}: SplitDocumentEditorProps) {
+  imageTabData,
+  onAddImageTab,
+  onImageActiveChange,
+}: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
 
@@ -181,11 +204,18 @@ export function SplitDocumentEditor({
   const tabSnapshotRef = useRef<Map<string, TabSnapshot>>(new Map());
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const isChartActive = activeTab?.type === "chart";
+  const isImageActive = activeTab?.type === "image";
+  const isDocumentActive = activeTab?.type === "document";
 
   // Notify parent when chart active state changes
   useEffect(() => {
     onChartActiveChange?.(isChartActive);
   }, [isChartActive, onChartActiveChange]);
+
+  // Notify parent when image active state changes
+  useEffect(() => {
+    onImageActiveChange?.(isImageActive, isImageActive ? activeTabId : null);
+  }, [isImageActive, activeTabId, onImageActiveChange]);
 
   // ── Tab rename state ──
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -258,7 +288,7 @@ export function SplitDocumentEditor({
   const handleEvolve = useCallback(() => {
     if (!onEvolve || !text.trim()) {
       if (!text.trim()) {
-        toast({ title: "Nothing to evolve", description: "Write some content first." });
+        toast({ title: "Nothing to write", description: "Write some content first." });
       }
       return;
     }
@@ -331,6 +361,33 @@ export function SplitDocumentEditor({
     setTabs((prev) => [...prev, { id: newId, title: newTitle, type: "chart" }]);
     setActiveTabId(newId);
   }, [activeTabId, text, objective, tabs]);
+
+  const handleAddImageTab = useCallback((externalTabId?: string) => {
+    const currentTab = tabs.find((t) => t.id === activeTabId);
+    if (currentTab?.type === "document") {
+      tabSnapshotRef.current.set(activeTabId, {
+        text,
+        objective: objective || "",
+      });
+    }
+    const newId = externalTabId || generateId("img");
+    // Check if tab already exists (external add may target existing)
+    const exists = tabs.find((t) => t.id === newId);
+    if (exists) {
+      setActiveTabId(newId);
+      return;
+    }
+    const imgCount = tabs.filter((t) => t.type === "image").length;
+    const newTitle = `Image ${imgCount + 1}`;
+    setTabs((prev) => [...prev, { id: newId, title: newTitle, type: "image" }]);
+    setActiveTabId(newId);
+    onAddImageTab?.(newId);
+  }, [activeTabId, text, objective, tabs, onAddImageTab]);
+
+  // Expose addImageTab to parent via ref
+  useImperativeHandle(ref, () => ({
+    addImageTab: (tabId?: string) => handleAddImageTab(tabId),
+  }), [handleAddImageTab]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -420,6 +477,8 @@ export function SplitDocumentEditor({
             >
               {tab.type === "chart" ? (
                 <GitGraph className="w-3 h-3 shrink-0 text-cyan-500" />
+              ) : tab.type === "image" ? (
+                <Paintbrush className="w-3 h-3 shrink-0 text-rose-500" />
               ) : (
                 <FileText className="w-3 h-3 shrink-0" />
               )}
@@ -477,10 +536,21 @@ export function SplitDocumentEditor({
           </TooltipTrigger>
           <TooltipContent>New chart tab</TooltipContent>
         </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => handleAddImageTab()}
+              className="flex items-center justify-center h-7 w-7 rounded-t-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors shrink-0 mb-px"
+            >
+              <Paintbrush className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>New image tab</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* ─── Writer Controls toolbar (document tabs only) ─── */}
-      {!isChartActive && (
+      {isDocumentActive && (
         <div className="shrink-0 border-b bg-card">
           {/* Category row: clickable pills that expand sub-options */}
           <div className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto">
@@ -544,12 +614,12 @@ export function SplitDocumentEditor({
                     }`}
                   >
                     {isEvolving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                    Evolve{totalSelected > 0 ? ` (${totalSelected})` : ""}
+                    Writer{totalSelected > 0 ? ` (${totalSelected})` : ""}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
                   {totalSelected > 0
-                    ? `Apply ${totalSelected} configuration${totalSelected > 1 ? "s" : ""} to evolve document`
+                    ? `Apply ${totalSelected} configuration${totalSelected > 1 ? "s" : ""} to write document`
                     : "General document improvement"}
                 </TooltipContent>
               </Tooltip>
@@ -616,7 +686,7 @@ export function SplitDocumentEditor({
       )}
 
       {/* Merging indicator */}
-      {isMerging && !isChartActive && (
+      {isMerging && isDocumentActive && (
         <div className="bg-primary/10 px-3 py-1.5 flex items-center gap-2 text-xs border-b shrink-0">
           <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <span>Integrating feedback into document...</span>
@@ -637,8 +707,29 @@ export function SplitDocumentEditor({
           </div>
         ))}
 
+      {/* ─── Image tab instances (always mounted to preserve state) ─── */}
+      {tabs
+        .filter((t) => t.type === "image")
+        .map((tab) => {
+          const data = imageTabData?.get(tab.id);
+          return (
+            <div
+              key={tab.id}
+              className={
+                tab.id === activeTabId ? "flex-1 min-h-0" : "hidden"
+              }
+            >
+              <ImageCanvas
+                imageUrl={data?.imageUrl ?? null}
+                prompt={data?.prompt ?? ""}
+                isGenerating={data?.isGenerating ?? false}
+              />
+            </div>
+          );
+        })}
+
       {/* Context document preview */}
-      {!isChartActive && previewDoc ? (
+      {isDocumentActive && previewDoc ? (
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between px-3 py-1.5 border-b shrink-0 bg-muted/30">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -661,7 +752,7 @@ export function SplitDocumentEditor({
             <MarkdownRenderer content={previewDoc.content} />
           </div>
         </div>
-      ) : !isChartActive ? (
+      ) : isDocumentActive ? (
         <div className="flex-1 flex flex-col min-h-0">
           {/* ─── Objective pane (collapsible) ─── */}
           <div className="shrink-0 border-b overflow-hidden max-h-[180px]">
@@ -719,4 +810,4 @@ export function SplitDocumentEditor({
       ) : null}
     </div>
   );
-}
+});
