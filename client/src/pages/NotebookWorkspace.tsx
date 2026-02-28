@@ -345,7 +345,7 @@ export default function NotebookWorkspace() {
         ? `> **Objective:** ${objective.trim()}\n\n${document.rawText}`
         : document.rawText;
       await apiRequest("POST", "/api/documents", { title, content });
-      trackEvent("document_saved_to_context");
+      trackEvent("document_saved");
       toast({ title: "Saved to Context Store", description: title });
     } catch {
       toast({ title: "Save failed", description: "Could not save document.", variant: "destructive" });
