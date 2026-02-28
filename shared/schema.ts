@@ -807,6 +807,9 @@ export const trackingEventType = [
   "document_saved_to_context", // User saved the document to Context Store
   "writer_invoked",           // Writer was called to evolve document
 
+  // ── Mobile capture ──
+  "mobile_note_captured",     // User captured a note from mobile
+
   // ── Podcast ──
   "podcast_generated",        // User generated a podcast from interview Q&A
 ] as const;
