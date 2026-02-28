@@ -9,10 +9,10 @@ import {
   type PrebuiltTemplate,
 } from "@/lib/prebuiltTemplates";
 import {
-  Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
+import { ProvoIcon } from "@/components/ProvoIcon";
 
 interface AppSidebarProps {
   selectedAppId: string | null;
@@ -47,7 +47,7 @@ export function AppSidebar({
       <div className="h-full flex flex-col bg-card border-r w-12 shrink-0">
         {/* Logo */}
         <div className="flex items-center justify-center py-3 border-b">
-          <Sparkles className="w-5 h-5 text-primary" />
+          <ProvoIcon className="w-5 h-5 text-primary" />
         </div>
 
         {/* Top app icons */}
@@ -100,7 +100,7 @@ export function AppSidebar({
     <div className="h-full flex flex-col bg-card border-r w-56 shrink-0">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-3 border-b">
-        <Sparkles className="w-5 h-5 text-primary shrink-0" />
+        <ProvoIcon className="w-5 h-5 text-primary shrink-0" />
         <span className="font-semibold text-sm flex-1">Provocations</span>
         <Button
           variant="ghost"
