@@ -1082,7 +1082,7 @@ export interface PipelineStatus {
 
 // ── Clean-context chat schemas (research session) ──
 
-export const researchFocusModes = ["explore", "verify", "gather", "analyze"] as const;
+export const researchFocusModes = ["explore", "verify", "gather", "analyze", "synthesize", "reason", "deep-research"] as const;
 export type ResearchFocus = (typeof researchFocusModes)[number];
 
 export const chatMessageSchema = z.object({
