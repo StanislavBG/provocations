@@ -405,3 +405,21 @@
     overflow-x: auto;
   }
 }
+
+/* ── AIQA QA Overlay — ensure it stays on top and remains interactive ── */
+#aiqa-widget,
+#aiqa-widget *,
+[data-aiqa],
+[data-aiqa] *,
+iframe[src*="aiqastudio"],
+div[class*="aiqa"],
+div[id*="aiqa"] {
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+/* The AIQA button/container — prevent our app from overlapping it */
+#aiqa-widget {
+  position: fixed !important;
+  isolation: isolate;
+}

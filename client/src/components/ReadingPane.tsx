@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, FileDown, FileArchive, Mic, Square, Send, X, FileText, Info, Clock, Loader2, ImageIcon, Paintbrush } from "lucide-react";
+import { Download, FileDown, FileArchive, Mic, Square, Send, X, FileText, Info, Clock, Loader2, ImageIcon, Paintbrush, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useWhisperRecorder } from "@/hooks/use-whisper";
@@ -64,13 +64,17 @@ interface ReadingPaneProps {
   objective?: string;
   /** The selected template/application name (e.g. "Product Requirement") */
   templateName?: string;
-  /** Called when a mic transcript is captured — routes to the Transcript panel */
+  /** Called when a mic transcript is captured — routes to the Notes panel */
   onMicTranscript?: (transcript: string, selectedText?: string) => void;
   /** Called when user clicks Artify — opens the Artify panel with this document's text */
   onArtify?: () => void;
+  /** Called when user clicks Save to Context — saves document to Context Store */
+  onSaveToContext?: () => void;
+  /** Whether a save-to-context operation is in progress */
+  isSavingToContext?: boolean;
 }
 
-export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount, onDocumentCopy, objective, templateName, onMicTranscript, onArtify }: ReadingPaneProps) {
+export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, isMerging, onTranscriptUpdate, onTextEdit, onSendFeedback, draftWordCount, onDocumentCopy, objective, templateName, onMicTranscript, onArtify, onSaveToContext, isSavingToContext }: ReadingPaneProps) {
   const { toast } = useToast();
   const [selectedText, setSelectedText] = useState("");
   const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null);
@@ -579,6 +583,28 @@ export function ReadingPane({ text, onTextChange, highlightText, onVoiceMerge, i
           >
             <Mic className="w-3.5 h-3.5" />
           </Button>
+          {onSaveToContext && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  data-testid="button-save-to-context"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-green-600 dark:hover:text-green-400"
+                  onClick={onSaveToContext}
+                  disabled={!text.trim() || isSavingToContext}
+                  title="Save to Context"
+                >
+                  {isSavingToContext ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Save document to Context Store</TooltipContent>
+            </Tooltip>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
