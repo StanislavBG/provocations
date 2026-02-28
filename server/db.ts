@@ -298,6 +298,16 @@ export async function ensureTables(): Promise<void> {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_preferences_user ON chat_preferences(user_id);
 
+      -- Active Context table (hot storage → cold store reflection)
+      CREATE TABLE IF NOT EXISTS active_context (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        document_id INTEGER NOT NULL,
+        pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE(user_id, document_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_active_context_user ON active_context(user_id);
+
       -- Document & folder indexes (critical for Context Store performance)
       CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
       CREATE INDEX IF NOT EXISTS idx_documents_user_folder ON documents(user_id, folder_id);
