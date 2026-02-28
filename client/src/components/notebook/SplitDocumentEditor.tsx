@@ -530,7 +530,7 @@ export function SplitDocumentEditor({
       ) : !isChartActive ? (
         <div className="flex-1 flex flex-col min-h-0">
           {/* ─── Objective pane (collapsible) ─── */}
-          <div className="shrink-0 border-b">
+          <div className="shrink-0 border-b overflow-hidden max-h-[180px]">
             <button
               type="button"
               onClick={() => setObjectiveExpanded(!objectiveExpanded)}
@@ -564,7 +564,7 @@ export function SplitDocumentEditor({
                   showWordCount={false}
                   showReadingTime={false}
                   minRows={2}
-                  maxRows={4}
+                  maxRows={3}
                 />
               </div>
             )}
