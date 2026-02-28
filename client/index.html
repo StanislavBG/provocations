@@ -25,10 +25,15 @@
     <!-- Prevent AIQA click events from bubbling to Radix UI DismissableLayer -->
     <script>
       (function() {
+        // Use BUBBLE phase (not capture) so events still reach child elements
+        // inside the widget. stopPropagation in bubble prevents the event from
+        // reaching document-level listeners (Radix DismissableLayer) while
+        // allowing the widget's own internal buttons/forms to work.
         function shield(root) {
-          if (!root) return;
-          ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'focusin'].forEach(function(evt) {
-            root.addEventListener(evt, function(e) { e.stopPropagation(); }, true);
+          if (!root || root._aiqaShielded) return;
+          root._aiqaShielded = true;
+          ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'focusin', 'touchstart', 'touchend'].forEach(function(evt) {
+            root.addEventListener(evt, function(e) { e.stopPropagation(); }); // bubble phase
           });
         }
 
@@ -37,16 +42,17 @@
           el._aiqaDraggable = true;
           var style = window.getComputedStyle(el);
           if (style.position === 'static') el.style.position = 'fixed';
-          el.style.cursor = 'move';
           el.style.zIndex = '99999';
           var offsetX = 0, offsetY = 0, dragging = false;
           el.addEventListener('mousedown', function(e) {
-            // Only drag from the element itself or its header area (top 32px)
             var rect = el.getBoundingClientRect();
-            if (e.clientY - rect.top > 40 && e.target === el) return;
+            // Only initiate drag from the top 40px header area AND from the
+            // element itself (not from child buttons/inputs inside the widget).
+            if (e.clientY - rect.top > 40 || e.target !== el) return;
             dragging = true;
             offsetX = e.clientX - rect.left;
             offsetY = e.clientY - rect.top;
+            el.style.cursor = 'grabbing';
             e.preventDefault();
           });
           document.addEventListener('mousemove', function(e) {
@@ -56,14 +62,22 @@
             el.style.right = 'auto';
             el.style.bottom = 'auto';
           });
-          document.addEventListener('mouseup', function() { dragging = false; });
+          document.addEventListener('mouseup', function() {
+            if (dragging) el.style.cursor = '';
+            dragging = false;
+          });
+        }
+
+        function isAiqaElement(el) {
+          return el.id === 'aiqa-widget' ||
+            (el.id && el.id.indexOf('aiqa') !== -1) ||
+            (el.className && typeof el.className === 'string' && el.className.indexOf('aiqa') !== -1) ||
+            el.hasAttribute('data-aiqa') ||
+            (el.tagName === 'IFRAME' && el.src && el.src.indexOf('aiqastudio') !== -1);
         }
 
         function processNode(el) {
-          if (el.id === 'aiqa-widget' || (el.id && el.id.indexOf('aiqa') !== -1) ||
-              (el.className && typeof el.className === 'string' && el.className.indexOf('aiqa') !== -1) ||
-              el.hasAttribute('data-aiqa') ||
-              (el.tagName === 'IFRAME' && el.src && el.src.indexOf('aiqastudio') !== -1)) {
+          if (isAiqaElement(el)) {
             shield(el);
             makeDraggable(el);
           }
@@ -75,6 +89,10 @@
             m.addedNodes.forEach(function(node) {
               if (node.nodeType !== 1) return;
               processNode(node);
+              // Also check children (widget might be wrapped in a container)
+              if (node.querySelectorAll) {
+                node.querySelectorAll('#aiqa-widget, [data-aiqa], div[id*="aiqa"], div[class*="aiqa"], iframe[src*="aiqastudio"]').forEach(processNode);
+              }
             });
           });
         });
