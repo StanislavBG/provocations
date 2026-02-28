@@ -92,7 +92,7 @@ export default function NotebookWorkspace() {
   const [discussionMessages, setDiscussionMessages] = useState<DiscussionMessage[]>([]);
 
   // ── Session ──
-  const [sessionName, setSessionName] = useState("Untitled Session");
+  // (session name removed — top bar now shows logo + brand)
 
   // ── Computed values ──
   const appFlowConfig: AppFlowConfig = getAppFlowConfig(selectedTemplateId);
@@ -104,14 +104,14 @@ export default function NotebookWorkspace() {
     ? prebuiltTemplates.find((t) => t.id === selectedTemplateId)?.title
     : undefined;
 
-  // ── Build session context (pinned docs + captured items) ──
+  // ── Build active context (pinned docs + captured items) ──
   const buildSessionContext = useCallback(() => {
     const pinnedItems: ContextItem[] = Object.entries(pinnedDocContents).map(
       ([id, doc]) => ({
         id: `pinned-${id}`,
         type: "text" as const,
         content: `[Document: ${doc.title}]\n${doc.content}`,
-        annotation: "Pinned as session context",
+        annotation: "Pinned as active context",
         createdAt: Date.now(),
       }),
     );
@@ -312,7 +312,7 @@ export default function NotebookWorkspace() {
     });
   }, []);
 
-  // ── Capture research response to session context ──
+  // ── Capture research response to active context ──
   const handleCaptureToContext = useCallback(
     (text: string, label: string) => {
       const item: ContextItem = {
@@ -383,7 +383,7 @@ export default function NotebookWorkspace() {
     }
   }, [pinnedDocContents, toast]);
 
-  // ── New session ──
+  // ── New workspace ──
   const handleNewSession = useCallback(() => {
     if (document.rawText || objective) {
       setShowNewConfirm(true);
@@ -400,7 +400,6 @@ export default function NotebookWorkspace() {
     setEditHistory([]);
     setDiscussionMessages([]);
     setCapturedContext([]);
-    setSessionName("Untitled Session");
     setShowNewConfirm(false);
   }, []);
 
@@ -413,8 +412,6 @@ export default function NotebookWorkspace() {
     <div className="h-screen flex flex-col">
       {/* Top bar */}
       <NotebookTopBar
-        sessionName={sessionName}
-        onSessionNameChange={setSessionName}
         onNew={handleNewSession}
         isAdmin={isAdmin}
         versionCount={versions.length}
@@ -586,14 +583,14 @@ export default function NotebookWorkspace() {
         )}
       </div>
 
-      {/* New session confirmation */}
+      {/* New workspace confirmation */}
       <AlertDialog open={showNewConfirm} onOpenChange={setShowNewConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Start a new session?</AlertDialogTitle>
+            <AlertDialogTitle>Start a new workspace?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will clear your current document and chat history. Make sure
-              to save first if you want to keep your work.
+              This will clear your current document, active context, and chat
+              history. Make sure to save first if you want to keep your work.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

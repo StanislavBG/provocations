@@ -70,7 +70,7 @@ export function NotebookLeftPanel({
             </TooltipTrigger>
             <TooltipContent side="right">
               {pinnedDocIds.size} document{pinnedDocIds.size > 1 ? "s" : ""} in
-              session context
+              active context
             </TooltipContent>
           </Tooltip>
         )}

@@ -335,7 +335,7 @@ export function OnboardingSplash({
               {onLoadSession && recentSessions.length > 0 && (
                 <Button variant="outline" size="sm" onClick={onLoadSession} className="gap-1.5">
                   <RotateCcw className="w-3.5 h-3.5" />
-                  Resume Session
+                  Resume
                 </Button>
               )}
             </div>
