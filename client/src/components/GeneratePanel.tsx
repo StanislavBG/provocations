@@ -1,12 +1,14 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { generateId } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Image as ImageIcon,
@@ -16,6 +18,9 @@ import {
   Eye,
   Sparkles,
   GripVertical,
+  Save,
+  X,
+  Maximize,
   type LucideIcon,
 } from "lucide-react";
 
@@ -91,6 +96,45 @@ export function GeneratePanel({
 }: GeneratePanelProps) {
   const { toast } = useToast();
   const [activeApp, setActiveApp] = useState<string | null>(null);
+
+  // ── Fullscreen lightbox state ──
+  const [lightboxDoc, setLightboxDoc] = useState<GeneratedDocument | null>(null);
+
+  // ── Save-to-context state ──
+  const [savingDocId, setSavingDocId] = useState<string | null>(null);
+  const [saveFileName, setSaveFileName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const saveInputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartSave = useCallback((doc: GeneratedDocument) => {
+    setSavingDocId(doc.id);
+    setSaveFileName(doc.title);
+    setTimeout(() => saveInputRef.current?.focus(), 50);
+  }, []);
+
+  const handleConfirmSave = useCallback(async (doc: GeneratedDocument) => {
+    const title = saveFileName.trim() || doc.title;
+    setIsSaving(true);
+    try {
+      const content = doc.imageUrl
+        ? `![${title}](${doc.imageUrl})\n\n${doc.content}`
+        : doc.content;
+      await apiRequest("POST", "/api/documents", { title, content });
+      trackEvent("document_saved");
+      toast({ title: "Saved to Context Store", description: title });
+      setSavingDocId(null);
+      setSaveFileName("");
+    } catch {
+      toast({ title: "Save failed", description: "Could not save to Context Store.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [saveFileName, toast]);
+
+  const handleCancelSave = useCallback(() => {
+    setSavingDocId(null);
+    setSaveFileName("");
+  }, []);
 
   // ── Infographic generation ──
 
@@ -203,7 +247,7 @@ Make it visually compelling and information-dense.`,
       </div>
 
       <ScrollArea className="flex-1">
-        {/* ═══ APPLICATION CARDS ═══ */}
+        {/* APPLICATION CARDS */}
         <div className="p-3">
           <p className="text-[10px] text-muted-foreground/60 mb-2">
             Generate artifacts from your document. Results are added as session context.
@@ -244,7 +288,7 @@ Make it visually compelling and information-dense.`,
           </div>
         </div>
 
-        {/* ═══ GENERATED DOCUMENTS (Session Context) ═══ */}
+        {/* GENERATED DOCUMENTS (Session Context) */}
         <div className="border-t">
           <div className="px-3 pt-3 pb-1 flex items-center gap-1.5">
             <FileText className="w-3 h-3 text-amber-600" />
@@ -262,77 +306,195 @@ Make it visually compelling and information-dense.`,
             </div>
           ) : (
             <div className="px-3 pb-3 space-y-1.5">
-              {generatedDocs.map((doc) => (
-                <div
-                  key={doc.id}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("application/x-generated-doc", JSON.stringify(doc));
-                    e.dataTransfer.effectAllowed = "copy";
-                  }}
-                  className="group flex items-start gap-2 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 transition-colors hover:bg-amber-500/10 cursor-grab active:cursor-grabbing"
-                >
-                  {/* Drag grip */}
-                  <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 mt-1" />
+              {generatedDocs.map((doc) => {
+                const isSavingThis = savingDocId === doc.id;
+                return (
+                  <div key={doc.id}>
+                    <div
+                      draggable={!isSavingThis}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/x-generated-doc", JSON.stringify(doc));
+                        e.dataTransfer.effectAllowed = "copy";
+                      }}
+                      className="group flex items-start gap-2 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 transition-colors hover:bg-amber-500/10 cursor-grab active:cursor-grabbing"
+                    >
+                      {/* Drag grip */}
+                      <GripVertical className="w-3 h-3 text-muted-foreground/30 shrink-0 mt-1" />
 
-                  {/* Thumbnail or icon */}
-                  {doc.imageUrl ? (
-                    <img
-                      src={doc.imageUrl}
-                      alt={doc.title}
-                      className="w-10 h-10 rounded object-cover shrink-0 border"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0">
-                      <FileText className="w-4 h-4 text-muted-foreground/50" />
-                    </div>
-                  )}
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{doc.title}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      {doc.content.slice(0, 80)}...
-                    </p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-col gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {onDocPreview && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 text-muted-foreground/50 hover:text-foreground"
-                            onClick={() => onDocPreview(doc)}
-                          >
-                            <Eye className="w-2.5 h-2.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">Preview</TooltipContent>
-                      </Tooltip>
-                    )}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5 text-muted-foreground/50 hover:text-destructive"
-                          onClick={() => onDocRemove(doc.id)}
+                      {/* Thumbnail or icon — click to open fullscreen */}
+                      {doc.imageUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setLightboxDoc(doc)}
+                          className="relative shrink-0 group/thumb"
+                          title="Click to view fullscreen"
                         >
-                          <Trash2 className="w-2.5 h-2.5" />
+                          <img
+                            src={doc.imageUrl}
+                            alt={doc.title}
+                            className="w-10 h-10 rounded object-cover border"
+                          />
+                          <div className="absolute inset-0 bg-black/40 rounded opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
+                            <Maximize className="w-3.5 h-3.5 text-white" />
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0">
+                          <FileText className="w-4 h-4 text-muted-foreground/50" />
+                        </div>
+                      )}
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{doc.title}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {doc.content.slice(0, 80)}...
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex flex-col gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {doc.imageUrl && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 text-muted-foreground/50 hover:text-foreground"
+                                onClick={() => setLightboxDoc(doc)}
+                              >
+                                <Maximize className="w-2.5 h-2.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">Fullscreen</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {onDocPreview && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 text-muted-foreground/50 hover:text-foreground"
+                                onClick={() => onDocPreview(doc)}
+                              >
+                                <Eye className="w-2.5 h-2.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">Preview</TooltipContent>
+                          </Tooltip>
+                        )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-muted-foreground/50 hover:text-primary"
+                              onClick={() => handleStartSave(doc)}
+                            >
+                              <Save className="w-2.5 h-2.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Save to Context Store</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-muted-foreground/50 hover:text-destructive"
+                              onClick={() => onDocRemove(doc.id)}
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Remove</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </div>
+
+                    {/* Inline save form (appears below the card) */}
+                    {isSavingThis && (
+                      <div className="flex items-center gap-1.5 mt-1 px-1 animate-in slide-in-from-top-1 duration-150">
+                        <Input
+                          ref={saveInputRef}
+                          value={saveFileName}
+                          onChange={(e) => setSaveFileName(e.target.value)}
+                          placeholder="File name..."
+                          className="h-7 text-xs flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleConfirmSave(doc);
+                            if (e.key === "Escape") handleCancelSave();
+                          }}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 shrink-0"
+                          disabled={isSaving}
+                          onClick={() => handleConfirmSave(doc)}
+                        >
+                          {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3 text-primary" />}
                         </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">Remove</TooltipContent>
-                    </Tooltip>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 shrink-0 text-muted-foreground"
+                          onClick={handleCancelSave}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       </ScrollArea>
+
+      {/* ═══ FULLSCREEN LIGHTBOX ═══ */}
+      {lightboxDoc && lightboxDoc.imageUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxDoc(null)}
+        >
+          <div className="absolute top-4 right-4 flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStartSave(lightboxDoc);
+              }}
+            >
+              <Save className="w-3.5 h-3.5" />
+              Save
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setLightboxDoc(null)}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <img
+            src={lightboxDoc.imageUrl}
+            alt={lightboxDoc.title}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center">
+            <p className="text-white/80 text-sm font-medium">{lightboxDoc.title}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
