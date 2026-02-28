@@ -834,7 +834,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
 
           {/* Actions row (smart + snapshot + custom actions) + metrics */}
           {(actionsRow || metricsEl) && (
-            <div className="flex items-center justify-between px-4 pb-3 pt-1 gap-2 shrink-0">
+            <div className="flex items-center justify-between px-4 pb-2 gap-2 shrink-0">
               {actionsRow ?? <div />}
               {metricsEl}
             </div>
