@@ -156,8 +156,8 @@ export function ProvoThread({
         [challenge.id]: { ...prev[challenge.id], accepted: true },
       }));
       toast({
-        title: "Sent to Transcript",
-        description: "Advice added to your transcript",
+        title: "Sent to Notes",
+        description: "Advice added to your notes",
       });
     },
     [adviceStates, onCaptureToContext, toast],
@@ -185,7 +185,7 @@ export function ProvoThread({
         `Response: ${challenge.title}`,
       );
       toast({
-        title: "Sent to Transcript",
+        title: "Sent to Notes",
         description: "Your response added to transcript",
       });
     },
@@ -472,7 +472,7 @@ function SmartBubble({
                 onClick={onResponseToTranscript}
               >
                 <BookmarkPlus className="w-2.5 h-2.5" />
-                Transcript
+                Notes
               </Button>
             </div>
             <p className="text-xs leading-relaxed">{response}</p>
@@ -523,7 +523,7 @@ function SmartBubble({
                     onClick={onAcceptAdvice}
                   >
                     <Check className="w-3 h-3" />
-                    Accept → Transcript
+                    Accept → Notes
                   </Button>
                 )}
               </>
