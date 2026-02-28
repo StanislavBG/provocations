@@ -9,6 +9,7 @@ interface NotebookCenterPanelProps {
   templateName?: string;
   previewDoc?: { title: string; content: string } | null;
   onClosePreview?: () => void;
+  onChartActiveChange?: (isActive: boolean) => void;
 }
 
 export function NotebookCenterPanel({
@@ -20,6 +21,7 @@ export function NotebookCenterPanel({
   templateName,
   previewDoc,
   onClosePreview,
+  onChartActiveChange,
 }: NotebookCenterPanelProps) {
   return (
     <div className="h-full flex flex-col">
@@ -32,6 +34,7 @@ export function NotebookCenterPanel({
         templateName={templateName}
         previewDoc={previewDoc}
         onClosePreview={onClosePreview}
+        onChartActiveChange={onChartActiveChange}
       />
     </div>
   );
