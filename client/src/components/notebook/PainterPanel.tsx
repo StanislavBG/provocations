@@ -274,13 +274,19 @@ export function PainterPanel({
 
   const handlePaint = useCallback(() => {
     const configs = buildConfigs();
+    // Fall back through: explicit painter objective → workspace objective → document summary
+    const effectiveObjective = painterObjective.trim()
+      || objective
+      || (documentText.trim()
+        ? `Create a visual representation of: ${documentText.slice(0, 300)}`
+        : "");
     onPaintImage({
       painterConfigs: configs,
-      painterObjective: painterObjective.trim() || objective,
+      painterObjective: effectiveObjective,
       negativePrompt: negativePrompt.trim() || undefined,
       painterMode,
     });
-  }, [buildConfigs, onPaintImage, painterObjective, objective, negativePrompt, painterMode]);
+  }, [buildConfigs, onPaintImage, painterObjective, objective, documentText, negativePrompt, painterMode]);
 
   // Compute current labels for summary display
   const currentLabels = useMemo(() => {
@@ -578,7 +584,7 @@ export function PainterPanel({
         >
           <Button
             onClick={handlePaint}
-            disabled={isPainting || (!painterObjective.trim() && !objective.trim())}
+            disabled={isPainting || (!painterObjective.trim() && !objective.trim() && !documentText.trim())}
             className={`w-full text-white gap-1.5 text-xs ${
               isArt
                 ? "bg-rose-600 hover:bg-rose-700"

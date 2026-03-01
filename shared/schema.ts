@@ -307,9 +307,9 @@ export const editHistoryEntrySchema = z.object({
 export type EditHistoryEntry = z.infer<typeof editHistoryEntrySchema>;
 
 export const writeRequestSchema = z.object({
-  // Foundation (always required)
+  // Foundation
   document: z.string().min(1, "Document is required"),
-  objective: z.string().min(1, "Objective is required"),
+  objective: z.string().optional(),
 
   // Application type — tells the LLM what kind of document this is (e.g. "query-editor")
   appType: z.enum(templateIds).optional(),
