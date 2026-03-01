@@ -3,7 +3,7 @@ import { ProvoThread } from "./ProvoThread";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { NotebookResearchChat } from "./NotebookResearchChat";
 import { InterviewTab } from "./InterviewTab";
-import { PainterPanel, type PainterConfig } from "./PainterPanel";
+import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPanel";
 import { Sparkles, Users, ClipboardList, Paintbrush, MessageCircleQuestion } from "lucide-react";
 import type { ProvocationType, DiscussionMessage, ContextItem } from "@shared/schema";
 
@@ -40,6 +40,7 @@ interface NotebookRightPanelProps {
     painterConfigs: PainterConfig[];
     painterObjective: string;
     negativePrompt?: string;
+    painterMode: PainterMode;
   }) => void;
   isPainting?: boolean;
   pinnedDocContents?: Record<number, { title: string; content: string }>;
