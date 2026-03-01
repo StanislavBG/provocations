@@ -2301,23 +2301,34 @@ Output only valid JSON, no markdown.`;
       if (style && typeof style === "string") {
         fullPrompt = `${style} style: ${fullPrompt}`;
       }
+      if (negativePrompt && typeof negativePrompt === "string") {
+        fullPrompt += `. Avoid: ${negativePrompt}`;
+      }
+      if (aspectRatio && aspectRatio !== "1:1") {
+        fullPrompt += `. Aspect ratio: ${aspectRatio}`;
+      }
 
-      const response = await ai.models.generateImages({
-        model: "imagen-4.0-generate-001",
-        prompt: fullPrompt,
-        config: {
-          numberOfImages: Math.min(Math.max(numberOfImages || 1, 1), 4),
-          aspectRatio: aspectRatio || "1:1",
-          ...(negativePrompt ? { negativePrompt } : {}),
-          outputMimeType: "image/png",
-          personGeneration: "allow_adult" as any,
-        },
-      });
+      // Use Nano Banana 2 (gemini-3.1-flash-image-preview) via generateContent
+      const count = Math.min(Math.max(numberOfImages || 1, 1), 4);
+      const images: string[] = [];
 
-      const images = (response.generatedImages || []).map((img: any) => {
-        const bytes = img?.image?.imageBytes;
-        return bytes ? `data:image/png;base64,${bytes}` : null;
-      }).filter(Boolean);
+      for (let i = 0; i < count; i++) {
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-image-preview",
+          contents: fullPrompt,
+          config: {
+            responseModalities: ["IMAGE", "TEXT"],
+          },
+        });
+
+        // Extract image parts from the response
+        const parts = (response as any)?.candidates?.[0]?.content?.parts || [];
+        for (const part of parts) {
+          if (part?.inlineData?.data && part?.inlineData?.mimeType) {
+            images.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+          }
+        }
+      }
 
       if (images.length === 0) {
         return res.json({
@@ -2370,21 +2381,22 @@ Output only valid JSON, no markdown.`;
       const { GoogleGenAI } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: geminiKey });
 
-      const response = await ai.models.generateImages({
-        model: "imagen-4.0-generate-001",
-        prompt: imagePrompt,
+      // Use Nano Banana 2 (gemini-3.1-flash-image-preview) via generateContent
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-image-preview",
+        contents: `${imagePrompt}. Aspect ratio: 16:9`,
         config: {
-          numberOfImages: 1,
-          aspectRatio: "16:9",
-          outputMimeType: "image/png",
-          personGeneration: "allow_adult" as any,
+          responseModalities: ["IMAGE", "TEXT"],
         },
       });
 
-      const images = (response.generatedImages || []).map((img: any) => {
-        const bytes = img?.image?.imageBytes;
-        return bytes ? `data:image/png;base64,${bytes}` : null;
-      }).filter(Boolean);
+      const images: string[] = [];
+      const parts = (response as any)?.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part?.inlineData?.data && part?.inlineData?.mimeType) {
+          images.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+        }
+      }
 
       return res.json({ imagePrompt, images });
     } catch (error) {

@@ -462,7 +462,15 @@ export default function NotebookWorkspace() {
         }
       }
 
-      const prompt = [painterObjective, ...parts].filter(Boolean).join(", ");
+      // Include Active Context (pinned docs) as additional context for the image
+      const contextSnippets = Object.values(pinnedDocContents)
+        .map((doc) => doc.content.slice(0, 500))
+        .filter(Boolean);
+      const contextSuffix = contextSnippets.length > 0
+        ? `. Context: ${contextSnippets.join("; ").slice(0, 1000)}`
+        : "";
+
+      const prompt = [painterObjective, ...parts].filter(Boolean).join(", ") + contextSuffix;
       const style = [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
 
       // Create or reuse the active image tab
@@ -519,7 +527,7 @@ export default function NotebookWorkspace() {
         setIsPainting(false);
       }
     },
-    [activeImageTabId, toast],
+    [activeImageTabId, toast, pinnedDocContents],
   );
 
   const handleImageActiveChange = useCallback((isActive: boolean, tabId: string | null) => {
@@ -635,6 +643,10 @@ export default function NotebookWorkspace() {
                   templateName={selectedTemplateName}
                   previewDoc={previewDoc}
                   onClosePreview={() => setPreviewDoc(null)}
+                  onOpenPreviewDoc={(content, title) => {
+                    setDocument({ id: generateId("doc"), rawText: content });
+                    setObjective(title);
+                  }}
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}
                   isSaving={isSavingToContext}

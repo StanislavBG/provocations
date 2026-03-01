@@ -16,6 +16,7 @@ interface NotebookCenterPanelProps {
   templateName?: string;
   previewDoc?: { title: string; content: string } | null;
   onClosePreview?: () => void;
+  onOpenPreviewDoc?: (content: string, title: string) => void;
   onChartActiveChange?: (isActive: boolean) => void;
   onSaveToContext?: () => void;
   isSaving?: boolean;
@@ -43,6 +44,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
       templateName,
       previewDoc,
       onClosePreview,
+      onOpenPreviewDoc,
       onChartActiveChange,
       onSaveToContext,
       isSaving,
@@ -71,6 +73,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
           templateName={templateName}
           previewDoc={previewDoc}
           onClosePreview={onClosePreview}
+          onOpenPreviewDoc={onOpenPreviewDoc}
           onChartActiveChange={onChartActiveChange}
           onSaveToContext={onSaveToContext}
           isSaving={isSaving}
