@@ -3653,6 +3653,29 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&
     }
   });
 
+  // ── Text-to-Speech endpoint ──
+  // Converts a short text to speech audio (MP3) for interview question read-aloud.
+  app.post("/api/tts", async (req, res) => {
+    try {
+      const { text, voice } = req.body as { text?: string; voice?: string };
+      if (!text || typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ error: "text is required" });
+      }
+      // Limit text length to prevent abuse (questions are short)
+      const truncated = text.slice(0, 1000);
+      const ttsVoice = (voice === "nova" || voice === "onyx" || voice === "alloy" || voice === "echo" || voice === "fable" || voice === "shimmer")
+        ? voice
+        : "nova";
+      const audioBuffer = await textToSpeech(truncated, ttsVoice, "mp3");
+      const audioBase64 = audioBuffer.toString("base64");
+      res.json({ audio: audioBase64, mimeType: "audio/mp3" });
+    } catch (error) {
+      console.error("TTS error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "TTS failed", details: errorMessage });
+    }
+  });
+
   // ── Ask question to the persona team ──
   // The user asks a question and the system identifies the 3 most relevant
   // personas, then composes a multi-perspective response.

@@ -28,6 +28,8 @@ import {
   Compass,
   Scale,
   Target,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import type {
   InterviewEntry,
@@ -93,6 +95,11 @@ export function InterviewTab({
   const [showScript, setShowScript] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // ── TTS (Text-to-Speech) state ──
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll when new entries arrive
@@ -102,12 +109,50 @@ export function InterviewTab({
     }
   }, [entries.length, currentQuestion]);
 
-  // Cleanup audio URL on unmount
+  // Cleanup audio URLs on unmount
   useEffect(() => {
     return () => {
       if (podcastAudioUrl) URL.revokeObjectURL(podcastAudioUrl);
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        const src = ttsAudioRef.current.src;
+        if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+      }
     };
   }, [podcastAudioUrl]);
+
+  /** Speak text via /api/tts — plays the question aloud */
+  const speakQuestion = useCallback(async (text: string) => {
+    if (!ttsEnabled || !text.trim()) return;
+    try {
+      setIsSpeaking(true);
+      const res = await apiRequest("POST", "/api/tts", { text, voice: "nova" });
+      const data = (await res.json()) as { audio: string; mimeType: string };
+      if (!data.audio) return;
+      // Convert base64 to blob URL
+      const byteChars = atob(data.audio);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteArray[i] = byteChars.charCodeAt(i);
+      }
+      const blob = new Blob([byteArray], { type: data.mimeType || "audio/mp3" });
+      const url = URL.createObjectURL(blob);
+      // Stop previous TTS playback
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        const oldSrc = ttsAudioRef.current.src;
+        if (oldSrc.startsWith("blob:")) URL.revokeObjectURL(oldSrc);
+      }
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+      audio.onended = () => setIsSpeaking(false);
+      audio.onerror = () => setIsSpeaking(false);
+      await audio.play();
+    } catch {
+      setIsSpeaking(false);
+      // TTS is non-critical — fail silently
+    }
+  }, [ttsEnabled]);
 
   // ── Fetch next question mutation ──
   // Accept optional updatedEntries to avoid stale closure when called
@@ -128,6 +173,8 @@ export function InterviewTab({
     onSuccess: (data) => {
       setCurrentQuestion(data.question);
       setCurrentTopic(data.topic);
+      // Read the question aloud if TTS is enabled
+      speakQuestion(data.question);
     },
     onError: (error) => {
       const msg = error instanceof Error ? error.message : "Failed to generate question";
@@ -248,13 +295,37 @@ export function InterviewTab({
 
   const handleVoiceAnswer = useCallback(
     (transcript: string) => {
-      if (transcript.trim()) {
-        trackEvent("voice_recorded");
-        handleAnswer(transcript);
+      if (!transcript.trim()) return;
+      trackEvent("voice_recorded");
+      // Check for "Provo End Message" keyword — strip it and submit
+      const endKeyword = /provo\s+end\s+message/i;
+      const cleaned = transcript.replace(endKeyword, "").trim();
+      if (cleaned) {
+        handleAnswer(cleaned);
       }
     },
     [handleAnswer],
   );
+
+  // Watch answerText for "Provo End Message" keyword mid-stream and auto-submit
+  const endKeywordRef = useRef(false);
+  useEffect(() => {
+    if (!answerText || !isRecordingAnswer || endKeywordRef.current) return;
+    const endKeyword = /provo\s+end\s+message/i;
+    if (endKeyword.test(answerText)) {
+      endKeywordRef.current = true;
+      const cleaned = answerText.replace(endKeyword, "").trim();
+      if (cleaned) {
+        // Small delay to let voice recording finish
+        setTimeout(() => {
+          handleAnswer(cleaned);
+          endKeywordRef.current = false;
+        }, 300);
+      } else {
+        endKeywordRef.current = false;
+      }
+    }
+  }, [answerText, isRecordingAnswer, handleAnswer]);
 
   const handleSkip = useCallback(() => {
     trackEvent("interview_skip");
@@ -365,6 +436,22 @@ export function InterviewTab({
               </div>
             </div>
 
+            {/* Voice conversation mode toggle */}
+            <button
+              onClick={() => setTtsEnabled(!ttsEnabled)}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
+                ttsEnabled
+                  ? "border-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400"
+                  : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
+              }`}
+            >
+              {ttsEnabled ? <Volume2 className="w-3.5 h-3.5 shrink-0" /> : <VolumeX className="w-3.5 h-3.5 shrink-0" />}
+              <div className="text-left">
+                <span className="font-medium">Voice Conversation</span>
+                <span className="text-[10px] opacity-70 ml-1.5">questions read aloud</span>
+              </div>
+            </button>
+
             <Button
               size="sm"
               className="gap-1.5 w-full"
@@ -417,6 +504,28 @@ export function InterviewTab({
           </Tooltip>
         </div>
         <div className="flex items-center gap-1">
+          {/* TTS toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={ttsEnabled ? "default" : "ghost"}
+                size="sm"
+                className={`h-7 w-7 p-0 ${ttsEnabled ? "text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => {
+                  const next = !ttsEnabled;
+                  setTtsEnabled(next);
+                  if (!next && ttsAudioRef.current) {
+                    ttsAudioRef.current.pause();
+                    setIsSpeaking(false);
+                  }
+                }}
+              >
+                {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{ttsEnabled ? "Disable question read-aloud" : "Enable question read-aloud (voice conversation mode)"}</TooltipContent>
+          </Tooltip>
+
           {/* Podcast button */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -683,7 +792,13 @@ export function InterviewTab({
                 {isRecordingAnswer && (
                   <div className="flex items-center gap-1.5 text-xs text-primary animate-pulse mt-1">
                     <Mic className="w-3 h-3" />
-                    Listening...
+                    Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo End Message&quot; to submit</span>
+                  </div>
+                )}
+                {isSpeaking && (
+                  <div className="flex items-center gap-1.5 text-xs text-violet-500 animate-pulse mt-1">
+                    <Volume2 className="w-3 h-3" />
+                    Speaking question...
                   </div>
                 )}
               </div>
