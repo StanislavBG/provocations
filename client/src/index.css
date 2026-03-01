@@ -522,6 +522,15 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  /* Restore browser-default styles inside the AIQA QA widget so our
+     Tailwind Preflight reset doesn't break its layout and form controls. */
+  #aiqa-widget *,
+  [data-aiqa] *,
+  div[id*="aiqa"] *,
+  div[class*="aiqa"] * {
+    all: revert;
+  }
 }
 
 /**
