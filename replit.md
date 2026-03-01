@@ -73,6 +73,30 @@ Each application is defined across three code layers (schema → UI → LLM guid
 
 Per-app documentation lives in `apps/<templateId>/CLAUDE.md` — synced to the document store via `POST /api/admin/sync-app-docs`.
 
+## Database Schema Management
+
+The database schema is managed by **two systems that must stay in sync**:
+
+1. **Drizzle schema** (`shared/models/chat.ts`) — The authoritative schema. Replit auto-runs `drizzle-kit push` during Deploy, which compares this schema to the database and generates DDL to sync them.
+2. **`ensureTables()`** (`server/db.ts`) — Safety-net raw SQL that runs on app startup. Creates tables/columns/indexes so the app works even without `drizzle-kit push`.
+
+**Deploy flow on Replit:**
+1. Build (`npm run build`)
+2. Replit runs `drizzle-kit push` (compares Drizzle schema ↔ database) ← migration dialog shows here
+3. App starts (`node ./dist/index.cjs`) → `ensureTables()` runs
+
+**If migration items appear in the deploy dialog**, it means the database doesn't match the Drizzle schema. To resolve:
+- Run `npm run dev` briefly before deploying — this triggers `ensureTables()` which syncs the database
+- Then Deploy — `drizzle-kit push` should find zero differences
+
+**Common causes of recurring migration items:**
+- `ensureTables()` creates an index with `DESC` but Drizzle schema uses default `ASC`
+- `ensureTables()` inline `UNIQUE` creates constraints named `{table}_{column}_key`, but Drizzle expects `{table}_{column}_unique`
+- `ensureTables()` has `REFERENCES` (FK constraints) that the Drizzle schema doesn't define
+- A new table/column was added to the Drizzle schema but not to `ensureTables()`, or vice versa
+
+See `CLAUDE.md` → "ADR: Dual Schema Management" for the full rules.
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -112,6 +136,7 @@ Per-app documentation lives in `apps/<templateId>/CLAUDE.md` — synced to the d
 - Voice: Web Speech API + custom audio worklets
 
 ## Recent Changes
+- March 1, 2026: Fixed recurring Drizzle migration items on deploy — aligned ensureTables() with Drizzle schema (DESC mismatch, FK refs, constraint naming). Added ADR for dual schema management.
 - February 24, 2026: GPT-to-Context chat endpoints now always use Gemini 2.5 Flash via GEMINI_API_KEY, independent of global LLM_PROVIDER
 - February 24, 2026: Added Stripe payment integration — webhook endpoint (`/api/stripe/webhook`), checkout session creation, pricing page (`/pricing`), payments DB table
 - February 22, 2026: Added per-app CLAUDE.md documentation graph — 12 isolated app guides in `apps/<templateId>/CLAUDE.md` with admin sync endpoint to document store
