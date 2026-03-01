@@ -1,11 +1,9 @@
 import { forwardRef } from "react";
 import {
   SplitDocumentEditor,
-  type WriterConfig,
   type SplitDocumentEditorHandle,
   type ImageTabData,
 } from "./SplitDocumentEditor";
-import type { ContextItem, EditHistoryEntry } from "@shared/schema";
 
 interface NotebookCenterPanelProps {
   documentText: string;
@@ -20,17 +18,9 @@ interface NotebookCenterPanelProps {
   onChartActiveChange?: (isActive: boolean) => void;
   onSaveToContext?: () => void;
   isSaving?: boolean;
-  onEvolve?: (configurations: WriterConfig[]) => void;
-  isEvolving?: boolean;
   imageTabData?: Map<string, ImageTabData>;
   onAddImageTab?: (tabId: string) => void;
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
-  /** Context data for the Evolve hover preview */
-  capturedContext?: ContextItem[];
-  pinnedDocContents?: Record<number, { title: string; content: string }>;
-  sessionNotes?: string;
-  editHistory?: EditHistoryEntry[];
-  appType?: string;
 }
 
 export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, NotebookCenterPanelProps>(
@@ -48,16 +38,9 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
       onChartActiveChange,
       onSaveToContext,
       isSaving,
-      onEvolve,
-      isEvolving,
       imageTabData,
       onAddImageTab,
       onImageActiveChange,
-      capturedContext,
-      pinnedDocContents,
-      sessionNotes,
-      editHistory,
-      appType,
     },
     ref,
   ) {
@@ -77,16 +60,9 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
           onChartActiveChange={onChartActiveChange}
           onSaveToContext={onSaveToContext}
           isSaving={isSaving}
-          onEvolve={onEvolve}
-          isEvolving={isEvolving}
           imageTabData={imageTabData}
           onAddImageTab={onAddImageTab}
           onImageActiveChange={onImageActiveChange}
-          capturedContext={capturedContext}
-          pinnedDocContents={pinnedDocContents}
-          sessionNotes={sessionNotes}
-          editHistory={editHistory}
-          appType={appType}
         />
       </div>
     );

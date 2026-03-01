@@ -5,13 +5,9 @@ import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { ImageCanvas } from "./ImageCanvas";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { EvolveContextPreview } from "./EvolveContextPreview";
 import { useToast } from "@/hooks/use-toast";
 import { generateId } from "@/lib/utils";
-import type { ContextItem, EditHistoryEntry } from "@shared/schema";
 import {
   Eye,
   Download,
@@ -22,19 +18,9 @@ import {
   X,
   FileText,
   GitGraph,
-  Maximize2,
-  Minimize2,
-  ArrowUpDown,
-  Lightbulb,
-  Palette,
-  CheckCircle2,
-  Sparkles,
   Save,
   Loader2,
-  Wand2,
   Paintbrush,
-  RotateCcw,
-  type LucideIcon,
 } from "lucide-react";
 
 interface DocTab {
@@ -63,91 +49,6 @@ export interface PreviewDoc {
   docId?: number;
 }
 
-interface SmartOption {
-  id: string;
-  label: string;
-  description: string;
-}
-
-interface SmartButtonDef {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  color: string;
-  activeBg: string;
-  options: SmartOption[];
-}
-
-/** A selected writer configuration passed to the evolve handler */
-export interface WriterConfig {
-  category: string;
-  option: string;
-  categoryLabel: string;
-  optionLabel: string;
-}
-
-const SMART_BUTTONS: SmartButtonDef[] = [
-  {
-    id: "expand",
-    label: "Expand",
-    icon: Maximize2,
-    color: "text-primary/70",
-    activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
-    options: [
-      { id: "add-examples", label: "Add examples", description: "Concrete illustrations and use cases" },
-      { id: "add-detail", label: "Add detail", description: "Deeper explanations and supporting info" },
-      { id: "add-data", label: "Supporting data", description: "Statistics, evidence, and references" },
-    ],
-  },
-  {
-    id: "condense",
-    label: "Condense",
-    icon: Minimize2,
-    color: "text-primary/70",
-    activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
-    options: [
-      { id: "tighten", label: "Tighten prose", description: "Remove filler words and weak phrasing" },
-      { id: "dedup", label: "Remove redundancy", description: "Eliminate repeated ideas and content" },
-      { id: "exec-summary", label: "Executive summary", description: "Create a concise overview" },
-    ],
-  },
-  {
-    id: "restructure",
-    label: "Restructure",
-    icon: ArrowUpDown,
-    color: "text-primary/70",
-    activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
-    options: [
-      { id: "reorder", label: "Reorder sections", description: "Improve logical flow and progression" },
-      { id: "headings", label: "Add headings", description: "Create section hierarchy and navigation" },
-      { id: "outline", label: "Outline view", description: "Convert to structured outline format" },
-    ],
-  },
-  {
-    id: "clarify",
-    label: "Clarify",
-    icon: Lightbulb,
-    color: "text-primary/70",
-    activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
-    options: [
-      { id: "simplify", label: "Simplify language", description: "Make complex ideas accessible" },
-      { id: "define", label: "Define terms", description: "Add definitions for jargon and acronyms" },
-      { id: "context", label: "Add context", description: "Background info for new readers" },
-    ],
-  },
-  {
-    id: "style",
-    label: "Style",
-    icon: Palette,
-    color: "text-primary/70",
-    activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
-    options: [
-      { id: "professional", label: "Professional", description: "Formal business tone" },
-      { id: "casual", label: "Casual", description: "Conversational and friendly" },
-      { id: "academic", label: "Academic", description: "Scholarly and precise" },
-    ],
-  },
-];
 
 interface SplitDocumentEditorProps {
   text: string;
@@ -166,21 +67,12 @@ interface SplitDocumentEditorProps {
   /** Save the current document + objective to the Context Store */
   onSaveToContext?: () => void;
   isSaving?: boolean;
-  /** Evolve the document using the writer with selected configurations */
-  onEvolve?: (configurations: WriterConfig[]) => void;
-  isEvolving?: boolean;
   /** Image tab data keyed by tab ID */
   imageTabData?: Map<string, ImageTabData>;
   /** Callback when an image tab is added externally (e.g. from Painter) */
   onAddImageTab?: (tabId: string) => void;
   /** Notifies parent when the active tab type changes to image */
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
-  /** Context data for the Evolve hover preview */
-  capturedContext?: ContextItem[];
-  pinnedDocContents?: Record<number, { title: string; content: string }>;
-  sessionNotes?: string;
-  editHistory?: EditHistoryEntry[];
-  appType?: string;
 }
 
 /** Imperative handle for parent to add image tabs */
@@ -201,16 +93,9 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   onChartActiveChange,
   onSaveToContext,
   isSaving = false,
-  onEvolve,
-  isEvolving = false,
   imageTabData,
   onAddImageTab,
   onImageActiveChange,
-  capturedContext,
-  pinnedDocContents,
-  sessionNotes,
-  editHistory,
-  appType,
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
@@ -247,84 +132,6 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
       tabEditRef.current?.select();
     }
   }, [editingTabId]);
-
-  // ── Multi-select writer controls ──
-  // Which categories are expanded (showing sub-options)
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  // Map of categoryId → Set of selected optionIds
-  const [selectedConfigs, setSelectedConfigs] = useState<Map<string, Set<string>>>(new Map());
-
-  const totalSelected = Array.from(selectedConfigs.values()).reduce(
-    (sum, s) => sum + s.size,
-    0,
-  );
-
-  const toggleCategory = useCallback((catId: string) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(catId)) next.delete(catId);
-      else next.add(catId);
-      return next;
-    });
-  }, []);
-
-  const toggleOption = useCallback((catId: string, optId: string) => {
-    setSelectedConfigs((prev) => {
-      const next = new Map(prev);
-      const catSet = new Set(next.get(catId) || []);
-      if (catSet.has(optId)) catSet.delete(optId);
-      else catSet.add(optId);
-      if (catSet.size === 0) next.delete(catId);
-      else next.set(catId, catSet);
-      return next;
-    });
-  }, []);
-
-  const clearSelections = useCallback(() => {
-    setSelectedConfigs(new Map());
-  }, []);
-
-  /** Build the array of WriterConfig from current selections */
-  const buildConfigs = useCallback((): WriterConfig[] => {
-    const configs: WriterConfig[] = [];
-    SMART_BUTTONS.forEach((btn) => {
-      const optIds = selectedConfigs.get(btn.id);
-      if (!optIds || optIds.size === 0) return;
-      btn.options.forEach((opt) => {
-        if (optIds.has(opt.id)) {
-          configs.push({
-            category: btn.id,
-            option: opt.id,
-            categoryLabel: btn.label,
-            optionLabel: opt.label,
-          });
-        }
-      });
-    });
-    return configs;
-  }, [selectedConfigs]);
-
-  const handleEvolve = useCallback(() => {
-    if (!onEvolve || !text.trim()) {
-      if (!text.trim()) {
-        toast({ title: "Nothing to write", description: "Write some content first." });
-      }
-      return;
-    }
-    const configs = buildConfigs();
-    if (configs.length === 0) {
-      // No specific options selected — general evolve
-      onEvolve([{ category: "general", option: "general", categoryLabel: "General", optionLabel: "Improve" }]);
-    } else {
-      onEvolve(configs);
-    }
-    // Clear selections after evolving
-    clearSelections();
-  }, [onEvolve, text, buildConfigs, clearSelections, toast]);
-
-  // Count selected options per category (for badges)
-  const getCategorySelectedCount = (catId: string): number =>
-    selectedConfigs.get(catId)?.size || 0;
 
   const handleSwitchTab = useCallback(
     (tabId: string) => {
@@ -463,6 +270,23 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
 
   const documentHeaderActions = (
     <div className="flex items-center gap-1">
+      {onSaveToContext && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onSaveToContext}
+              disabled={isSaving || !text.trim()}
+              title="Save to Context Store"
+            >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Save to Context Store</TooltipContent>
+        </Tooltip>
+      )}
       <Button
         variant="ghost"
         size="icon"
@@ -567,153 +391,6 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
           <TooltipContent>New image tab</TooltipContent>
         </Tooltip>
       </div>
-
-      {/* ─── Writer Controls toolbar (document tabs only) ─── */}
-      {isDocumentActive && (
-        <div className="shrink-0 border-b bg-card">
-          {/* Category row: clickable pills that expand sub-options */}
-          <div className="flex items-center gap-1 px-2 py-1.5 overflow-x-auto">
-            <Sparkles className="w-3 h-3 text-primary/50 shrink-0 mr-0.5" />
-            {SMART_BUTTONS.map((btn) => {
-              const Icon = btn.icon;
-              const isExpanded = expandedCategories.has(btn.id);
-              const selectedCount = getCategorySelectedCount(btn.id);
-              return (
-                <button
-                  key={btn.id}
-                  onClick={() => toggleCategory(btn.id)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 ${
-                    selectedCount > 0
-                      ? `${btn.activeBg} border`
-                      : isExpanded
-                        ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                  }`}
-                >
-                  <Icon className={`w-3 h-3 ${selectedCount > 0 ? "" : isExpanded ? "text-primary" : btn.color}`} />
-                  {btn.label}
-                  {selectedCount > 0 && (
-                    <Badge className="h-3.5 min-w-[14px] px-1 text-[9px] bg-foreground/15 text-current">
-                      {selectedCount}
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
-
-            {/* Separator + action buttons */}
-            <div className="w-px h-4 bg-border/60 mx-1 shrink-0" />
-
-            {onSaveToContext && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={onSaveToContext}
-                    disabled={isSaving || !text.trim()}
-                    className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-colors shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-40"
-                  >
-                    {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                    Save
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Save document to Context Store</TooltipContent>
-              </Tooltip>
-            )}
-
-            {onEvolve && (
-              <HoverCard openDelay={300} closeDelay={150}>
-                <HoverCardTrigger asChild>
-                  <button
-                    onClick={handleEvolve}
-                    disabled={isEvolving || !text.trim()}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all shrink-0 disabled:opacity-40 ${
-                      totalSelected > 0
-                        ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-                        : "bg-primary/10 text-primary hover:bg-primary/20"
-                    }`}
-                  >
-                    {isEvolving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                    Writer{totalSelected > 0 ? ` (${totalSelected})` : ""}
-                  </button>
-                </HoverCardTrigger>
-                <HoverCardContent
-                  side="bottom"
-                  align="end"
-                  className="w-auto p-0 border-0 bg-transparent shadow-none"
-                >
-                  <EvolveContextPreview
-                    text={text}
-                    objective={objective}
-                    configurations={buildConfigs()}
-                    capturedContext={capturedContext}
-                    pinnedDocContents={pinnedDocContents}
-                    sessionNotes={sessionNotes}
-                    editHistory={editHistory}
-                    appType={appType}
-                  />
-                </HoverCardContent>
-              </HoverCard>
-            )}
-
-            {totalSelected > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={clearSelections}
-                    className="flex items-center justify-center w-5 h-5 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-                  >
-                    <RotateCcw className="w-2.5 h-2.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Clear all selections</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-
-          {/* Expanded sub-options — multi-select chips */}
-          {expandedCategories.size > 0 && (
-            <div className="px-3 pb-2 space-y-1 animate-in slide-in-from-top-1 duration-150">
-              {SMART_BUTTONS.filter((b) => expandedCategories.has(b.id)).map(
-                (btn) => {
-                  const catSelected = selectedConfigs.get(btn.id);
-                  return (
-                    <div key={btn.id} className="flex items-center gap-1 flex-wrap">
-                      <span className={`text-[10px] font-semibold uppercase tracking-wider mr-1 shrink-0 ${btn.color}`}>
-                        {btn.label}
-                      </span>
-                      {btn.options.map((opt) => {
-                        const isSelected = catSelected?.has(opt.id) || false;
-                        return (
-                          <Tooltip key={opt.id}>
-                            <TooltipTrigger asChild>
-                              <button
-                                onClick={() => toggleOption(btn.id, opt.id)}
-                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all shrink-0 border ${
-                                  isSelected
-                                    ? `${btn.activeBg}`
-                                    : "bg-muted/40 border-transparent text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                                }`}
-                              >
-                                {isSelected && (
-                                  <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
-                                )}
-                                {opt.label}
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-[11px]">
-                              {opt.description}
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
-                    </div>
-                  );
-                },
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Merging indicator */}
       {isMerging && isDocumentActive && (

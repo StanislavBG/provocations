@@ -4,10 +4,11 @@ import { TranscriptPanel } from "./TranscriptPanel";
 import { NotebookResearchChat } from "./NotebookResearchChat";
 import { InterviewTab } from "./InterviewTab";
 import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPanel";
-import { Sparkles, Users, ClipboardList, Paintbrush, MessageCircleQuestion } from "lucide-react";
-import type { ProvocationType, DiscussionMessage, ContextItem } from "@shared/schema";
+import { WriterPanel, type WriterConfig } from "./WriterPanel";
+import { Sparkles, Users, ClipboardList, Paintbrush, MessageCircleQuestion, Wand2 } from "lucide-react";
+import type { ProvocationType, DiscussionMessage, ContextItem, EditHistoryEntry } from "@shared/schema";
 
-type RightPanelTab = "research" | "interview" | "provo" | "transcript" | "painter";
+type RightPanelTab = "research" | "interview" | "provo" | "transcript" | "painter" | "writer";
 
 interface NotebookRightPanelProps {
   activePersonas: Set<ProvocationType>;
@@ -33,6 +34,12 @@ interface NotebookRightPanelProps {
   // Evolve document (writer)
   onEvolveDocument?: (instruction: string, description: string) => void;
   isMerging?: boolean;
+
+  // Writer tab
+  onEvolve?: (configurations: WriterConfig[]) => void;
+  isEvolving?: boolean;
+  sessionNotes?: string;
+  editHistory?: EditHistoryEntry[];
 
   // Painter tab + Interview tab
   documentText: string;
@@ -65,6 +72,10 @@ export function NotebookRightPanel({
   onRemoveCapturedItem,
   onEvolveDocument,
   isMerging = false,
+  onEvolve,
+  isEvolving = false,
+  sessionNotes,
+  editHistory,
   documentText,
   onPaintImage,
   isPainting = false,
@@ -133,6 +144,17 @@ export function NotebookRightPanel({
           Provo
         </button>
         <button
+          onClick={() => setActiveTab("writer")}
+          className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-colors ${
+            activeTab === "writer"
+              ? "text-primary border-b-2 border-primary -mb-px"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Wand2 className="w-3.5 h-3.5" />
+          Writer
+        </button>
+        <button
           onClick={() => setActiveTab("painter")}
           className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold transition-colors ${
             activeTab === "painter"
@@ -191,6 +213,23 @@ export function NotebookRightPanel({
           hasDocument={hasDocument}
           pinnedDocContents={pinnedDocContents}
         />
+      </div>
+
+      {/* Writer */}
+      <div className={activeTab === "writer" ? "flex-1 overflow-hidden" : "hidden"}>
+        {onEvolve && (
+          <WriterPanel
+            documentText={documentText}
+            objective={objective}
+            onEvolve={onEvolve}
+            isEvolving={isEvolving}
+            capturedContext={capturedContext}
+            pinnedDocContents={pinnedDocContents}
+            sessionNotes={sessionNotes}
+            editHistory={editHistory}
+            appType={appType}
+          />
+        )}
       </div>
 
       {/* Painter */}
