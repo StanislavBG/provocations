@@ -167,7 +167,7 @@ export function NotebookResearchChat({
       )}
 
       {/* Focus mode selector */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b shrink-0 bg-muted/20">
+      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b shrink-0 bg-muted/20">
         {FOCUS_MODES.map((mode) => {
           const Icon = mode.icon;
           const isActive = focusMode === mode.id;

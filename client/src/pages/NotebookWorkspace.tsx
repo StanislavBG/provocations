@@ -29,7 +29,7 @@ import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
-import type { PainterConfig } from "@/components/notebook/PainterPanel";
+import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
@@ -168,7 +168,7 @@ export default function NotebookWorkspace() {
 
       const payload = {
         document: document.rawText,
-        objective,
+        objective: objective.trim() || undefined,
         appType: validAppType,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: allContext.length > 0 ? allContext : undefined,
@@ -440,38 +440,69 @@ export default function NotebookWorkspace() {
       painterConfigs: PainterConfig[];
       painterObjective: string;
       negativePrompt?: string;
+      painterMode: PainterMode;
     }) => {
-      const { painterConfigs, painterObjective, negativePrompt } = config;
+      const { painterConfigs, painterObjective, negativePrompt, painterMode } = config;
 
-      // Build prompt from configs
+      // Include Active Context (pinned docs) — infographic mode sends more
+      // context since Nano Banana 2 excels at data visualization from rich input
+      const contextLimit = painterMode === "infographic" ? 1500 : 500;
+      const contextJoinLimit = painterMode === "infographic" ? 3000 : 1000;
+      const contextSnippets = Object.values(pinnedDocContents)
+        .map((doc) => doc.content.slice(0, contextLimit))
+        .filter(Boolean);
+      const contextSuffix = contextSnippets.length > 0
+        ? `. Context: ${contextSnippets.join("; ").slice(0, contextJoinLimit)}`
+        : "";
+
+      // Build prompt from configs — mode-aware
       const parts: string[] = [];
       let aspectRatio = "1:1";
       let stylePart = "";
 
-      for (const cfg of painterConfigs) {
-        if (cfg.category === "format") {
-          aspectRatio = cfg.option;
-        } else if (cfg.category === "style") {
-          stylePart = cfg.optionLabel;
-        } else if (cfg.category === "mood") {
-          parts.push(`${cfg.optionLabel} mood`);
-        } else if (cfg.category === "composition") {
-          parts.push(`${cfg.optionLabel} composition`);
-        } else if (cfg.category === "detail") {
-          parts.push(`${cfg.optionLabel} detail level`);
+      if (painterMode === "infographic") {
+        // Infographic mode — leverage Nano Banana 2's data visualization,
+        // diagram, and infographic capabilities for business-grade output.
+        const configMap: Record<string, string> = {};
+        for (const cfg of painterConfigs) {
+          if (cfg.category === "format") {
+            aspectRatio = cfg.option;
+          } else {
+            configMap[cfg.category] = cfg.optionLabel;
+            parts.push(`${cfg.categoryLabel}: ${cfg.optionLabel}`);
+          }
+        }
+        // Build a rich structured style directive for the image model
+        const layoutHint = configMap["layout"] || "Dashboard";
+        const dataHint = configMap["data-style"] || "Charts & Graphs";
+        const paletteHint = configMap["palette"] || "Corporate";
+        const typoHint = configMap["typography"] || "Geometric Sans";
+        const densityHint = configMap["density"] || "Balanced";
+        stylePart = `Professional ${layoutHint} infographic, ${paletteHint} color scheme, ${typoHint} typography, ${densityHint} density, featuring ${dataHint}`;
+      } else {
+        // Art mode: original behavior
+        for (const cfg of painterConfigs) {
+          if (cfg.category === "format") {
+            aspectRatio = cfg.option;
+          } else if (cfg.category === "style") {
+            stylePart = cfg.optionLabel;
+          } else if (cfg.category === "mood") {
+            parts.push(`${cfg.optionLabel} mood`);
+          } else if (cfg.category === "composition") {
+            parts.push(`${cfg.optionLabel} composition`);
+          } else if (cfg.category === "detail") {
+            parts.push(`${cfg.optionLabel} detail level`);
+          }
         }
       }
 
-      // Include Active Context (pinned docs) as additional context for the image
-      const contextSnippets = Object.values(pinnedDocContents)
-        .map((doc) => doc.content.slice(0, 500))
-        .filter(Boolean);
-      const contextSuffix = contextSnippets.length > 0
-        ? `. Context: ${contextSnippets.join("; ").slice(0, 1000)}`
+      const modePrefix = painterMode === "infographic"
+        ? "Create a high-quality, detailed infographic. Use clear data visualizations, structured layouts, bold headings, and professional design. Include labeled sections, icons, and visual hierarchy. The infographic should look publication-ready: "
         : "";
-
-      const prompt = [painterObjective, ...parts].filter(Boolean).join(", ") + contextSuffix;
-      const style = [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
+      const prompt = modePrefix + [painterObjective, ...parts].filter(Boolean).join(", ") + contextSuffix;
+      const style = painterMode === "infographic"
+        ? stylePart
+        : [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
 
       // Create or reuse the active image tab
       const tabId = activeImageTabId || generateId("img");
@@ -514,7 +545,7 @@ export default function NotebookWorkspace() {
           next.set(tabId, { imageUrl, prompt, isGenerating: false });
           return next;
         });
-        trackEvent("painter_generated", { metadata: { configs: painterConfigs.length.toString(), aspectRatio } });
+        trackEvent("painter_generated", { metadata: { configs: painterConfigs.length.toString(), aspectRatio, mode: painterMode } });
       } catch (error) {
         console.error("[painter] generation error:", error);
         toast({ title: "Painting failed", description: "Could not generate image.", variant: "destructive" });
