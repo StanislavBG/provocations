@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/tracking";
@@ -97,6 +97,7 @@ export function GeneratePanel({
   onDocPreview,
 }: GeneratePanelProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [activeApp, setActiveApp] = useState<string | null>(null);
 
   // ── Fullscreen lightbox state ──
@@ -119,12 +120,13 @@ export function GeneratePanel({
         : doc.content;
       await apiRequest("POST", "/api/documents", { title: doc.title, content });
       setSavedDocIds((prev) => new Set(prev).add(doc.id));
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       trackEvent("document_saved");
     } catch {
       // Auto-save failed silently — user can still manually save
       console.warn("[GeneratePanel] Auto-save failed for", doc.title);
     }
-  }, []);
+  }, [queryClient]);
 
   const handleStartSave = useCallback((doc: GeneratedDocument) => {
     setSavingDocId(doc.id);
@@ -141,6 +143,7 @@ export function GeneratePanel({
         : doc.content;
       await apiRequest("POST", "/api/documents", { title, content });
       trackEvent("document_saved");
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       toast({ title: "Saved to Context Store", description: title });
       setSavingDocId(null);
       setSaveFileName("");
@@ -149,7 +152,7 @@ export function GeneratePanel({
     } finally {
       setIsSaving(false);
     }
-  }, [saveFileName, toast]);
+  }, [saveFileName, toast, queryClient]);
 
   const handleCancelSave = useCallback(() => {
     setSavingDocId(null);
