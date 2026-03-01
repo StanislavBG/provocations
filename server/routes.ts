@@ -786,12 +786,17 @@ Output only valid JSON, no markdown.`,
         ],
       });
 
-      const content = response.text || "{}";
+      let content = (response.text || "{}").trim();
+      // Strip markdown code fences if the LLM wrapped JSON in ```json ... ```
+      const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        content = fenceMatch[1].trim();
+      }
       let parsedResponse: Record<string, unknown> = {};
       try {
         parsedResponse = JSON.parse(content);
       } catch {
-        console.error("Failed to parse challenges JSON:", content);
+        console.error("Failed to parse challenges JSON:", content.slice(0, 500));
         return res.json({ challenges: [] });
       }
 
@@ -913,12 +918,14 @@ Output only valid JSON, no markdown.`;
         ],
       });
 
-      const content = response.text || "{}";
+      let adviceRaw = (response.text || "{}").trim();
+      const adviceFenceMatch = adviceRaw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (adviceFenceMatch) adviceRaw = adviceFenceMatch[1].trim();
       let parsedResponse: Record<string, unknown> = {};
       try {
-        parsedResponse = JSON.parse(content);
+        parsedResponse = JSON.parse(adviceRaw);
       } catch {
-        console.error("Failed to parse advice JSON:", content);
+        console.error("Failed to parse advice JSON:", adviceRaw.slice(0, 500));
         return res.json({ advice: null });
       }
 
@@ -3821,10 +3828,12 @@ Output only valid JSON, no markdown.`,
         ],
       });
 
-      const content = response.text || "{}";
+      let askContent = (response.text || "{}").trim();
+      const askFence = askContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (askFence) askContent = askFence[1].trim();
       let result: AskQuestionResponse;
       try {
-        const parsed = JSON.parse(content);
+        const parsed = JSON.parse(askContent);
         result = {
           answer: typeof parsed.answer === "string" ? parsed.answer : "Unable to generate a response.",
           perspectives: Array.isArray(parsed.perspectives)
