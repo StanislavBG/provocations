@@ -411,8 +411,9 @@ export function PainterPanel({
           previewTitle="Paint Image"
           previewBlocks={previewBlocks}
           previewSummary={previewSummary}
-          side="top"
-          align="center"
+          side="left"
+          align="end"
+          collisionPadding={{ bottom: 60, right: 60 }}
         >
           <Button
             onClick={handlePaint}

@@ -34,6 +34,8 @@ export interface LlmHoverButtonProps {
   side?: "top" | "bottom" | "left" | "right";
   /** HoverCard alignment (default: "center") */
   align?: "start" | "center" | "end";
+  /** Padding from viewport edges to avoid overlapping fixed UI (e.g. AIQA widget) */
+  collisionPadding?: number | { top?: number; right?: number; bottom?: number; left?: number };
 }
 
 export function LlmHoverButton({
@@ -43,6 +45,7 @@ export function LlmHoverButton({
   children,
   side = "bottom",
   align = "center",
+  collisionPadding,
 }: LlmHoverButtonProps) {
   return (
     <HoverCard openDelay={300} closeDelay={150}>
@@ -52,6 +55,7 @@ export function LlmHoverButton({
       <HoverCardContent
         side={side}
         align={align}
+        collisionPadding={collisionPadding}
         className="w-auto p-0 border-0 bg-transparent shadow-none"
       >
         <LlmCallPreview
