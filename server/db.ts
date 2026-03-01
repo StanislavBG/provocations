@@ -34,7 +34,7 @@ export async function ensureTables(): Promise<void> {
         name_ciphertext TEXT,
         name_salt VARCHAR(64),
         name_iv VARCHAR(32),
-        parent_folder_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+        parent_folder_id INTEGER,
         locked BOOLEAN DEFAULT FALSE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -58,8 +58,8 @@ export async function ensureTables(): Promise<void> {
         ciphertext TEXT NOT NULL,
         salt VARCHAR(64) NOT NULL,
         iv VARCHAR(32) NOT NULL,
-        folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL,
-        key_version_id INTEGER REFERENCES key_versions(id),
+        folder_id INTEGER,
+        key_version_id INTEGER,
         locked BOOLEAN DEFAULT FALSE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -75,8 +75,8 @@ export async function ensureTables(): Promise<void> {
 
       -- Add columns that were added after initial schema (idempotent)
       DO $$ BEGIN
-        ALTER TABLE documents ADD COLUMN IF NOT EXISTS folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL;
-        ALTER TABLE documents ADD COLUMN IF NOT EXISTS key_version_id INTEGER REFERENCES key_versions(id);
+        ALTER TABLE documents ADD COLUMN IF NOT EXISTS folder_id INTEGER;
+        ALTER TABLE documents ADD COLUMN IF NOT EXISTS key_version_id INTEGER;
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_ciphertext TEXT;
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_salt VARCHAR(64);
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_iv VARCHAR(32);
@@ -330,7 +330,7 @@ export async function ensureTables(): Promise<void> {
       -- Document & folder indexes (critical for Context Store performance)
       CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
       CREATE INDEX IF NOT EXISTS idx_documents_user_folder ON documents(user_id, folder_id);
-      CREATE INDEX IF NOT EXISTS idx_documents_user_updated ON documents(user_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_documents_user_updated ON documents(user_id, updated_at);
       CREATE INDEX IF NOT EXISTS idx_folders_user_id ON folders(user_id);
       CREATE INDEX IF NOT EXISTS idx_folders_user_parent ON folders(user_id, parent_folder_id);
 
@@ -344,6 +344,39 @@ export async function ensureTables(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_agent_definitions_user_id ON agent_definitions(user_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_definitions_agent_id ON agent_definitions(agent_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_prompt_overrides_task_type ON agent_prompt_overrides(task_type);
+
+      -- Ensure unique constraints match Drizzle's naming convention ({table}_{column}_unique).
+      -- ensureTables creates inline UNIQUE (PostgreSQL names these {table}_{column}_key),
+      -- but drizzle-kit push expects {table}_{column}_unique. Without matching names,
+      -- drizzle-kit push keeps generating ADD CONSTRAINT statements every deploy.
+      DO $$ BEGIN
+        ALTER TABLE user_preferences ADD CONSTRAINT user_preferences_user_id_unique UNIQUE(user_id);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE pipeline_artifacts ADD CONSTRAINT pipeline_artifacts_uuid_unique UNIQUE(uuid);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE persona_overrides ADD CONSTRAINT persona_overrides_persona_id_unique UNIQUE(persona_id);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE agent_definitions ADD CONSTRAINT agent_definitions_agent_id_unique UNIQUE(agent_id);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE agent_prompt_overrides ADD CONSTRAINT agent_prompt_overrides_task_type_unique UNIQUE(task_type);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE llm_call_logs ADD CONSTRAINT llm_call_logs_call_id_unique UNIQUE(call_id);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE chat_preferences ADD CONSTRAINT chat_preferences_user_id_unique UNIQUE(user_id);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
     `);
     console.log("Database tables verified.");
   } catch (err) {
