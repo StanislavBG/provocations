@@ -197,6 +197,9 @@ export default function NotebookWorkspace() {
       setEditHistory((prev) => [...prev.slice(-9), historyEntry]);
       trackEvent("write_executed", { metadata: { instructionType: data.instructionType || "general" } });
 
+      // Clear notes — they've been integrated into the document
+      setCapturedContext([]);
+
       toast({
         title: "Document updated",
         description: data.summary || "Changes integrated successfully",
