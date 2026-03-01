@@ -5,22 +5,13 @@ import { NotebookResearchChat } from "./NotebookResearchChat";
 import { InterviewTab } from "./InterviewTab";
 import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPanel";
 import { WriterPanel, type WriterConfig } from "./WriterPanel";
-import { Sparkles, Users, ClipboardList, Paintbrush, MessageCircleQuestion, Wand2, type LucideIcon } from "lucide-react";
+import { ContextSidebar } from "./ContextSidebar";
+import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
+import { Video } from "lucide-react";
+import { resolveVisibleTabs } from "./panelTabs";
 import type { ProvocationType, DiscussionMessage, ContextItem, EditHistoryEntry } from "@shared/schema";
 
-type RightPanelTab = "research" | "interview" | "provo" | "transcript" | "painter" | "writer";
-
-const TAB_DEFS: { id: RightPanelTab; icon: LucideIcon; label: string }[] = [
-  { id: "research", icon: Sparkles, label: "Research" },
-  { id: "interview", icon: MessageCircleQuestion, label: "Interview" },
-  { id: "transcript", icon: ClipboardList, label: "Notes" },
-  { id: "provo", icon: Users, label: "Provo" },
-  { id: "writer", icon: Wand2, label: "Writer" },
-  { id: "painter", icon: Paintbrush, label: "Painter" },
-];
-
-/** Set of tab IDs this panel knows how to render */
-const NATIVE_TAB_IDS = new Set<string>(TAB_DEFS.map((t) => t.id));
+const DEFAULT_RIGHT_IDS = ["research", "interview", "transcript", "provo", "writer", "painter"];
 
 interface NotebookRightPanelProps {
   activePersonas: Set<ProvocationType>;
@@ -67,8 +58,19 @@ interface NotebookRightPanelProps {
   // Interview tab
   appType?: string;
 
-  /** Ordered list of tab IDs to show (from panel layout config). Only native tabs are rendered. */
+  /** Ordered list of tab IDs to show (from panel layout config) */
   visibleTabs?: string[];
+
+  // ── Props for left-panel tabs that may be moved here ──
+  pinnedDocIds?: Set<number>;
+  onPinDoc?: (id: number) => void;
+  onUnpinDoc?: (id: number) => void;
+  onPreviewDoc?: (id: number, title: string) => void;
+  onOpenDoc?: (id: number, title: string) => void;
+  onToggleCollapse?: () => void;
+  chatSessionContext?: ChatSessionContext;
+  activeChatConversationId?: number | null;
+  onActiveChatConversationChange?: (id: number | null) => void;
 }
 
 export function NotebookRightPanel({
@@ -97,19 +99,24 @@ export function NotebookRightPanel({
   pinnedDocContents,
   appType,
   visibleTabs,
+  // Left-panel tab props (optional)
+  pinnedDocIds,
+  onPinDoc,
+  onUnpinDoc,
+  onPreviewDoc,
+  onOpenDoc,
+  onToggleCollapse,
+  chatSessionContext,
+  activeChatConversationId,
+  onActiveChatConversationChange,
 }: NotebookRightPanelProps) {
-  const [activeTab, setActiveTab] = useState<RightPanelTab>("research");
+  const [activeTab, setActiveTab] = useState("research");
   const [researchMsgCount, setResearchMsgCount] = useState(0);
 
-  // Filter and order tabs based on visibleTabs prop
-  const tabs = useMemo(() => {
-    if (!visibleTabs) return TAB_DEFS;
-    const ordered = visibleTabs
-      .filter((id) => NATIVE_TAB_IDS.has(id))
-      .map((id) => TAB_DEFS.find((t) => t.id === id)!)
-      .filter(Boolean);
-    return ordered.length > 0 ? ordered : TAB_DEFS;
-  }, [visibleTabs]);
+  const tabs = useMemo(
+    () => resolveVisibleTabs(visibleTabs, DEFAULT_RIGHT_IDS),
+    [visibleTabs],
+  );
 
   // Ensure active tab is in the visible set
   const effectiveActiveTab = tabs.some((t) => t.id === activeTab)
@@ -231,6 +238,51 @@ export function NotebookRightPanel({
           pinnedDocContents={pinnedDocContents}
         />
       </div>
+
+      {/* ── Left-panel tabs that may be moved here ── */}
+
+      {effectiveActiveTab === "context" && pinnedDocIds && onPinDoc && onUnpinDoc && (
+        <div className="flex-1 overflow-hidden">
+          <ContextSidebar
+            pinnedDocIds={pinnedDocIds}
+            onPinDoc={onPinDoc}
+            onUnpinDoc={onUnpinDoc}
+            onPreviewDoc={onPreviewDoc}
+            onOpenDoc={onOpenDoc}
+            isCollapsed={false}
+            onToggleCollapse={onToggleCollapse || (() => {})}
+            embedded
+          />
+        </div>
+      )}
+
+      {effectiveActiveTab === "chat" && chatSessionContext && (
+        <div className="flex-1 overflow-hidden">
+          <ChatDrawer
+            open={true}
+            onOpenChange={() => {}}
+            sessionContext={chatSessionContext}
+            activeConversationId={activeChatConversationId ?? null}
+            onActiveConversationChange={onActiveChatConversationChange || (() => {})}
+            embedded
+          />
+        </div>
+      )}
+
+      {effectiveActiveTab === "video" && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground/40 p-6">
+          <Video className="w-10 h-10" />
+          <div className="text-center space-y-1">
+            <p className="text-sm font-medium text-foreground/50">
+              Video Collaboration
+            </p>
+            <p className="text-xs leading-relaxed">
+              Video calls with collaborators will be available here in a future
+              update.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

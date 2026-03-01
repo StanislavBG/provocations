@@ -44,7 +44,9 @@ interface ContextSidebarProps {
   pinnedDocIds: Set<number>;
   onPinDoc: (id: number) => void;
   onUnpinDoc: (id: number) => void;
-  /** Called when user wants to open a document (load its content) */
+  /** Called on single-click to preview a document */
+  onPreviewDoc?: (id: number, title: string) => void;
+  /** Called on double-click to open a document for editing */
   onOpenDoc?: (id: number, title: string) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -127,6 +129,7 @@ export function ContextSidebar({
   pinnedDocIds,
   onPinDoc,
   onUnpinDoc,
+  onPreviewDoc,
   onOpenDoc,
   isCollapsed,
   onToggleCollapse,
@@ -491,17 +494,13 @@ export function ContextSidebar({
             <button
               className="flex-1 flex items-center gap-1.5 py-1.5 px-1 text-left min-w-0"
               onClick={() => {
-                if (isPinned) {
-                  onOpenDoc?.(doc.id, doc.title);
-                } else {
-                  onPinDoc(doc.id);
-                }
+                onPreviewDoc?.(doc.id, doc.title);
               }}
-              title={
-                isPinned
-                  ? `${doc.title} (in active context)`
-                  : `Click to add "${doc.title}" to active context`
-              }
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                onOpenDoc?.(doc.id, doc.title);
+              }}
+              title="Click to preview, double-click to edit"
             >
               {isPinned ? (
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />

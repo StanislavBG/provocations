@@ -1,33 +1,27 @@
 import { useState, useMemo } from "react";
 import { ContextSidebar } from "./ContextSidebar";
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
+import { NotebookResearchChat } from "./NotebookResearchChat";
+import { InterviewTab } from "./InterviewTab";
+import { TranscriptPanel } from "./TranscriptPanel";
+import { ProvoThread } from "./ProvoThread";
+import { WriterPanel, type WriterConfig } from "./WriterPanel";
+import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  BookOpen,
-  MessageSquare,
-  Video,
-  PanelLeftOpen,
-  type LucideIcon,
-} from "lucide-react";
+import { PanelLeftOpen, Video } from "lucide-react";
+import { resolveVisibleTabs } from "./panelTabs";
+import type { ProvocationType, DiscussionMessage, ContextItem, EditHistoryEntry } from "@shared/schema";
 
-type LeftPanelTab = "context" | "chat" | "video";
-
-const TAB_DEFS: { id: LeftPanelTab; icon: LucideIcon; label: string }[] = [
-  { id: "context", icon: BookOpen, label: "Context" },
-  { id: "chat", icon: MessageSquare, label: "Chat" },
-  { id: "video", icon: Video, label: "Video" },
-];
-
-/** Set of tab IDs this panel knows how to render */
-const NATIVE_TAB_IDS = new Set<string>(TAB_DEFS.map((t) => t.id));
+const DEFAULT_LEFT_IDS = ["context", "chat", "video"];
 
 interface NotebookLeftPanelProps {
   // Context tab props
   pinnedDocIds: Set<number>;
   onPinDoc: (id: number) => void;
   onUnpinDoc: (id: number) => void;
+  onPreviewDoc?: (id: number, title: string) => void;
   onOpenDoc?: (id: number, title: string) => void;
 
   // Chat tab props
@@ -39,14 +33,46 @@ interface NotebookLeftPanelProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
 
-  /** Ordered list of tab IDs to show (from panel layout config). Only native tabs are rendered. */
+  /** Ordered list of tab IDs to show (from panel layout config) */
   visibleTabs?: string[];
+
+  // ── Props for right-panel tabs that may be moved here ──
+  activePersonas?: Set<ProvocationType>;
+  onTogglePersona?: (id: ProvocationType) => void;
+  discussionMessages?: DiscussionMessage[];
+  onSendMessage?: (text: string) => void;
+  onAcceptResponse?: (messageId: string) => void;
+  onDismissResponse?: (messageId: string) => void;
+  onRespondToMessage?: (messageId: string, text: string) => void;
+  isChatLoading?: boolean;
+  hasDocument?: boolean;
+  objective?: string;
+  onCaptureToContext?: (text: string, label: string) => void;
+  capturedContext?: ContextItem[];
+  onRemoveCapturedItem?: (itemId: string) => void;
+  onEvolveDocument?: (instruction: string, description: string) => void;
+  isMerging?: boolean;
+  onEvolve?: (configurations: WriterConfig[]) => void;
+  isEvolving?: boolean;
+  sessionNotes?: string;
+  editHistory?: EditHistoryEntry[];
+  documentText?: string;
+  onPaintImage?: (config: {
+    painterConfigs: PainterConfig[];
+    painterObjective: string;
+    negativePrompt?: string;
+    painterMode: PainterMode;
+  }) => void;
+  isPainting?: boolean;
+  pinnedDocContents?: Record<number, { title: string; content: string }>;
+  appType?: string;
 }
 
 export function NotebookLeftPanel({
   pinnedDocIds,
   onPinDoc,
   onUnpinDoc,
+  onPreviewDoc,
   onOpenDoc,
   chatSessionContext,
   activeChatConversationId,
@@ -54,18 +80,32 @@ export function NotebookLeftPanel({
   isCollapsed,
   onToggleCollapse,
   visibleTabs,
+  // Right-panel tab props (optional — only used when those tabs are moved here)
+  activePersonas,
+  onTogglePersona,
+  onCaptureToContext,
+  capturedContext,
+  onRemoveCapturedItem,
+  onEvolveDocument,
+  isMerging = false,
+  onEvolve,
+  isEvolving = false,
+  sessionNotes,
+  editHistory,
+  documentText = "",
+  onPaintImage,
+  isPainting = false,
+  pinnedDocContents,
+  appType,
+  hasDocument = false,
+  objective = "",
 }: NotebookLeftPanelProps) {
-  const [activeTab, setActiveTab] = useState<LeftPanelTab>("context");
+  const [activeTab, setActiveTab] = useState("context");
 
-  // Filter and order tabs based on visibleTabs prop
-  const tabs = useMemo(() => {
-    if (!visibleTabs) return TAB_DEFS;
-    const ordered = visibleTabs
-      .filter((id) => NATIVE_TAB_IDS.has(id))
-      .map((id) => TAB_DEFS.find((t) => t.id === id)!)
-      .filter(Boolean);
-    return ordered.length > 0 ? ordered : TAB_DEFS;
-  }, [visibleTabs]);
+  const tabs = useMemo(
+    () => resolveVisibleTabs(visibleTabs, DEFAULT_LEFT_IDS),
+    [visibleTabs],
+  );
 
   // Ensure active tab is in the visible set
   const effectiveActiveTab = tabs.some((t) => t.id === activeTab)
@@ -156,6 +196,7 @@ export function NotebookLeftPanel({
               pinnedDocIds={pinnedDocIds}
               onPinDoc={onPinDoc}
               onUnpinDoc={onUnpinDoc}
+              onPreviewDoc={onPreviewDoc}
               onOpenDoc={onOpenDoc}
               isCollapsed={false}
               onToggleCollapse={onToggleCollapse}
@@ -187,6 +228,85 @@ export function NotebookLeftPanel({
                 update.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* ── Right-panel tabs that may be moved here ── */}
+
+        {effectiveActiveTab === "research" && onCaptureToContext && (
+          <div className="h-full overflow-hidden">
+            <NotebookResearchChat
+              objective={objective}
+              onCaptureToContext={onCaptureToContext}
+            />
+          </div>
+        )}
+
+        {effectiveActiveTab === "interview" && onCaptureToContext && (
+          <div className="h-full overflow-hidden">
+            <InterviewTab
+              objective={objective}
+              documentText={documentText}
+              appType={appType}
+              onEvolveDocument={onEvolveDocument}
+              isMerging={isMerging}
+              onCaptureToContext={onCaptureToContext}
+            />
+          </div>
+        )}
+
+        {effectiveActiveTab === "transcript" && onCaptureToContext && (
+          <div className="h-full overflow-hidden">
+            <TranscriptPanel
+              capturedContext={capturedContext || []}
+              onCaptureToContext={onCaptureToContext}
+              onRemoveCapturedItem={onRemoveCapturedItem}
+              onEvolveDocument={onEvolveDocument}
+              hasDocument={hasDocument}
+              isMerging={isMerging}
+            />
+          </div>
+        )}
+
+        {effectiveActiveTab === "provo" && activePersonas && onTogglePersona && onCaptureToContext && (
+          <div className="h-full overflow-hidden">
+            <ProvoThread
+              documentText={documentText}
+              objective={objective}
+              activePersonas={activePersonas}
+              onTogglePersona={onTogglePersona}
+              onCaptureToContext={onCaptureToContext}
+              hasDocument={hasDocument}
+              pinnedDocContents={pinnedDocContents}
+            />
+          </div>
+        )}
+
+        {effectiveActiveTab === "writer" && onEvolve && (
+          <div className="h-full overflow-hidden">
+            <WriterPanel
+              documentText={documentText}
+              objective={objective}
+              onEvolve={onEvolve}
+              isEvolving={isEvolving}
+              capturedContext={capturedContext}
+              pinnedDocContents={pinnedDocContents}
+              sessionNotes={sessionNotes}
+              editHistory={editHistory}
+              appType={appType}
+            />
+          </div>
+        )}
+
+        {effectiveActiveTab === "painter" && onPaintImage && (
+          <div className="h-full overflow-hidden">
+            <PainterPanel
+              documentText={documentText}
+              objective={objective}
+              onPaintImage={onPaintImage}
+              isPainting={isPainting}
+              pinnedDocContents={pinnedDocContents}
+            />
           </div>
         )}
       </div>
