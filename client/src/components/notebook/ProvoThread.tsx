@@ -33,6 +33,7 @@ interface ProvoThreadProps {
   onTogglePersona: (id: ProvocationType) => void;
   onCaptureToContext: (text: string, label: string) => void;
   hasDocument: boolean;
+  pinnedDocContents?: Record<number, { title: string; content: string }>;
 }
 
 interface AdviceState {
@@ -48,6 +49,7 @@ export function ProvoThread({
   onTogglePersona,
   onCaptureToContext,
   hasDocument,
+  pinnedDocContents,
 }: ProvoThreadProps) {
   const { toast } = useToast();
 
@@ -64,9 +66,19 @@ export function ProvoThread({
   // ── Generate provocations ──
   const generateMutation = useMutation({
     mutationFn: async () => {
+      // Build effective document: main doc + pinned context when main doc is sparse
+      let effectiveDoc = documentText;
+      if (pinnedDocContents && Object.keys(pinnedDocContents).length > 0) {
+        const contextSnippets = Object.values(pinnedDocContents)
+          .map((doc) => `[${doc.title}]\n${doc.content.slice(0, 2000)}`)
+          .join("\n\n---\n\n");
+        effectiveDoc = effectiveDoc.trim()
+          ? `${effectiveDoc}\n\n--- ACTIVE CONTEXT ---\n\n${contextSnippets}`
+          : contextSnippets;
+      }
       const res = await apiRequest("POST", "/api/generate-challenges", {
-        document: documentText,
-        objective,
+        document: effectiveDoc,
+        objective: objective.trim() || undefined,
         personaIds: Array.from(activePersonas),
       });
       return res.json() as Promise<{ challenges: Challenge[] }>;

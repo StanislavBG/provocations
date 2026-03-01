@@ -189,6 +189,7 @@ export function NotebookRightPanel({
           onTogglePersona={onTogglePersona}
           onCaptureToContext={onCaptureToContext}
           hasDocument={hasDocument}
+          pinnedDocContents={pinnedDocContents}
         />
       </div>
 
