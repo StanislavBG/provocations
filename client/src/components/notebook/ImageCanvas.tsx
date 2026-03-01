@@ -9,6 +9,7 @@ import {
   Maximize,
   Paintbrush,
   Loader2,
+  Save,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -19,9 +20,11 @@ interface ImageCanvasProps {
   imageUrl: string | null;
   prompt: string;
   isGenerating: boolean;
+  onSaveToContext?: (imageUrl: string, prompt: string) => void;
+  isSaving?: boolean;
 }
 
-export function ImageCanvas({ imageUrl, prompt, isGenerating }: ImageCanvasProps) {
+export function ImageCanvas({ imageUrl, prompt, isGenerating, onSaveToContext, isSaving }: ImageCanvasProps) {
   const { toast } = useToast();
   const [zoom, setZoom] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -127,6 +130,26 @@ export function ImageCanvas({ imageUrl, prompt, isGenerating }: ImageCanvasProps
               </TooltipTrigger>
               <TooltipContent>Download image</TooltipContent>
             </Tooltip>
+
+            {onSaveToContext && imageUrl && (
+              <>
+                <div className="w-px h-4 bg-border mx-1" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      disabled={isSaving}
+                      onClick={() => onSaveToContext(imageUrl, prompt)}
+                    >
+                      {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Save to Context Store</TooltipContent>
+                </Tooltip>
+              </>
+            )}
           </div>
         )}
       </div>

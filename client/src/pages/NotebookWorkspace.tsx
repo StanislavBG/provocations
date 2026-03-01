@@ -410,6 +410,24 @@ export default function NotebookWorkspace() {
     }
   }, [document.rawText, objective, activeDocumentId, pinnedDocIds, toast]);
 
+  // ── Save an image to the Context Store ──
+  const handleSaveImageToContext = useCallback(async (imageUrl: string, prompt: string) => {
+    setIsSavingToContext(true);
+    try {
+      const title = prompt
+        ? prompt.slice(0, 120)
+        : `Image ${new Date().toLocaleDateString()}`;
+      const content = `![${title}](${imageUrl})\n\n${prompt ? `**Prompt:** ${prompt}` : ""}`;
+      await apiRequest("POST", "/api/documents", { title, content });
+      trackEvent("document_saved");
+      toast({ title: "Saved to Context Store", description: title });
+    } catch {
+      toast({ title: "Save failed", description: "Could not save image.", variant: "destructive" });
+    } finally {
+      setIsSavingToContext(false);
+    }
+  }, [toast]);
+
   // ── Evolve document via writer (multi-config) ──
   const handleEvolve = useCallback(
     (configurations: WriterConfig[]) => {
@@ -666,6 +684,25 @@ export default function NotebookWorkspace() {
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
                     visibleTabs={panelLayout.leftTabs}
+                    // Props for right-panel tabs that may be moved here
+                    activePersonas={activePersonas}
+                    onTogglePersona={handleTogglePersona}
+                    hasDocument={!!document.rawText.trim() || Object.keys(pinnedDocContents).length > 0}
+                    objective={objective}
+                    onCaptureToContext={handleCaptureToContext}
+                    capturedContext={capturedContext}
+                    onRemoveCapturedItem={handleRemoveCapturedItem}
+                    onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
+                    isMerging={writeMutation.isPending}
+                    onEvolve={handleEvolve}
+                    isEvolving={writeMutation.isPending}
+                    sessionNotes={sessionNotes}
+                    editHistory={editHistory}
+                    documentText={document.rawText}
+                    onPaintImage={handlePaintImage}
+                    isPainting={isPainting}
+                    pinnedDocContents={pinnedDocContents}
+                    appType={validAppType}
                   />
                 </ResizablePanel>
                 <ResizableHandle withHandle />
@@ -697,6 +734,7 @@ export default function NotebookWorkspace() {
                   }}
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}
+                  onSaveImageToContext={handleSaveImageToContext}
                   isSaving={isSavingToContext}
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
@@ -735,6 +773,20 @@ export default function NotebookWorkspace() {
                     pinnedDocContents={pinnedDocContents}
                     appType={validAppType}
                     visibleTabs={panelLayout.rightTabs}
+                    // Props for left-panel tabs that may be moved here
+                    pinnedDocIds={pinnedDocIds}
+                    onPinDoc={handlePinDoc}
+                    onUnpinDoc={handleUnpinDoc}
+                    onPreviewDoc={handlePreviewDoc}
+                    onOpenDoc={handleOpenDoc}
+                    onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    chatSessionContext={{
+                      objective,
+                      templateName: selectedTemplateName ?? null,
+                      documentExcerpt: document.rawText.slice(0, 200),
+                    } satisfies ChatSessionContext}
+                    activeChatConversationId={activeChatConversationId}
+                    onActiveChatConversationChange={setActiveChatConversationId}
                   />
                 </ResizablePanel>
               </>
