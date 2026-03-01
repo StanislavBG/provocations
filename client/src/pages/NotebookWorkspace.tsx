@@ -687,6 +687,7 @@ export default function NotebookWorkspace() {
                     documentText={document.rawText}
                     onPaintImage={handlePaintImage}
                     isPainting={isPainting}
+                    pinnedDocContents={pinnedDocContents}
                     appType={validAppType}
                   />
                 </ResizablePanel>
