@@ -160,7 +160,7 @@ interface SplitDocumentEditorProps {
   previewDoc?: PreviewDoc | null;
   onClosePreview?: () => void;
   /** Opens the previewed document as the active workspace document */
-  onOpenPreviewDoc?: (content: string, title: string) => void;
+  onOpenPreviewDoc?: (content: string, title: string, docId?: number) => void;
   /** Notifies parent when the active tab type changes (chart vs document) */
   onChartActiveChange?: (isActive: boolean) => void;
   /** Save the current document + objective to the Context Store */
@@ -775,7 +775,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
                   size="sm"
                   className="h-6 text-xs gap-1"
                   onClick={() => {
-                    onOpenPreviewDoc(previewDoc.content, previewDoc.title);
+                    onOpenPreviewDoc(previewDoc.content, previewDoc.title, previewDoc.docId);
                     onClosePreview?.();
                   }}
                 >
