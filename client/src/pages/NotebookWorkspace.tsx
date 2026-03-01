@@ -34,6 +34,7 @@ import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPa
 import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
+import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
 import type { ChatSessionContext } from "@/components/ChatDrawer";
 
@@ -647,11 +648,11 @@ export default function NotebookWorkspace() {
       <div className="flex-1 overflow-hidden">
         {/* Desktop: 3-column resizable layout — side panels swap based on active tab type */}
         <ResizablePanelGroup
-          key={isChartActive ? "chart-layout" : appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : "doc-layout"}
+          key={isChartActive ? "chart-layout" : appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : appFlowConfig.workspaceLayout === "timeline" ? "timeline-layout" : "doc-layout"}
           direction="horizontal"
         >
-            {/* Left panel (hidden when chart tab is active or bs-chart app) */}
-            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && (
+            {/* Left panel (hidden when chart tab is active or custom workspace app) */}
+            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && appFlowConfig.workspaceLayout !== "timeline" && (
               <>
                 <ResizablePanel
                   defaultSize={20}
@@ -682,10 +683,14 @@ export default function NotebookWorkspace() {
               </>
             )}
 
-            {/* Center: Document editor (with chart tabs) or BS Chart app */}
-            <ResizablePanel defaultSize={isChartActive || appFlowConfig.workspaceLayout === "bs-chart" ? 100 : 55} minSize={30}>
+            {/* Center: Document editor, BS Chart, or Timeline app */}
+            <ResizablePanel defaultSize={isChartActive || appFlowConfig.workspaceLayout === "bs-chart" || appFlowConfig.workspaceLayout === "timeline" ? 100 : 55} minSize={30}>
               {appFlowConfig.workspaceLayout === "bs-chart" ? (
                 <BSChartWorkspace
+                  onSaveToContext={(json, label) => handleCaptureToContext(json, label)}
+                />
+              ) : appFlowConfig.workspaceLayout === "timeline" ? (
+                <TimelineWorkspace
                   onSaveToContext={(json, label) => handleCaptureToContext(json, label)}
                 />
               ) : (
@@ -713,8 +718,8 @@ export default function NotebookWorkspace() {
               )}
             </ResizablePanel>
 
-            {/* Right panel (hidden when chart tab is active or bs-chart app) */}
-            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && (
+            {/* Right panel (hidden when chart tab is active or custom workspace app) */}
+            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && appFlowConfig.workspaceLayout !== "timeline" && (
               <>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize={25} minSize={15}>
