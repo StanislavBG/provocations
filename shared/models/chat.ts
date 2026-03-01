@@ -96,6 +96,7 @@ export const activeContext = pgTable("active_context", {
   pinnedAt: timestamp("pinned_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
   index("idx_active_context_user").on(table.userId),
+  uniqueIndex("idx_active_context_user_doc").on(table.userId, table.documentId),
 ]);
 
 export type StoredActiveContext = typeof activeContext.$inferSelect;
