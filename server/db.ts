@@ -86,6 +86,7 @@ export async function ensureTables(): Promise<void> {
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_iv VARCHAR(32);
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE NOT NULL;
         ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS verbose_mode BOOLEAN DEFAULT FALSE NOT NULL;
+        ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_save_session BOOLEAN DEFAULT TRUE NOT NULL;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
 
@@ -298,15 +299,33 @@ export async function ensureTables(): Promise<void> {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_preferences_user ON chat_preferences(user_id);
 
+      -- Workspace sessions — saves full workspace state for resume functionality
+      CREATE TABLE IF NOT EXISTS workspace_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        template_id VARCHAR(64) NOT NULL,
+        title TEXT NOT NULL,
+        title_ciphertext TEXT,
+        title_salt VARCHAR(64),
+        title_iv VARCHAR(32),
+        ciphertext TEXT NOT NULL,
+        salt VARCHAR(64) NOT NULL,
+        iv VARCHAR(32) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_workspace_sessions_user ON workspace_sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_workspace_sessions_template ON workspace_sessions(user_id, template_id);
+
       -- Active Context table (hot storage → cold store reflection)
       CREATE TABLE IF NOT EXISTS active_context (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(128) NOT NULL,
         document_id INTEGER NOT NULL,
-        pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        UNIQUE(user_id, document_id)
+        pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_active_context_user ON active_context(user_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_active_context_user_doc ON active_context(user_id, document_id);
 
       -- Document & folder indexes (critical for Context Store performance)
       CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
