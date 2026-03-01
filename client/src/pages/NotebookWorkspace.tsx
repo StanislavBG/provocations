@@ -12,6 +12,7 @@ import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useRole } from "@/hooks/use-role";
+import { usePanelLayout } from "@/hooks/use-panel-layout";
 import { useRoute } from "wouter";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
@@ -53,6 +54,7 @@ export default function NotebookWorkspace() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const { isAdmin } = useRole();
+  const { panelLayout, setPanelLayout } = usePanelLayout();
   const [routeMatch, routeParams] = useRoute("/app/:templateId");
 
   // ── Core state ──
@@ -637,6 +639,8 @@ export default function NotebookWorkspace() {
         onNew={handleNewSession}
         isAdmin={isAdmin}
         versionCount={versions.length}
+        panelLayout={panelLayout}
+        onPanelLayoutChange={setPanelLayout}
       />
 
       {/* Main layout */}
@@ -671,6 +675,7 @@ export default function NotebookWorkspace() {
                     onActiveChatConversationChange={setActiveChatConversationId}
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    visibleTabs={panelLayout.leftTabs}
                   />
                 </ResizablePanel>
                 <ResizableHandle withHandle />
@@ -738,6 +743,7 @@ export default function NotebookWorkspace() {
                     isPainting={isPainting}
                     pinnedDocContents={pinnedDocContents}
                     appType={validAppType}
+                    visibleTabs={panelLayout.rightTabs}
                   />
                 </ResizablePanel>
               </>

@@ -108,8 +108,8 @@ export interface IStorage {
   deleteFolder(id: number): Promise<void>;
   getFolder(id: number): Promise<{ id: number; userId: string; name: string; nameCiphertext: string | null; nameSalt: string | null; nameIv: string | null; parentFolderId: number | null; locked: boolean } | null>;
   // User preferences
-  getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean }>;
-  setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean }>;
+  getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null }>;
+  setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null }>): Promise<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null }>;
   // LLM call logs
   insertLlmCallLog(data: InsertLlmCallLog): Promise<StoredLlmCallLog>;
   listLlmCallLogs(opts: { userId?: string; limit?: number; offset?: number }): Promise<StoredLlmCallLog[]>;
@@ -595,17 +595,17 @@ export class DatabaseStorage implements IStorage {
     return map;
   }
 
-  async getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean }> {
+  async getUserPreferences(userId: string): Promise<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null }> {
     const [row] = await db
-      .select({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode })
+      .select({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode, panelLayout: userPreferences.panelLayout })
       .from(userPreferences)
       .where(eq(userPreferences.userId, userId))
       .limit(1);
 
-    return { autoDictate: row?.autoDictate ?? false, verboseMode: row?.verboseMode ?? false };
+    return { autoDictate: row?.autoDictate ?? false, verboseMode: row?.verboseMode ?? false, panelLayout: row?.panelLayout ?? null };
   }
 
-  async setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean }>): Promise<{ autoDictate: boolean; verboseMode: boolean }> {
+  async setUserPreferences(userId: string, prefs: Partial<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null }>): Promise<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null }> {
     const now = new Date();
     const updateSet: Record<string, unknown> = { updatedAt: now };
     const insertValues: Record<string, unknown> = { userId, updatedAt: now };
@@ -617,6 +617,10 @@ export class DatabaseStorage implements IStorage {
       updateSet.verboseMode = prefs.verboseMode;
       insertValues.verboseMode = prefs.verboseMode;
     }
+    if (prefs.panelLayout !== undefined) {
+      updateSet.panelLayout = prefs.panelLayout;
+      insertValues.panelLayout = prefs.panelLayout;
+    }
 
     const [row] = await db
       .insert(userPreferences)
@@ -625,9 +629,9 @@ export class DatabaseStorage implements IStorage {
         target: userPreferences.userId,
         set: updateSet as any,
       })
-      .returning({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode });
+      .returning({ autoDictate: userPreferences.autoDictate, verboseMode: userPreferences.verboseMode, panelLayout: userPreferences.panelLayout });
 
-    return { autoDictate: row.autoDictate, verboseMode: row.verboseMode };
+    return { autoDictate: row.autoDictate, verboseMode: row.verboseMode, panelLayout: row.panelLayout };
   }
 
   async insertLlmCallLog(data: InsertLlmCallLog): Promise<StoredLlmCallLog> {
