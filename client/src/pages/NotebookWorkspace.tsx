@@ -25,7 +25,6 @@ import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/noteb
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
-import type { ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
 import type {
@@ -649,6 +648,13 @@ export default function NotebookWorkspace() {
         versionCount={versions.length}
         panelLayout={panelLayout}
         onPanelLayoutChange={setPanelLayout}
+        chatSessionContext={{
+          objective,
+          templateName: selectedTemplateName ?? null,
+          documentExcerpt: document.rawText.slice(0, 200),
+        }}
+        activeChatConversationId={activeChatConversationId}
+        onActiveChatConversationChange={setActiveChatConversationId}
       />
 
       {/* Main layout */}
@@ -676,13 +682,6 @@ export default function NotebookWorkspace() {
                     onUnpinDoc={handleUnpinDoc}
                     onPreviewDoc={handlePreviewDoc}
                     onOpenDoc={handleOpenDoc}
-                    chatSessionContext={{
-                      objective,
-                      templateName: selectedTemplateName ?? null,
-                      documentExcerpt: document.rawText.slice(0, 200),
-                    } satisfies ChatSessionContext}
-                    activeChatConversationId={activeChatConversationId}
-                    onActiveChatConversationChange={setActiveChatConversationId}
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
                     visibleTabs={panelLayout.leftTabs}
@@ -787,13 +786,6 @@ export default function NotebookWorkspace() {
                     onPreviewDoc={handlePreviewDoc}
                     onOpenDoc={handleOpenDoc}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    chatSessionContext={{
-                      objective,
-                      templateName: selectedTemplateName ?? null,
-                      documentExcerpt: document.rawText.slice(0, 200),
-                    } satisfies ChatSessionContext}
-                    activeChatConversationId={activeChatConversationId}
-                    onActiveChatConversationChange={setActiveChatConversationId}
                   />
                 </ResizablePanel>
               </>

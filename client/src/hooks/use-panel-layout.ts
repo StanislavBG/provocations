@@ -14,11 +14,9 @@ export interface PanelLayoutConfig {
   rightTabs: string[];
 }
 
-/** All possible panel tabs */
+/** All possible panel tabs (chat & video are now in the global header) */
 export const ALL_PANEL_TABS: PanelTabDef[] = [
   { id: "context", label: "Context", icon: "BookOpen" },
-  { id: "chat", label: "Chat", icon: "MessageSquare" },
-  { id: "video", label: "Video", icon: "Video" },
   { id: "research", label: "Research", icon: "Sparkles" },
   { id: "interview", label: "Interview", icon: "MessageCircleQuestion" },
   { id: "transcript", label: "Notes", icon: "ClipboardList" },
@@ -28,7 +26,7 @@ export const ALL_PANEL_TABS: PanelTabDef[] = [
 ];
 
 export const DEFAULT_PANEL_LAYOUT: PanelLayoutConfig = {
-  leftTabs: ["context", "chat", "video"],
+  leftTabs: ["context"],
   rightTabs: ["research", "interview", "transcript", "provo", "writer", "painter"],
 };
 

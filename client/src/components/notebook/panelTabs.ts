@@ -4,8 +4,6 @@
  */
 import {
   BookOpen,
-  MessageSquare,
-  Video,
   Sparkles,
   MessageCircleQuestion,
   ClipboardList,
@@ -21,10 +19,9 @@ export interface PanelTabDef {
   label: string;
 }
 
+/** Panel-assignable tabs (chat & video are now in the global header) */
 export const ALL_TAB_DEFS: PanelTabDef[] = [
   { id: "context", icon: BookOpen, label: "Context" },
-  { id: "chat", icon: MessageSquare, label: "Chat" },
-  { id: "video", icon: Video, label: "Video" },
   { id: "research", icon: Sparkles, label: "Research" },
   { id: "interview", icon: MessageCircleQuestion, label: "Interview" },
   { id: "transcript", icon: ClipboardList, label: "Notes" },

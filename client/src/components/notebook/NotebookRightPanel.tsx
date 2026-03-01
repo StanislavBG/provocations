@@ -6,8 +6,6 @@ import { InterviewTab } from "./InterviewTab";
 import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPanel";
 import { WriterPanel, type WriterConfig } from "./WriterPanel";
 import { ContextSidebar } from "./ContextSidebar";
-import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
-import { Video } from "lucide-react";
 import { resolveVisibleTabs } from "./panelTabs";
 import type { ProvocationType, DiscussionMessage, ContextItem, EditHistoryEntry } from "@shared/schema";
 
@@ -68,9 +66,6 @@ interface NotebookRightPanelProps {
   onPreviewDoc?: (id: number, title: string) => void;
   onOpenDoc?: (id: number, title: string) => void;
   onToggleCollapse?: () => void;
-  chatSessionContext?: ChatSessionContext;
-  activeChatConversationId?: number | null;
-  onActiveChatConversationChange?: (id: number | null) => void;
 }
 
 export function NotebookRightPanel({
@@ -106,9 +101,6 @@ export function NotebookRightPanel({
   onPreviewDoc,
   onOpenDoc,
   onToggleCollapse,
-  chatSessionContext,
-  activeChatConversationId,
-  onActiveChatConversationChange,
 }: NotebookRightPanelProps) {
   const [activeTab, setActiveTab] = useState("research");
   const [researchMsgCount, setResearchMsgCount] = useState(0);
@@ -256,33 +248,6 @@ export function NotebookRightPanel({
         </div>
       )}
 
-      {effectiveActiveTab === "chat" && chatSessionContext && (
-        <div className="flex-1 overflow-hidden">
-          <ChatDrawer
-            open={true}
-            onOpenChange={() => {}}
-            sessionContext={chatSessionContext}
-            activeConversationId={activeChatConversationId ?? null}
-            onActiveConversationChange={onActiveChatConversationChange || (() => {})}
-            embedded
-          />
-        </div>
-      )}
-
-      {effectiveActiveTab === "video" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground/40 p-6">
-          <Video className="w-10 h-10" />
-          <div className="text-center space-y-1">
-            <p className="text-sm font-medium text-foreground/50">
-              Video Collaboration
-            </p>
-            <p className="text-xs leading-relaxed">
-              Video calls with collaborators will be available here in a future
-              update.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
