@@ -35,6 +35,8 @@ import {
   Pencil,
   Trash2,
   Zap,
+  BookmarkPlus,
+  FileOutput,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
@@ -535,6 +537,42 @@ export function ContextSidebar({
                   <TooltipContent side="right">
                     Remove from active context
                   </TooltipContent>
+                </Tooltip>
+              )}
+              {!isPinned && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 text-muted-foreground/50 hover:text-green-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPinDoc(doc.id);
+                      }}
+                    >
+                      <BookmarkPlus className="w-2.5 h-2.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Load to context</TooltipContent>
+                </Tooltip>
+              )}
+              {onOpenDoc && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 text-muted-foreground/50 hover:text-amber-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenDoc(doc.id, doc.title);
+                      }}
+                    >
+                      <FileOutput className="w-2.5 h-2.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Open as document</TooltipContent>
                 </Tooltip>
               )}
               <Tooltip>

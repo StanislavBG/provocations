@@ -24,8 +24,8 @@ import {
   Square,
   X,
   CheckCircle2,
-  Pencil,
-  Paintbrush,
+  Search,
+  Compass,
   Scale,
   Target,
 } from "lucide-react";
@@ -36,16 +36,16 @@ import type {
   PodcastSegment,
 } from "@shared/schema";
 
-// ── Interview stance ──
+// ── Interview stance (Journalist approach styles) ──
 
-type InterviewStance = "writer" | "painter" | "balanced";
+type InterviewStance = "investigative" | "exploratory" | "balanced";
 
 function buildGuidance(stance: InterviewStance, focus: string): string | undefined {
   const parts: string[] = [];
-  if (stance === "writer") {
-    parts.push("STANCE: Writer — be analytical, structured. Break things down, find logical gaps, demand specifics and evidence. Ask the hard 'how' and 'why' questions.");
-  } else if (stance === "painter") {
-    parts.push("STANCE: Painter — be creative, exploratory. Ask 'what if', draw unexpected connections, explore emotional and human dimensions. Open new possibilities.");
+  if (stance === "investigative") {
+    parts.push("STANCE: Investigative Journalist — be rigorous and analytical. Dig into claims, find logical gaps, demand specifics and evidence. Ask the hard 'how' and 'why' questions. Hold the interviewee accountable to their own stated goals.");
+  } else if (stance === "exploratory") {
+    parts.push("STANCE: Feature Journalist — be curious and exploratory. Ask 'what if', draw unexpected connections, explore the human story and motivations behind the document. Open new angles the interviewee hasn't considered.");
   }
   if (focus.trim()) parts.push(focus.trim());
   return parts.length > 0 ? parts.join("\n\n") : undefined;
@@ -83,7 +83,7 @@ export function InterviewTab({
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
 
   // ── Stance & focus state ──
-  const [stance, setStance] = useState<InterviewStance>("writer");
+  const [stance, setStance] = useState<InterviewStance>("investigative");
   const [focusText, setFocusText] = useState("");
 
   // ── Podcast state ──
@@ -117,7 +117,7 @@ export function InterviewTab({
         document: documentText,
         appType,
         previousEntries: entries.length > 0 ? entries : undefined,
-        directionMode: stance === "writer" ? "challenge" : stance === "painter" ? "advise" : undefined,
+        directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" ? "advise" : undefined,
         directionGuidance: buildGuidance(stance, focusText),
       });
       return (await response.json()) as InterviewQuestionResponse;
@@ -295,7 +295,7 @@ export function InterviewTab({
   // ── Stance cycle helper ──
   const cycleStance = useCallback(() => {
     setStance((prev) =>
-      prev === "balanced" ? "writer" : prev === "writer" ? "painter" : "balanced"
+      prev === "balanced" ? "investigative" : prev === "investigative" ? "exploratory" : "balanced"
     );
   }, []);
 
@@ -310,39 +310,39 @@ export function InterviewTab({
 
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="space-y-4 max-w-sm w-full">
-            {/* Writer stance — primary choice */}
+            {/* Investigative stance — primary choice */}
             <div className="space-y-1">
               <button
-                onClick={() => setStance("writer")}
+                onClick={() => setStance("investigative")}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${
-                  stance === "writer"
+                  stance === "investigative"
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30"
                 }`}
               >
-                <Pencil className="w-4 h-4 shrink-0" />
+                <Search className="w-4 h-4 shrink-0" />
                 <div>
-                  <div className="font-semibold">Writer</div>
-                  <div className="text-[10px] opacity-70">Analytical, structured — breaks things down, finds gaps, demands specifics</div>
+                  <div className="font-semibold">Investigative</div>
+                  <div className="text-[10px] opacity-70">Rigorous, analytical — digs into claims, finds gaps, demands evidence</div>
                 </div>
               </button>
             </div>
 
-            {/* Config options for the writer */}
+            {/* Config options */}
             <div className="space-y-2.5 pl-1">
-              {/* Painter toggle */}
+              {/* Exploratory toggle */}
               <button
-                onClick={() => setStance(stance === "painter" ? "writer" : "painter")}
+                onClick={() => setStance(stance === "exploratory" ? "investigative" : "exploratory")}
                 className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
-                  stance === "painter"
+                  stance === "exploratory"
                     ? "border-primary/60 bg-primary/5 text-primary"
                     : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
                 }`}
               >
-                <Paintbrush className="w-3.5 h-3.5 shrink-0" />
+                <Compass className="w-3.5 h-3.5 shrink-0" />
                 <div className="text-left">
-                  <span className="font-medium">Painter</span>
-                  <span className="text-[10px] opacity-70 ml-1.5">creative, exploratory</span>
+                  <span className="font-medium">Exploratory</span>
+                  <span className="text-[10px] opacity-70 ml-1.5">curious, opens new angles</span>
                 </div>
               </button>
 
@@ -398,16 +398,16 @@ export function InterviewTab({
                 onClick={cycleStance}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors hover:bg-muted/50"
               >
-                {stance === "writer" ? (
-                  <><Pencil className="w-3 h-3" /> Writer</>
-                ) : stance === "painter" ? (
-                  <><Paintbrush className="w-3 h-3" /> Painter</>
+                {stance === "investigative" ? (
+                  <><Search className="w-3 h-3" /> Investigative</>
+                ) : stance === "exploratory" ? (
+                  <><Compass className="w-3 h-3" /> Exploratory</>
                 ) : (
                   <><Scale className="w-3 h-3" /> Balanced</>
                 )}
               </button>
             </TooltipTrigger>
-            <TooltipContent>Tap to cycle: Balanced → Writer → Painter</TooltipContent>
+            <TooltipContent>Tap to cycle: Balanced → Investigative → Exploratory</TooltipContent>
           </Tooltip>
         </div>
         <div className="flex items-center gap-1">

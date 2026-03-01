@@ -708,7 +708,7 @@ export default function NotebookWorkspace() {
                     onDismissResponse={handleDismissResponse}
                     onRespondToMessage={handleRespondToMessage}
                     isChatLoading={askQuestionMutation.isPending}
-                    hasDocument={!!document.rawText.trim()}
+                    hasDocument={!!document.rawText.trim() || Object.keys(pinnedDocContents).length > 0}
                     objective={objective}
                     onCaptureToContext={handleCaptureToContext}
                     capturedContext={capturedContext}
