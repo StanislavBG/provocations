@@ -12,6 +12,7 @@ import {
   Mail,
   Workflow,
   GitGraph,
+  Clock,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -746,6 +747,51 @@ How sections are ordered — most impactful insight first, supporting details be
       "This diagram has 15 elements but no labels on the connectors. How does a reader know what flows where? — UX Reviewer",
     ],
     steps: [{ id: "design", label: "Design your chart" }],
+  },
+  {
+    id: "timeline",
+    category: "build",
+    statusLabel: "alpha",
+    title: "Timeline",
+    shortLabel: "Timeline",
+    subtitle: "Chronological event mapping & exploration",
+    description:
+      "A timeline document workspace for mapping events in chronological order. Capture life events, project milestones, or historical data through interviews and notes, then transform them into a structured, interactive timeline. Tag events with people, places, and categories, and use overlay views to filter and explore patterns across time.",
+    howTo: "Start by describing the timeline's subject and scope in the objective. Use the interview or notes panel to capture events — each note is transformed via AI into structured timeline entries with dates, descriptions, and tags. Use the toolbar to add events manually, filter by tags, and zoom in/out to explore different time scales.",
+    useCases: [
+      "Mapping a person's life events through an interactive interview",
+      "Building a project timeline with milestones, decisions, and deliveries",
+      "Structuring historical research into a chronological narrative",
+      "Exploring patterns across events using tag-based overlay filters",
+    ],
+    icon: Clock,
+    objective:
+      "Build a clear, chronologically accurate timeline that captures key events, their relationships, and meaningful patterns across time",
+    starterText: "",
+    draftQuestions: [
+      "What is the subject or scope of this timeline? (a person's life, a project, an era)",
+      "What is the earliest event or starting point you want to capture?",
+      "What are the major milestones or turning points?",
+      "Who are the key people involved, and what roles do they play?",
+      "What categories or themes should events be grouped into?",
+    ],
+    templateContent: "",
+    provocationSources: [
+      "Historian",
+      "Data Analyst",
+      "Interviewer",
+      "Narrative Designer",
+    ],
+    provocationExamples: [
+      "You have three events in 1995 but nothing between 1990-1994. Is that a gap in the record or an uneventful period? — Historian",
+      "These events overlap in time but aren't tagged with any shared people or themes. Are they truly independent? — Data Analyst",
+      "The interview captured 'moved to New York' but no date. Can you pin that down to at least a year? — Interviewer",
+    ],
+    steps: [
+      { id: "capture", label: "Capture events" },
+      { id: "organize", label: "Organize & tag" },
+      { id: "explore", label: "Explore timeline" },
+    ],
   },
 ];
 

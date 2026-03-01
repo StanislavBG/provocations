@@ -109,7 +109,7 @@ const DEFAULT_OBJECTIVE_CONFIG: ObjectiveConfig = {
  * "infographic-studio"  — 3-panel infographic pipeline (raw text | summary + controls | image gallery).
  * "research-chat"       — 2-panel research session (chat panel | dynamic summary panel).
  */
-export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio" | "research-chat" | "bs-chart";
+export type WorkspaceLayout = "standard" | "voice-capture" | "infographic-studio" | "research-chat" | "bs-chart" | "timeline";
 
 export interface AppFlowConfig {
   /** Top-level workspace layout. Defaults to "standard" (3-panel). */
@@ -485,6 +485,40 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       outputFormat: "markdown",
       documentType: "diagram / chart",
       feedbackTone: "precise and architecture-focused",
+    },
+  },
+
+  timeline: {
+    workspaceLayout: "timeline",
+    defaultToolboxTab: "context",
+    autoStartInterview: false,
+    autoStartPersonas: undefined,
+
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "capture", label: "Capture Events", description: "Gather events via interviews, notes, or manual entry" },
+      { id: "organize", label: "Organize & Tag", description: "Tag events with people, places, and themes" },
+      { id: "explore", label: "Explore Timeline", description: "Zoom, filter, and analyze patterns across time" },
+    ],
+
+    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_CHAT],
+
+    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_TRANSCRIPT],
+
+    objectiveConfig: {
+      primaryLabel: "Timeline Subject",
+      primaryPlaceholder: "Describe the subject of this timeline — a person, project, organization, or era...",
+      primaryDescription: "What or who is this timeline about? This guides the AI when transforming notes into timeline events.",
+      secondaryLabel: "Focus Area",
+      secondaryPlaceholder: "Optional: a specific period, theme, or question to focus on...",
+      secondaryDescription: "Narrow the timeline to a specific lens or investigation angle.",
+    },
+
+    writer: {
+      mode: "edit",
+      outputFormat: "markdown",
+      documentType: "timeline document",
+      feedbackTone: "chronologically precise and analytically curious",
     },
   },
 };
