@@ -17,6 +17,7 @@ interface NotebookCenterPanelProps {
   onOpenPreviewDoc?: (content: string, title: string, docId?: number) => void;
   onChartActiveChange?: (isActive: boolean) => void;
   onSaveToContext?: () => void;
+  onSaveImageToContext?: (imageUrl: string, prompt: string) => void;
   isSaving?: boolean;
   imageTabData?: Map<string, ImageTabData>;
   onAddImageTab?: (tabId: string) => void;
@@ -37,6 +38,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
       onOpenPreviewDoc,
       onChartActiveChange,
       onSaveToContext,
+      onSaveImageToContext,
       isSaving,
       imageTabData,
       onAddImageTab,
@@ -59,6 +61,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
           onOpenPreviewDoc={onOpenPreviewDoc}
           onChartActiveChange={onChartActiveChange}
           onSaveToContext={onSaveToContext}
+          onSaveImageToContext={onSaveImageToContext}
           isSaving={isSaving}
           imageTabData={imageTabData}
           onAddImageTab={onAddImageTab}
