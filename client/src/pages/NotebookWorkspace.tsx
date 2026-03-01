@@ -444,12 +444,15 @@ export default function NotebookWorkspace() {
     }) => {
       const { painterConfigs, painterObjective, negativePrompt, painterMode } = config;
 
-      // Include Active Context (pinned docs) as additional context for the image
+      // Include Active Context (pinned docs) — infographic mode sends more
+      // context since Nano Banana 2 excels at data visualization from rich input
+      const contextLimit = painterMode === "infographic" ? 1500 : 500;
+      const contextJoinLimit = painterMode === "infographic" ? 3000 : 1000;
       const contextSnippets = Object.values(pinnedDocContents)
-        .map((doc) => doc.content.slice(0, 500))
+        .map((doc) => doc.content.slice(0, contextLimit))
         .filter(Boolean);
       const contextSuffix = contextSnippets.length > 0
-        ? `. Context: ${contextSnippets.join("; ").slice(0, 1000)}`
+        ? `. Context: ${contextSnippets.join("; ").slice(0, contextJoinLimit)}`
         : "";
 
       // Build prompt from configs — mode-aware
@@ -458,15 +461,24 @@ export default function NotebookWorkspace() {
       let stylePart = "";
 
       if (painterMode === "infographic") {
-        // Infographic: structured prompt with layout, data style, palette, etc.
+        // Infographic mode — leverage Nano Banana 2's data visualization,
+        // diagram, and infographic capabilities for business-grade output.
+        const configMap: Record<string, string> = {};
         for (const cfg of painterConfigs) {
           if (cfg.category === "format") {
             aspectRatio = cfg.option;
           } else {
+            configMap[cfg.category] = cfg.optionLabel;
             parts.push(`${cfg.categoryLabel}: ${cfg.optionLabel}`);
           }
         }
-        stylePart = "Professional infographic";
+        // Build a rich structured style directive for the image model
+        const layoutHint = configMap["layout"] || "Dashboard";
+        const dataHint = configMap["data-style"] || "Charts & Graphs";
+        const paletteHint = configMap["palette"] || "Corporate";
+        const typoHint = configMap["typography"] || "Geometric Sans";
+        const densityHint = configMap["density"] || "Balanced";
+        stylePart = `Professional ${layoutHint} infographic, ${paletteHint} color scheme, ${typoHint} typography, ${densityHint} density, featuring ${dataHint}`;
       } else {
         // Art mode: original behavior
         for (const cfg of painterConfigs) {
@@ -485,11 +497,11 @@ export default function NotebookWorkspace() {
       }
 
       const modePrefix = painterMode === "infographic"
-        ? "Create a professional infographic visual: "
+        ? "Create a high-quality, detailed infographic. Use clear data visualizations, structured layouts, bold headings, and professional design. Include labeled sections, icons, and visual hierarchy. The infographic should look publication-ready: "
         : "";
       const prompt = modePrefix + [painterObjective, ...parts].filter(Boolean).join(", ") + contextSuffix;
       const style = painterMode === "infographic"
-        ? [stylePart, ...parts].filter(Boolean).join(", ")
+        ? stylePart
         : [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
 
       // Create or reuse the active image tab
