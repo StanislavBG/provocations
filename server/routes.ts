@@ -5934,6 +5934,90 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
     }
   });
 
+  // ── Timeline: Transform notes into structured timeline events ──
+  app.post("/api/timeline/transform", async (req, res) => {
+    try {
+      const { notes, existingTags } = req.body;
+      if (!notes || typeof notes !== "string" || !notes.trim()) {
+        return res.status(400).json({ error: "Notes text is required" });
+      }
+
+      const existingTagContext = existingTags?.length
+        ? `\nEXISTING TAGS (reuse these when applicable):\n${existingTags.map((t: { label: string; category: string }) => `- ${t.label} (${t.category})`).join("\n")}`
+        : "";
+
+      const response = await llm.generate({
+        maxTokens: 4000,
+        temperature: 0.3,
+        system: `You are a timeline data extraction expert. Your job is to transform free-form text (notes, interview responses, narratives) into structured timeline events.
+
+For each discrete event you identify, extract:
+1. title: A concise event title (max 80 chars)
+2. description: A 1-3 sentence description with relevant details
+3. date: The most specific date possible in ISO format (YYYY-MM-DD, YYYY-MM, or YYYY)
+4. dateLabel: A human-readable label for approximate dates (e.g. "Early 1990s", "Summer 2015")
+5. dateConfidence: "exact" if a specific date is stated, "approximate" if roughly known, "estimated" if inferred
+6. type: One of "milestone" (major turning point), "phase" (period/era), "decision" (choice made), "delivery" (completion/output), "event" (general occurrence)
+7. tags: Array of tag labels — names of people, places, and themes mentioned in connection with this event
+
+Also suggest new tags that should be created, each with a label and category ("person", "place", or "theme").
+${existingTagContext}
+
+OUTPUT FORMAT: Respond with valid JSON only, no markdown code fences:
+{
+  "events": [
+    {
+      "title": "...",
+      "description": "...",
+      "date": "YYYY-MM-DD",
+      "dateLabel": "...",
+      "dateConfidence": "exact|approximate|estimated",
+      "type": "milestone|phase|decision|delivery|event",
+      "tags": ["tag label 1", "tag label 2"],
+      "source": "note"
+    }
+  ],
+  "suggestedTags": [
+    { "label": "...", "category": "person|place|theme" }
+  ]
+}
+
+RULES:
+- Extract ALL discrete events, even passing references
+- If no date is mentioned, estimate based on context and mark as "estimated"
+- Prefer more specific dates when possible
+- Do not fabricate events — only extract what is stated or clearly implied
+- Sort events chronologically in your output
+- Deduplicate: if the same event is mentioned twice, output it once with combined details`,
+        messages: [
+          {
+            role: "user",
+            content: `Transform the following notes into structured timeline events:\n\n${notes}`,
+          },
+        ],
+      });
+
+      const text = response.text.trim();
+      // Try to parse JSON from the response
+      let parsed;
+      try {
+        // Handle potential markdown code fences
+        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+        parsed = JSON.parse(jsonMatch[1]?.trim() ?? text);
+      } catch {
+        return res.status(500).json({ error: "Failed to parse LLM response as JSON" });
+      }
+
+      res.json({
+        events: parsed.events ?? [],
+        suggestedTags: parsed.suggestedTags ?? [],
+      });
+    } catch (error) {
+      console.error("Timeline transform error:", error);
+      res.status(500).json({ error: "Failed to transform notes into timeline events" });
+    }
+  });
+
   // ── Message purge scheduler (runs every hour) ──
   setInterval(async () => {
     try {
