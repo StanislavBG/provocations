@@ -110,13 +110,16 @@ export function InterviewTab({
   }, [podcastAudioUrl]);
 
   // ── Fetch next question mutation ──
+  // Accept optional updatedEntries to avoid stale closure when called
+  // immediately after setEntries (React state updates are async).
   const questionMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (updatedEntries?: InterviewEntry[]) => {
+      const allEntries = updatedEntries ?? entries;
       const response = await apiRequest("POST", "/api/interview/question", {
         objective,
         document: documentText,
         appType,
-        previousEntries: entries.length > 0 ? entries : undefined,
+        previousEntries: allEntries.length > 0 ? allEntries : undefined,
         directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" ? "advise" : undefined,
         directionGuidance: buildGuidance(stance, focusText),
       });
@@ -201,7 +204,7 @@ export function InterviewTab({
       return;
     }
     setIsActive(true);
-    questionMutation.mutate();
+    questionMutation.mutate(undefined);
     trackEvent("interview_started");
   }, [objective, questionMutation, toast]);
 
@@ -224,16 +227,19 @@ export function InterviewTab({
         timestamp: Date.now(),
       };
 
-      setEntries((prev) => [...prev, entry]);
+      // Build the full entries array including this new answer so the
+      // mutation sees it immediately (setEntries is async).
+      const nextEntries = [...entries, entry];
+      setEntries(nextEntries);
       setCurrentQuestion(null);
       setCurrentTopic(null);
       setAnswerText("");
       trackEvent("interview_answer", { metadata: { inputMethod: "text" } });
 
-      // Auto-fetch next question
-      questionMutation.mutate();
+      // Pass the up-to-date entries so the LLM sees ALL previous Q&A
+      questionMutation.mutate(nextEntries);
     },
-    [currentQuestion, currentTopic, questionMutation],
+    [currentQuestion, currentTopic, questionMutation, entries],
   );
 
   const handleSubmitAnswer = useCallback(() => {
@@ -254,7 +260,7 @@ export function InterviewTab({
     trackEvent("interview_skip");
     setCurrentQuestion(null);
     setCurrentTopic(null);
-    questionMutation.mutate();
+    questionMutation.mutate(undefined);
   }, [questionMutation]);
 
   const handleGenerateSummary = useCallback(() => {
