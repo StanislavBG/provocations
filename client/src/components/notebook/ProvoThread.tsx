@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProvokeText } from "@/components/ProvokeText";
-import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import {
   Flame,
@@ -459,6 +458,10 @@ function SmartBubble({
                 variant="textarea"
                 value={responseText}
                 onChange={onResponseTextChange}
+                voice={{ mode: "append" }}
+                onVoiceTranscript={(t) =>
+                  onResponseTextChange(responseText ? `${responseText} ${t}` : t)
+                }
                 placeholder="Your response..."
                 className="text-xs"
                 minRows={1}
@@ -473,14 +476,6 @@ function SmartBubble({
                 }}
               />
             </div>
-            <VoiceRecorder
-              onTranscript={(t) =>
-                onResponseTextChange(responseText ? `${responseText} ${t}` : t)
-              }
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 shrink-0 text-muted-foreground"
-            />
             <Button
               size="icon"
               variant="ghost"
