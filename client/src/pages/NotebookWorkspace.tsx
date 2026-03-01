@@ -30,6 +30,7 @@ import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
 import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPanel";
+import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
@@ -418,7 +419,7 @@ export default function NotebookWorkspace() {
 
   // ── Evolve document via writer (multi-config) ──
   const handleEvolve = useCallback(
-    (configurations: import("@/components/notebook/SplitDocumentEditor").WriterConfig[]) => {
+    (configurations: WriterConfig[]) => {
       if (configurations.length === 0) return;
 
       // Single general config — simple instruction
@@ -701,15 +702,8 @@ export default function NotebookWorkspace() {
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}
                   isSaving={isSavingToContext}
-                  onEvolve={handleEvolve}
-                  isEvolving={writeMutation.isPending}
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
-                  capturedContext={capturedContext}
-                  pinnedDocContents={pinnedDocContents}
-                  sessionNotes={sessionNotes}
-                  editHistory={editHistory}
-                  appType={validAppType}
                 />
               )}
             </ResizablePanel>
@@ -735,6 +729,10 @@ export default function NotebookWorkspace() {
                     onRemoveCapturedItem={handleRemoveCapturedItem}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
+                    onEvolve={handleEvolve}
+                    isEvolving={writeMutation.isPending}
+                    sessionNotes={sessionNotes}
+                    editHistory={editHistory}
                     documentText={document.rawText}
                     onPaintImage={handlePaintImage}
                     isPainting={isPainting}
