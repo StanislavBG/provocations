@@ -274,10 +274,10 @@ export function useWhisperRecorder({
       }
       if (newFinal) {
         speechTranscriptRef.current += newFinal + " ";
-        // Deliver confirmed fragments immediately so the parent can use them
-        // without waiting for stop — critical for long conversations
-        onTranscriptRef.current(speechTranscriptRef.current.trim());
       }
+      // Deliver accumulated text via onInterimTranscript for live preview.
+      // onTranscript fires only once when recording stops (matching Whisper
+      // behavior) to avoid duplication in handlers that append.
       const full = speechTranscriptRef.current + interimTranscript;
       if (full) onInterimTranscriptRef.current?.(full);
     };
@@ -294,10 +294,14 @@ export function useWhisperRecorder({
     };
 
     recognition.onend = () => {
-      // If user intentionally stopped, clean up (final fragments already
-      // delivered incrementally via onresult)
+      // If user intentionally stopped, deliver the final accumulated
+      // transcript once (matching Whisper's single-delivery behavior)
+      // and clean up.
       if (speechStoppingRef.current) {
         speechStoppingRef.current = false;
+        if (speechTranscriptRef.current.trim()) {
+          onTranscriptRef.current(speechTranscriptRef.current.trim());
+        }
         speechTranscriptRef.current = "";
         isRecordingRef.current = false;
         setIsRecording(false);
