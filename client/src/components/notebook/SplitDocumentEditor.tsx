@@ -56,9 +56,11 @@ export interface ImageTabData {
   isGenerating: boolean;
 }
 
-interface PreviewDoc {
+export interface PreviewDoc {
   title: string;
   content: string;
+  /** Document ID from the store — enables "Open Document" action */
+  docId?: number;
 }
 
 interface SmartOption {
@@ -157,6 +159,8 @@ interface SplitDocumentEditorProps {
   /** When set, shows a read-only preview of a context document */
   previewDoc?: PreviewDoc | null;
   onClosePreview?: () => void;
+  /** Opens the previewed document as the active workspace document */
+  onOpenPreviewDoc?: (content: string, title: string) => void;
   /** Notifies parent when the active tab type changes (chart vs document) */
   onChartActiveChange?: (isActive: boolean) => void;
   /** Save the current document + objective to the Context Store */
@@ -193,6 +197,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   templateName,
   previewDoc,
   onClosePreview,
+  onOpenPreviewDoc,
   onChartActiveChange,
   onSaveToContext,
   isSaving = false,
@@ -763,15 +768,31 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
                 {previewDoc.title}
               </span>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs gap-1 shrink-0"
-              onClick={onClosePreview}
-            >
-              <X className="w-3 h-3" />
-              Close Preview
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              {onOpenPreviewDoc && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs gap-1"
+                  onClick={() => {
+                    onOpenPreviewDoc(previewDoc.content, previewDoc.title);
+                    onClosePreview?.();
+                  }}
+                >
+                  <FileText className="w-3 h-3" />
+                  Open Document
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs gap-1"
+                onClick={onClosePreview}
+              >
+                <X className="w-3 h-3" />
+                Close Preview
+              </Button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <MarkdownRenderer content={previewDoc.content} />

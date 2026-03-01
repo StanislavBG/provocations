@@ -21,6 +21,7 @@ export default defineConfig({
     "key_versions",
     "documents",
     "user_preferences",
+    "active_context",
     "persona_versions",
     "tracking_events",
     "usage_metrics",
