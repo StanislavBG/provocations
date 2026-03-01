@@ -612,10 +612,6 @@ export function ContextSidebar({
               : "hover:bg-muted/50"
           }`}
           style={{ paddingLeft: `${indent}px` }}
-          draggable={!isEditing}
-          onDragStart={(e) => {
-            encodeDragData({ type: "folder", id: folder.id, title: folder.name }, e.dataTransfer);
-          }}
           onDragOver={(e) => handleDragOver(folder.id, e)}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(folder.id, e)}
@@ -632,20 +628,22 @@ export function ContextSidebar({
             </div>
           ) : (
             <>
+              {/* Drag handle — only the folder icon + name are draggable */}
               <button
-                onClick={() => hasContent && toggleFolder(folder.id)}
-                className={`flex-1 text-left py-1.5 px-1 text-xs flex items-center gap-1.5 min-w-0 ${
-                  hasContent ? "cursor-pointer" : "opacity-50 cursor-default"
-                }`}
+                draggable
+                onDragStart={(e) => {
+                  encodeDragData({ type: "folder", id: folder.id, title: folder.name }, e.dataTransfer);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFolder(folder.id);
+                }}
+                className="flex-1 text-left py-1.5 px-1 text-xs flex items-center gap-1.5 min-w-0 cursor-pointer"
               >
-                {hasContent ? (
-                  isExpanded ? (
-                    <ChevronDown className="w-3 h-3 shrink-0" />
-                  ) : (
-                    <ChevronRight className="w-3 h-3 shrink-0" />
-                  )
+                {isExpanded ? (
+                  <ChevronDown className="w-3 h-3 shrink-0" />
                 ) : (
-                  <span className="w-3" />
+                  <ChevronRight className="w-3 h-3 shrink-0" />
                 )}
                 {isExpanded ? (
                   <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
