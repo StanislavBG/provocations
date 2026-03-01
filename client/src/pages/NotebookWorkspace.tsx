@@ -25,7 +25,6 @@ import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/noteb
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
-import type { ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
 import type {
@@ -649,19 +648,27 @@ export default function NotebookWorkspace() {
         versionCount={versions.length}
         panelLayout={panelLayout}
         onPanelLayoutChange={setPanelLayout}
+        chatSessionContext={{
+          objective,
+          templateName: selectedTemplateName ?? null,
+          documentExcerpt: document.rawText.slice(0, 200),
+        }}
+        activeChatConversationId={activeChatConversationId}
+        onActiveChatConversationChange={setActiveChatConversationId}
       />
 
       {/* Main layout */}
       <div className="flex-1 overflow-hidden">
         {/* Desktop: 3-column resizable layout — side panels swap based on active tab type */}
         <ResizablePanelGroup
-          key={isChartActive ? "chart-layout" : appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : appFlowConfig.workspaceLayout === "timeline" ? "timeline-layout" : "doc-layout"}
+          key={appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : appFlowConfig.workspaceLayout === "timeline" ? "timeline-layout" : "doc-layout"}
           direction="horizontal"
         >
             {/* Left panel (hidden when chart tab is active or custom workspace app) */}
             {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && appFlowConfig.workspaceLayout !== "timeline" && (
               <>
                 <ResizablePanel
+                  order={1}
                   defaultSize={20}
                   minSize={4}
                   collapsible
@@ -675,13 +682,6 @@ export default function NotebookWorkspace() {
                     onUnpinDoc={handleUnpinDoc}
                     onPreviewDoc={handlePreviewDoc}
                     onOpenDoc={handleOpenDoc}
-                    chatSessionContext={{
-                      objective,
-                      templateName: selectedTemplateName ?? null,
-                      documentExcerpt: document.rawText.slice(0, 200),
-                    } satisfies ChatSessionContext}
-                    activeChatConversationId={activeChatConversationId}
-                    onActiveChatConversationChange={setActiveChatConversationId}
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
                     visibleTabs={panelLayout.leftTabs}
@@ -711,7 +711,7 @@ export default function NotebookWorkspace() {
             )}
 
             {/* Center: Document editor, BS Chart, or Timeline app */}
-            <ResizablePanel defaultSize={isChartActive || appFlowConfig.workspaceLayout === "bs-chart" || appFlowConfig.workspaceLayout === "timeline" ? 100 : 55} minSize={30}>
+            <ResizablePanel order={2} defaultSize={appFlowConfig.workspaceLayout === "bs-chart" || appFlowConfig.workspaceLayout === "timeline" ? 100 : 55} minSize={30}>
               {appFlowConfig.workspaceLayout === "bs-chart" ? (
                 <BSChartWorkspace
                   onSaveToContext={(json, label) => handleCaptureToContext(json, label)}
@@ -752,7 +752,7 @@ export default function NotebookWorkspace() {
             {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && appFlowConfig.workspaceLayout !== "timeline" && (
               <>
                 <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={25} minSize={15}>
+                <ResizablePanel order={3} defaultSize={25} minSize={15}>
                   <NotebookRightPanel
                     activePersonas={activePersonas}
                     onTogglePersona={handleTogglePersona}
@@ -786,13 +786,6 @@ export default function NotebookWorkspace() {
                     onPreviewDoc={handlePreviewDoc}
                     onOpenDoc={handleOpenDoc}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    chatSessionContext={{
-                      objective,
-                      templateName: selectedTemplateName ?? null,
-                      documentExcerpt: document.rawText.slice(0, 200),
-                    } satisfies ChatSessionContext}
-                    activeChatConversationId={activeChatConversationId}
-                    onActiveChatConversationChange={setActiveChatConversationId}
                   />
                 </ResizablePanel>
               </>

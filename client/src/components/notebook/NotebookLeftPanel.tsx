@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { ContextSidebar } from "./ContextSidebar";
-import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 import { NotebookResearchChat } from "./NotebookResearchChat";
 import { InterviewTab } from "./InterviewTab";
 import { TranscriptPanel } from "./TranscriptPanel";
@@ -10,11 +9,11 @@ import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPan
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PanelLeftOpen, Video } from "lucide-react";
+import { PanelLeftOpen } from "lucide-react";
 import { resolveVisibleTabs } from "./panelTabs";
 import type { ProvocationType, DiscussionMessage, ContextItem, EditHistoryEntry } from "@shared/schema";
 
-const DEFAULT_LEFT_IDS = ["context", "chat", "video"];
+const DEFAULT_LEFT_IDS = ["context"];
 
 interface NotebookLeftPanelProps {
   // Context tab props
@@ -23,11 +22,6 @@ interface NotebookLeftPanelProps {
   onUnpinDoc: (id: number) => void;
   onPreviewDoc?: (id: number, title: string) => void;
   onOpenDoc?: (id: number, title: string) => void;
-
-  // Chat tab props
-  chatSessionContext: ChatSessionContext;
-  activeChatConversationId: number | null;
-  onActiveChatConversationChange: (id: number | null) => void;
 
   // Collapse
   isCollapsed: boolean;
@@ -74,9 +68,6 @@ export function NotebookLeftPanel({
   onUnpinDoc,
   onPreviewDoc,
   onOpenDoc,
-  chatSessionContext,
-  activeChatConversationId,
-  onActiveChatConversationChange,
   isCollapsed,
   onToggleCollapse,
   visibleTabs,
@@ -202,32 +193,6 @@ export function NotebookLeftPanel({
               onToggleCollapse={onToggleCollapse}
               embedded
             />
-          </div>
-        )}
-
-        {effectiveActiveTab === "chat" && (
-          <ChatDrawer
-            open={true}
-            onOpenChange={() => {}}
-            sessionContext={chatSessionContext}
-            activeConversationId={activeChatConversationId}
-            onActiveConversationChange={onActiveChatConversationChange}
-            embedded
-          />
-        )}
-
-        {effectiveActiveTab === "video" && (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground/40 p-6">
-            <Video className="w-10 h-10" />
-            <div className="text-center space-y-1">
-              <p className="text-sm font-medium text-foreground/50">
-                Video Collaboration
-              </p>
-              <p className="text-xs leading-relaxed">
-                Video calls with collaborators will be available here in a future
-                update.
-              </p>
-            </div>
           </div>
         )}
 
