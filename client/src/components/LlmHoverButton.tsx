@@ -34,7 +34,7 @@ export interface LlmHoverButtonProps {
   side?: "top" | "bottom" | "left" | "right";
   /** HoverCard alignment (default: "center") */
   align?: "start" | "center" | "end";
-  /** Padding from viewport edges to avoid overlapping fixed UI (e.g. AIQA widget) */
+  /** Padding from viewport edges to avoid overlapping fixed UI */
   collisionPadding?: number | { top?: number; right?: number; bottom?: number; left?: number };
 }
 

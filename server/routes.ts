@@ -2416,7 +2416,7 @@ Output only valid JSON, no markdown.`;
 
       const {
         document,
-        objective,
+        objective: rawObjective,
         selectedText,
         instruction: rawInstruction,
         provocation,
@@ -2427,6 +2427,9 @@ Output only valid JSON, no markdown.`;
         sessionNotes,
         editHistory,
       } = parsed.data;
+
+      // When no objective is provided, let the LLM infer purpose from the document
+      const objective = rawObjective?.trim() || "";
 
       // Step 1: Clean voice transcripts before processing
       let instruction = rawInstruction;
@@ -2605,11 +2608,16 @@ The user's response should be integrated thoughtfully - don't just append it, we
         : "";
 
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
+      // Build objective section — when missing, instruct LLM to infer from content
+      const objectiveSection = objective
+        ? `DOCUMENT OBJECTIVE: ${objective}`
+        : `DOCUMENT OBJECTIVE: Not explicitly provided by the user. Infer the document's purpose, audience, and goals from its content and the user's instruction. Shape your edits to strengthen what the document is clearly trying to achieve.`;
+
       const documentResponse = await llm.generate({
         maxTokens: 8192,
         system: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
 
-DOCUMENT OBJECTIVE: ${objective}
+${objectiveSection}
 
 Your role is to evolve the document based on the user's instruction while always keeping the objective in mind. The document should get better with each iteration - clearer, more compelling, better structured.
 
@@ -2740,7 +2748,7 @@ INSTRUCTION APPLIED: ${instruction}`
 
       const {
         document,
-        objective,
+        objective: rawStreamObjective,
         selectedText,
         instruction,
         provocation,
@@ -2749,6 +2757,8 @@ INSTRUCTION APPLIED: ${instruction}`
         referenceDocuments,
         editHistory
       } = parsed.data;
+
+      const objective = rawStreamObjective?.trim() || "";
 
       // Classify the instruction type
       const instructionType = classifyInstruction(instruction);
@@ -2803,7 +2813,11 @@ STRATEGY: ${strategy}`);
       // Send instruction type first
       res.write(`data: ${JSON.stringify({ type: 'meta', instructionType })}\n\n`);
 
-      const streamSystemPrompt = `You are an expert document editor. OBJECTIVE: ${objective}
+      const streamObjectiveSection = objective
+        ? `OBJECTIVE: ${objective}`
+        : `OBJECTIVE: Not explicitly set. Infer the document's purpose from its content and the instruction.`;
+
+      const streamSystemPrompt = `You are an expert document editor. ${streamObjectiveSection}
 
 ${contextSection}
 
