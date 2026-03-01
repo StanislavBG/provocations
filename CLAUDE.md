@@ -474,6 +474,49 @@ When running `npm run check` or `npm run build`, **always fix all TypeScript err
 | `messages` | Individual chat messages |
 | `chatPreferences` | User chat settings |
 
+### ADR: Dual Schema Management — ensureTables + Drizzle (CRITICAL)
+
+The database schema is managed by **two independent systems** that MUST stay in perfect sync. Mismatches between them cause recurring migration items on every Replit deploy. This has been a repeated source of bugs.
+
+**The two systems:**
+
+| System | File | Runs when | Purpose |
+|--------|------|-----------|---------|
+| `ensureTables()` | `server/db.ts` | App startup (`npm run dev` / `npm run start`) | Safety net: creates tables/columns/indexes via raw SQL so the app works even if `drizzle-kit push` was never run |
+| Drizzle schema | `shared/models/chat.ts` | `npm run db:push` (and Replit auto-runs it during Deploy) | Authoritative schema: `drizzle-kit push` introspects the database and generates DDL to match this schema |
+
+**Why this causes problems:** On Replit, deployment runs `drizzle-kit push` BEFORE the app starts. So `ensureTables()` hasn't run yet when Drizzle checks the database. If the database is missing structures that only `ensureTables()` would create, Drizzle generates migration items. Worse: if `ensureTables()` creates structures that differ subtly from the Drizzle schema (wrong index direction, wrong constraint name, extra FK constraints), Drizzle detects a mismatch and generates DROP/CREATE statements every single deploy.
+
+**Mandatory rules when changing database schema:**
+
+1. **Always edit BOTH files.** Every schema change must be reflected in both `shared/models/chat.ts` (Drizzle) AND `server/db.ts` (`ensureTables`). Never edit one without the other.
+
+2. **The Drizzle schema is the source of truth.** Write the Drizzle definition first, then make `ensureTables()` produce the exact same DDL. Never the reverse.
+
+3. **Match index definitions exactly:**
+   - If Drizzle says `index("idx_foo").on(table.bar)` → ensureTables must say `CREATE INDEX IF NOT EXISTS idx_foo ON tablename(bar)` with no extra modifiers (no `DESC`, no `NULLS FIRST`, etc.)
+   - Drizzle's default sort is ASC. Only add `DESC` to ensureTables if the Drizzle schema explicitly uses `.desc()`
+
+4. **Match constraint names exactly:**
+   - Drizzle `.unique()` on a column generates a constraint named `{table}_{column}_unique`
+   - PostgreSQL inline `UNIQUE` in CREATE TABLE generates `{table}_{column}_key` — a DIFFERENT name
+   - ensureTables must explicitly create constraints with Drizzle-compatible names: `ALTER TABLE ... ADD CONSTRAINT {table}_{column}_unique UNIQUE(...)` wrapped in `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
+
+5. **No FK REFERENCES in ensureTables** unless the Drizzle schema also defines them (via `.references()`). Currently the Drizzle schema has ZERO foreign keys. Adding `REFERENCES` in ensureTables creates constraints that Drizzle doesn't expect, causing recurring DROP CONSTRAINT statements.
+
+6. **New table checklist:**
+   - Add `pgTable()` definition in `shared/models/chat.ts` with all columns, indexes, and unique constraints
+   - Add `CREATE TABLE IF NOT EXISTS` in `ensureTables()` matching the Drizzle definition exactly
+   - Add the table name to `tablesFilter` in `drizzle.config.ts`
+   - Add any Drizzle-named unique constraints (`{table}_{column}_unique`) via `ALTER TABLE ADD CONSTRAINT`
+
+7. **New column checklist:**
+   - Add the column to the `pgTable()` definition in `shared/models/chat.ts`
+   - Add `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in the ensureTables `DO $$ BEGIN ... END $$` block
+   - If the column has `.unique()`, also add the named constraint
+
+8. **Verify with `npm run db:push --dry-run`** (or check the Replit deploy dialog) — there should be ZERO pending migration items if both systems are in sync and the app has been started at least once.
+
 ### Error Handling
 - Zod validation on all API inputs
 - Defensive null-checks in components
