@@ -83,7 +83,7 @@ export function InterviewTab({
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
 
   // ── Stance & focus state ──
-  const [stance, setStance] = useState<InterviewStance>("balanced");
+  const [stance, setStance] = useState<InterviewStance>("writer");
   const [focusText, setFocusText] = useState("");
 
   // ── Podcast state ──
@@ -309,74 +309,59 @@ export function InterviewTab({
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center space-y-4 max-w-sm">
-            <MessageCircleQuestion className="w-10 h-10 text-primary/30 mx-auto" />
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Guided Interview</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                A thought-provoking AI interviewer asks targeted questions about your document.
-                Choose a stance to shape the style of questioning.
-              </p>
+          <div className="space-y-4 max-w-sm w-full">
+            {/* Writer stance — primary choice */}
+            <div className="space-y-1">
+              <button
+                onClick={() => setStance("writer")}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${
+                  stance === "writer"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                }`}
+              >
+                <Pencil className="w-4 h-4 shrink-0" />
+                <div>
+                  <div className="font-semibold">Writer</div>
+                  <div className="text-[10px] opacity-70">Analytical, structured — breaks things down, finds gaps, demands specifics</div>
+                </div>
+              </button>
             </div>
 
-            {/* Stance toggle */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Interview Stance</p>
-              <div className="flex gap-2 justify-center">
-                <button
-                  onClick={() => setStance("writer")}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                    stance === "writer"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                  }`}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  <div className="text-left">
-                    <div>Writer</div>
-                    <div className="text-[9px] opacity-70">Analytical</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setStance("painter")}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                    stance === "painter"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                  }`}
-                >
-                  <Paintbrush className="w-3.5 h-3.5" />
-                  <div className="text-left">
-                    <div>Painter</div>
-                    <div className="text-[9px] opacity-70">Exploratory</div>
-                  </div>
-                </button>
+            {/* Config options for the writer */}
+            <div className="space-y-2.5 pl-1">
+              {/* Painter toggle */}
+              <button
+                onClick={() => setStance(stance === "painter" ? "writer" : "painter")}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
+                  stance === "painter"
+                    ? "border-primary/60 bg-primary/5 text-primary"
+                    : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
+                }`}
+              >
+                <Paintbrush className="w-3.5 h-3.5 shrink-0" />
+                <div className="text-left">
+                  <span className="font-medium">Painter</span>
+                  <span className="text-[10px] opacity-70 ml-1.5">creative, exploratory</span>
+                </div>
+              </button>
+
+              {/* Focus input */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Focus (optional)</p>
+                <input
+                  type="text"
+                  value={focusText}
+                  onChange={(e) => setFocusText(e.target.value)}
+                  placeholder="e.g. Push me on pricing strategy"
+                  className="w-full px-2.5 py-1.5 text-xs bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                />
               </div>
-              {stance !== "balanced" && (
-                <button
-                  onClick={() => setStance("balanced")}
-                  className="text-[10px] text-muted-foreground hover:text-foreground underline"
-                >
-                  Reset to balanced
-                </button>
-              )}
-            </div>
-
-            {/* Focus input */}
-            <div className="space-y-1.5 text-left">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Focus (optional)</p>
-              <input
-                type="text"
-                value={focusText}
-                onChange={(e) => setFocusText(e.target.value)}
-                placeholder="e.g. Push me on pricing strategy"
-                className="w-full px-3 py-2 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
-              />
             </div>
 
             <Button
               size="sm"
-              className="gap-1.5"
+              className="gap-1.5 w-full"
               onClick={handleStart}
               disabled={!objective.trim()}
             >
@@ -384,7 +369,7 @@ export function InterviewTab({
               Start Interview
             </Button>
             {!objective.trim() && (
-              <p className="text-[10px] text-muted-foreground/60">
+              <p className="text-[10px] text-muted-foreground/60 text-center">
                 Set a document objective first
               </p>
             )}
@@ -468,23 +453,6 @@ export function InterviewTab({
             <TooltipContent>Synthesize Q&A into document edits</TooltipContent>
           </Tooltip>
 
-          {/* Save to context */}
-          {onCaptureToContext && entries.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleSaveToContext}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Save Q&A to Notes</TooltipContent>
-            </Tooltip>
-          )}
-
           {/* Stop / Restart */}
           {isActive ? (
             <Tooltip>
@@ -513,6 +481,23 @@ export function InterviewTab({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Resume interview</TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Save to context — far right */}
+          {onCaptureToContext && entries.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 ml-1"
+                  onClick={handleSaveToContext}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Save Q&A to Notes</TooltipContent>
             </Tooltip>
           )}
         </div>
