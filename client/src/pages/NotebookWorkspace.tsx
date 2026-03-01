@@ -743,6 +743,7 @@ export default function NotebookWorkspace() {
                   isSaving={isSavingToContext}
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
+                  onSaveTimelineToContext={(json, label) => handleCaptureToContext(json, label)}
                 />
               )}
             </ResizablePanel>
