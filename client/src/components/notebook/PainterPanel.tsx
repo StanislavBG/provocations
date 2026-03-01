@@ -11,8 +11,14 @@ import {
   ChevronDown,
   ChevronRight,
   Minus,
+  FileText,
+  Pin,
+  Target,
+  Settings2,
+  Info,
   type LucideIcon,
 } from "lucide-react";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 
 // ── Reuse the same schema shape as Writer's SmartButtonDef ──────────────
 
@@ -117,6 +123,7 @@ interface PainterPanelProps {
     negativePrompt?: string;
   }) => void;
   isPainting: boolean;
+  pinnedDocContents?: Record<number, { title: string; content: string }>;
 }
 
 export function PainterPanel({
@@ -124,6 +131,7 @@ export function PainterPanel({
   objective,
   onPaintImage,
   isPainting,
+  pinnedDocContents = {},
 }: PainterPanelProps) {
   // Per-category selection (single-select per category for Painter)
   const [selections, setSelections] = useState<Map<string, string>>(new Map());
@@ -132,6 +140,8 @@ export function PainterPanel({
   const [showNegative, setShowNegative] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("sliders");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["style"]));
+
+  const pinnedDocs = useMemo(() => Object.values(pinnedDocContents), [pinnedDocContents]);
 
   const selectOption = useCallback((catId: string, optId: string) => {
     setSelections((prev) => {
@@ -195,6 +205,60 @@ export function PainterPanel({
     return labels;
   }, [selections]);
 
+  // ── LLM preview blocks for the Paint button hover ──
+  const previewBlocks: ContextBlock[] = useMemo(() => {
+    const descriptionText = painterObjective.trim() || objective;
+    const configText = buildConfigs()
+      .map((c) => `${c.categoryLabel}: ${c.optionLabel}`)
+      .join(", ");
+    const pinnedChars = pinnedDocs.reduce((s, d) => s + Math.min(d.content.length, 500), 0);
+
+    return [
+      { label: "Description", chars: descriptionText.length, color: "text-rose-400" },
+      { label: "Document", chars: documentText.length, color: "text-blue-400" },
+      { label: "Active Context", chars: pinnedChars, color: "text-cyan-400" },
+      { label: "Style / Config", chars: configText.length + 50, color: "text-emerald-400" },
+    ];
+  }, [painterObjective, objective, documentText, pinnedDocs, buildConfigs]);
+
+  const previewSummary: SummaryItem[] = useMemo(() => {
+    const descriptionText = painterObjective.trim() || objective;
+    const docWords = documentText.trim() ? documentText.split(/\s+/).filter(Boolean).length : 0;
+
+    return [
+      {
+        icon: <Target className="w-3 h-3 text-rose-400" />,
+        label: "Description",
+        count: descriptionText.trim() ? 1 : 0,
+        detail: descriptionText.trim() ? descriptionText.slice(0, 60) + (descriptionText.length > 60 ? "..." : "") : undefined,
+      },
+      {
+        icon: <FileText className="w-3 h-3 text-blue-400" />,
+        label: "Document",
+        count: docWords > 0 ? 1 : 0,
+        detail: docWords > 0 ? `${docWords} words` : undefined,
+        emptyLabel: "No document",
+      },
+      {
+        icon: <Pin className="w-3 h-3 text-cyan-400" />,
+        label: "Active Context Docs",
+        count: pinnedDocs.length,
+        emptyLabel: "None pinned",
+      },
+      {
+        icon: <Settings2 className="w-3 h-3 text-emerald-400" />,
+        label: "Style Configs",
+        count: selections.size,
+        emptyLabel: "No style selected",
+      },
+    ];
+  }, [painterObjective, objective, documentText, pinnedDocs, selections]);
+
+  // Determine which sources are active for the indicator
+  const hasDescription = !!(painterObjective.trim() || objective.trim());
+  const hasDocument = !!documentText.trim();
+  const hasContext = pinnedDocs.length > 0;
+
   return (
     <div className="flex flex-col h-full">
       {/* ── Header ── */}
@@ -250,6 +314,48 @@ export function PainterPanel({
             />
           </div>
 
+          {/* ── Context Sources Indicator ── */}
+          <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/20 px-3 py-2.5 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Info className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Painter Context
+              </span>
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+              The Painter combines your <strong className="text-foreground/70">description</strong>,{" "}
+              <strong className="text-foreground/70">current document</strong>, and{" "}
+              <strong className="text-foreground/70">active context</strong> to curate the image.
+              For best results, refine your document and use it as the primary source.
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <span className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
+                hasDescription
+                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                  : "bg-muted/60 text-muted-foreground/50"
+              }`}>
+                <Target className="w-2.5 h-2.5" />
+                Description {hasDescription ? "" : "(empty)"}
+              </span>
+              <span className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
+                hasDocument
+                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                  : "bg-muted/60 text-muted-foreground/50"
+              }`}>
+                <FileText className="w-2.5 h-2.5" />
+                Document {hasDocument ? "" : "(empty)"}
+              </span>
+              <span className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
+                hasContext
+                  ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
+                  : "bg-muted/60 text-muted-foreground/50"
+              }`}>
+                <Pin className="w-2.5 h-2.5" />
+                Context {hasContext ? `(${pinnedDocs.length})` : "(none)"}
+              </span>
+            </div>
+          </div>
+
           {/* ── Configuration Area — renders based on viewMode ── */}
           {viewMode === "sliders" && (
             <SliderView
@@ -299,21 +405,29 @@ export function PainterPanel({
         </div>
       </ScrollArea>
 
-      {/* ── Paint Button ── */}
+      {/* ── Paint Button (wrapped with LLM preview on hover) ── */}
       <div className="px-3 py-2.5 border-t shrink-0 bg-card">
-        <Button
-          onClick={handlePaint}
-          disabled={isPainting || (!painterObjective.trim() && !objective.trim())}
-          className="w-full bg-rose-600 hover:bg-rose-700 text-white gap-1.5 text-xs"
-          size="sm"
+        <LlmHoverButton
+          previewTitle="Paint Image"
+          previewBlocks={previewBlocks}
+          previewSummary={previewSummary}
+          side="top"
+          align="center"
         >
-          {isPainting ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Paintbrush className="w-3.5 h-3.5" />
-          )}
-          Paint{totalSelected > 0 ? ` (${totalSelected})` : ""}
-        </Button>
+          <Button
+            onClick={handlePaint}
+            disabled={isPainting || (!painterObjective.trim() && !objective.trim())}
+            className="w-full bg-rose-600 hover:bg-rose-700 text-white gap-1.5 text-xs"
+            size="sm"
+          >
+            {isPainting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Paintbrush className="w-3.5 h-3.5" />
+            )}
+            Paint{totalSelected > 0 ? ` (${totalSelected})` : ""}
+          </Button>
+        </LlmHoverButton>
       </div>
     </div>
   );
