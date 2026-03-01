@@ -20,7 +20,10 @@ export const folders = pgTable("folders", {
   locked: boolean("locked").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_folders_user_id").on(table.userId),
+  index("idx_folders_user_parent").on(table.userId, table.parentFolderId),
+]);
 
 export const insertFolderSchema = createInsertSchema(folders).omit({
   id: true,
@@ -70,7 +73,11 @@ export const documents = pgTable("documents", {
   locked: boolean("locked").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_documents_user_id").on(table.userId),
+  index("idx_documents_user_folder").on(table.userId, table.folderId),
+  index("idx_documents_user_updated").on(table.userId, table.updatedAt),
+]);
 
 export const insertDocumentSchema = createInsertSchema(documents).omit({
   id: true,
@@ -87,7 +94,9 @@ export const activeContext = pgTable("active_context", {
   userId: varchar("user_id", { length: 128 }).notNull(),
   documentId: integer("document_id").notNull(),
   pinnedAt: timestamp("pinned_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_active_context_user").on(table.userId),
+]);
 
 export type StoredActiveContext = typeof activeContext.$inferSelect;
 
