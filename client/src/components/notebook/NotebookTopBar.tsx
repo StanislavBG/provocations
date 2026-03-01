@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -6,14 +7,17 @@ import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 
 import { DebugButton } from "@/components/DebugButton";
 import { LlmTraceButton } from "@/components/LlmTraceButton";
+import { PanelLayoutDialog } from "./PanelLayoutDialog";
 import { UserButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import {
   FilePlus2,
   GitCompare,
   Shield,
+  LayoutDashboard,
 } from "lucide-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
+import type { PanelLayoutConfig } from "@/hooks/use-panel-layout";
 
 interface NotebookTopBarProps {
   onNew: () => void;
@@ -22,6 +26,9 @@ interface NotebookTopBarProps {
   versionCount?: number;
   showVersions?: boolean;
   onToggleVersions?: () => void;
+  /** Panel layout configuration */
+  panelLayout?: PanelLayoutConfig;
+  onPanelLayoutChange?: (layout: PanelLayoutConfig) => void;
 }
 
 export function NotebookTopBar({
@@ -30,7 +37,11 @@ export function NotebookTopBar({
   versionCount = 0,
   showVersions,
   onToggleVersions,
+  panelLayout,
+  onPanelLayoutChange,
 }: NotebookTopBarProps) {
+  const [layoutDialogOpen, setLayoutDialogOpen] = useState(false);
+
   return (
     <header className="border-b bg-card shrink-0">
       {/* Main bar */}
@@ -77,6 +88,21 @@ export function NotebookTopBar({
           <div className="w-px h-4 bg-border mx-0.5" />
 
           <AutoDictateToggle />
+          {panelLayout && onPanelLayoutChange && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setLayoutDialogOpen(true)}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Configure panel layout</TooltipContent>
+            </Tooltip>
+          )}
           <PaletteToggle />
           <ThemeToggle />
 
@@ -94,6 +120,14 @@ export function NotebookTopBar({
         </div>
       </div>
 
+      {panelLayout && onPanelLayoutChange && (
+        <PanelLayoutDialog
+          open={layoutDialogOpen}
+          onOpenChange={setLayoutDialogOpen}
+          panelLayout={panelLayout}
+          onSave={onPanelLayoutChange}
+        />
+      )}
     </header>
   );
 }
