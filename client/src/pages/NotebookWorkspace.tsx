@@ -25,7 +25,6 @@ import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/noteb
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
-import { OnboardingSplash } from "@/components/notebook/OnboardingSplash";
 import type { ChatSessionContext } from "@/components/ChatDrawer";
 
 import { templateIds } from "@shared/schema";
@@ -56,8 +55,6 @@ export default function NotebookWorkspace() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     routeMatch ? routeParams?.templateId ?? null : null,
   );
-  /** Show onboarding splash when no template is selected via URL */
-  const [showOnboarding, setShowOnboarding] = useState(!routeMatch);
   const [referenceDocuments, setReferenceDocuments] = useState<ReferenceDocument[]>([]);
   const [capturedContext, setCapturedContext] = useState<ContextItem[]>([]);
   const [sessionNotes, setSessionNotes] = useState("");
@@ -637,50 +634,11 @@ export default function NotebookWorkspace() {
     }
   }, [pinnedDocContents, toast]);
 
-  // ── Onboarding: start the app by selecting a template + objective ──
-  const handleOnboardingStart = useCallback(
-    async (templateId: string, obj: string, splashPinnedDocIds?: Set<number>) => {
-      setSelectedTemplateId(templateId);
-      setObjective(obj);
-      setShowOnboarding(false);
-
-      // Pin documents selected during onboarding
-      if (splashPinnedDocIds && splashPinnedDocIds.size > 0) {
-        setPinnedDocIds(splashPinnedDocIds);
-        Array.from(splashPinnedDocIds).forEach((id) => {
-          apiRequest("POST", "/api/active-context/pin", { documentId: id }).catch(() => {});
-          apiRequest("GET", `/api/documents/${id}`)
-            .then((r) => r.json())
-            .then((data) => {
-              setPinnedDocContents((prev) => ({
-                ...prev,
-                [id]: { title: data.title, content: data.content },
-              }));
-            })
-            .catch(() => {});
-        });
-      }
-
-      trackEvent("template_selected", { metadata: { templateId } });
-    },
-    [],
-  );
-
   // ── Render ──
 
   // Mobile: completely separate note-capture experience
   if (isMobile) {
     return <MobileCapture />;
-  }
-
-  // Show onboarding splash when no app is selected
-  if (showOnboarding) {
-    return (
-      <OnboardingSplash
-        onStart={handleOnboardingStart}
-        onDismiss={() => setShowOnboarding(false)}
-      />
-    );
   }
 
   return (
