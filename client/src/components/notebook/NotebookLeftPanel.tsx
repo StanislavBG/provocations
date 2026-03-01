@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ContextSidebar } from "./ContextSidebar";
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,19 @@ import {
   MessageSquare,
   Video,
   PanelLeftOpen,
+  type LucideIcon,
 } from "lucide-react";
 
 type LeftPanelTab = "context" | "chat" | "video";
+
+const TAB_DEFS: { id: LeftPanelTab; icon: LucideIcon; label: string }[] = [
+  { id: "context", icon: BookOpen, label: "Context" },
+  { id: "chat", icon: MessageSquare, label: "Chat" },
+  { id: "video", icon: Video, label: "Video" },
+];
+
+/** Set of tab IDs this panel knows how to render */
+const NATIVE_TAB_IDS = new Set<string>(TAB_DEFS.map((t) => t.id));
 
 interface NotebookLeftPanelProps {
   // Context tab props
@@ -28,6 +38,9 @@ interface NotebookLeftPanelProps {
   // Collapse
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+
+  /** Ordered list of tab IDs to show (from panel layout config). Only native tabs are rendered. */
+  visibleTabs?: string[];
 }
 
 export function NotebookLeftPanel({
@@ -40,8 +53,24 @@ export function NotebookLeftPanel({
   onActiveChatConversationChange,
   isCollapsed,
   onToggleCollapse,
+  visibleTabs,
 }: NotebookLeftPanelProps) {
   const [activeTab, setActiveTab] = useState<LeftPanelTab>("context");
+
+  // Filter and order tabs based on visibleTabs prop
+  const tabs = useMemo(() => {
+    if (!visibleTabs) return TAB_DEFS;
+    const ordered = visibleTabs
+      .filter((id) => NATIVE_TAB_IDS.has(id))
+      .map((id) => TAB_DEFS.find((t) => t.id === id)!)
+      .filter(Boolean);
+    return ordered.length > 0 ? ordered : TAB_DEFS;
+  }, [visibleTabs]);
+
+  // Ensure active tab is in the visible set
+  const effectiveActiveTab = tabs.some((t) => t.id === activeTab)
+    ? activeTab
+    : tabs[0]?.id || "context";
 
   // ── Collapsed view: narrow icon strip ──
   if (isCollapsed) {
@@ -76,38 +105,24 @@ export function NotebookLeftPanel({
         )}
 
         <div className="mt-auto flex flex-col gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => {
-                  onToggleCollapse();
-                  setActiveTab("context");
-                }}
-              >
-                <BookOpen className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Context</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => {
-                  onToggleCollapse();
-                  setActiveTab("chat");
-                }}
-              >
-                <MessageSquare className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Chat</TooltipContent>
-          </Tooltip>
+          {tabs.slice(0, 2).map((tab) => (
+            <Tooltip key={tab.id}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    onToggleCollapse();
+                    setActiveTab(tab.id);
+                  }}
+                >
+                  <tab.icon className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{tab.label}</TooltipContent>
+            </Tooltip>
+          ))}
         </div>
       </div>
     );
@@ -117,18 +132,12 @@ export function NotebookLeftPanel({
     <div className="h-full flex flex-col bg-card border-r">
       {/* ─── Tab switcher ─── */}
       <div className="flex border-b shrink-0">
-        {(
-          [
-            { id: "context" as const, icon: BookOpen, label: "Context" },
-            { id: "chat" as const, icon: MessageSquare, label: "Chat" },
-            { id: "video" as const, icon: Video, label: "Video" },
-          ] as const
-        ).map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors ${
-              activeTab === tab.id
+              effectiveActiveTab === tab.id
                 ? "text-primary border-b-2 border-primary -mb-px"
                 : "text-muted-foreground hover:text-foreground"
             }`}
@@ -141,7 +150,7 @@ export function NotebookLeftPanel({
 
       {/* ─── Tab content ─── */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === "context" && (
+        {effectiveActiveTab === "context" && (
           <div className="h-full flex flex-col">
             <ContextSidebar
               pinnedDocIds={pinnedDocIds}
@@ -155,7 +164,7 @@ export function NotebookLeftPanel({
           </div>
         )}
 
-        {activeTab === "chat" && (
+        {effectiveActiveTab === "chat" && (
           <ChatDrawer
             open={true}
             onOpenChange={() => {}}
@@ -166,7 +175,7 @@ export function NotebookLeftPanel({
           />
         )}
 
-        {activeTab === "video" && (
+        {effectiveActiveTab === "video" && (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground/40 p-6">
             <Video className="w-10 h-10" />
             <div className="text-center space-y-1">

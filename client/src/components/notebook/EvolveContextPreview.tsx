@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import { LlmCallPreview, type ContextBlock, type SummaryItem } from "@/components/LlmCallPreview";
 import { Badge } from "@/components/ui/badge";
 import type { ContextItem, EditHistoryEntry } from "@shared/schema";
-import type { WriterConfig } from "./SplitDocumentEditor";
+import type { WriterConfig } from "./WriterPanel";
 import {
   FileText,
   Target,

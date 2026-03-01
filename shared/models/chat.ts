@@ -108,6 +108,7 @@ export const userPreferences = pgTable("user_preferences", {
   autoDictate: boolean("auto_dictate").default(false).notNull(),
   verboseMode: boolean("verbose_mode").default(false).notNull(),
   autoSaveSession: boolean("auto_save_session").default(true).notNull(),
+  panelLayout: text("panel_layout"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

@@ -12,6 +12,7 @@ import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useRole } from "@/hooks/use-role";
+import { usePanelLayout } from "@/hooks/use-panel-layout";
 import { useRoute } from "wouter";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
@@ -30,6 +31,7 @@ import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
 import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPanel";
+import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
@@ -52,6 +54,7 @@ export default function NotebookWorkspace() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const { isAdmin } = useRole();
+  const { panelLayout, setPanelLayout } = usePanelLayout();
   const [routeMatch, routeParams] = useRoute("/app/:templateId");
 
   // ── Core state ──
@@ -418,7 +421,7 @@ export default function NotebookWorkspace() {
 
   // ── Evolve document via writer (multi-config) ──
   const handleEvolve = useCallback(
-    (configurations: import("@/components/notebook/SplitDocumentEditor").WriterConfig[]) => {
+    (configurations: WriterConfig[]) => {
       if (configurations.length === 0) return;
 
       // Single general config — simple instruction
@@ -636,6 +639,8 @@ export default function NotebookWorkspace() {
         onNew={handleNewSession}
         isAdmin={isAdmin}
         versionCount={versions.length}
+        panelLayout={panelLayout}
+        onPanelLayoutChange={setPanelLayout}
       />
 
       {/* Main layout */}
@@ -670,6 +675,7 @@ export default function NotebookWorkspace() {
                     onActiveChatConversationChange={setActiveChatConversationId}
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    visibleTabs={panelLayout.leftTabs}
                   />
                 </ResizablePanel>
                 <ResizableHandle withHandle />
@@ -701,15 +707,8 @@ export default function NotebookWorkspace() {
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}
                   isSaving={isSavingToContext}
-                  onEvolve={handleEvolve}
-                  isEvolving={writeMutation.isPending}
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
-                  capturedContext={capturedContext}
-                  pinnedDocContents={pinnedDocContents}
-                  sessionNotes={sessionNotes}
-                  editHistory={editHistory}
-                  appType={validAppType}
                 />
               )}
             </ResizablePanel>
@@ -735,11 +734,16 @@ export default function NotebookWorkspace() {
                     onRemoveCapturedItem={handleRemoveCapturedItem}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
+                    onEvolve={handleEvolve}
+                    isEvolving={writeMutation.isPending}
+                    sessionNotes={sessionNotes}
+                    editHistory={editHistory}
                     documentText={document.rawText}
                     onPaintImage={handlePaintImage}
                     isPainting={isPainting}
                     pinnedDocContents={pinnedDocContents}
                     appType={validAppType}
+                    visibleTabs={panelLayout.rightTabs}
                   />
                 </ResizablePanel>
               </>
