@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import { DebugButton } from "@/components/DebugButton";
 import { LlmTraceButton } from "@/components/LlmTraceButton";
+import { MessageLogButton } from "@/components/MessageLogButton";
 import { PanelLayoutDialog } from "./PanelLayoutDialog";
 import { UserButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
@@ -143,6 +144,7 @@ export function NotebookTopBar({
           )}
 
           <LlmTraceButton />
+          <MessageLogButton />
           <DebugButton />
           <UserButton />
         </div>
