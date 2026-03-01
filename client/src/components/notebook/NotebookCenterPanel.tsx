@@ -14,9 +14,9 @@ interface NotebookCenterPanelProps {
   objective?: string;
   onObjectiveChange?: (objective: string) => void;
   templateName?: string;
-  previewDoc?: { title: string; content: string } | null;
+  previewDoc?: { title: string; content: string; docId?: number } | null;
   onClosePreview?: () => void;
-  onOpenPreviewDoc?: (content: string, title: string) => void;
+  onOpenPreviewDoc?: (content: string, title: string, docId?: number) => void;
   onChartActiveChange?: (isActive: boolean) => void;
   onSaveToContext?: () => void;
   isSaving?: boolean;

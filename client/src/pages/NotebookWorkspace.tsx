@@ -57,6 +57,8 @@ export default function NotebookWorkspace() {
   // ── Core state ──
   const [document, setDocument] = useState<Document>({ id: generateId("doc"), rawText: "" });
   const [objective, setObjective] = useState("");
+  /** When editing a document from the Context Store, tracks its DB id for in-place save */
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     routeMatch ? routeParams?.templateId ?? null : null,
   );
@@ -122,7 +124,7 @@ export default function NotebookWorkspace() {
   }, [savedActiveContext]);
 
   // ── Preview state for context documents ──
-  const [previewDoc, setPreviewDoc] = useState<{ title: string; content: string } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; content: string; docId?: number } | null>(null);
 
   // ── Document versioning ──
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
@@ -384,19 +386,35 @@ export default function NotebookWorkspace() {
       const title = objective?.trim()
         ? objective.trim().slice(0, 120)
         : `Document ${new Date().toLocaleDateString()}`;
-      // Store objective as a header in the content so it travels with the document
-      const content = objective?.trim()
-        ? `> **Objective:** ${objective.trim()}\n\n${document.rawText}`
-        : document.rawText;
-      await apiRequest("POST", "/api/documents", { title, content });
-      trackEvent("document_saved");
-      toast({ title: "Saved to Context Store", description: title });
+      const content = document.rawText;
+
+      if (activeDocumentId) {
+        // Update existing document in-place
+        await apiRequest("PUT", `/api/documents/${activeDocumentId}`, { title, content });
+        // Refresh pinned cache if this doc is pinned
+        if (pinnedDocIds.has(activeDocumentId)) {
+          setPinnedDocContents((prev) => ({
+            ...prev,
+            [activeDocumentId]: { title, content },
+          }));
+        }
+        trackEvent("document_saved");
+        toast({ title: "Document saved", description: title });
+      } else {
+        // Create new document
+        const res = await apiRequest("POST", "/api/documents", { title, content });
+        const data = await res.json();
+        // Track the newly created document so subsequent saves update it
+        if (data.id) setActiveDocumentId(data.id);
+        trackEvent("document_saved");
+        toast({ title: "Saved to Context Store", description: title });
+      }
     } catch {
       toast({ title: "Save failed", description: "Could not save document.", variant: "destructive" });
     } finally {
       setIsSavingToContext(false);
     }
-  }, [document.rawText, objective, toast]);
+  }, [document.rawText, objective, activeDocumentId, pinnedDocIds, toast]);
 
   // ── Evolve document via writer (multi-config) ──
   const handleEvolve = useCallback(
@@ -570,14 +588,14 @@ export default function NotebookWorkspace() {
     // Check if already in pinned cache
     const cached = pinnedDocContents[id];
     if (cached) {
-      setPreviewDoc({ title: cached.title, content: cached.content });
+      setPreviewDoc({ title: cached.title, content: cached.content, docId: id });
       return;
     }
     // Fetch from server
     try {
       const res = await apiRequest("GET", `/api/documents/${id}`);
       const data = await res.json();
-      setPreviewDoc({ title: data.title || title, content: data.content || "" });
+      setPreviewDoc({ title: data.title || title, content: data.content || "", docId: id });
     } catch {
       toast({ title: "Failed to load document", variant: "destructive" });
     }
@@ -595,6 +613,7 @@ export default function NotebookWorkspace() {
   const confirmNewSession = useCallback(() => {
     setDocument({ id: generateId("doc"), rawText: "" });
     setObjective("");
+    setActiveDocumentId(null);
     setSelectedTemplateId(null);
     setVersions([]);
     setEditHistory([]);
@@ -674,9 +693,10 @@ export default function NotebookWorkspace() {
                   templateName={selectedTemplateName}
                   previewDoc={previewDoc}
                   onClosePreview={() => setPreviewDoc(null)}
-                  onOpenPreviewDoc={(content, title) => {
+                  onOpenPreviewDoc={(content, title, docId) => {
                     setDocument({ id: generateId("doc"), rawText: content });
                     setObjective(title);
+                    setActiveDocumentId(docId ?? null);
                   }}
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}
