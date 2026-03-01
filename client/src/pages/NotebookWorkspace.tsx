@@ -29,7 +29,7 @@ import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
-import type { PainterConfig } from "@/components/notebook/PainterPanel";
+import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
@@ -440,27 +440,9 @@ export default function NotebookWorkspace() {
       painterConfigs: PainterConfig[];
       painterObjective: string;
       negativePrompt?: string;
+      painterMode: PainterMode;
     }) => {
-      const { painterConfigs, painterObjective, negativePrompt } = config;
-
-      // Build prompt from configs
-      const parts: string[] = [];
-      let aspectRatio = "1:1";
-      let stylePart = "";
-
-      for (const cfg of painterConfigs) {
-        if (cfg.category === "format") {
-          aspectRatio = cfg.option;
-        } else if (cfg.category === "style") {
-          stylePart = cfg.optionLabel;
-        } else if (cfg.category === "mood") {
-          parts.push(`${cfg.optionLabel} mood`);
-        } else if (cfg.category === "composition") {
-          parts.push(`${cfg.optionLabel} composition`);
-        } else if (cfg.category === "detail") {
-          parts.push(`${cfg.optionLabel} detail level`);
-        }
-      }
+      const { painterConfigs, painterObjective, negativePrompt, painterMode } = config;
 
       // Include Active Context (pinned docs) as additional context for the image
       const contextSnippets = Object.values(pinnedDocContents)
@@ -470,8 +452,45 @@ export default function NotebookWorkspace() {
         ? `. Context: ${contextSnippets.join("; ").slice(0, 1000)}`
         : "";
 
-      const prompt = [painterObjective, ...parts].filter(Boolean).join(", ") + contextSuffix;
-      const style = [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
+      // Build prompt from configs — mode-aware
+      const parts: string[] = [];
+      let aspectRatio = "1:1";
+      let stylePart = "";
+
+      if (painterMode === "infographic") {
+        // Infographic: structured prompt with layout, data style, palette, etc.
+        for (const cfg of painterConfigs) {
+          if (cfg.category === "format") {
+            aspectRatio = cfg.option;
+          } else {
+            parts.push(`${cfg.categoryLabel}: ${cfg.optionLabel}`);
+          }
+        }
+        stylePart = "Professional infographic";
+      } else {
+        // Art mode: original behavior
+        for (const cfg of painterConfigs) {
+          if (cfg.category === "format") {
+            aspectRatio = cfg.option;
+          } else if (cfg.category === "style") {
+            stylePart = cfg.optionLabel;
+          } else if (cfg.category === "mood") {
+            parts.push(`${cfg.optionLabel} mood`);
+          } else if (cfg.category === "composition") {
+            parts.push(`${cfg.optionLabel} composition`);
+          } else if (cfg.category === "detail") {
+            parts.push(`${cfg.optionLabel} detail level`);
+          }
+        }
+      }
+
+      const modePrefix = painterMode === "infographic"
+        ? "Create a professional infographic visual: "
+        : "";
+      const prompt = modePrefix + [painterObjective, ...parts].filter(Boolean).join(", ") + contextSuffix;
+      const style = painterMode === "infographic"
+        ? [stylePart, ...parts].filter(Boolean).join(", ")
+        : [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
 
       // Create or reuse the active image tab
       const tabId = activeImageTabId || generateId("img");
@@ -514,7 +533,7 @@ export default function NotebookWorkspace() {
           next.set(tabId, { imageUrl, prompt, isGenerating: false });
           return next;
         });
-        trackEvent("painter_generated", { metadata: { configs: painterConfigs.length.toString(), aspectRatio } });
+        trackEvent("painter_generated", { metadata: { configs: painterConfigs.length.toString(), aspectRatio, mode: painterMode } });
       } catch (error) {
         console.error("[painter] generation error:", error);
         toast({ title: "Painting failed", description: "Could not generate image.", variant: "destructive" });
