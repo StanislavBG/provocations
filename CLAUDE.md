@@ -88,8 +88,7 @@ provocations/
 │   └── agent-editor/CLAUDE.md
 ├── client/src/
 │   ├── pages/
-│   │   ├── NotebookWorkspace.tsx   # Primary 3-panel workspace (replaced old Workspace.tsx)
-│   │   ├── Workspace.tsx           # Legacy workspace (still used for some layouts)
+│   │   ├── NotebookWorkspace.tsx   # Primary 3-panel workspace
 │   │   ├── ContextStore.tsx        # Standalone /store page for context management
 │   │   ├── Admin.tsx               # Admin analytics dashboard
 │   │   ├── Pricing.tsx             # Pricing page
@@ -107,8 +106,7 @@ provocations/
 │   │   │   ├── TranscriptPanel.tsx     # Notes panel: add/remove notes, save to context, evolve doc
 │   │   │   ├── SplitDocumentEditor.tsx # Multi-tab editor with smart buttons (Expand/Condense/...)
 │   │   │   ├── PersonaAvatarRow.tsx    # Persona toggle row with avatars
-│   │   │   ├── ChatThread.tsx          # User-to-user chat thread rendering
-│   │   │   └── OnboardingSplash.tsx    # Welcome screen when no document loaded
+│   │   │   └── ChatThread.tsx          # User-to-user chat thread rendering
 │   │   ├── bschart/                # BS Chart visual diagramming tool
 │   │   │   ├── BSChartWorkspace.tsx    # Main chart workspace with canvas, toolbar, properties
 │   │   │   ├── BSChartCanvas.tsx       # Canvas rendering layer
@@ -119,7 +117,6 @@ provocations/
 │   │   │   ├── nodes/BSNodeRenderer.tsx # Renders node types (table, diamond, rect, text, badge)
 │   │   │   └── hooks/                  # useChartState, useCanvasInteraction, useVoiceChartCommands
 │   │   ├── ProvokeText.tsx          # Smart text area with voice + processing (ADR: all text must use this)
-│   │   ├── ReadingPane.tsx          # Editable document canvas with save-to-context
 │   │   ├── StoragePanel.tsx         # Context Store browser (embeddable or standalone)
 │   │   ├── ChatDrawer.tsx           # User-to-user messaging drawer
 │   │   ├── GeneratePanel.tsx        # Document generation panel
@@ -366,9 +363,6 @@ The main interface since the notebook refactor. Unified 3-panel resizable layout
 - **State**: document, objective, personas, capturedContext, pinnedDocIds, discussionMessages, versions, editHistory
 - **Mobile**: Falls back to tabbed single-panel layout (context | document | chat tabs)
 
-### Workspace.tsx (Legacy Orchestrator)
-Still exists for some layout types (voice-capture, infographic-studio). Uses the older tab-based left/right panel system with `AppFlowConfig`.
-
 ### notebook/ Components
 | Component | Purpose |
 |-----------|---------|
@@ -389,13 +383,6 @@ Visual diagram/flowchart designer on infinite canvas:
 - `hooks/useVoiceChartCommands.ts` — Natural language voice commands → chart operations
 - `hooks/useChartState.ts` — Node/connector state management
 - Supports: ERD, flowcharts, architecture diagrams with drag/drop and voice creation
-
-### ReadingPane.tsx
-The document canvas (used by legacy workspace standard-layout apps):
-- Editable mode (pencil toggle)
-- Text selection → voice/edit actions
-- Markdown rendering and download
-- **Save to Context Store** button in toolbar
 
 ### ProvokeText.tsx (ADR-mandated)
 Universal text component — see ADR below. All text display/editing must use this.
@@ -459,7 +446,7 @@ When running `npm run check` or `npm run build`, **always fix all TypeScript err
 | `/pricing` | `Pricing` | Pricing page |
 
 ### State Management
-- Local state in NotebookWorkspace.tsx (primary) and Workspace.tsx (legacy) for app-wide concerns
+- Local state in NotebookWorkspace.tsx for app-wide concerns
 - React Query for server state caching
 - Context pinning: `pinnedDocIds` (Set) + `pinnedDocContents` (cache) in NotebookWorkspace
 - Captured context: `capturedContext` (ContextItem[]) passed to all LLM calls
