@@ -168,7 +168,7 @@ export default function NotebookWorkspace() {
 
       const payload = {
         document: document.rawText,
-        objective,
+        objective: objective.trim() || undefined,
         appType: validAppType,
         referenceDocuments: referenceDocuments.length > 0 ? referenceDocuments : undefined,
         capturedContext: allContext.length > 0 ? allContext : undefined,
