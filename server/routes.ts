@@ -678,7 +678,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { document: docText, objective, personaIds, guidance, referenceDocuments, appType: challengeAppType } = parsed.data;
+      const { document: docText, objective: rawChallengeObjective, personaIds, guidance, referenceDocuments, appType: challengeAppType } = parsed.data;
+      const objective = rawChallengeObjective?.trim() || "";
 
       const challengeAppConfig = getAppTypeConfig(challengeAppType);
       const challengeAppContext = formatAppTypeContext(challengeAppType);
@@ -746,12 +747,15 @@ Instead:
       const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
+      const challengeObjectiveSection = objective
+        ? `DOCUMENT OBJECTIVE: ${objective}\nEvaluate the ${challengeAppConfig?.documentType || "document"} against this objective. Every challenge must relate to how well the ${challengeAppConfig?.documentType || "document"} achieves this goal.`
+        : `DOCUMENT OBJECTIVE: Not explicitly stated. Infer the document's purpose from its content, then challenge whether the document achieves that inferred purpose effectively.`;
+
       const response = await llm.generate({
         maxTokens: 4096,
         system: `${challengeAppContext ? challengeAppContext + "\n\n" : ""}You are a critical thinking partner. Your job is to CHALLENGE the user's document — identify gaps, weaknesses, and assumptions.
 
-DOCUMENT OBJECTIVE: ${objective}
-Evaluate the ${challengeAppConfig?.documentType || "document"} against this objective. Every challenge must relate to how well the ${challengeAppConfig?.documentType || "document"} achieves this goal.
+${challengeObjectiveSection}
 
 IMPORTANT: Only generate challenges. Do NOT provide advice, solutions, or suggestions. The user will request advice separately.
 
@@ -777,7 +781,7 @@ Output only valid JSON, no markdown.`,
         messages: [
           {
             role: "user",
-            content: `OBJECTIVE: ${objective}\n\nDOCUMENT TO CHALLENGE:\n\n${analysisText}\n\nGenerate grounded challenges — each must cite a specific part of this document or a specific omission relative to the objective.`
+            content: `${objective ? `OBJECTIVE: ${objective}\n\n` : ""}DOCUMENT TO CHALLENGE:\n\n${analysisText}\n\nGenerate grounded challenges — each must cite a specific part of this document or a specific omission relative to ${objective ? "the objective" : "what the document is trying to achieve"}.`
           }
         ],
       });
@@ -835,7 +839,8 @@ Output only valid JSON, no markdown.`,
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { document: docText, objective, appType, challengeId, challengeTitle, challengeContent, personaId, discussionHistory } = parsed.data;
+      const { document: docText, objective: rawAdviceObjective, appType, challengeId, challengeTitle, challengeContent, personaId, discussionHistory } = parsed.data;
+      const objective = rawAdviceObjective?.trim() || "";
 
       const persona = getPersonaById(personaId);
       if (!persona) {
@@ -877,13 +882,13 @@ THE PROVOCATION (this is your primary grounding — your advice must directly ad
 Title: ${challengeTitle}
 Detail: ${challengeContent}
 
-DOCUMENT OBJECTIVE: ${objective}
+${objective ? `DOCUMENT OBJECTIVE: ${objective}` : "DOCUMENT OBJECTIVE: Not explicitly stated. Infer the document's purpose from its content."}
 ${discussionContext}
 
 ADVICE RULES:
 1. Start from the PROVOCATION — your advice must directly answer the specific gap, weakness, or assumption raised. Do NOT provide generic guidance.
 2. Reference the CURRENT DOCUMENT — point to specific sections, paragraphs, or claims that need attention to resolve this provocation.
-3. Serve the OBJECTIVE — explain how resolving this provocation advances the stated goal.
+3. Serve the OBJECTIVE — explain how resolving this provocation advances the ${objective ? "stated goal" : "document's inferred purpose"}.
 4. Build on the DISCUSSION HISTORY — if the user has already answered or discussed related points, acknowledge that and don't repeat.
 5. Be concrete and actionable — the user should know exactly what to write, change, or add.
 6. Be different from the provocation — do NOT restate the problem, provide the solution.

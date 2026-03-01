@@ -170,7 +170,7 @@ export type Advice = z.infer<typeof adviceSchema>;
 
 export const generateChallengeRequestSchema = z.object({
   document: z.string().min(1, "Document is required"),         // current draft to challenge
-  objective: z.string().min(1, "Objective is required"),       // what the document is trying to achieve
+  objective: z.string().optional(),                            // what the document is trying to achieve (LLM infers if missing)
   personaIds: z.array(z.string()).optional(),                  // filter to specific personas; empty = all
   guidance: z.string().optional(),                             // user-specific focus area
   referenceDocuments: z.array(z.lazy(() => referenceDocumentSchema)).optional(),
@@ -183,7 +183,7 @@ export type GenerateChallengeRequest = z.infer<typeof generateChallengeRequestSc
 
 export const generateAdviceRequestSchema = z.object({
   document: z.string().min(1, "Document is required"),        // current draft — the persona reads this
-  objective: z.string().min(1, "Objective is required"),      // what the document is trying to achieve
+  objective: z.string().optional(),                           // what the document is trying to achieve (LLM infers if missing)
   appType: z.enum(templateIds).optional(),                     // application template — must match a templateIds entry
   challengeId: z.string().min(1, "Challenge ID is required"), // which challenge to advise on
   challengeTitle: z.string().min(1, "Challenge title is required"),
