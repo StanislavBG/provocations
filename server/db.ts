@@ -87,6 +87,7 @@ export async function ensureTables(): Promise<void> {
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE NOT NULL;
         ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS verbose_mode BOOLEAN DEFAULT FALSE NOT NULL;
         ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_save_session BOOLEAN DEFAULT TRUE NOT NULL;
+        ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS panel_layout TEXT;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
 

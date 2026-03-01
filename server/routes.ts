@@ -4744,9 +4744,10 @@ RULES:
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const update: Partial<{ autoDictate: boolean; verboseMode: boolean }> = {};
+      const update: Partial<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null }> = {};
       if (typeof req.body.autoDictate === "boolean") update.autoDictate = req.body.autoDictate;
       if (typeof req.body.verboseMode === "boolean") update.verboseMode = req.body.verboseMode;
+      if (typeof req.body.panelLayout === "string" || req.body.panelLayout === null) update.panelLayout = req.body.panelLayout;
 
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ error: "At least one preference field must be provided" });
