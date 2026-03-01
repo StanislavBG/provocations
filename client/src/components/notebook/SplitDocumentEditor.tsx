@@ -3,6 +3,7 @@ import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { ImageCanvas } from "./ImageCanvas";
+import { ImageLightbox, extractImageUrl } from "./ImageLightbox";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import {
   Save,
   Loader2,
   Paintbrush,
+  Maximize2,
 } from "lucide-react";
 
 interface DocTab {
@@ -102,6 +104,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
+  const [previewLightbox, setPreviewLightbox] = useState(false);
 
   // ── Chrome-style document tabs ──
   const [tabs, setTabs] = useState<DocTab[]>(() => [
@@ -451,6 +454,22 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
               </span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              {extractImageUrl(previewDoc.content) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs gap-1"
+                      onClick={() => setPreviewLightbox(true)}
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                      Fullscreen
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>View image fullscreen</TooltipContent>
+                </Tooltip>
+              )}
               {onOpenPreviewDoc && (
                 <Button
                   variant="ghost"
@@ -479,6 +498,16 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
           <div className="flex-1 overflow-y-auto p-4">
             <MarkdownRenderer content={previewDoc.content} />
           </div>
+          {previewLightbox && (() => {
+            const imgUrl = extractImageUrl(previewDoc.content);
+            return imgUrl ? (
+              <ImageLightbox
+                imageUrl={imgUrl}
+                title={previewDoc.title}
+                onClose={() => setPreviewLightbox(false)}
+              />
+            ) : null;
+          })()}
         </div>
       ) : isDocumentActive ? (
         <div className="flex-1 flex flex-col min-h-0">

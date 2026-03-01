@@ -7,11 +7,13 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize,
+  Maximize2,
   Paintbrush,
   Loader2,
   Save,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ImageLightbox } from "./ImageLightbox";
 
 // ── Zoom presets ─────────────────────────────────────────────
 const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2] as const;
@@ -27,6 +29,7 @@ interface ImageCanvasProps {
 export function ImageCanvas({ imageUrl, prompt, isGenerating, onSaveToContext, isSaving }: ImageCanvasProps) {
   const { toast } = useToast();
   const [zoom, setZoom] = useState(1);
+  const [showLightbox, setShowLightbox] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleZoomIn = useCallback(() => {
@@ -111,6 +114,15 @@ export function ImageCanvas({ imageUrl, prompt, isGenerating, onSaveToContext, i
               <TooltipContent>Fit to view</TooltipContent>
             </Tooltip>
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setShowLightbox(true)}>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Fullscreen</TooltipContent>
+            </Tooltip>
+
             <div className="w-px h-4 bg-border mx-1" />
 
             <Tooltip>
@@ -187,6 +199,14 @@ export function ImageCanvas({ imageUrl, prompt, isGenerating, onSaveToContext, i
             {prompt}
           </p>
         </div>
+      )}
+
+      {showLightbox && imageUrl && (
+        <ImageLightbox
+          imageUrl={imageUrl}
+          title={prompt}
+          onClose={() => setShowLightbox(false)}
+        />
       )}
     </div>
   );
