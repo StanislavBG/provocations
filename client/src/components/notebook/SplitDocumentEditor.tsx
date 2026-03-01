@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardR
 import { ProvokeText } from "@/components/ProvokeText";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
+import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { ImageCanvas } from "./ImageCanvas";
 import { ImageLightbox, extractImageUrl } from "./ImageLightbox";
 import { Button } from "@/components/ui/button";
@@ -22,13 +23,14 @@ import {
   Save,
   Loader2,
   Paintbrush,
+  Clock,
   Maximize2,
 } from "lucide-react";
 
 interface DocTab {
   id: string;
   title: string;
-  type: "document" | "chart" | "image";
+  type: "document" | "chart" | "image" | "timeline";
 }
 
 /** Stored state for inactive tabs */
@@ -77,6 +79,8 @@ interface SplitDocumentEditorProps {
   onAddImageTab?: (tabId: string) => void;
   /** Notifies parent when the active tab type changes to image */
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
+  /** Save timeline JSON to the Context Store */
+  onSaveTimelineToContext?: (json: string, label: string) => void;
 }
 
 /** Imperative handle for parent to add image tabs */
@@ -101,6 +105,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   imageTabData,
   onAddImageTab,
   onImageActiveChange,
+  onSaveTimelineToContext,
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
@@ -113,9 +118,10 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   const [activeTabId, setActiveTabId] = useState("main");
   const tabSnapshotRef = useRef<Map<string, TabSnapshot>>(new Map());
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  const isChartActive = activeTab?.type === "chart";
+  const isChartActive = activeTab?.type === "chart" || activeTab?.type === "timeline";
   const isImageActive = activeTab?.type === "image";
   const isDocumentActive = activeTab?.type === "document";
+  const isTimelineActive = activeTab?.type === "timeline";
 
   // Notify parent when chart active state changes
   useEffect(() => {
@@ -191,6 +197,21 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
     const chartCount = tabs.filter((t) => t.type === "chart").length;
     const newTitle = `Chart ${chartCount + 1}`;
     setTabs((prev) => [...prev, { id: newId, title: newTitle, type: "chart" }]);
+    setActiveTabId(newId);
+  }, [activeTabId, text, objective, tabs]);
+
+  const handleAddTimelineTab = useCallback(() => {
+    const currentTab = tabs.find((t) => t.id === activeTabId);
+    if (currentTab?.type === "document") {
+      tabSnapshotRef.current.set(activeTabId, {
+        text,
+        objective: objective || "",
+      });
+    }
+    const newId = generateId("tl");
+    const tlCount = tabs.filter((t) => t.type === "timeline").length;
+    const newTitle = `Timeline ${tlCount + 1}`;
+    setTabs((prev) => [...prev, { id: newId, title: newTitle, type: "timeline" }]);
     setActiveTabId(newId);
   }, [activeTabId, text, objective, tabs]);
 
@@ -328,6 +349,8 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
                 <GitGraph className="w-3 h-3 shrink-0 text-cyan-500" />
               ) : tab.type === "image" ? (
                 <Paintbrush className="w-3 h-3 shrink-0 text-rose-500" />
+              ) : tab.type === "timeline" ? (
+                <Clock className="w-3 h-3 shrink-0 text-amber-500" />
               ) : (
                 <FileText className="w-3 h-3 shrink-0" />
               )}
@@ -396,6 +419,17 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
           </TooltipTrigger>
           <TooltipContent>New image tab</TooltipContent>
         </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleAddTimelineTab}
+              className="flex items-center justify-center h-7 w-7 rounded-t-lg text-muted-foreground hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors shrink-0 mb-px"
+            >
+              <Clock className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>New timeline tab</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Merging indicator */}
@@ -442,6 +476,20 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
             </div>
           );
         })}
+
+      {/* ─── Timeline tab instances (always mounted to preserve state) ─── */}
+      {tabs
+        .filter((t) => t.type === "timeline")
+        .map((tab) => (
+          <div
+            key={tab.id}
+            className={
+              tab.id === activeTabId ? "flex-1 min-h-0" : "hidden"
+            }
+          >
+            <TimelineWorkspace onSaveToContext={onSaveTimelineToContext} />
+          </div>
+        ))}
 
       {/* Context document preview */}
       {isDocumentActive && previewDoc ? (
