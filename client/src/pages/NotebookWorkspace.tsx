@@ -577,7 +577,23 @@ export default function NotebookWorkspace() {
     setActiveImageTabId(isActive ? tabId : null);
   }, []);
 
-  // ── Open a context document directly into the editor ──
+  // ── Preview a context document (single-click) ──
+  const handlePreviewDoc = useCallback(async (id: number, title: string) => {
+    const cached = pinnedDocContents[id];
+    if (cached) {
+      setPreviewDoc({ title: cached.title, content: cached.content, docId: id });
+      return;
+    }
+    try {
+      const res = await apiRequest("GET", `/api/documents/${id}`);
+      const data = await res.json();
+      setPreviewDoc({ title: data.title || title, content: data.content || "", docId: id });
+    } catch {
+      toast({ title: "Failed to load document", variant: "destructive" });
+    }
+  }, [pinnedDocContents, toast]);
+
+  // ── Open a context document directly into the editor (double-click) ──
   const handleOpenDoc = useCallback(async (id: number, title: string) => {
     // Check if already in pinned cache
     const cached = pinnedDocContents[id];
@@ -638,6 +654,7 @@ export default function NotebookWorkspace() {
                     pinnedDocIds={pinnedDocIds}
                     onPinDoc={handlePinDoc}
                     onUnpinDoc={handleUnpinDoc}
+                    onPreviewDoc={handlePreviewDoc}
                     onOpenDoc={handleOpenDoc}
                     chatSessionContext={{
                       objective,
@@ -676,6 +693,7 @@ export default function NotebookWorkspace() {
                     setDocument({ id: generateId("doc"), rawText: content });
                     setObjective(title);
                     setActiveDocumentId(docId ?? null);
+                    setPreviewDoc(null);
                   }}
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}

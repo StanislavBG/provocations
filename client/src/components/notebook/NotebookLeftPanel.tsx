@@ -28,6 +28,7 @@ interface NotebookLeftPanelProps {
   pinnedDocIds: Set<number>;
   onPinDoc: (id: number) => void;
   onUnpinDoc: (id: number) => void;
+  onPreviewDoc?: (id: number, title: string) => void;
   onOpenDoc?: (id: number, title: string) => void;
 
   // Chat tab props
@@ -47,6 +48,7 @@ export function NotebookLeftPanel({
   pinnedDocIds,
   onPinDoc,
   onUnpinDoc,
+  onPreviewDoc,
   onOpenDoc,
   chatSessionContext,
   activeChatConversationId,
@@ -156,6 +158,7 @@ export function NotebookLeftPanel({
               pinnedDocIds={pinnedDocIds}
               onPinDoc={onPinDoc}
               onUnpinDoc={onUnpinDoc}
+              onPreviewDoc={onPreviewDoc}
               onOpenDoc={onOpenDoc}
               isCollapsed={false}
               onToggleCollapse={onToggleCollapse}
