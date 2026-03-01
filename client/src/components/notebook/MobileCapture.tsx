@@ -26,6 +26,8 @@ import {
   Pencil,
   Paintbrush,
   Scale,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import type { InterviewEntry, InterviewQuestionResponse } from "@shared/schema";
 
@@ -348,6 +350,11 @@ function InterviewView({
   const [stance, setStance] = useState<InterviewStance>("balanced");
   const [focusText, setFocusText] = useState("");
 
+  // ── TTS (Text-to-Speech) state ──
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const objectiveRef = useRef<HTMLTextAreaElement>(null);
 
@@ -365,6 +372,47 @@ function InterviewView({
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   }, [objective]);
+
+  // Cleanup TTS audio on unmount
+  useEffect(() => {
+    return () => {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        const src = ttsAudioRef.current.src;
+        if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+      }
+    };
+  }, []);
+
+  /** Speak text via /api/tts */
+  const speakQuestion = useCallback(async (text: string) => {
+    if (!ttsEnabled || !text.trim()) return;
+    try {
+      setIsSpeaking(true);
+      const res = await apiRequest("POST", "/api/tts", { text, voice: "nova" });
+      const data = (await res.json()) as { audio: string; mimeType: string };
+      if (!data.audio) return;
+      const byteChars = atob(data.audio);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteArray[i] = byteChars.charCodeAt(i);
+      }
+      const blob = new Blob([byteArray], { type: data.mimeType || "audio/mp3" });
+      const url = URL.createObjectURL(blob);
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        const oldSrc = ttsAudioRef.current.src;
+        if (oldSrc.startsWith("blob:")) URL.revokeObjectURL(oldSrc);
+      }
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+      audio.onended = () => setIsSpeaking(false);
+      audio.onerror = () => setIsSpeaking(false);
+      await audio.play();
+    } catch {
+      setIsSpeaking(false);
+    }
+  }, [ttsEnabled]);
 
   // ── Stance cycle helper ──
   const cycleStance = useCallback(() => {
@@ -387,6 +435,7 @@ function InterviewView({
     onSuccess: (data) => {
       setCurrentQuestion(data.question);
       setCurrentTopic(data.topic);
+      speakQuestion(data.question);
     },
     onError: (error) => {
       const msg = error instanceof Error ? error.message : "Failed to generate question";
@@ -468,13 +517,35 @@ function InterviewView({
 
   const handleVoiceAnswer = useCallback(
     (transcript: string) => {
-      if (transcript.trim()) {
-        trackEvent("voice_recorded");
-        handleAnswer(transcript);
+      if (!transcript.trim()) return;
+      trackEvent("voice_recorded");
+      const endKeyword = /provo\s+end\s+message/i;
+      const cleaned = transcript.replace(endKeyword, "").trim();
+      if (cleaned) {
+        handleAnswer(cleaned);
       }
     },
     [handleAnswer],
   );
+
+  // Watch answerText mid-stream for "Provo End Message" keyword
+  const endKeywordRef = useRef(false);
+  useEffect(() => {
+    if (!answerText || !isRecordingAnswer || endKeywordRef.current) return;
+    const endKeyword = /provo\s+end\s+message/i;
+    if (endKeyword.test(answerText)) {
+      endKeywordRef.current = true;
+      const cleaned = answerText.replace(endKeyword, "").trim();
+      if (cleaned) {
+        setTimeout(() => {
+          handleAnswer(cleaned);
+          endKeywordRef.current = false;
+        }, 300);
+      } else {
+        endKeywordRef.current = false;
+      }
+    }
+  }, [answerText, isRecordingAnswer, handleAnswer]);
 
   const handleSkip = useCallback(() => {
     trackEvent("interview_skip");
@@ -500,9 +571,18 @@ function InterviewView({
 
             {/* Objective input */}
             <div className="rounded-xl border bg-card shadow-sm overflow-hidden text-left">
-              <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-1.5">
-                <Target className="w-3 h-3 text-primary" />
-                <span className="text-[11px] font-semibold text-muted-foreground">Objective</span>
+              <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Target className="w-3 h-3 text-primary" />
+                  <span className="text-[11px] font-semibold text-muted-foreground">Objective</span>
+                </div>
+                <VoiceRecorder
+                  onTranscript={(t) => setObjective((prev) => prev ? prev + " " + t : t)}
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground"
+                  label=""
+                />
               </div>
               <div className="p-3">
                 <textarea
@@ -562,14 +642,37 @@ function InterviewView({
             {/* Focus input */}
             <div className="space-y-1.5 text-left">
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Focus (optional)</p>
-              <input
-                type="text"
-                value={focusText}
-                onChange={(e) => setFocusText(e.target.value)}
-                placeholder="Push me on pricing strategy"
-                className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-xl outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50 font-serif"
-              />
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={focusText}
+                  onChange={(e) => setFocusText(e.target.value)}
+                  placeholder="Push me on pricing strategy"
+                  className="flex-1 px-3 py-2.5 text-sm bg-muted/30 border rounded-xl outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50 font-serif"
+                />
+                <VoiceRecorder
+                  onTranscript={(t) => setFocusText((prev) => prev ? prev + " " + t : t)}
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0 text-muted-foreground"
+                  label=""
+                />
+              </div>
             </div>
+
+            {/* Voice Conversation toggle */}
+            <button
+              onClick={() => setTtsEnabled(!ttsEnabled)}
+              className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                ttsEnabled
+                  ? "border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                  : "border-border bg-card text-muted-foreground"
+              }`}
+            >
+              {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              Voice Conversation
+              <span className="text-[10px] opacity-70">{ttsEnabled ? "on" : "off"}</span>
+            </button>
 
             <Button
               size="lg"
@@ -593,6 +696,22 @@ function InterviewView({
       {/* Interview header strip */}
       <div className="shrink-0 px-4 py-2 border-b bg-muted/20 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
+          {/* TTS toggle */}
+          <button
+            onClick={() => {
+              const next = !ttsEnabled;
+              setTtsEnabled(next);
+              if (!next && ttsAudioRef.current) {
+                ttsAudioRef.current.pause();
+                setIsSpeaking(false);
+              }
+            }}
+            className={`shrink-0 p-1 rounded-full transition-colors ${
+              ttsEnabled ? "bg-violet-500/20 text-violet-500" : "text-muted-foreground"
+            }`}
+          >
+            {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
           {/* Stance pill — tap to cycle */}
           <button
             onClick={cycleStance}
@@ -762,7 +881,13 @@ function InterviewView({
           {isRecordingAnswer && (
             <div className="flex items-center justify-center gap-1.5 text-xs text-primary animate-pulse mt-2">
               <Mic className="w-3 h-3" />
-              Listening — speak your answer...
+              Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo End Message&quot; to submit</span>
+            </div>
+          )}
+          {isSpeaking && (
+            <div className="flex items-center justify-center gap-1.5 text-xs text-violet-500 animate-pulse mt-2">
+              <Volume2 className="w-3 h-3" />
+              Speaking question...
             </div>
           )}
         </div>
