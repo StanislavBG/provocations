@@ -42,6 +42,7 @@ interface NotebookRightPanelProps {
     negativePrompt?: string;
   }) => void;
   isPainting?: boolean;
+  pinnedDocContents?: Record<number, { title: string; content: string }>;
 
   // Interview tab
   appType?: string;
@@ -66,6 +67,7 @@ export function NotebookRightPanel({
   documentText,
   onPaintImage,
   isPainting = false,
+  pinnedDocContents,
   appType,
 }: NotebookRightPanelProps) {
   const [activeTab, setActiveTab] = useState<RightPanelTab>("research");
@@ -196,6 +198,7 @@ export function NotebookRightPanel({
           objective={objective}
           onPaintImage={onPaintImage}
           isPainting={isPainting}
+          pinnedDocContents={pinnedDocContents}
         />
       </div>
     </div>
