@@ -18,6 +18,37 @@ import type {
 } from "@shared/schema";
 import { EVENT_CATEGORIES } from "@shared/schema";
 
+// ── LLM Usage aggregate types ──
+
+export interface LlmUsageAggregates {
+  totalCalls: number;
+  totalCostMicrodollars: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalDurationMs: number;
+  errorCount: number;
+  byModel: { model: string; provider: string; calls: number; costMicrodollars: number; inputTokens: number; outputTokens: number }[];
+  byTaskType: { taskType: string; calls: number; costMicrodollars: number; avgDurationMs: number }[];
+  byAppType: { appType: string; calls: number; costMicrodollars: number }[];
+}
+
+export interface LlmUserUsageRow {
+  userId: string;
+  totalCalls: number;
+  totalCostMicrodollars: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  lastCallAt: string;
+}
+
+export interface LlmTimelineRow {
+  date: string;
+  calls: number;
+  costMicrodollars: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 interface StoredDocument {
   id: number;
   userId: string;
@@ -83,6 +114,9 @@ export interface IStorage {
   insertLlmCallLog(data: InsertLlmCallLog): Promise<StoredLlmCallLog>;
   listLlmCallLogs(opts: { userId?: string; limit?: number; offset?: number }): Promise<StoredLlmCallLog[]>;
   countLlmCallLogs(opts: { userId?: string }): Promise<number>;
+  getLlmUsageAggregates(opts?: { userId?: string; since?: Date }): Promise<LlmUsageAggregates>;
+  getLlmUsageByUser(opts?: { since?: Date; limit?: number }): Promise<LlmUserUsageRow[]>;
+  getLlmUsageTimeline(opts?: { userId?: string; days?: number }): Promise<LlmTimelineRow[]>;
   // Persona overrides
   getPersonaOverride(personaId: string): Promise<StoredPersonaOverride | null>;
   getAllPersonaOverrides(): Promise<StoredPersonaOverride[]>;
@@ -619,6 +653,107 @@ export class DatabaseStorage implements IStorage {
     const conditions = opts.userId ? eq(llmCallLogs.userId, opts.userId) : undefined;
     const [result] = await db.select({ count: count() }).from(llmCallLogs).where(conditions);
     return result?.count ?? 0;
+  }
+
+  async getLlmUsageAggregates(opts?: { userId?: string; since?: Date }): Promise<LlmUsageAggregates> {
+    const conditions: any[] = [];
+    if (opts?.userId) conditions.push(eq(llmCallLogs.userId, opts.userId));
+    if (opts?.since) conditions.push(sql`${llmCallLogs.createdAt} >= ${opts.since}`);
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Totals
+    const [totals] = await db.select({
+      totalCalls: count(),
+      totalCost: sql<number>`COALESCE(SUM(${llmCallLogs.estimatedCostMicrodollars}), 0)`,
+      totalInput: sql<number>`COALESCE(SUM(${llmCallLogs.contextTokensEstimate}), 0)`,
+      totalOutput: sql<number>`COALESCE(SUM(${llmCallLogs.responseTokensEstimate}), 0)`,
+      totalDuration: sql<number>`COALESCE(SUM(${llmCallLogs.durationMs}), 0)`,
+      errorCount: sql<number>`COUNT(*) FILTER (WHERE ${llmCallLogs.status} = 'error')`,
+    }).from(llmCallLogs).where(where);
+
+    // By model
+    const byModel = await db.select({
+      model: llmCallLogs.model,
+      provider: llmCallLogs.provider,
+      calls: count(),
+      costMicrodollars: sql<number>`COALESCE(SUM(${llmCallLogs.estimatedCostMicrodollars}), 0)`,
+      inputTokens: sql<number>`COALESCE(SUM(${llmCallLogs.contextTokensEstimate}), 0)`,
+      outputTokens: sql<number>`COALESCE(SUM(${llmCallLogs.responseTokensEstimate}), 0)`,
+    }).from(llmCallLogs).where(where).groupBy(llmCallLogs.model, llmCallLogs.provider).orderBy(sql`COUNT(*) DESC`);
+
+    // By task type
+    const byTaskType = await db.select({
+      taskType: llmCallLogs.taskType,
+      calls: count(),
+      costMicrodollars: sql<number>`COALESCE(SUM(${llmCallLogs.estimatedCostMicrodollars}), 0)`,
+      avgDurationMs: sql<number>`COALESCE(AVG(${llmCallLogs.durationMs}), 0)`,
+    }).from(llmCallLogs).where(where).groupBy(llmCallLogs.taskType).orderBy(sql`COUNT(*) DESC`);
+
+    // By app type
+    const byAppType = await db.select({
+      appType: sql<string>`COALESCE(${llmCallLogs.appType}, 'unknown')`,
+      calls: count(),
+      costMicrodollars: sql<number>`COALESCE(SUM(${llmCallLogs.estimatedCostMicrodollars}), 0)`,
+    }).from(llmCallLogs).where(where).groupBy(llmCallLogs.appType).orderBy(sql`COUNT(*) DESC`);
+
+    return {
+      totalCalls: Number(totals.totalCalls) || 0,
+      totalCostMicrodollars: Number(totals.totalCost) || 0,
+      totalInputTokens: Number(totals.totalInput) || 0,
+      totalOutputTokens: Number(totals.totalOutput) || 0,
+      totalDurationMs: Number(totals.totalDuration) || 0,
+      errorCount: Number(totals.errorCount) || 0,
+      byModel: byModel.map(r => ({ model: r.model, provider: r.provider, calls: Number(r.calls), costMicrodollars: Number(r.costMicrodollars), inputTokens: Number(r.inputTokens), outputTokens: Number(r.outputTokens) })),
+      byTaskType: byTaskType.map(r => ({ taskType: r.taskType, calls: Number(r.calls), costMicrodollars: Number(r.costMicrodollars), avgDurationMs: Math.round(Number(r.avgDurationMs)) })),
+      byAppType: byAppType.map(r => ({ appType: r.appType, calls: Number(r.calls), costMicrodollars: Number(r.costMicrodollars) })),
+    };
+  }
+
+  async getLlmUsageByUser(opts?: { since?: Date; limit?: number }): Promise<LlmUserUsageRow[]> {
+    const conditions: any[] = [];
+    if (opts?.since) conditions.push(sql`${llmCallLogs.createdAt} >= ${opts.since}`);
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const rows = await db.select({
+      userId: llmCallLogs.userId,
+      totalCalls: count(),
+      totalCost: sql<number>`COALESCE(SUM(${llmCallLogs.estimatedCostMicrodollars}), 0)`,
+      totalInput: sql<number>`COALESCE(SUM(${llmCallLogs.contextTokensEstimate}), 0)`,
+      totalOutput: sql<number>`COALESCE(SUM(${llmCallLogs.responseTokensEstimate}), 0)`,
+      lastCallAt: sql<string>`MAX(${llmCallLogs.createdAt})`,
+    }).from(llmCallLogs).where(where).groupBy(llmCallLogs.userId).orderBy(sql`SUM(${llmCallLogs.estimatedCostMicrodollars}) DESC`).limit(opts?.limit ?? 100);
+
+    return rows.map(r => ({
+      userId: r.userId,
+      totalCalls: Number(r.totalCalls),
+      totalCostMicrodollars: Number(r.totalCost),
+      totalInputTokens: Number(r.totalInput),
+      totalOutputTokens: Number(r.totalOutput),
+      lastCallAt: String(r.lastCallAt),
+    }));
+  }
+
+  async getLlmUsageTimeline(opts?: { userId?: string; days?: number }): Promise<LlmTimelineRow[]> {
+    const days = opts?.days ?? 30;
+    const conditions: any[] = [sql`${llmCallLogs.createdAt} >= NOW() - INTERVAL '${sql.raw(String(days))} days'`];
+    if (opts?.userId) conditions.push(eq(llmCallLogs.userId, opts.userId));
+    const where = and(...conditions);
+
+    const rows = await db.select({
+      date: sql<string>`DATE(${llmCallLogs.createdAt})`,
+      calls: count(),
+      costMicrodollars: sql<number>`COALESCE(SUM(${llmCallLogs.estimatedCostMicrodollars}), 0)`,
+      inputTokens: sql<number>`COALESCE(SUM(${llmCallLogs.contextTokensEstimate}), 0)`,
+      outputTokens: sql<number>`COALESCE(SUM(${llmCallLogs.responseTokensEstimate}), 0)`,
+    }).from(llmCallLogs).where(where).groupBy(sql`DATE(${llmCallLogs.createdAt})`).orderBy(sql`DATE(${llmCallLogs.createdAt})`);
+
+    return rows.map(r => ({
+      date: String(r.date),
+      calls: Number(r.calls),
+      costMicrodollars: Number(r.costMicrodollars),
+      inputTokens: Number(r.inputTokens),
+      outputTokens: Number(r.outputTokens),
+    }));
   }
 
   // ── Tracking Events ──
