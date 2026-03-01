@@ -2303,7 +2303,7 @@ Output only valid JSON, no markdown.`;
       }
 
       const response = await ai.models.generateImages({
-        model: "imagen-3.0-generate-002",
+        model: "imagen-4.0-generate-001",
         prompt: fullPrompt,
         config: {
           numberOfImages: Math.min(Math.max(numberOfImages || 1, 1), 4),
@@ -2371,7 +2371,7 @@ Output only valid JSON, no markdown.`;
       const ai = new GoogleGenAI({ apiKey: geminiKey });
 
       const response = await ai.models.generateImages({
-        model: "imagen-3.0-generate-002",
+        model: "imagen-4.0-generate-001",
         prompt: imagePrompt,
         config: {
           numberOfImages: 1,
