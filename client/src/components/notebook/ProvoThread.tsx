@@ -15,7 +15,6 @@ import {
   Lightbulb,
   MessageSquare,
   Check,
-  BookmarkPlus,
   Quote,
   Send,
   X,
@@ -178,7 +177,7 @@ export function ProvoThread({
     [adviceStates, onCaptureToContext, toast],
   );
 
-  // ── Submit response to a challenge ──
+  // ── Submit response to a challenge (auto-sends to Notes) ──
   const handleSubmitResponse = useCallback(
     (challengeId: string) => {
       const text = responseText.trim();
@@ -186,25 +185,17 @@ export function ProvoThread({
       setResponses((prev) => ({ ...prev, [challengeId]: text }));
       setResponseText("");
       setRespondingTo(null);
-    },
-    [responseText],
-  );
 
-  // ── Send user response to transcript ──
-  const handleResponseToTranscript = useCallback(
-    (challenge: Challenge) => {
-      const text = responses[challenge.id];
-      if (!text) return;
-      onCaptureToContext(
-        `**Response to ${challenge.persona.label} — "${challenge.title}"**\n\n${text}`,
-        `Response: ${challenge.title}`,
-      );
-      toast({
-        title: "Sent to Notes",
-        description: "Your response added to transcript",
-      });
+      // Auto-add to Notes
+      const challenge = challenges.find((c) => c.id === challengeId);
+      if (challenge) {
+        onCaptureToContext(
+          `**Response to ${challenge.persona.label} — "${challenge.title}"**\n\n${text}`,
+          `Response: ${challenge.title}`,
+        );
+      }
     },
-    [responses, onCaptureToContext, toast],
+    [responseText, challenges, onCaptureToContext],
   );
 
   const handleDismiss = useCallback((challengeId: string) => {
@@ -314,9 +305,6 @@ export function ProvoThread({
                 }
                 onRequestAdvice={() => handleRequestAdvice(challenge)}
                 onAcceptAdvice={() => handleAcceptAdvice(challenge)}
-                onResponseToTranscript={() =>
-                  handleResponseToTranscript(challenge)
-                }
                 onDismiss={() => handleDismiss(challenge.id)}
               />
             ))}
@@ -342,7 +330,6 @@ interface SmartBubbleProps {
   onSubmitResponse: () => void;
   onRequestAdvice: () => void;
   onAcceptAdvice: () => void;
-  onResponseToTranscript: () => void;
   onDismiss: () => void;
 }
 
@@ -357,7 +344,6 @@ function SmartBubble({
   onSubmitResponse,
   onRequestAdvice,
   onAcceptAdvice,
-  onResponseToTranscript,
   onDismiss,
 }: SmartBubbleProps) {
   const persona = challenge.persona;
@@ -493,21 +479,10 @@ function SmartBubble({
       {response && (
         <div className="px-3 pb-2 border-t">
           <div className="mt-2 bg-primary/5 rounded-md px-2.5 py-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[9px] font-semibold text-primary/70 uppercase tracking-wider">
-                Your response
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 text-[9px] gap-1 text-muted-foreground hover:text-primary"
-                onClick={onResponseToTranscript}
-              >
-                <BookmarkPlus className="w-2.5 h-2.5" />
-                Notes
-              </Button>
-            </div>
-            <p className="text-xs leading-relaxed">{response}</p>
+            <span className="text-[9px] font-semibold text-primary/70 uppercase tracking-wider">
+              Your response
+            </span>
+            <p className="text-xs leading-relaxed mt-1">{response}</p>
           </div>
         </div>
       )}

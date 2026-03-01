@@ -15,17 +15,6 @@ import { useRole } from "@/hooks/use-role";
 import { usePanelLayout } from "@/hooks/use-panel-layout";
 import { useRoute } from "wouter";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
 import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
@@ -72,7 +61,6 @@ export default function NotebookWorkspace() {
   // ── Layout state ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isChartActive, setIsChartActive] = useState(false);
-  const [showNewConfirm, setShowNewConfirm] = useState(false);
 
   // ── Painter state ──
   const [isPainting, setIsPainting] = useState(false);
@@ -208,6 +196,9 @@ export default function NotebookWorkspace() {
       };
       setEditHistory((prev) => [...prev.slice(-9), historyEntry]);
       trackEvent("write_executed", { metadata: { instructionType: data.instructionType || "general" } });
+
+      // Clear notes — they've been integrated into the document
+      setCapturedContext([]);
 
       toast({
         title: "Document updated",
@@ -419,6 +410,24 @@ export default function NotebookWorkspace() {
     }
   }, [document.rawText, objective, activeDocumentId, pinnedDocIds, toast]);
 
+  // ── Save an image to the Context Store ──
+  const handleSaveImageToContext = useCallback(async (imageUrl: string, prompt: string) => {
+    setIsSavingToContext(true);
+    try {
+      const title = prompt
+        ? prompt.slice(0, 120)
+        : `Image ${new Date().toLocaleDateString()}`;
+      const content = `![${title}](${imageUrl})\n\n${prompt ? `**Prompt:** ${prompt}` : ""}`;
+      await apiRequest("POST", "/api/documents", { title, content });
+      trackEvent("document_saved");
+      toast({ title: "Saved to Context Store", description: title });
+    } catch {
+      toast({ title: "Save failed", description: "Could not save image.", variant: "destructive" });
+    } finally {
+      setIsSavingToContext(false);
+    }
+  }, [toast]);
+
   // ── Evolve document via writer (multi-config) ──
   const handleEvolve = useCallback(
     (configurations: WriterConfig[]) => {
@@ -586,15 +595,13 @@ export default function NotebookWorkspace() {
     setActiveImageTabId(isActive ? tabId : null);
   }, []);
 
-  // ── Open a context document for preview ──
-  const handleOpenDoc = useCallback(async (id: number, title: string) => {
-    // Check if already in pinned cache
+  // ── Preview a context document (single-click) ──
+  const handlePreviewDoc = useCallback(async (id: number, title: string) => {
     const cached = pinnedDocContents[id];
     if (cached) {
       setPreviewDoc({ title: cached.title, content: cached.content, docId: id });
       return;
     }
-    // Fetch from server
     try {
       const res = await apiRequest("GET", `/api/documents/${id}`);
       const data = await res.json();
@@ -604,26 +611,27 @@ export default function NotebookWorkspace() {
     }
   }, [pinnedDocContents, toast]);
 
-  // ── New workspace ──
-  const handleNewSession = useCallback(() => {
-    if (document.rawText || objective) {
-      setShowNewConfirm(true);
-    } else {
-      // Already empty — nothing to confirm
+  // ── Open a context document directly into the editor (double-click) ──
+  const handleOpenDoc = useCallback(async (id: number, title: string) => {
+    // Check if already in pinned cache
+    const cached = pinnedDocContents[id];
+    if (cached) {
+      setDocument({ id: generateId("doc"), rawText: cached.content });
+      setObjective(cached.title);
+      setActiveDocumentId(id);
+      return;
     }
-  }, [document.rawText, objective]);
-
-  const confirmNewSession = useCallback(() => {
-    setDocument({ id: generateId("doc"), rawText: "" });
-    setObjective("");
-    setActiveDocumentId(null);
-    setSelectedTemplateId(null);
-    setVersions([]);
-    setEditHistory([]);
-    setDiscussionMessages([]);
-    setCapturedContext([]);
-    setShowNewConfirm(false);
-  }, []);
+    // Fetch from server
+    try {
+      const res = await apiRequest("GET", `/api/documents/${id}`);
+      const data = await res.json();
+      setDocument({ id: generateId("doc"), rawText: data.content || "" });
+      setObjective(data.title || title);
+      setActiveDocumentId(id);
+    } catch {
+      toast({ title: "Failed to load document", variant: "destructive" });
+    }
+  }, [pinnedDocContents, toast]);
 
   // ── Render ──
 
@@ -636,7 +644,6 @@ export default function NotebookWorkspace() {
     <div className="h-screen flex flex-col">
       {/* Top bar */}
       <NotebookTopBar
-        onNew={handleNewSession}
         isAdmin={isAdmin}
         versionCount={versions.length}
         panelLayout={panelLayout}
@@ -665,6 +672,7 @@ export default function NotebookWorkspace() {
                     pinnedDocIds={pinnedDocIds}
                     onPinDoc={handlePinDoc}
                     onUnpinDoc={handleUnpinDoc}
+                    onPreviewDoc={handlePreviewDoc}
                     onOpenDoc={handleOpenDoc}
                     chatSessionContext={{
                       objective,
@@ -676,6 +684,25 @@ export default function NotebookWorkspace() {
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
                     visibleTabs={panelLayout.leftTabs}
+                    // Props for right-panel tabs that may be moved here
+                    activePersonas={activePersonas}
+                    onTogglePersona={handleTogglePersona}
+                    hasDocument={!!document.rawText.trim() || Object.keys(pinnedDocContents).length > 0}
+                    objective={objective}
+                    onCaptureToContext={handleCaptureToContext}
+                    capturedContext={capturedContext}
+                    onRemoveCapturedItem={handleRemoveCapturedItem}
+                    onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
+                    isMerging={writeMutation.isPending}
+                    onEvolve={handleEvolve}
+                    isEvolving={writeMutation.isPending}
+                    sessionNotes={sessionNotes}
+                    editHistory={editHistory}
+                    documentText={document.rawText}
+                    onPaintImage={handlePaintImage}
+                    isPainting={isPainting}
+                    pinnedDocContents={pinnedDocContents}
+                    appType={validAppType}
                   />
                 </ResizablePanel>
                 <ResizableHandle withHandle />
@@ -703,9 +730,11 @@ export default function NotebookWorkspace() {
                     setDocument({ id: generateId("doc"), rawText: content });
                     setObjective(title);
                     setActiveDocumentId(docId ?? null);
+                    setPreviewDoc(null);
                   }}
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}
+                  onSaveImageToContext={handleSaveImageToContext}
                   isSaving={isSavingToContext}
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
@@ -744,31 +773,26 @@ export default function NotebookWorkspace() {
                     pinnedDocContents={pinnedDocContents}
                     appType={validAppType}
                     visibleTabs={panelLayout.rightTabs}
+                    // Props for left-panel tabs that may be moved here
+                    pinnedDocIds={pinnedDocIds}
+                    onPinDoc={handlePinDoc}
+                    onUnpinDoc={handleUnpinDoc}
+                    onPreviewDoc={handlePreviewDoc}
+                    onOpenDoc={handleOpenDoc}
+                    onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    chatSessionContext={{
+                      objective,
+                      templateName: selectedTemplateName ?? null,
+                      documentExcerpt: document.rawText.slice(0, 200),
+                    } satisfies ChatSessionContext}
+                    activeChatConversationId={activeChatConversationId}
+                    onActiveChatConversationChange={setActiveChatConversationId}
                   />
                 </ResizablePanel>
               </>
             )}
         </ResizablePanelGroup>
       </div>
-
-      {/* New workspace confirmation */}
-      <AlertDialog open={showNewConfirm} onOpenChange={setShowNewConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Start a new workspace?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will clear your current document, active context, and chat
-              history. Make sure to save first if you want to keep your work.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmNewSession}>
-              Start New
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
     </div>
   );

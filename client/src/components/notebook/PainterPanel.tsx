@@ -275,10 +275,16 @@ export function PainterPanel({
   const handlePaint = useCallback(() => {
     const configs = buildConfigs();
     // Fall back through: explicit painter objective → workspace objective → document summary
+    const contextSummary = pinnedDocs.length > 0
+      ? pinnedDocs.map((d) => `[${d.title}] ${d.content.slice(0, 300)}`).join("\n")
+      : "";
     const effectiveObjective = painterObjective.trim()
       || objective
       || (documentText.trim()
         ? `Create a visual representation of: ${documentText.slice(0, 300)}`
+        : "")
+      || (contextSummary
+        ? `Create a visual representation based on this context:\n${contextSummary}`
         : "");
     onPaintImage({
       painterConfigs: configs,
@@ -584,7 +590,7 @@ export function PainterPanel({
         >
           <Button
             onClick={handlePaint}
-            disabled={isPainting || (!painterObjective.trim() && !objective.trim() && !documentText.trim())}
+            disabled={isPainting || (!painterObjective.trim() && !objective.trim() && !documentText.trim() && pinnedDocs.length === 0)}
             className={`w-full text-white gap-1.5 text-xs ${
               isArt
                 ? "bg-rose-600 hover:bg-rose-700"
