@@ -80,18 +80,31 @@ export function PanelLayoutDialog({
   // ── Drag state ──
   const [dragItem, setDragItem] = useState<{ id: string; from: "left" | "right" } | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<{ panel: "left" | "right"; index: number } | null>(null);
+  // Ref to track current target without triggering re-renders on every dragover event
+  const dragOverRef = useRef<{ panel: "left" | "right"; index: number } | null>(null);
 
-  const handleDragStart = useCallback((id: string, from: "left" | "right") => {
+  const handleDragStart = useCallback((e: React.DragEvent, id: string, from: "left" | "right") => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
     setDragItem({ id, from });
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, panel: "left" | "right", index: number) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
+    // Only update React state if the target actually changed — prevents re-render storm
+    if (dragOverRef.current?.panel === panel && dragOverRef.current?.index === index) return;
+    dragOverRef.current = { panel, index };
     setDragOverTarget({ panel, index });
   }, []);
 
-  const handleDragLeave = useCallback(() => {
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if leaving the panel container (not moving between children)
+    const relatedTarget = e.relatedTarget as HTMLElement | null;
+    const currentTarget = e.currentTarget as HTMLElement;
+    if (relatedTarget && currentTarget.contains(relatedTarget)) return;
+    dragOverRef.current = null;
     setDragOverTarget(null);
   }, []);
 
@@ -109,40 +122,32 @@ export function PanelLayoutDialog({
 
     if (from === targetPanel) {
       // Reorder within same panel
-      // Adjust target index if item was above the target in the same list
       const adjustedIndex = removeIdx < targetIndex ? targetIndex - 1 : targetIndex;
       sourceList.splice(adjustedIndex, 0, id);
       setSource(sourceList);
     } else {
       // Move across panels
       setSource(sourceList);
-      const targetList = targetPanel === "left" ? [...leftTabs] : [...rightTabs];
-      // If we just removed from targetList's sibling, the state may not reflect it yet
-      // so we work with the current state
-      if (from === targetPanel) {
-        // Already handled above
-      } else {
-        // Remove from source was already done above, now insert into target
-        const cleanTarget = targetPanel === "left"
-          ? leftTabs.filter((t) => t !== id)
-          : rightTabs.filter((t) => t !== id);
-        cleanTarget.splice(targetIndex, 0, id);
-        if (targetPanel === "left") setLeftTabs(cleanTarget);
-        else setRightTabs(cleanTarget);
-      }
+      const cleanTarget = targetPanel === "left"
+        ? leftTabs.filter((t) => t !== id)
+        : rightTabs.filter((t) => t !== id);
+      cleanTarget.splice(targetIndex, 0, id);
+      if (targetPanel === "left") setLeftTabs(cleanTarget);
+      else setRightTabs(cleanTarget);
     }
 
     setDragItem(null);
     setDragOverTarget(null);
+    dragOverRef.current = null;
   }, [dragItem, leftTabs, rightTabs]);
 
   const handleDragEnd = useCallback(() => {
     setDragItem(null);
     setDragOverTarget(null);
+    dragOverRef.current = null;
   }, []);
 
   const moveTab = useCallback((id: string, from: "left" | "right") => {
-    const target = from === "left" ? "right" : "left";
     if (from === "left") {
       setLeftTabs((prev) => prev.filter((t) => t !== id));
       setRightTabs((prev) => [...prev, id]);
@@ -166,48 +171,47 @@ export function PanelLayoutDialog({
     const def = getTabDef(id);
     const Icon = getTabIcon(id);
     const isDragging = dragItem?.id === id;
-    const isDropTarget = dragOverTarget?.panel === panel && dragOverTarget?.index === index;
+    const showDropAbove = dragOverTarget?.panel === panel && dragOverTarget?.index === index && dragItem && dragItem.id !== id;
 
     return (
-      <div key={id}>
-        {isDropTarget && (
-          <div className="h-0.5 bg-primary rounded-full mx-2 -my-0.5 transition-all" />
+      <div
+        key={id}
+        draggable
+        onDragStart={(e) => handleDragStart(e, id, panel)}
+        onDragOver={(e) => handleDragOver(e, panel, index)}
+        onDrop={(e) => handleDrop(e, panel, index)}
+        onDragEnd={handleDragEnd}
+        className={`relative flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing group select-none ${
+          isDragging
+            ? "opacity-30 scale-95"
+            : "hover:bg-muted/60"
+        }`}
+      >
+        {/* Drop indicator — uses border-top instead of inserting a DOM element */}
+        {showDropAbove && (
+          <div className="absolute top-0 left-2 right-2 h-0.5 bg-primary rounded-full -translate-y-1/2 pointer-events-none" />
         )}
-        <div
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", id);
-            handleDragStart(id, panel);
+        <GripVertical className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+        {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+        <span className="text-xs font-medium flex-1">{def?.label || id}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            moveTab(id, panel);
           }}
-          onDragOver={(e) => handleDragOver(e, panel, index)}
-          onDragEnd={handleDragEnd}
-          className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing transition-all group ${
-            isDragging
-              ? "opacity-30 scale-95"
-              : "hover:bg-muted/60"
-          }`}
+          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted transition-opacity"
+          title={`Move to ${panel === "left" ? "right" : "left"} panel`}
         >
-          <GripVertical className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-          {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-          <span className="text-xs font-medium flex-1">{def?.label || id}</span>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              moveTab(id, panel);
-            }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted transition-all"
-            title={`Move to ${panel === "left" ? "right" : "left"} panel`}
-          >
-            <ArrowLeftRight className="w-3 h-3 text-muted-foreground" />
-          </button>
-        </div>
+          <ArrowLeftRight className="w-3 h-3 text-muted-foreground" />
+        </button>
       </div>
     );
   };
 
   const renderPanel = (tabs: string[], panel: "left" | "right", label: string) => {
     const isLeft = panel === "left";
+    const showDropAtEnd = dragOverTarget?.panel === panel && dragOverTarget?.index === tabs.length && dragItem;
+
     return (
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 px-2 py-1.5 mb-1">
@@ -224,11 +228,13 @@ export function PanelLayoutDialog({
           </span>
         </div>
         <div
-          className="space-y-0.5 rounded-lg border border-dashed border-muted-foreground/20 bg-muted/10 p-1 min-h-[120px]"
+          className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/10 p-1 min-h-[120px]"
           onDragOver={(e) => {
             e.preventDefault();
-            if (dragOverTarget?.panel !== panel || dragOverTarget?.index !== tabs.length) {
-              setDragOverTarget({ panel, index: tabs.length });
+            // Only handle if not over a specific tab item (those handle themselves)
+            const target = e.target as HTMLElement;
+            if (target === e.currentTarget || target.closest("[data-panel-drop-zone]")) {
+              handleDragOver(e, panel, tabs.length);
             }
           }}
           onDragLeave={handleDragLeave}
@@ -236,12 +242,16 @@ export function PanelLayoutDialog({
         >
           {tabs.map((id, idx) => renderTabItem(id, panel, idx))}
           {tabs.length === 0 && (
-            <div className="flex items-center justify-center h-[100px] text-[10px] text-muted-foreground/50">
+            <div
+              data-panel-drop-zone
+              className="flex items-center justify-center h-[100px] text-[10px] text-muted-foreground/50"
+            >
               Drag tabs here
             </div>
           )}
-          {dragOverTarget?.panel === panel && dragOverTarget?.index === tabs.length && dragItem && (
-            <div className="h-0.5 bg-primary rounded-full mx-2 my-0.5 transition-all" />
+          {/* Drop indicator at end of list */}
+          {showDropAtEnd && (
+            <div className="h-0.5 bg-primary rounded-full mx-2 my-1 pointer-events-none" />
           )}
         </div>
       </div>
