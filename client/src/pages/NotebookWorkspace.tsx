@@ -15,17 +15,6 @@ import { useRole } from "@/hooks/use-role";
 import { usePanelLayout } from "@/hooks/use-panel-layout";
 import { useRoute } from "wouter";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
 import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
@@ -72,7 +61,6 @@ export default function NotebookWorkspace() {
   // ── Layout state ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isChartActive, setIsChartActive] = useState(false);
-  const [showNewConfirm, setShowNewConfirm] = useState(false);
 
   // ── Painter state ──
   const [isPainting, setIsPainting] = useState(false);
@@ -586,44 +574,27 @@ export default function NotebookWorkspace() {
     setActiveImageTabId(isActive ? tabId : null);
   }, []);
 
-  // ── Open a context document for preview ──
+  // ── Open a context document directly into the editor ──
   const handleOpenDoc = useCallback(async (id: number, title: string) => {
     // Check if already in pinned cache
     const cached = pinnedDocContents[id];
     if (cached) {
-      setPreviewDoc({ title: cached.title, content: cached.content, docId: id });
+      setDocument({ id: generateId("doc"), rawText: cached.content });
+      setObjective(cached.title);
+      setActiveDocumentId(id);
       return;
     }
     // Fetch from server
     try {
       const res = await apiRequest("GET", `/api/documents/${id}`);
       const data = await res.json();
-      setPreviewDoc({ title: data.title || title, content: data.content || "", docId: id });
+      setDocument({ id: generateId("doc"), rawText: data.content || "" });
+      setObjective(data.title || title);
+      setActiveDocumentId(id);
     } catch {
       toast({ title: "Failed to load document", variant: "destructive" });
     }
   }, [pinnedDocContents, toast]);
-
-  // ── New workspace ──
-  const handleNewSession = useCallback(() => {
-    if (document.rawText || objective) {
-      setShowNewConfirm(true);
-    } else {
-      // Already empty — nothing to confirm
-    }
-  }, [document.rawText, objective]);
-
-  const confirmNewSession = useCallback(() => {
-    setDocument({ id: generateId("doc"), rawText: "" });
-    setObjective("");
-    setActiveDocumentId(null);
-    setSelectedTemplateId(null);
-    setVersions([]);
-    setEditHistory([]);
-    setDiscussionMessages([]);
-    setCapturedContext([]);
-    setShowNewConfirm(false);
-  }, []);
 
   // ── Render ──
 
@@ -636,7 +607,6 @@ export default function NotebookWorkspace() {
     <div className="h-screen flex flex-col">
       {/* Top bar */}
       <NotebookTopBar
-        onNew={handleNewSession}
         isAdmin={isAdmin}
         versionCount={versions.length}
         panelLayout={panelLayout}
@@ -750,25 +720,6 @@ export default function NotebookWorkspace() {
             )}
         </ResizablePanelGroup>
       </div>
-
-      {/* New workspace confirmation */}
-      <AlertDialog open={showNewConfirm} onOpenChange={setShowNewConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Start a new workspace?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will clear your current document, active context, and chat
-              history. Make sure to save first if you want to keep your work.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmNewSession}>
-              Start New
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
     </div>
   );

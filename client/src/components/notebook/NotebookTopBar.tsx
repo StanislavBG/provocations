@@ -11,7 +11,6 @@ import { PanelLayoutDialog } from "./PanelLayoutDialog";
 import { UserButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import {
-  FilePlus2,
   GitCompare,
   Shield,
   LayoutDashboard,
@@ -20,7 +19,6 @@ import { ProvoIcon } from "@/components/ProvoIcon";
 import type { PanelLayoutConfig } from "@/hooks/use-panel-layout";
 
 interface NotebookTopBarProps {
-  onNew: () => void;
   isAdmin: boolean;
   /** Version count for diff view toggle */
   versionCount?: number;
@@ -32,7 +30,6 @@ interface NotebookTopBarProps {
 }
 
 export function NotebookTopBar({
-  onNew,
   isAdmin,
   versionCount = 0,
   showVersions,
@@ -56,22 +53,6 @@ export function NotebookTopBar({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5">
-          {/* New */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onNew}
-                className="gap-1.5 h-7"
-              >
-                <FilePlus2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline text-xs">New</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Start new workspace</TooltipContent>
-          </Tooltip>
-
           {/* Versions */}
           {versionCount > 0 && onToggleVersions && (
             <Button
