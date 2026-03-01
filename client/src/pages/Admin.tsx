@@ -28,6 +28,11 @@ import {
   Unlock,
   Workflow,
   RotateCcw,
+  Cpu,
+  DollarSign,
+  Zap,
+  Hash,
+  AlertCircle,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useCallback } from "react";
@@ -40,6 +45,7 @@ import type {
 } from "@shared/schema";
 import { getAllPersonas, getPersonasByDomain } from "@shared/personas";
 import { buildAppLaunchUrl } from "@/lib/appLaunchParams";
+import { formatTokens, formatCost, formatDuration, getProviderColor } from "@/lib/llm-verbose";
 
 export default function Admin() {
   const { isAdmin, isLoading: roleLoading } = useRole();
@@ -120,10 +126,14 @@ export default function Admin() {
 
         {/* Tabs */}
         <Tabs defaultValue="dashboard">
-          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+          <TabsList className="grid w-full grid-cols-5 max-w-3xl">
             <TabsTrigger value="dashboard" className="gap-2">
               <BarChart3 className="w-4 h-4" />
               Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="llm-trace" className="gap-2">
+              <Cpu className="w-4 h-4" />
+              LLM Trace
             </TabsTrigger>
             <TabsTrigger value="user-metrics" className="gap-2">
               <Users className="w-4 h-4" />
@@ -262,7 +272,14 @@ export default function Admin() {
           </TabsContent>
 
           {/* ════════════════════════════════════════ */}
-          {/* Tab 2: User Metrics Matrix               */}
+          {/* Tab 2: LLM Trace                          */}
+          {/* ════════════════════════════════════════ */}
+          <TabsContent value="llm-trace" className="space-y-6 mt-6">
+            <LlmTraceTab />
+          </TabsContent>
+
+          {/* ════════════════════════════════════════ */}
+          {/* Tab 3: User Metrics Matrix               */}
           {/* ════════════════════════════════════════ */}
           <TabsContent value="user-metrics" className="space-y-6 mt-6">
             <Card>
@@ -1189,6 +1206,393 @@ function AgentPromptList() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── LLM Trace Tab ──
+
+interface LlmUsageAggregates {
+  totalCalls: number;
+  totalCostMicrodollars: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalDurationMs: number;
+  errorCount: number;
+  byModel: { model: string; provider: string; calls: number; costMicrodollars: number; inputTokens: number; outputTokens: number }[];
+  byTaskType: { taskType: string; calls: number; costMicrodollars: number; avgDurationMs: number }[];
+  byAppType: { appType: string; calls: number; costMicrodollars: number }[];
+}
+
+interface LlmUserUsageRow {
+  userId: string;
+  totalCalls: number;
+  totalCostMicrodollars: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  lastCallAt: string;
+}
+
+interface LlmTimelineRow {
+  date: string;
+  calls: number;
+  costMicrodollars: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+interface LlmUsageResponse {
+  aggregates: LlmUsageAggregates;
+  byUser: LlmUserUsageRow[];
+  timeline: LlmTimelineRow[];
+  days: number;
+}
+
+interface LlmLogsResponse {
+  logs: {
+    callId: string;
+    userId: string;
+    provider: string;
+    model: string;
+    taskType: string;
+    endpoint: string;
+    appType: string | null;
+    contextTokensEstimate: number | null;
+    contextCharacters: number | null;
+    responseCharacters: number | null;
+    responseTokensEstimate: number | null;
+    maxTokens: number | null;
+    temperature: number | null;
+    estimatedCostMicrodollars: number | null;
+    durationMs: number | null;
+    status: string;
+    errorMessage: string | null;
+    streaming: boolean;
+    createdAt: string;
+  }[];
+  total: number;
+}
+
+function LlmTraceTab() {
+  const [days, setDays] = useState(30);
+  const [expandedCalls, setExpandedCalls] = useState<Set<string>>(new Set());
+  const [logPage, setLogPage] = useState(0);
+
+  const { data: usage, isLoading: usageLoading } = useQuery<LlmUsageResponse>({
+    queryKey: ["/api/admin/llm-usage", { days }],
+    queryFn: () => apiRequest("GET", `/api/admin/llm-usage?days=${days}`).then(r => r.json()),
+    refetchInterval: 30_000,
+  });
+
+  const { data: logsData, isLoading: logsLoading } = useQuery<LlmLogsResponse>({
+    queryKey: ["/api/admin/llm-logs", { offset: logPage * 50 }],
+    queryFn: () => apiRequest("GET", `/api/admin/llm-logs?limit=50&offset=${logPage * 50}`).then(r => r.json()),
+    refetchInterval: 30_000,
+  });
+
+  const agg = usage?.aggregates;
+  const timeline = usage?.timeline ?? [];
+  const byUser = usage?.byUser ?? [];
+  const logs = logsData?.logs ?? [];
+  const totalLogs = logsData?.total ?? 0;
+
+  const toggleCall = useCallback((callId: string) => {
+    setExpandedCalls(prev => {
+      const next = new Set(prev);
+      if (next.has(callId)) next.delete(callId);
+      else next.add(callId);
+      return next;
+    });
+  }, []);
+
+  // Timeline bar chart max
+  const maxCalls = Math.max(...timeline.map(t => t.calls), 1);
+
+  return (
+    <div className="space-y-6">
+      {/* Period selector */}
+      <div className="flex items-center gap-2">
+        {[7, 14, 30, 90].map(d => (
+          <Button
+            key={d}
+            size="sm"
+            variant={days === d ? "default" : "outline"}
+            onClick={() => setDays(d)}
+            className="text-xs h-7"
+          >
+            {d}d
+          </Button>
+        ))}
+      </div>
+
+      {/* KPI Cards */}
+      {usageLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+      ) : agg ? (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <KpiCard icon={<Hash className="w-4 h-4" />} label="Total Calls" value={agg.totalCalls.toLocaleString()} loading={false} />
+            <KpiCard icon={<DollarSign className="w-4 h-4" />} label="Total Cost" value={formatCost(agg.totalCostMicrodollars)} loading={false} />
+            <KpiCard icon={<FileText className="w-4 h-4" />} label="Input Tokens" value={formatTokens(agg.totalInputTokens)} loading={false} />
+            <KpiCard icon={<Zap className="w-4 h-4" />} label="Output Tokens" value={formatTokens(agg.totalOutputTokens)} loading={false} />
+            <KpiCard icon={<Clock className="w-4 h-4" />} label="Total Duration" value={formatDuration(agg.totalDurationMs)} loading={false} />
+            <KpiCard icon={<AlertCircle className="w-4 h-4" />} label="Errors" value={String(agg.errorCount)} loading={false} />
+          </div>
+
+          {/* Timeline */}
+          {timeline.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Activity className="w-4 h-4" />
+                  {days}-Day LLM Call Timeline
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-end gap-[2px] h-28">
+                  {timeline.map(row => {
+                    const pct = (row.calls / maxCalls) * 100;
+                    return (
+                      <div key={row.date} className="flex-1 group relative flex flex-col items-center">
+                        <div
+                          className="w-full bg-amber-500/60 hover:bg-amber-500 rounded-t transition-colors min-h-[2px]"
+                          style={{ height: `${Math.max(pct, 2)}%` }}
+                          title={`${row.date}: ${row.calls} calls, ${formatCost(row.costMicrodollars)}`}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+                  <span>{timeline[0]?.date}</span>
+                  <span>{timeline[timeline.length - 1]?.date}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* By Model */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Cpu className="w-4 h-4" />
+                  By Model
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {agg.byModel.map(m => (
+                  <div key={m.model} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-medium ${getProviderColor(m.provider)}`}>{m.model}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-muted-foreground font-mono">
+                      <span>{m.calls} calls</span>
+                      <span>{formatTokens(m.inputTokens)} in</span>
+                      <span>{formatTokens(m.outputTokens)} out</span>
+                      <span className="text-green-400 font-semibold">{formatCost(m.costMicrodollars)}</span>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* By Task Type */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Workflow className="w-4 h-4" />
+                  By Task Type
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {agg.byTaskType.map(t => (
+                  <div key={t.taskType} className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{t.taskType}</span>
+                    <div className="flex items-center gap-3 text-muted-foreground font-mono">
+                      <span>{t.calls} calls</span>
+                      <span className="text-blue-400">~{formatDuration(t.avgDurationMs)}</span>
+                      <span className="text-green-400 font-semibold">{formatCost(t.costMicrodollars)}</span>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* By User (pricing analysis) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="w-4 h-4" />
+                Usage by User (Cost Ranking)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {byUser.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No usage data.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs font-mono">
+                    <thead>
+                      <tr className="text-muted-foreground border-b">
+                        <th className="text-left py-1.5 pr-4">User ID</th>
+                        <th className="text-right py-1.5 px-2">Calls</th>
+                        <th className="text-right py-1.5 px-2">Input Tokens</th>
+                        <th className="text-right py-1.5 px-2">Output Tokens</th>
+                        <th className="text-right py-1.5 px-2">Cost</th>
+                        <th className="text-right py-1.5 pl-2">Last Call</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {byUser.map(u => (
+                        <tr key={u.userId} className="border-b border-border/50 hover:bg-muted/30">
+                          <td className="py-1.5 pr-4 text-muted-foreground">{u.userId.slice(0, 16)}...</td>
+                          <td className="text-right py-1.5 px-2">{u.totalCalls}</td>
+                          <td className="text-right py-1.5 px-2">{formatTokens(u.totalInputTokens)}</td>
+                          <td className="text-right py-1.5 px-2">{formatTokens(u.totalOutputTokens)}</td>
+                          <td className="text-right py-1.5 px-2 text-green-400 font-semibold">{formatCost(u.totalCostMicrodollars)}</td>
+                          <td className="text-right py-1.5 pl-2 text-muted-foreground">{new Date(u.lastCallAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* By App Type */}
+          {agg.byAppType.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3 className="w-4 h-4" />
+                  By Application
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {agg.byAppType.map(a => (
+                  <div key={a.appType} className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{a.appType}</span>
+                    <div className="flex items-center gap-3 text-muted-foreground font-mono">
+                      <span>{a.calls} calls</span>
+                      <span className="text-green-400 font-semibold">{formatCost(a.costMicrodollars)}</span>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </>
+      ) : null}
+
+      {/* Recent Call Logs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="w-4 h-4" />
+            Recent LLM Calls
+            {totalLogs > 0 && (
+              <Badge variant="outline" className="ml-2 text-[10px]">{totalLogs.toLocaleString()} total</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {logsLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : logs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No LLM call logs yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {logs.map((log, idx) => (
+                <div key={log.callId} className="border border-border rounded text-xs font-mono">
+                  <button
+                    className="w-full flex items-center justify-between px-2 py-1 hover:bg-muted/30 transition-colors"
+                    onClick={() => toggleCall(log.callId)}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {log.status === "error" && <AlertCircle className="w-3 h-3 text-destructive" />}
+                      <span className={`font-medium ${getProviderColor(log.provider)}`}>{log.model}</span>
+                      <Badge variant="outline" className="text-[8px] py-0 px-1 border-border text-muted-foreground">{log.taskType}</Badge>
+                      <span className="text-muted-foreground/50 text-[9px]">{log.userId.slice(0, 10)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span>{formatTokens(log.contextTokensEstimate ?? 0)} &rarr; {formatTokens(log.responseTokensEstimate ?? 0)}</span>
+                      <span className="text-green-400">{formatCost(log.estimatedCostMicrodollars ?? 0)}</span>
+                      <span className="text-blue-400">{formatDuration(log.durationMs ?? 0)}</span>
+                      <span className="text-[9px] text-muted-foreground/50">{new Date(log.createdAt).toLocaleTimeString()}</span>
+                      {expandedCalls.has(log.callId) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    </div>
+                  </button>
+                  {expandedCalls.has(log.callId) && (
+                    <div className="border-t border-border px-2 py-1.5 space-y-1 text-[10px]">
+                      <div className="grid grid-cols-3 gap-x-4 gap-y-0.5">
+                        <LlmDetail label="User" value={log.userId} />
+                        <LlmDetail label="Provider" value={log.provider} />
+                        <LlmDetail label="Model" value={log.model} />
+                        <LlmDetail label="Endpoint" value={log.endpoint} />
+                        <LlmDetail label="Task" value={log.taskType} />
+                        {log.appType && <LlmDetail label="App" value={log.appType} />}
+                        <LlmDetail label="Max Tokens" value={String(log.maxTokens ?? "—")} />
+                        <LlmDetail label="Temperature" value={log.temperature != null ? (log.temperature / 100).toFixed(2) : "—"} />
+                        <LlmDetail label="Streaming" value={log.streaming ? "Yes" : "No"} />
+                        <LlmDetail label="Context Chars" value={(log.contextCharacters ?? 0).toLocaleString()} />
+                        <LlmDetail label="Response Chars" value={(log.responseCharacters ?? 0).toLocaleString()} />
+                        <LlmDetail label="Status" value={log.status} />
+                        <LlmDetail label="Duration" value={formatDuration(log.durationMs ?? 0)} />
+                        <LlmDetail label="Cost" value={formatCost(log.estimatedCostMicrodollars ?? 0)} highlight />
+                      </div>
+                      {log.errorMessage && (
+                        <div className="text-destructive border-t border-border pt-1 mt-1">{log.errorMessage}</div>
+                      )}
+                      <div className="text-muted-foreground/50 text-[8px]">
+                        {new Date(log.createdAt).toLocaleString()} &middot; {log.callId}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Pagination */}
+              {totalLogs > 50 && (
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setLogPage(p => Math.max(0, p - 1))}
+                    disabled={logPage === 0}
+                    className="text-xs h-7"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {logPage + 1} of {Math.ceil(totalLogs / 50)}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setLogPage(p => p + 1)}
+                    disabled={(logPage + 1) * 50 >= totalLogs}
+                    className="text-xs h-7"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function LlmDetail({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={highlight ? "text-green-400 font-semibold" : "text-foreground"}>{value}</span>
     </div>
   );
 }

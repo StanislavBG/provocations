@@ -5,6 +5,7 @@ import { PaletteToggle } from "@/components/PaletteToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 
 import { DebugButton } from "@/components/DebugButton";
+import { LlmTraceButton } from "@/components/LlmTraceButton";
 import { UserButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import {
@@ -87,6 +88,7 @@ export function NotebookTopBar({
             </Link>
           )}
 
+          <LlmTraceButton />
           <DebugButton />
           <UserButton />
         </div>
