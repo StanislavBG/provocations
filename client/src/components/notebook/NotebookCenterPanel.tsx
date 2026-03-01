@@ -22,6 +22,7 @@ interface NotebookCenterPanelProps {
   imageTabData?: Map<string, ImageTabData>;
   onAddImageTab?: (tabId: string) => void;
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
+  onSaveTimelineToContext?: (json: string, label: string) => void;
 }
 
 export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, NotebookCenterPanelProps>(
@@ -43,6 +44,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
       imageTabData,
       onAddImageTab,
       onImageActiveChange,
+      onSaveTimelineToContext,
     },
     ref,
   ) {
@@ -66,6 +68,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
           imageTabData={imageTabData}
           onAddImageTab={onAddImageTab}
           onImageActiveChange={onImageActiveChange}
+          onSaveTimelineToContext={onSaveTimelineToContext}
         />
       </div>
     );
