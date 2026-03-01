@@ -1768,6 +1768,53 @@ Output only valid JSON, no markdown.`;
     }
   });
 
+  // ── Admin: LLM usage aggregates (protected) ──
+  app.get("/api/admin/llm-usage", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
+
+      const days = Math.min(parseInt(req.query.days as string) || 30, 365);
+      const filterUserId = req.query.userId as string | undefined;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const [aggregates, byUser, timeline] = await Promise.all([
+        storage.getLlmUsageAggregates({ userId: filterUserId, since }),
+        storage.getLlmUsageByUser({ since, limit: 50 }),
+        storage.getLlmUsageTimeline({ userId: filterUserId, days }),
+      ]);
+
+      res.json({ aggregates, byUser, timeline, days });
+    } catch (error) {
+      console.error("Admin LLM usage error:", error);
+      res.status(500).json({ error: "Failed to load LLM usage" });
+    }
+  });
+
+  // ── User: own LLM session usage (for header trace button) ──
+  app.get("/api/llm-session-usage", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      // Return calls from the last 24 hours by default (current session proxy)
+      const hours = Math.min(parseInt(req.query.hours as string) || 24, 168);
+      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
+
+      const [logs, aggregates] = await Promise.all([
+        storage.listLlmCallLogs({ userId, limit, offset: 0 }),
+        storage.getLlmUsageAggregates({ userId, since }),
+      ]);
+
+      res.json({ logs, aggregates });
+    } catch (error) {
+      console.error("LLM session usage error:", error);
+      res.status(500).json({ error: "Failed to load session usage" });
+    }
+  });
+
   // ── Usage metrics: record (authenticated, fire-and-forget) ──
   app.post("/api/metrics", async (req, res) => {
     try {
