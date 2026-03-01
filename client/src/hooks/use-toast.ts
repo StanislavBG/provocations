@@ -4,6 +4,7 @@ import type {
   ToastActionElement,
   ToastProps,
 } from "@/components/ui/toast"
+import { messageLogStore, type MessageLevel } from "@/lib/messageLog"
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
@@ -160,6 +161,18 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+
+  // Mirror to the global message log for the unified notification dropdown
+  const title = typeof props.title === "string" ? props.title : "";
+  const description = typeof props.description === "string" ? props.description : undefined;
+  if (title) {
+    let level: MessageLevel = "info";
+    if (props.variant === "destructive") level = "error";
+    else if (/saved|success|merged|created|uploaded|copied|ready/i.test(title)) level = "success";
+    else if (/fail|error|issue/i.test(title)) level = "error";
+    else if (/warn|caution/i.test(title)) level = "warning";
+    messageLogStore.push({ title, description, level });
+  }
 
   return {
     id: id,
