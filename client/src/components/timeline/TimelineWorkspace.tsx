@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,11 @@ import { Save, Sparkles } from "lucide-react";
 interface TimelineWorkspaceProps {
   /** Callback to save timeline JSON to context store */
   onSaveToContext?: (json: string, label: string) => void;
+  /** Optional JSON string to auto-import on first mount (e.g. from "Map Notes to Timeline") */
+  initialData?: string;
 }
 
-export function TimelineWorkspace({ onSaveToContext }: TimelineWorkspaceProps) {
+export function TimelineWorkspace({ onSaveToContext, initialData }: TimelineWorkspaceProps) {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
@@ -46,6 +48,16 @@ export function TimelineWorkspace({ onSaveToContext }: TimelineWorkspaceProps) {
     exportTimeline,
     importTimeline,
   } = useTimelineState();
+
+  // ── Import initial data on first mount ──
+  const initialDataConsumedRef = useRef(false);
+  useEffect(() => {
+    if (initialData && !initialDataConsumedRef.current) {
+      importTimeline(initialData);
+      initialDataConsumedRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {

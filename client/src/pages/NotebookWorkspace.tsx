@@ -253,6 +253,82 @@ export default function NotebookWorkspace() {
     },
   });
 
+  // ── Map notes to timeline mutation ──
+  const mapNotesToTimelineMutation = useMutation({
+    mutationFn: async () => {
+      if (capturedContext.length === 0) throw new Error("No notes to map");
+      const allNotes = capturedContext
+        .map((item) => {
+          const label = item.annotation || "Note";
+          return `## ${label}\n${item.content}`;
+        })
+        .join("\n\n");
+
+      const res = await apiRequest("POST", "/api/timeline/transform", {
+        notes: allNotes,
+      });
+      return res.json() as Promise<{
+        events: Array<{
+          title: string;
+          description: string;
+          date: string;
+          endDate?: string;
+          dateLabel?: string;
+          dateConfidence: "exact" | "approximate" | "estimated";
+          type: "milestone" | "phase" | "decision" | "delivery" | "event";
+          tags: string[];
+          source: "note";
+        }>;
+        suggestedTags: Array<{ label: string; category: "person" | "place" | "theme" }>;
+      }>;
+    },
+    onSuccess: (data) => {
+      // Build the timeline JSON structure matching the import format
+      const tags = data.suggestedTags.map((t, i) => ({
+        id: `tag_${i}`,
+        label: t.label,
+        category: t.category,
+        color: t.category === "person" ? "#ec4899" : t.category === "place" ? "#06b6d4" : "#f97316",
+      }));
+
+      // Map tag labels in events to generated tag IDs
+      const tagLabelToId: Record<string, string> = {};
+      for (const tag of tags) {
+        tagLabelToId[tag.label.toLowerCase()] = tag.id;
+      }
+
+      const events = data.events.map((e, i) => ({
+        id: `evt_${i}`,
+        ...e,
+        tags: e.tags
+          .map((label) => tagLabelToId[label.toLowerCase()])
+          .filter(Boolean),
+      }));
+
+      const json = JSON.stringify({ events, tags });
+
+      // Open a new timeline tab with the data
+      if (centerPanelRef.current) {
+        centerPanelRef.current.addTimelineTabWithData(json);
+      }
+
+      toast({
+        title: "Timeline created",
+        description: `Extracted ${events.length} event${events.length !== 1 ? "s" : ""} from ${capturedContext.length} note${capturedContext.length !== 1 ? "s" : ""}.`,
+      });
+      trackEvent("notes_mapped_to_timeline", { metadata: { eventCount: String(events.length), noteCount: String(capturedContext.length) } });
+    },
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : "Failed to map notes";
+      errorLogStore.push({ step: "Map Notes to Timeline", endpoint: "/api/timeline/transform", message: msg });
+      toast({ title: "Timeline mapping failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  const handleMapNotesToTimeline = useCallback(() => {
+    mapNotesToTimelineMutation.mutate();
+  }, [mapNotesToTimelineMutation]);
+
   // ── Chat handlers ──
   const handleSendMessage = useCallback(
     (text: string) => {
@@ -695,6 +771,8 @@ export default function NotebookWorkspace() {
                     onRemoveCapturedItem={handleRemoveCapturedItem}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
+                    onMapNotesToTimeline={handleMapNotesToTimeline}
+                    isMapPending={mapNotesToTimelineMutation.isPending}
                     onEvolve={handleEvolve}
                     isEvolving={writeMutation.isPending}
                     sessionNotes={sessionNotes}
@@ -769,6 +847,8 @@ export default function NotebookWorkspace() {
                     onRemoveCapturedItem={handleRemoveCapturedItem}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
+                    onMapNotesToTimeline={handleMapNotesToTimeline}
+                    isMapPending={mapNotesToTimelineMutation.isPending}
                     onEvolve={handleEvolve}
                     isEvolving={writeMutation.isPending}
                     sessionNotes={sessionNotes}

@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   Search,
   Compass,
+  Clock,
   Scale,
   Target,
   Volume2,
@@ -40,14 +41,30 @@ import type {
 
 // ── Interview stance (Journalist approach styles) ──
 
-type InterviewStance = "investigative" | "exploratory" | "balanced";
+type InterviewStance = "investigative" | "exploratory" | "balanced" | "autobiography";
 
-function buildGuidance(stance: InterviewStance, focus: string): string | undefined {
+function buildGuidance(stance: InterviewStance, focus: string, appType?: string): string | undefined {
   const parts: string[] = [];
   if (stance === "investigative") {
     parts.push("STANCE: Investigative Journalist — be rigorous and analytical. Dig into claims, find logical gaps, demand specifics and evidence. Ask the hard 'how' and 'why' questions. Hold the interviewee accountable to their own stated goals.");
   } else if (stance === "exploratory") {
     parts.push("STANCE: Feature Journalist — be curious and exploratory. Ask 'what if', draw unexpected connections, explore the human story and motivations behind the document. Open new angles the interviewee hasn't considered.");
+  } else if (stance === "autobiography") {
+    parts.push(`STANCE: Autobiography Interviewer — you are a biographer capturing someone's life story for a chronological timeline. Your SOLE PURPOSE is to extract time-tagged events, turning points, and experiences.
+
+CRITICAL RULES FOR AUTOBIOGRAPHY MODE:
+1. ALWAYS ask about WHEN things happened — push for specific dates, years, seasons, or approximate periods ("early 1990s", "summer after college")
+2. Ask about cause-and-effect chains: "What led to that decision?" "What happened as a result?"
+3. Ask about KEY PEOPLE involved in each event — names, roles, relationships
+4. Ask about PLACES — where did this happen? Where were you living at the time?
+5. Identify TURNING POINTS — the moments that changed the trajectory of the story
+6. Move chronologically when possible — start from the beginning and work forward, but follow interesting threads
+7. Capture both FACTS (what happened) and FEELINGS (how it felt, what it meant)
+8. Distinguish between phases/eras (longer periods) and specific milestone events
+9. When the user mentions a time period vaguely, probe for specifics: "You said 'around that time' — can you narrow that down? Was it before or after [previous event]?"
+10. Tag each question topic with the time period being discussed, e.g. "Early Career: First Job" or "Childhood: Family Move"
+
+Your questions should feel like a warm but thorough biographer capturing someone's story for posterity.`);
   }
   if (focus.trim()) parts.push(focus.trim());
   return parts.length > 0 ? parts.join("\n\n") : undefined;
@@ -85,7 +102,9 @@ export function InterviewTab({
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
 
   // ── Stance & focus state ──
-  const [stance, setStance] = useState<InterviewStance>("investigative");
+  const [stance, setStance] = useState<InterviewStance>(
+    appType === "timeline" ? "autobiography" : "investigative",
+  );
   const [focusText, setFocusText] = useState("");
 
   // ── Podcast state ──
@@ -203,8 +222,8 @@ export function InterviewTab({
         document: documentText,
         appType,
         previousEntries: allEntries.length > 0 ? allEntries : undefined,
-        directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" ? "advise" : undefined,
-        directionGuidance: buildGuidance(stance, focusText),
+        directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" || stance === "autobiography" ? "advise" : undefined,
+        directionGuidance: buildGuidance(stance, focusText, appType),
       });
       return (await response.json()) as InterviewQuestionResponse;
     },
@@ -412,7 +431,7 @@ export function InterviewTab({
   // ── Stance cycle helper ──
   const cycleStance = useCallback(() => {
     setStance((prev) =>
-      prev === "balanced" ? "investigative" : prev === "investigative" ? "exploratory" : "balanced"
+      prev === "balanced" ? "investigative" : prev === "investigative" ? "exploratory" : prev === "exploratory" ? "autobiography" : "balanced"
     );
   }, []);
 
@@ -460,6 +479,22 @@ export function InterviewTab({
                 <div className="text-left">
                   <span className="font-medium">Exploratory</span>
                   <span className="text-[10px] opacity-70 ml-1.5">curious, opens new angles</span>
+                </div>
+              </button>
+
+              {/* Autobiography toggle */}
+              <button
+                onClick={() => setStance(stance === "autobiography" ? "investigative" : "autobiography")}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
+                  stance === "autobiography"
+                    ? "border-amber-500/60 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+                    : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <div className="text-left">
+                  <span className="font-medium">Autobiography</span>
+                  <span className="text-[10px] opacity-70 ml-1.5">captures time-tagged life events</span>
                 </div>
               </button>
 
@@ -540,12 +575,14 @@ export function InterviewTab({
                   <><Search className="w-3 h-3" /> Investigative</>
                 ) : stance === "exploratory" ? (
                   <><Compass className="w-3 h-3" /> Exploratory</>
+                ) : stance === "autobiography" ? (
+                  <><Clock className="w-3 h-3" /> Autobiography</>
                 ) : (
                   <><Scale className="w-3 h-3" /> Balanced</>
                 )}
               </button>
             </TooltipTrigger>
-            <TooltipContent>Tap to cycle: Balanced → Investigative → Exploratory</TooltipContent>
+            <TooltipContent>Tap to cycle stance</TooltipContent>
           </Tooltip>
         </div>
         <div className="flex items-center gap-1">

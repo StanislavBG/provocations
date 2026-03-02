@@ -20,6 +20,7 @@ import {
   Save,
   Check,
   StickyNote,
+  Clock,
 } from "lucide-react";
 import { trackEvent } from "@/lib/tracking";
 import type { ContextItem } from "@shared/schema";
@@ -29,6 +30,8 @@ interface TranscriptPanelProps {
   onCaptureToContext: (text: string, label: string) => void;
   onRemoveCapturedItem?: (itemId: string) => void;
   onEvolveDocument?: (instruction: string, description: string) => void;
+  onMapNotesToTimeline?: () => void;
+  isMapPending?: boolean;
   hasDocument: boolean;
   isMerging: boolean;
 }
@@ -38,6 +41,8 @@ export function TranscriptPanel({
   onCaptureToContext,
   onRemoveCapturedItem,
   onEvolveDocument,
+  onMapNotesToTimeline,
+  isMapPending = false,
   hasDocument,
   isMerging,
 }: TranscriptPanelProps) {
@@ -265,6 +270,8 @@ export function TranscriptPanel({
             handleEvolve={handleEvolve}
             hasDocument={hasDocument}
             isMerging={isMerging}
+            onMapNotesToTimeline={onMapNotesToTimeline}
+            isMapPending={isMapPending}
           />
         </>
       )}
@@ -280,12 +287,16 @@ function TranscriptFooter({
   handleEvolve,
   hasDocument,
   isMerging,
+  onMapNotesToTimeline,
+  isMapPending,
 }: {
   capturedContext: ContextItem[];
   summarizeMutation: { mutate: () => void; isPending: boolean };
   handleEvolve: () => void;
   hasDocument: boolean;
   isMerging: boolean;
+  onMapNotesToTimeline?: () => void;
+  isMapPending?: boolean;
 }) {
   const notesChars = useMemo(
     () => capturedContext.reduce((s, c) => s + c.content.length, 0),
@@ -299,6 +310,16 @@ function TranscriptFooter({
 
   const summarizeSummary: SummaryItem[] = useMemo(() => [
     { icon: <StickyNote className="w-3 h-3 text-orange-400" />, label: "Notes to Summarize", count: capturedContext.length, detail: `${notesChars.toLocaleString()} chars` },
+  ], [capturedContext.length, notesChars]);
+
+  const timelineBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 1800, color: "text-purple-400" },
+    { label: "Notes Content", chars: notesChars, color: "text-orange-400" },
+  ], [notesChars]);
+
+  const timelineSummary: SummaryItem[] = useMemo(() => [
+    { icon: <StickyNote className="w-3 h-3 text-orange-400" />, label: "Notes to Transform", count: capturedContext.length, detail: `${notesChars.toLocaleString()} chars` },
+    { icon: <Clock className="w-3 h-3 text-amber-500" />, label: "Target", count: 1, detail: "Timeline tab" },
   ], [capturedContext.length, notesChars]);
 
   const evolveBlocks: ContextBlock[] = useMemo(() => [
@@ -345,6 +366,39 @@ function TranscriptFooter({
           )}
         </Button>
       </LlmHoverButton>
+
+      {/* Map to Timeline */}
+      {onMapNotesToTimeline && (
+        <LlmHoverButton
+          previewTitle="Map Notes to Timeline"
+          previewBlocks={timelineBlocks}
+          previewSummary={timelineSummary}
+          align="end"
+        >
+          <Button
+            variant="outline"
+            onClick={onMapNotesToTimeline}
+            disabled={isMapPending || capturedContext.length === 0}
+            className="w-full gap-2 h-8 text-xs font-semibold border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+          >
+            {isMapPending ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Mapping to Timeline...
+              </>
+            ) : (
+              <>
+                <Clock className="w-3.5 h-3.5" />
+                Map Notes to Timeline
+                <span className="text-[10px] opacity-70 font-normal ml-1">
+                  ({capturedContext.length} item
+                  {capturedContext.length !== 1 ? "s" : ""})
+                </span>
+              </>
+            )}
+          </Button>
+        </LlmHoverButton>
+      )}
 
       {/* Evolve Document */}
       <LlmHoverButton
