@@ -45,6 +45,7 @@ interface NotebookLeftPanelProps {
   capturedContext?: ContextItem[];
   onRemoveCapturedItem?: (itemId: string) => void;
   onEvolveDocument?: (instruction: string, description: string) => void;
+  onMoveToDocument?: (content: string) => void;
   isMerging?: boolean;
   onEvolve?: (configurations: WriterConfig[]) => void;
   isEvolving?: boolean;
@@ -78,6 +79,7 @@ export function NotebookLeftPanel({
   capturedContext,
   onRemoveCapturedItem,
   onEvolveDocument,
+  onMoveToDocument,
   isMerging = false,
   onEvolve,
   isEvolving = false,
@@ -226,6 +228,7 @@ export function NotebookLeftPanel({
               capturedContext={capturedContext || []}
               onCaptureToContext={onCaptureToContext}
               onRemoveCapturedItem={onRemoveCapturedItem}
+              onMoveToDocument={onMoveToDocument}
               onEvolveDocument={onEvolveDocument}
               hasDocument={hasDocument}
               isMerging={isMerging}
