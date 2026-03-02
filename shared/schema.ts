@@ -1366,3 +1366,77 @@ export const chatPreferencesSchema = z.object({
   compactMode: z.boolean().default(false),
 });
 export type ChatPreferencesData = z.infer<typeof chatPreferencesSchema>;
+
+// ══════════════════════════════════════════════════════════════════
+// Sharing — Document & Folder sharing between connected users
+// ══════════════════════════════════════════════════════════════════
+
+export const shareItemTypes = ["document", "folder"] as const;
+export type ShareItemType = typeof shareItemTypes[number];
+
+export const sharePermissions = ["read", "write"] as const;
+export type SharePermission = typeof sharePermissions[number];
+
+export const shareStatuses = ["pending", "accepted", "declined", "revoked"] as const;
+export type ShareStatus = typeof shareStatuses[number];
+
+export const shareItemRequestSchema = z.object({
+  recipientId: z.string().min(1, "Recipient ID required"),
+  itemType: z.enum(shareItemTypes),
+  itemId: z.number(),
+  permission: z.enum(sharePermissions).default("read"),
+  note: z.string().max(500).optional(),
+});
+export type ShareItemRequest = z.infer<typeof shareItemRequestSchema>;
+
+export const respondShareRequestSchema = z.object({
+  shareId: z.number(),
+  action: z.enum(["accept", "decline"]),
+});
+export type RespondShareRequest = z.infer<typeof respondShareRequestSchema>;
+
+/** Shared item as returned by the API (with display info) */
+export interface SharedItemDisplay {
+  id: number;
+  ownerId: string;
+  recipientId: string;
+  itemType: ShareItemType;
+  itemId: number;
+  permission: SharePermission;
+  status: ShareStatus;
+  note?: string;           // decrypted
+  itemTitle?: string;      // decrypted doc/folder title for display
+  ownerName?: string;
+  ownerEmail?: string;
+  ownerAvatar?: string | null;
+  recipientName?: string;
+  recipientEmail?: string;
+  recipientAvatar?: string | null;
+  createdAt: string;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Notifications — Global Mailbox
+// ══════════════════════════════════════════════════════════════════
+
+export const notificationTypes = [
+  "connection_request",    // someone wants to connect
+  "connection_accepted",   // your connection request was accepted
+  "item_shared",           // someone shared a doc/folder with you
+  "share_accepted",        // recipient accepted your share
+] as const;
+export type NotificationType = typeof notificationTypes[number];
+
+/** Notification as returned by the API (with display info) */
+export interface NotificationItem {
+  id: number;
+  userId: string;
+  notificationType: NotificationType;
+  fromUserId: string;
+  fromUserName?: string;
+  fromUserEmail?: string;
+  fromUserAvatar?: string | null;
+  metadata?: Record<string, any>;   // parsed JSON
+  readAt: string | null;
+  createdAt: string;
+}
