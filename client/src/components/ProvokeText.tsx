@@ -183,6 +183,8 @@ export interface ProvokeTextProps {
 
   /* ── Extra rendered slots ── */
   extraActions?: React.ReactNode;
+  /** Actions rendered on the LEFT side of the header (before the label). */
+  headerLeadActions?: React.ReactNode;
   headerActions?: React.ReactNode;
   /** Content rendered between the header and the input area (e.g. objective bar) */
   beforeInput?: React.ReactNode;
@@ -282,6 +284,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
       onSelect,
 
       extraActions,
+      headerLeadActions,
       headerActions,
       beforeInput,
       footerExtra,
@@ -825,6 +828,11 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
         >
           {/* Header */}
           <div className="flex items-start gap-2 px-4 pt-4 pb-2 shrink-0">
+            {headerLeadActions && (
+              <div className="flex items-center gap-1 shrink-0">
+                {headerLeadActions}
+              </div>
+            )}
             <div className="flex-1 min-w-0 flex items-baseline gap-x-2 flex-wrap">
               {(LabelIcon || label) && (
                 <div className="flex items-center gap-2 text-base font-semibold text-foreground shrink-0">
