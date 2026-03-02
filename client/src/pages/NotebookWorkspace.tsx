@@ -23,7 +23,7 @@ import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPa
 import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
-import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
+import { TimelineWorkspace, type TimelineSummary } from "@/components/timeline/TimelineWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
 
 import { templateIds } from "@shared/schema";
@@ -67,6 +67,9 @@ export default function NotebookWorkspace() {
   const [imageTabData, setImageTabData] = useState<Map<string, ImageTabData>>(new Map());
   const [activeImageTabId, setActiveImageTabId] = useState<string | null>(null);
   const centerPanelRef = useRef<SplitDocumentEditorHandle>(null);
+
+  // ── Timeline summary state (for interview context) ──
+  const [timelineSummary, setTimelineSummary] = useState<TimelineSummary | null>(null);
 
   // ── User-to-user chat state (embedded in left panel) ──
   const [activeChatConversationId, setActiveChatConversationId] = useState<number | null>(null);
@@ -252,6 +255,82 @@ export default function NotebookWorkspace() {
       toast({ title: "Failed to get response", description: msg, variant: "destructive" });
     },
   });
+
+  // ── Map notes to timeline mutation ──
+  const mapNotesToTimelineMutation = useMutation({
+    mutationFn: async () => {
+      if (capturedContext.length === 0) throw new Error("No notes to map");
+      const allNotes = capturedContext
+        .map((item) => {
+          const label = item.annotation || "Note";
+          return `## ${label}\n${item.content}`;
+        })
+        .join("\n\n");
+
+      const res = await apiRequest("POST", "/api/timeline/transform", {
+        notes: allNotes,
+      });
+      return res.json() as Promise<{
+        events: Array<{
+          title: string;
+          description: string;
+          date: string;
+          endDate?: string;
+          dateLabel?: string;
+          dateConfidence: "exact" | "approximate" | "estimated";
+          type: "milestone" | "phase" | "decision" | "delivery" | "event";
+          tags: string[];
+          source: "note";
+        }>;
+        suggestedTags: Array<{ label: string; category: "person" | "place" | "theme" }>;
+      }>;
+    },
+    onSuccess: (data) => {
+      // Build the timeline JSON structure matching the import format
+      const tags = data.suggestedTags.map((t, i) => ({
+        id: `tag_${i}`,
+        label: t.label,
+        category: t.category,
+        color: t.category === "person" ? "#ec4899" : t.category === "place" ? "#06b6d4" : "#f97316",
+      }));
+
+      // Map tag labels in events to generated tag IDs
+      const tagLabelToId: Record<string, string> = {};
+      for (const tag of tags) {
+        tagLabelToId[tag.label.toLowerCase()] = tag.id;
+      }
+
+      const events = data.events.map((e, i) => ({
+        id: `evt_${i}`,
+        ...e,
+        tags: e.tags
+          .map((label) => tagLabelToId[label.toLowerCase()])
+          .filter(Boolean),
+      }));
+
+      const json = JSON.stringify({ events, tags });
+
+      // Open a new timeline tab with the data
+      if (centerPanelRef.current) {
+        centerPanelRef.current.addTimelineTabWithData(json);
+      }
+
+      toast({
+        title: "Timeline created",
+        description: `Extracted ${events.length} event${events.length !== 1 ? "s" : ""} from ${capturedContext.length} note${capturedContext.length !== 1 ? "s" : ""}.`,
+      });
+      trackEvent("notes_mapped_to_timeline", { metadata: { eventCount: String(events.length), noteCount: String(capturedContext.length) } });
+    },
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : "Failed to map notes";
+      errorLogStore.push({ step: "Map Notes to Timeline", endpoint: "/api/timeline/transform", message: msg });
+      toast({ title: "Timeline mapping failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  const handleMapNotesToTimeline = useCallback(() => {
+    mapNotesToTimelineMutation.mutate();
+  }, [mapNotesToTimelineMutation]);
 
   // ── Chat handlers ──
   const handleSendMessage = useCallback(
@@ -674,11 +753,11 @@ export default function NotebookWorkspace() {
       <div className="flex-1 overflow-hidden">
         {/* Desktop: 3-column resizable layout — side panels swap based on active tab type */}
         <ResizablePanelGroup
-          key={appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : appFlowConfig.workspaceLayout === "timeline" ? "timeline-layout" : "doc-layout"}
+          key={appFlowConfig.workspaceLayout === "bs-chart" ? "bs-chart-layout" : "doc-layout"}
           direction="horizontal"
         >
             {/* Left panel (hidden when chart tab is active or custom workspace app) */}
-            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && appFlowConfig.workspaceLayout !== "timeline" && (
+            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && (
               <>
                 <ResizablePanel
                   order={1}
@@ -708,6 +787,8 @@ export default function NotebookWorkspace() {
                     onRemoveCapturedItem={handleRemoveCapturedItem}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
+                    onMapNotesToTimeline={handleMapNotesToTimeline}
+                    isMapPending={mapNotesToTimelineMutation.isPending}
                     onEvolve={handleEvolve}
                     isEvolving={writeMutation.isPending}
                     sessionNotes={sessionNotes}
@@ -717,6 +798,7 @@ export default function NotebookWorkspace() {
                     isPainting={isPainting}
                     pinnedDocContents={pinnedDocContents}
                     appType={validAppType}
+                    timelineContext={timelineSummary}
                   />
                 </ResizablePanel>
                 <ResizableHandle withHandle />
@@ -724,7 +806,7 @@ export default function NotebookWorkspace() {
             )}
 
             {/* Center: Document editor, BS Chart, or Timeline app */}
-            <ResizablePanel order={2} defaultSize={appFlowConfig.workspaceLayout === "bs-chart" || appFlowConfig.workspaceLayout === "timeline" ? 100 : 55} minSize={30}>
+            <ResizablePanel order={2} defaultSize={appFlowConfig.workspaceLayout === "bs-chart" ? 100 : 55} minSize={30}>
               {appFlowConfig.workspaceLayout === "bs-chart" ? (
                 <BSChartWorkspace
                   onSaveToContext={(json, label) => handleCaptureToContext(json, label)}
@@ -757,13 +839,14 @@ export default function NotebookWorkspace() {
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
                   onSaveTimelineToContext={(json, label) => handleCaptureToContext(json, label)}
+                  onTimelineSummaryChange={setTimelineSummary}
                   onWriterFeedback={handleWriterFeedback}
                 />
               )}
             </ResizablePanel>
 
             {/* Right panel (hidden when chart tab is active or custom workspace app) */}
-            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && appFlowConfig.workspaceLayout !== "timeline" && (
+            {!isChartActive && appFlowConfig.workspaceLayout !== "bs-chart" && (
               <>
                 <ResizableHandle withHandle />
                 <ResizablePanel order={3} defaultSize={25} minSize={15}>
@@ -783,6 +866,8 @@ export default function NotebookWorkspace() {
                     onRemoveCapturedItem={handleRemoveCapturedItem}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
+                    onMapNotesToTimeline={handleMapNotesToTimeline}
+                    isMapPending={mapNotesToTimelineMutation.isPending}
                     onEvolve={handleEvolve}
                     isEvolving={writeMutation.isPending}
                     sessionNotes={sessionNotes}
