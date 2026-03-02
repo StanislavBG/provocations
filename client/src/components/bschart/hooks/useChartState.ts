@@ -13,6 +13,9 @@ import {
   DEFAULT_NODE_STYLE,
   DEFAULT_DIMENSIONS,
   DEFAULT_STYLES,
+  CHART_LIMITS,
+  ZOOM,
+  NODE_BOUNDS,
   snapToGrid,
 } from "../types";
 
@@ -22,8 +25,6 @@ interface HistoryEntry {
   nodes: BSNode[];
   connectors: BSConnector[];
 }
-
-const MAX_HISTORY = 50;
 
 export function useChartState() {
   const [chart, setChart] = useState<BSChart>({ ...EMPTY_CHART });
@@ -37,7 +38,7 @@ export function useChartState() {
       nodes: JSON.parse(JSON.stringify(chart.nodes)),
       connectors: JSON.parse(JSON.stringify(chart.connectors)),
     });
-    if (undoStack.current.length > MAX_HISTORY) undoStack.current.shift();
+    if (undoStack.current.length > CHART_LIMITS.MAX_UNDO_HISTORY) undoStack.current.shift();
     redoStack.current = [];
   }, [chart.nodes, chart.connectors]);
 
@@ -65,6 +66,7 @@ export function useChartState() {
 
   const addNode = useCallback(
     (type: BSNodeType, x: number, y: number, label?: string) => {
+      if (chart.nodes.length >= CHART_LIMITS.MAX_NODES) return null;
       pushHistory();
       const dim = DEFAULT_DIMENSIONS[type];
       const typeStyle = DEFAULT_STYLES[type] ?? {};
@@ -78,8 +80,8 @@ export function useChartState() {
         y: snappedY,
         width: dim.width,
         height: dim.height,
-        label: label || getDefaultLabel(type),
-        voiceLabel: label || getDefaultLabel(type),
+        label: (label || getDefaultLabel(type)).slice(0, CHART_LIMITS.MAX_LABEL_LENGTH),
+        voiceLabel: (label || getDefaultLabel(type)).slice(0, CHART_LIMITS.MAX_LABEL_LENGTH),
         style: { ...DEFAULT_NODE_STYLE, ...typeStyle },
         locked: false,
         zIndex: chart.nodes.length,
@@ -127,10 +129,13 @@ export function useChartState() {
   const updateNode = useCallback(
     (nodeId: string, updates: Partial<BSNode>) => {
       pushHistory();
+      const clamped = { ...updates };
+      if (clamped.label !== undefined) clamped.label = clamped.label.slice(0, CHART_LIMITS.MAX_LABEL_LENGTH);
+      if (clamped.voiceLabel !== undefined) clamped.voiceLabel = clamped.voiceLabel.slice(0, CHART_LIMITS.MAX_LABEL_LENGTH);
       setChart((prev) => ({
         ...prev,
         nodes: prev.nodes.map((n) =>
-          n.id === nodeId ? { ...n, ...updates } : n,
+          n.id === nodeId ? { ...n, ...clamped } : n,
         ),
       }));
     },
@@ -158,7 +163,13 @@ export function useChartState() {
       setChart((prev) => ({
         ...prev,
         nodes: prev.nodes.map((n) =>
-          n.id === nodeId ? { ...n, width: Math.max(40, width), height: Math.max(24, height) } : n,
+          n.id === nodeId
+            ? {
+                ...n,
+                width: Math.min(NODE_BOUNDS.MAX_WIDTH, Math.max(NODE_BOUNDS.MIN_WIDTH, width)),
+                height: Math.min(NODE_BOUNDS.MAX_HEIGHT, Math.max(NODE_BOUNDS.MIN_HEIGHT, height)),
+              }
+            : n,
         ),
       }));
     },
@@ -198,6 +209,7 @@ export function useChartState() {
 
   const addConnector = useCallback(
     (fromNodeId: string, fromPort: BSPortSide, toNodeId: string, toPort: BSPortSide, label?: string) => {
+      if (chart.connectors.length >= CHART_LIMITS.MAX_CONNECTORS) return null;
       pushHistory();
       const newConnector: BSConnector = {
         id: generateId("conn"),
@@ -220,7 +232,7 @@ export function useChartState() {
       }));
       return newConnector.id;
     },
-    [pushHistory],
+    [pushHistory, chart.connectors.length],
   );
 
   const updateConnector = useCallback(
@@ -285,7 +297,7 @@ export function useChartState() {
     (x: number, y: number, zoom: number) => {
       setChart((prev) => ({
         ...prev,
-        viewport: { x, y, zoom: Math.max(0.1, Math.min(4, zoom)) },
+        viewport: { x, y, zoom: Math.max(ZOOM.MIN, Math.min(ZOOM.MAX, zoom)) },
       }));
     },
     [],
@@ -310,18 +322,24 @@ export function useChartState() {
   const importChart = useCallback((json: string) => {
     try {
       const data = JSON.parse(json);
-      if (data.nodes && data.connectors) {
-        pushHistory();
-        setChart((prev) => ({
-          ...prev,
-          nodes: data.nodes,
-          connectors: data.connectors,
-          gridSize: data.gridSize ?? prev.gridSize,
-          selectedNodeIds: [],
-          selectedConnectorIds: [],
-        }));
-        return true;
-      }
+      if (!Array.isArray(data.nodes) || !Array.isArray(data.connectors)) return false;
+      // Enforce limits on imported data
+      const nodes: BSNode[] = data.nodes.slice(0, CHART_LIMITS.MAX_NODES).filter(
+        (n: unknown) => n && typeof n === "object" && "id" in (n as Record<string, unknown>) && "type" in (n as Record<string, unknown>),
+      );
+      const connectors: BSConnector[] = data.connectors.slice(0, CHART_LIMITS.MAX_CONNECTORS).filter(
+        (c: unknown) => c && typeof c === "object" && "id" in (c as Record<string, unknown>) && "fromNodeId" in (c as Record<string, unknown>),
+      );
+      pushHistory();
+      setChart((prev) => ({
+        ...prev,
+        nodes,
+        connectors,
+        gridSize: typeof data.gridSize === "number" ? data.gridSize : prev.gridSize,
+        selectedNodeIds: [],
+        selectedConnectorIds: [],
+      }));
+      return true;
     } catch {
       // invalid JSON
     }
@@ -332,6 +350,7 @@ export function useChartState() {
 
   const duplicateSelected = useCallback(() => {
     if (chart.selectedNodeIds.length === 0) return;
+    if (chart.nodes.length + chart.selectedNodeIds.length > CHART_LIMITS.MAX_NODES) return;
     pushHistory();
 
     const idMap = new Map<string, string>();
@@ -381,6 +400,7 @@ export function useChartState() {
         ...prev,
         nodes: prev.nodes.map((n) => {
           if (n.id !== nodeId || !n.tableData) return n;
+          if (n.tableData.rows.length >= CHART_LIMITS.MAX_TABLE_ROWS) return n;
           const cells: Record<string, string> = {};
           for (const col of n.tableData.columns) {
             cells[col.id] = "";
@@ -406,6 +426,7 @@ export function useChartState() {
         ...prev,
         nodes: prev.nodes.map((n) => {
           if (n.id !== nodeId || !n.tableData) return n;
+          if (n.tableData.columns.length >= CHART_LIMITS.MAX_TABLE_COLUMNS) return n;
           const newColId = generateId("col");
           return {
             ...n,
@@ -427,6 +448,7 @@ export function useChartState() {
 
   const updateTableCell = useCallback(
     (nodeId: string, rowId: string, colId: string, value: string) => {
+      const clamped = value.slice(0, CHART_LIMITS.MAX_CELL_LENGTH);
       setChart((prev) => ({
         ...prev,
         nodes: prev.nodes.map((n) => {
@@ -437,7 +459,7 @@ export function useChartState() {
               ...n.tableData,
               rows: n.tableData.rows.map((r) =>
                 r.id === rowId
-                  ? { ...r, cells: { ...r.cells, [colId]: value } }
+                  ? { ...r, cells: { ...r.cells, [colId]: clamped } }
                   : r,
               ),
             },

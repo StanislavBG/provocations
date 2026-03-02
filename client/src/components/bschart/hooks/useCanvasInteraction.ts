@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { BSToolMode, BSPortSide, BSNode } from "../types";
+import { ZOOM } from "../types";
 
 interface UseCanvasInteractionProps {
   viewport: { x: number; y: number; zoom: number };
@@ -80,8 +81,8 @@ export function useCanvasInteraction({
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-      const newZoom = Math.max(0.1, Math.min(4, viewport.zoom * zoomFactor));
+      const zoomFactor = e.deltaY < 0 ? ZOOM.STEP : 1 / ZOOM.STEP;
+      const newZoom = Math.max(ZOOM.MIN, Math.min(ZOOM.MAX, viewport.zoom * zoomFactor));
 
       // Zoom toward mouse position
       const newX = mouseX - (mouseX - viewport.x) * (newZoom / viewport.zoom);

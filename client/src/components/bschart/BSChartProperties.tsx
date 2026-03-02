@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Lock, Unlock } from "lucide-react";
 import type { BSNode, BSConnector, BSNodeStyle, BSLineStyle, BSArrowHead } from "./types";
+import { NODE_BOUNDS, CHART_LIMITS } from "./types";
 
 interface BSChartPropertiesProps {
   selectedNodes: BSNode[];
@@ -65,10 +66,11 @@ export function BSChartProperties({
               <Input
                 value={connector.label}
                 onChange={(e) =>
-                  onUpdateConnector(connector.id, { label: e.target.value })
+                  onUpdateConnector(connector.id, { label: e.target.value.slice(0, CHART_LIMITS.MAX_LABEL_LENGTH) })
                 }
                 className="h-7 text-xs"
                 placeholder="Connector label"
+                maxLength={CHART_LIMITS.MAX_LABEL_LENGTH}
               />
             </div>
 
@@ -119,12 +121,12 @@ export function BSChartProperties({
               <Label className="text-[10px]">Width</Label>
               <Input
                 type="number"
-                min={1}
-                max={8}
+                min={NODE_BOUNDS.MIN_STROKE_WIDTH}
+                max={NODE_BOUNDS.MAX_STROKE_WIDTH}
                 value={connector.strokeWidth}
                 onChange={(e) =>
                   onUpdateConnector(connector.id, {
-                    strokeWidth: parseInt(e.target.value) || 2,
+                    strokeWidth: Math.min(NODE_BOUNDS.MAX_STROKE_WIDTH, Math.max(NODE_BOUNDS.MIN_STROKE_WIDTH, parseInt(e.target.value) || 2)),
                   })
                 }
                 className="h-7 text-xs"
@@ -204,8 +206,9 @@ export function BSChartProperties({
             <Label className="text-[10px]">Label</Label>
             <Input
               value={node.label}
-              onChange={(e) => onUpdateNode(node.id, { label: e.target.value })}
+              onChange={(e) => onUpdateNode(node.id, { label: e.target.value.slice(0, CHART_LIMITS.MAX_LABEL_LENGTH) })}
               className="h-7 text-xs"
+              maxLength={CHART_LIMITS.MAX_LABEL_LENGTH}
             />
           </div>
 
@@ -239,10 +242,12 @@ export function BSChartProperties({
               <Label className="text-[10px]">Width</Label>
               <Input
                 type="number"
+                min={NODE_BOUNDS.MIN_WIDTH}
+                max={NODE_BOUNDS.MAX_WIDTH}
                 value={Math.round(node.width)}
                 onChange={(e) =>
                   onUpdateNode(node.id, {
-                    width: Math.max(40, parseInt(e.target.value) || 40),
+                    width: Math.min(NODE_BOUNDS.MAX_WIDTH, Math.max(NODE_BOUNDS.MIN_WIDTH, parseInt(e.target.value) || NODE_BOUNDS.MIN_WIDTH)),
                   })
                 }
                 className="h-7 text-xs"
@@ -252,10 +257,12 @@ export function BSChartProperties({
               <Label className="text-[10px]">Height</Label>
               <Input
                 type="number"
+                min={NODE_BOUNDS.MIN_HEIGHT}
+                max={NODE_BOUNDS.MAX_HEIGHT}
                 value={Math.round(node.height)}
                 onChange={(e) =>
                   onUpdateNode(node.id, {
-                    height: Math.max(24, parseInt(e.target.value) || 24),
+                    height: Math.min(NODE_BOUNDS.MAX_HEIGHT, Math.max(NODE_BOUNDS.MIN_HEIGHT, parseInt(e.target.value) || NODE_BOUNDS.MIN_HEIGHT)),
                   })
                 }
                 className="h-7 text-xs"
@@ -343,12 +350,12 @@ export function BSChartProperties({
                 <Label className="text-[10px]">Font Size</Label>
                 <Input
                   type="number"
-                  min={8}
-                  max={48}
+                  min={NODE_BOUNDS.MIN_FONT_SIZE}
+                  max={NODE_BOUNDS.MAX_FONT_SIZE}
                   value={node.style.fontSize}
                   onChange={(e) =>
                     onUpdateNodeStyle(node.id, {
-                      fontSize: parseInt(e.target.value) || 12,
+                      fontSize: Math.min(NODE_BOUNDS.MAX_FONT_SIZE, Math.max(NODE_BOUNDS.MIN_FONT_SIZE, parseInt(e.target.value) || 12)),
                     })
                   }
                   className="h-7 text-xs"
@@ -359,11 +366,11 @@ export function BSChartProperties({
                 <Input
                   type="number"
                   min={0}
-                  max={100}
+                  max={NODE_BOUNDS.MAX_BORDER_RADIUS}
                   value={node.style.borderRadius}
                   onChange={(e) =>
                     onUpdateNodeStyle(node.id, {
-                      borderRadius: parseInt(e.target.value) || 0,
+                      borderRadius: Math.min(NODE_BOUNDS.MAX_BORDER_RADIUS, Math.max(0, parseInt(e.target.value) || 0)),
                     })
                   }
                   className="h-7 text-xs"
@@ -403,7 +410,7 @@ export function BSChartProperties({
                 value={node.style.opacity}
                 onChange={(e) =>
                   onUpdateNodeStyle(node.id, {
-                    opacity: parseFloat(e.target.value) || 1,
+                    opacity: Math.min(1, Math.max(0, parseFloat(e.target.value) || 1)),
                   })
                 }
                 className="h-7 text-xs"
@@ -419,12 +426,16 @@ export function BSChartProperties({
                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
                   Table
                 </span>
+                <div className="text-[10px] text-muted-foreground">
+                  {node.tableData.rows.length} rows, {node.tableData.columns.length} columns
+                </div>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     className="flex-1 h-7 text-xs gap-1"
                     onClick={() => onAddTableRow?.(node.id)}
+                    disabled={node.tableData.rows.length >= CHART_LIMITS.MAX_TABLE_ROWS}
                   >
                     <Plus className="w-3 h-3" />
                     Row
@@ -435,8 +446,9 @@ export function BSChartProperties({
                     className="flex-1 h-7 text-xs gap-1"
                     onClick={() => {
                       const label = prompt("Column name:");
-                      if (label) onAddTableColumn?.(node.id, label);
+                      if (label) onAddTableColumn?.(node.id, label.slice(0, CHART_LIMITS.MAX_LABEL_LENGTH));
                     }}
+                    disabled={node.tableData.columns.length >= CHART_LIMITS.MAX_TABLE_COLUMNS}
                   >
                     <Plus className="w-3 h-3" />
                     Column
