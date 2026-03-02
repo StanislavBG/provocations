@@ -414,9 +414,10 @@ export default function NotebookWorkspace() {
   const handleSaveImageToContext = useCallback(async (imageUrl: string, prompt: string) => {
     setIsSavingToContext(true);
     try {
-      const title = prompt
-        ? prompt.slice(0, 120)
-        : `Image ${new Date().toLocaleDateString()}`;
+      // Derive a short 1-2 word label from the prompt for the file name.
+      const words = (prompt || "").replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+      const label = words.slice(0, 2).join(" ") || "Image";
+      const title = `${label} — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
       // Save just the image — the prompt lives in the title.
       const content = imageUrl;
       await apiRequest("POST", "/api/documents", { title, content });
