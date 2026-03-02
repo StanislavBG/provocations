@@ -114,6 +114,11 @@ export function MarkdownRenderer({
 
   const isLongDoc = chunks.length > 1;
 
+  // Detect if the entire content is a raw data-URL image (e.g. saved from Painter).
+  // In that case, render as a plain <img> rather than feeding megabytes of base64
+  // through the markdown parser (which would render it as a text paragraph).
+  const isRawDataImage = content.trimStart().startsWith("data:image/");
+
   // Show a placeholder when there's no real content — prevents
   // the pane from appearing empty / "blacked out" in dark mode.
   if (!content || !content.trim()) {
@@ -123,6 +128,20 @@ export function MarkdownRenderer({
           <p className="text-muted-foreground text-sm italic">
             Your document will appear here as you build it.
           </p>
+        </div>
+      </ScrollArea>
+    );
+  }
+
+  if (isRawDataImage) {
+    return (
+      <ScrollArea className="h-full" ref={scrollRef}>
+        <div className={`px-8 py-6 flex justify-center ${className}`}>
+          <img
+            src={content.trim()}
+            alt="Generated image"
+            className="max-w-full h-auto rounded-lg border"
+          />
         </div>
       </ScrollArea>
     );
