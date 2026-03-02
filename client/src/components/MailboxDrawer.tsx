@@ -74,12 +74,14 @@ export function MailboxDrawer({ open, onOpenChange }: MailboxDrawerProps) {
 
   const { data: notifications = [], isLoading } = useQuery<NotificationItem[]>({
     queryKey: ["/api/mailbox"],
-    refetchInterval: 15000,
+    enabled: open,
+    refetchInterval: open ? 15000 : false,
   });
 
   const { data: pendingShares = [] } = useQuery<SharedItemDisplay[]>({
     queryKey: ["/api/shared-with-me"],
-    refetchInterval: 30000,
+    enabled: open,
+    refetchInterval: open ? 30000 : false,
   });
 
   const markReadMutation = useMutation({
