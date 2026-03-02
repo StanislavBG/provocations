@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type ComponentPropsWithoutRef } from "react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X, ExternalLink, Copy, Check, Link2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -51,6 +51,201 @@ const TONE_OPTIONS: { id: ResponseTone; label: string; icon: LucideIcon; descrip
   { id: "assertive", label: "Assertive", icon: Zap, description: "Clear opinions and recommendations" },
   { id: "critical", label: "Critical", icon: SearchIcon, description: "Skeptical, surfaces risks and flaws" },
 ];
+
+// ── Enhanced Markdown rendering for research chat ──
+
+/** Parse citation references like [1], [2] in text and render as badges */
+function CitationText({ children }: { children: ReactNode }) {
+  if (typeof children !== "string") return <>{children}</>;
+
+  // Split on citation patterns like [1], [2], [1,2], [1-3]
+  const parts = children.split(/(\[\d+(?:[,\-–]\s*\d+)*\])/g);
+  if (parts.length === 1) return <>{children}</>;
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const match = part.match(/^\[(\d+(?:[,\-–]\s*\d+)*)\]$/);
+        if (match) {
+          return (
+            <span
+              key={i}
+              className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 mx-[1px] rounded-full bg-primary/15 text-primary text-[9px] font-semibold align-super cursor-default hover:bg-primary/25 transition-colors"
+              title={`Source ${match[1]}`}
+            >
+              {match[1]}
+            </span>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+/** Code block with copy button */
+function CodeBlockWithCopy({ children, className, ...props }: ComponentPropsWithoutRef<"code"> & { inline?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const isInline = !className && typeof children === "string" && !children.includes("\n");
+
+  if (isInline) {
+    return (
+      <code className="bg-muted/60 text-[0.85em] px-1.5 py-0.5 rounded font-mono" {...props}>
+        {children}
+      </code>
+    );
+  }
+
+  const codeText = typeof children === "string" ? children : String(children || "").replace(/\n$/, "");
+  const language = className?.replace(/^language-/, "") || "";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="relative group/code">
+      {language && (
+        <div className="absolute top-0 left-0 px-2 py-0.5 text-[9px] font-mono text-muted-foreground/60 bg-muted/30 rounded-br">
+          {language}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="absolute top-1 right-1 p-1 rounded bg-muted/60 hover:bg-muted opacity-0 group-hover/code:opacity-100 transition-opacity"
+        title="Copy code"
+      >
+        {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
+      </button>
+      <code className={className} {...props}>
+        {children}
+      </code>
+    </div>
+  );
+}
+
+/** Enhanced link rendering with external indicator */
+function EnhancedLink({ href, children, ...props }: ComponentPropsWithoutRef<"a">) {
+  const isExternal = href?.startsWith("http");
+  return (
+    <a
+      href={href}
+      target={isExternal ? "_blank" : undefined}
+      rel={isExternal ? "noopener noreferrer" : undefined}
+      className="text-primary hover:text-primary/80 underline underline-offset-2 decoration-primary/30 hover:decoration-primary/60 transition-colors inline-flex items-center gap-0.5"
+      {...props}
+    >
+      {children}
+      {isExternal && <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-50" />}
+    </a>
+  );
+}
+
+/** Detect if text is a "Sources" or "References" heading */
+function isSourcesHeading(text: string): boolean {
+  return /^(sources|references|bibliography|citations|works cited)/i.test(text.trim());
+}
+
+/** Create an enhanced heading component for a given level */
+function makeEnhancedHeading(level: 1 | 2 | 3 | 4) {
+  const Tag = level === 1 ? "h1" : level === 2 ? "h2" : level === 3 ? "h3" : "h4";
+  return function EnhancedHeading({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
+    const text = typeof children === "string" ? children : "";
+    const isSources = isSourcesHeading(text);
+
+    if (isSources) {
+      return (
+        <div className="flex items-center gap-1.5 mt-4 mb-2 pt-3 border-t border-border/50">
+          <Link2 className="w-3.5 h-3.5 text-primary/60" />
+          <Tag className="text-xs font-semibold text-foreground/80 uppercase tracking-wider !mt-0 !mb-0" {...props}>
+            {children}
+          </Tag>
+        </div>
+      );
+    }
+
+    return <Tag {...props}>{children}</Tag>;
+  };
+}
+
+const EnhancedH1 = makeEnhancedHeading(1);
+const EnhancedH2 = makeEnhancedHeading(2);
+const EnhancedH3 = makeEnhancedHeading(3);
+const EnhancedH4 = makeEnhancedHeading(4);
+
+/** Enhanced list item that renders source entries as compact cards */
+function EnhancedListItem({ children, ...props }: ComponentPropsWithoutRef<"li">) {
+  // Check if this list item contains a link (common in source lists)
+  const childArray = Array.isArray(children) ? children : [children];
+  const hasLink = childArray.some(
+    (child) =>
+      typeof child === "object" &&
+      child !== null &&
+      "props" in child &&
+      (child.type === "a" || child.type === EnhancedLink),
+  );
+
+  if (hasLink) {
+    return (
+      <li className="flex items-start gap-1.5 py-0.5 text-[11px] list-none" {...props}>
+        <Globe className="w-3 h-3 text-muted-foreground/50 mt-0.5 shrink-0" />
+        <span className="flex-1">{children}</span>
+      </li>
+    );
+  }
+
+  return <li {...props}>{children}</li>;
+}
+
+/** Custom paragraph that processes inline citations */
+function EnhancedParagraph({ children, ...props }: ComponentPropsWithoutRef<"p">) {
+  // Process children to inject citation badges
+  const processedChildren = Array.isArray(children)
+    ? children.map((child, i) =>
+        typeof child === "string" ? <CitationText key={i}>{child}</CitationText> : child,
+      )
+    : typeof children === "string"
+    ? <CitationText>{children}</CitationText>
+    : children;
+
+  return <p {...props}>{processedChildren}</p>;
+}
+
+/** ReactMarkdown components config for research chat */
+const researchMarkdownComponents = {
+  p: EnhancedParagraph,
+  a: EnhancedLink,
+  code: CodeBlockWithCopy,
+  h1: EnhancedH1,
+  h2: EnhancedH2,
+  h3: EnhancedH3,
+  h4: EnhancedH4,
+  li: EnhancedListItem,
+  blockquote: ({ children }: React.HTMLAttributes<HTMLQuoteElement>) => (
+    <blockquote className="border-l-2 border-primary/30 pl-3 italic text-foreground/70 my-2">
+      {children}
+    </blockquote>
+  ),
+  table: ({ children }: React.HTMLAttributes<HTMLTableElement>) => (
+    <div className="overflow-x-auto my-2 rounded border border-border/50">
+      <table className="min-w-full text-[11px]">{children}</table>
+    </div>
+  ),
+  th: ({ children }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
+    <th className="px-2 py-1 text-left font-semibold bg-muted/40 border-b border-border/50">
+      {children}
+    </th>
+  ),
+  td: ({ children }: React.TdHTMLAttributes<HTMLTableCellElement>) => (
+    <td className="px-2 py-1 border-b border-border/30">
+      {children}
+    </td>
+  ),
+} as const;
 
 interface NotebookResearchChatProps {
   objective: string;
@@ -466,8 +661,8 @@ export function NotebookResearchChat({
                           </Tooltip>
                         )}
                       </div>
-                      <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:bg-muted/30 [&_pre]:rounded-md [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:text-[11px]">
+                        <ReactMarkdown components={researchMarkdownComponents}>{msg.content}</ReactMarkdown>
                       </div>
                     </div>
 
@@ -522,8 +717,8 @@ export function NotebookResearchChat({
                         streaming...
                       </span>
                     </div>
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:bg-muted/30 [&_pre]:rounded-md [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:text-[11px]">
+                      <ReactMarkdown components={researchMarkdownComponents}>{streamingContent}</ReactMarkdown>
                     </div>
                   </div>
                   {/* Stop button */}
