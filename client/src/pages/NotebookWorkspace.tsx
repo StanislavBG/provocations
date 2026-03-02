@@ -19,7 +19,8 @@ import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
-import type { PainterConfig, PainterMode, PainterSource } from "@/components/notebook/PainterPanel";
+import type { PainterConfig, PainterMode, PainterSource, PaintImageRequest, PainterAdvancedParams } from "@/components/notebook/PainterPanel";
+import { PainterStudio } from "@/components/notebook/PainterStudio";
 import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
@@ -68,6 +69,7 @@ export default function NotebookWorkspace() {
   const [isPainting, setIsPainting] = useState(false);
   const [imageTabData, setImageTabData] = useState<Map<string, ImageTabData>>(new Map());
   const [activeImageTabId, setActiveImageTabId] = useState<string | null>(null);
+  const [showPainterStudio, setShowPainterStudio] = useState(false);
   const centerPanelRef = useRef<SplitDocumentEditorHandle>(null);
 
   // ── Timeline summary state (for interview context) ──
@@ -583,14 +585,8 @@ export default function NotebookWorkspace() {
 
   // ── Paint image via Painter configs ──
   const handlePaintImage = useCallback(
-    async (config: {
-      painterConfigs: PainterConfig[];
-      painterObjective: string;
-      negativePrompt?: string;
-      painterMode: PainterMode;
-      excludedSources?: Set<PainterSource>;
-    }) => {
-      const { painterConfigs, painterObjective, negativePrompt, painterMode, excludedSources } = config;
+    async (config: PaintImageRequest) => {
+      const { painterConfigs, painterObjective, negativePrompt, painterMode, excludedSources, advancedParams } = config;
 
       // Include Active Context (pinned docs) — unless "context" is excluded for this call.
       // Infographic mode sends more context since Nano Banana 2 excels at data visualization.
@@ -676,7 +672,16 @@ export default function NotebookWorkspace() {
           style: stylePart || undefined,
           aspectRatio,
           negativePrompt: negativePrompt || undefined,
-          numberOfImages: 1,
+          numberOfImages: advancedParams?.numberOfImages || 1,
+          // Advanced generation params from PainterStudio
+          ...(advancedParams?.temperature !== undefined && { temperature: advancedParams.temperature }),
+          ...(advancedParams?.topP !== undefined && { topP: advancedParams.topP }),
+          ...(advancedParams?.topK !== undefined && { topK: advancedParams.topK }),
+          ...(advancedParams?.seed !== undefined && { seed: advancedParams.seed }),
+          ...(advancedParams?.imageSize && { imageSize: advancedParams.imageSize }),
+          ...(advancedParams?.personGeneration && { personGeneration: advancedParams.personGeneration }),
+          ...(advancedParams?.safetyLevel && { safetyLevel: advancedParams.safetyLevel }),
+          ...(advancedParams?.systemInstruction && { systemInstruction: advancedParams.systemInstruction }),
         });
 
         const data = (await response.json()) as { images?: string[]; error?: string };
@@ -872,6 +877,7 @@ export default function NotebookWorkspace() {
                   onChartActiveChange={setIsChartActive}
                   onSaveToContext={handleSaveToContext}
                   onSaveImageToContext={handleSaveImageToContext}
+                  onOpenPainterStudio={() => setShowPainterStudio(true)}
                   isSaving={isSavingToContext}
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
@@ -915,6 +921,7 @@ export default function NotebookWorkspace() {
                     onPaintImage={handlePaintImage}
                     isPainting={isPainting}
                     pinnedDocContents={pinnedDocContents}
+                    onOpenPainterStudio={() => setShowPainterStudio(true)}
                     appType={validAppType}
                     visibleTabs={panelLayout.rightTabs}
                     // Props for left-panel tabs that may be moved here
@@ -931,6 +938,18 @@ export default function NotebookWorkspace() {
         </ResizablePanelGroup>
       </div>
 
+      {/* ── Painter Studio fullscreen overlay ── */}
+      {showPainterStudio && (
+        <PainterStudio
+          documentText={document.rawText}
+          objective={objective}
+          onPaintImage={handlePaintImage}
+          isPainting={isPainting}
+          pinnedDocContents={pinnedDocContents}
+          generatedImages={imageTabData}
+          onClose={() => setShowPainterStudio(false)}
+        />
+      )}
     </div>
   );
 }

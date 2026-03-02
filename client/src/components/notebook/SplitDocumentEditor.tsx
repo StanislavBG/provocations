@@ -77,6 +77,7 @@ interface SplitDocumentEditorProps {
   onSaveToContext?: (tabTitle?: string) => void;
   /** Save an image to the Context Store */
   onSaveImageToContext?: (imageUrl: string, prompt: string) => void;
+  onOpenPainterStudio?: () => void;
   isSaving?: boolean;
   /** Image tab data keyed by tab ID */
   imageTabData?: Map<string, ImageTabData>;
@@ -119,6 +120,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   onChartActiveChange,
   onSaveToContext,
   onSaveImageToContext,
+  onOpenPainterStudio,
   isSaving = false,
   imageTabData,
   onAddImageTab,
@@ -821,6 +823,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
                 isGenerating={data?.isGenerating ?? false}
                 onSaveToContext={onSaveImageToContext}
                 isSaving={isSaving}
+                onOpenStudio={onOpenPainterStudio}
               />
             </div>
           );

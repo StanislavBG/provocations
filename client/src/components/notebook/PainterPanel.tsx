@@ -8,6 +8,7 @@ import {
   SlidersHorizontal,
   LayoutGrid,
   List,
+  Maximize2,
   ChevronDown,
   ChevronRight,
   Minus,
@@ -41,6 +42,30 @@ export type PainterMode = "art" | "infographic";
 
 /** Context sources that can be excluded per-call */
 export type PainterSource = "description" | "document" | "context";
+
+/** Advanced generation parameters passed to the Gemini API */
+export interface PainterAdvancedParams {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  seed?: number;
+  imageSize?: "1K" | "2K" | "4K";
+  personGeneration?: "all" | "adult" | "none";
+  outputMimeType?: string;
+  safetyLevel?: "off" | "none" | "high" | "medium" | "low";
+  systemInstruction?: string;
+  numberOfImages?: number;
+}
+
+/** Full paint request payload */
+export interface PaintImageRequest {
+  painterConfigs: PainterConfig[];
+  painterObjective: string;
+  negativePrompt?: string;
+  painterMode: PainterMode;
+  excludedSources?: Set<PainterSource>;
+  advancedParams?: PainterAdvancedParams;
+}
 
 /** A selected painter configuration — same shape as WriterConfig */
 export interface PainterConfig {
@@ -111,6 +136,9 @@ const ART_BUTTONS: SmartButtonDef[] = [
       { id: "16:9", label: "Widescreen (16:9)", description: "Cinematic landscape ratio" },
       { id: "9:16", label: "Portrait (9:16)", description: "Tall vertical ratio" },
       { id: "4:3", label: "Standard (4:3)", description: "Classic photograph ratio" },
+      { id: "3:2", label: "Photo (3:2)", description: "Standard DSLR ratio" },
+      { id: "2:3", label: "Portrait (2:3)", description: "Vertical photo ratio" },
+      { id: "21:9", label: "Ultra-wide (21:9)", description: "Panoramic cinematic" },
     ],
   },
 ];
@@ -202,15 +230,10 @@ type ViewMode = "sliders" | "cards" | "accordion";
 interface PainterPanelProps {
   documentText: string;
   objective: string;
-  onPaintImage: (config: {
-    painterConfigs: PainterConfig[];
-    painterObjective: string;
-    negativePrompt?: string;
-    painterMode: PainterMode;
-    excludedSources?: Set<PainterSource>;
-  }) => void;
+  onPaintImage: (config: PaintImageRequest) => void;
   isPainting: boolean;
   pinnedDocContents?: Record<number, { title: string; content: string }>;
+  onOpenStudio?: () => void;
 }
 
 export function PainterPanel({
@@ -219,6 +242,7 @@ export function PainterPanel({
   onPaintImage,
   isPainting,
   pinnedDocContents = {},
+  onOpenStudio,
 }: PainterPanelProps) {
   const [painterMode, setPainterMode] = useState<PainterMode>("art");
   // Per-mode selections so switching modes doesn't lose choices
@@ -427,8 +451,20 @@ export function PainterPanel({
             </span>
           )}
         </div>
-        {/* View mode toggle */}
-        <div className="flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
+        <div className="flex items-center gap-1">
+          {/* Studio fullscreen */}
+          {onOpenStudio && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={onOpenStudio} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+                  <Maximize2 className="w-3 h-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-[10px]">Open Painter Studio</TooltipContent>
+            </Tooltip>
+          )}
+          {/* View mode toggle */}
+          <div className="flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
           {([
             { mode: "sliders" as ViewMode, icon: SlidersHorizontal, tip: "Slider view" },
             { mode: "cards" as ViewMode, icon: LayoutGrid, tip: "Card view" },
@@ -450,6 +486,7 @@ export function PainterPanel({
               <TooltipContent side="bottom" className="text-[10px]">{tip}</TooltipContent>
             </Tooltip>
           ))}
+          </div>
         </div>
       </div>
 
