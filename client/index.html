@@ -33,177 +33,111 @@
     <script type="module" src="/src/main.tsx"></script>
     <!-- AIQA QA Overlay -->
     <style>
-      /* Force AIQA overlay to center of screen with proper dimensions */
+      /* Minimal — just ensure AIQA is on top, let overlay.js handle its own layout */
       #aiqa-overlay-root {
         z-index: 2147483647 !important;
-        position: fixed !important;
-        top: 50% !important;
-        left: 50% !important;
-        right: auto !important;
-        bottom: auto !important;
-        transform: translate(-50%, -50%) !important;
-        width: 460px !important;
-        max-width: 95vw !important;
-        height: 80vh !important;
-        max-height: 90vh !important;
-        outline: 3px solid #6366f1 !important;
-        border-radius: 12px !important;
-        overflow: auto !important;
-        background: white !important;
-        box-shadow: 0 25px 50px rgba(0,0,0,0.3) !important;
-        pointer-events: auto !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        display: block !important;
-      }
-      #aiqa-overlay-root iframe {
-        width: 100% !important;
-        height: 100% !important;
-        border: none !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        display: block !important;
       }
     </style>
     <script src="https://aiqastudio.com/snippet.js" data-base-url="https://aiqastudio.com"></script>
     <script>
-      // AIQA Debug — tracks why the overlay disappears on click
+      // AIQA Debug v3 — deep mutation tracking inside overlay root
       (function() {
         var TAG = '[AIQA-DEBUG]';
         var log = function() { console.log.apply(console, [TAG].concat(Array.prototype.slice.call(arguments))); };
         var warn = function() { console.warn.apply(console, [TAG].concat(Array.prototype.slice.call(arguments))); };
 
-        // 1. Monitor overlay.js loading
-        var origFetch = window.fetch;
-        window.fetch = function() {
-          var url = arguments[0];
-          if (typeof url === 'string' && url.indexOf('aiqastudio') !== -1) {
-            log('Fetch →', url, arguments[1] || '');
-            return origFetch.apply(this, arguments).then(function(resp) {
-              log('Fetch ←', url, 'status:', resp.status, resp.ok ? 'OK' : 'FAILED');
-              if (!resp.ok) warn('Non-OK response from', url, '— overlay may not load');
-              return resp;
-            }).catch(function(err) {
-              warn('Fetch ERROR', url, err.message || err);
-              throw err;
-            });
+        // Capture all errors from overlay.js
+        window.addEventListener('error', function(e) {
+          if (e.filename && e.filename.indexOf('aiqastudio') !== -1) {
+            warn('SCRIPT ERROR in', e.filename, 'line', e.lineno, ':', e.message);
           }
-          return origFetch.apply(this, arguments);
-        };
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+          var msg = e.reason && (e.reason.message || String(e.reason));
+          if (msg && msg.indexOf('aiqa') !== -1) warn('UNHANDLED REJECTION:', msg);
+        });
 
-        // 2. Monitor script element injection (overlay.js loaded via <script>)
-        var origAppend = Element.prototype.appendChild;
-        Element.prototype.appendChild = function(child) {
-          if (child && child.tagName === 'SCRIPT' && child.src && child.src.indexOf('aiqastudio') !== -1) {
-            log('Script injected:', child.src);
-            child.addEventListener('load', function() { log('Script loaded OK:', child.src); });
-            child.addEventListener('error', function(e) { warn('Script FAILED to load:', child.src, e); });
-          }
-          return origAppend.call(this, child);
-        };
-
-        // 3. Watch for AIQA button & panel DOM mutations
-        var observer = new MutationObserver(function(mutations) {
+        // Watch for overlay root to appear, then deeply observe it
+        var rootObserver = new MutationObserver(function(mutations) {
           mutations.forEach(function(m) {
             m.addedNodes.forEach(function(n) {
-              if (n.nodeType === 1) {
-                var el = n;
-                if (el.textContent === 'QA' && el.tagName === 'BUTTON') log('QA button ADDED to DOM');
-                if (el.tagName === 'IFRAME' && el.src && el.src.indexOf('aiqastudio') !== -1) log('AIQA iframe ADDED:', el.src);
-                if (el.id && el.id.toLowerCase().indexOf('aiqa') !== -1) log('AIQA element ADDED:', el.tagName, el.id);
+              if (n.nodeType !== 1) return;
+              if (n.id === 'aiqa-overlay-root') {
+                log('overlay-root ADDED. Attaching deep observer.');
+                attachDeepObserver(n);
+                // Dump state after overlay.js has time to render
+                setTimeout(function() { dumpElement(n, 0); }, 2000);
+                setTimeout(function() { dumpElement(n, 0); }, 5000);
+              }
+              if (n.id === 'aiqa-overlay-styles') {
+                log('overlay-styles ADDED. CSS length:', n.textContent.length);
               }
             });
             m.removedNodes.forEach(function(n) {
-              if (n.nodeType === 1) {
-                var el = n;
-                if (el.textContent === 'QA' && el.tagName === 'BUTTON') warn('QA button REMOVED from DOM');
-                if (el.tagName === 'IFRAME') warn('iframe REMOVED:', el.src || '(no src)');
-                if (el.id && el.id.toLowerCase().indexOf('aiqa') !== -1) warn('AIQA element REMOVED:', el.tagName, el.id);
+              if (n.nodeType === 1 && n.id && n.id.indexOf('aiqa') !== -1) {
+                warn('REMOVED:', n.tagName, '#' + n.id);
               }
             });
           });
         });
-        observer.observe(document.documentElement, { childList: true, subtree: true });
+        rootObserver.observe(document.documentElement, { childList: true, subtree: true });
 
-        // 4. Monkeypatch window.AIQA when it appears
-        var patchInterval = setInterval(function() {
-          if (!window.AIQA) return;
-          clearInterval(patchInterval);
-          log('window.AIQA found:', Object.keys(window.AIQA));
-
-          if (window.AIQA.toggle) {
-            var origToggle = window.AIQA.toggle;
-            window.AIQA.toggle = function() {
-              log('toggle() called');
-              try { var r = origToggle.apply(this, arguments); log('toggle() completed'); return r; }
-              catch(e) { warn('toggle() THREW:', e.message, e.stack); throw e; }
-            };
-          }
-          if (window.AIQA.init) {
-            var origInit = window.AIQA.init;
-            window.AIQA.init = function() {
-              log('init() called');
-              try { var r = origInit.apply(this, arguments); log('init() completed'); return r; }
-              catch(e) { warn('init() THREW:', e.message, e.stack); throw e; }
-            };
-          }
-          if (window.AIQA.destroy) {
-            var origDestroy = window.AIQA.destroy;
-            window.AIQA.destroy = function() {
-              log('destroy() called');
-              try { var r = origDestroy.apply(this, arguments); log('destroy() completed'); return r; }
-              catch(e) { warn('destroy() THREW:', e.message, e.stack); throw e; }
-            };
-          }
-
-          // Log auth state
-          log('localStorage aiqa keys:', Object.keys(localStorage).filter(function(k) { return k.toLowerCase().indexOf('aiqa') !== -1; }));
-        }, 200);
-
-        // 5. Detailed overlay root diagnostics (runs once after init)
-        var overlayLogged = false;
-        setInterval(function() {
-          var root = document.getElementById('aiqa-overlay-root');
-          if (!root) return;
-          var s = window.getComputedStyle(root);
-          var rect = root.getBoundingClientRect();
-
-          if (!overlayLogged) {
-            overlayLogged = true;
-            log('=== OVERLAY ROOT FULL DUMP ===');
-            log('outerHTML (first 2000 chars):', root.outerHTML.slice(0, 2000));
-            log('computed style:', {
-              display: s.display, visibility: s.visibility, opacity: s.opacity,
-              position: s.position, zIndex: s.zIndex,
-              top: s.top, right: s.right, bottom: s.bottom, left: s.left,
-              width: s.width, height: s.height,
-              overflow: s.overflow, transform: s.transform,
-              pointerEvents: s.pointerEvents, clip: s.clip, clipPath: s.clipPath,
+        function attachDeepObserver(root) {
+          var deepObs = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+              if (m.type === 'childList') {
+                m.addedNodes.forEach(function(n) {
+                  if (n.nodeType === 1) {
+                    log('CHILD ADDED inside overlay-root:', n.tagName,
+                      n.id ? '#' + n.id : '', n.className ? '.' + n.className.toString().split(' ').join('.') : '',
+                      'innerHTML:', (n.innerHTML || '').slice(0, 200));
+                  }
+                });
+                m.removedNodes.forEach(function(n) {
+                  if (n.nodeType === 1) {
+                    warn('CHILD REMOVED from overlay-root:', n.tagName,
+                      n.id ? '#' + n.id : '', n.className ? '.' + n.className.toString().split(' ').join('.') : '');
+                  }
+                });
+              }
+              if (m.type === 'attributes') {
+                log('ATTR CHANGED on', m.target.tagName,
+                  m.target.id ? '#' + m.target.id : '',
+                  'attr:', m.attributeName, '=', m.target.getAttribute(m.attributeName));
+              }
             });
-            log('boundingRect:', JSON.stringify(rect));
-            log('children:', root.children.length);
-            // Dump each child
-            for (var i = 0; i < root.children.length; i++) {
-              var ch = root.children[i];
-              var cs = window.getComputedStyle(ch);
-              var cr = ch.getBoundingClientRect();
-              log('  child[' + i + ']:', ch.tagName, ch.id || ch.className || '', {
-                display: cs.display, visibility: cs.visibility, opacity: cs.opacity,
-                position: cs.position, zIndex: cs.zIndex,
-                width: cs.width, height: cs.height,
-                rect: JSON.stringify(cr),
-              });
-            }
-            // Check if #root (React app) covers the overlay
-            var appRoot = document.getElementById('root');
-            if (appRoot) {
-              var appS = window.getComputedStyle(appRoot);
-              log('React #root — position:', appS.position, 'zIndex:', appS.zIndex, 'isolation:', appS.isolation);
-            }
-          }
-        }, 1500);
+          });
+          deepObs.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'src'] });
+        }
 
-        log('Debug watcher installed — click the QA button and check console');
+        function dumpElement(el, depth) {
+          var indent = '  '.repeat(depth);
+          var s = window.getComputedStyle(el);
+          var r = el.getBoundingClientRect();
+          log(indent + el.tagName + (el.id ? '#' + el.id : '') + (el.className ? '.' + el.className.toString().split(' ')[0] : ''),
+            '| rect:', Math.round(r.width) + 'x' + Math.round(r.height), '@', Math.round(r.left) + ',' + Math.round(r.top),
+            '| display:', s.display, '| vis:', s.visibility, '| opacity:', s.opacity,
+            '| pos:', s.position, '| z:', s.zIndex, '| overflow:', s.overflow);
+          if (el.tagName === 'IFRAME') {
+            log(indent + '  iframe src:', el.src);
+          }
+          if (el.shadowRoot) {
+            log(indent + '  HAS SHADOW ROOT with', el.shadowRoot.children.length, 'children');
+          }
+          for (var i = 0; i < el.children.length && depth < 4; i++) {
+            dumpElement(el.children[i], depth + 1);
+          }
+        }
+
+        // Also log window.AIQA state
+        var poll = setInterval(function() {
+          if (!window.AIQA) return;
+          clearInterval(poll);
+          log('window.AIQA keys:', Object.keys(window.AIQA));
+          log('localStorage aiqa:', Object.keys(localStorage).filter(function(k) { return k.toLowerCase().indexOf('aiqa') !== -1; }));
+        }, 300);
+
+        log('Debug v3 installed');
       })();
     </script>
   </body>
