@@ -132,6 +132,49 @@ export function parseTimelineDate(dateStr: string): Date {
   return new Date(dateStr);
 }
 
+// ── Helper: detect date granularity from string format ──
+
+export type DateGranularity = "year" | "month" | "day" | "time";
+
+export function detectDateGranularity(dateStr: string): DateGranularity {
+  if (/^\d{4}$/.test(dateStr)) return "year";
+  if (/^\d{4}-\d{2}$/.test(dateStr)) return "month";
+  // Has time component (T or space followed by HH:MM)
+  if (/T\d{2}:\d{2}/.test(dateStr) || /\s\d{2}:\d{2}/.test(dateStr)) return "time";
+  return "day";
+}
+
+/** Format a date string for display, showing only as much detail as the data supports */
+export function formatEventDate(dateStr: string): string {
+  const granularity = detectDateGranularity(dateStr);
+  const date = parseTimelineDate(dateStr);
+  switch (granularity) {
+    case "year":
+      return `${date.getFullYear()}`;
+    case "month":
+      return date.toLocaleDateString("en-US", { year: "numeric", month: "short" });
+    case "day":
+      return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    case "time":
+      return date.toLocaleDateString("en-US", {
+        year: "numeric", month: "short", day: "numeric",
+        hour: "numeric", minute: "2-digit",
+      });
+  }
+}
+
+/** Pick the best zoom level based on the date span and density of events */
+export function autoZoomLevel(events: { date: string }[]): TimelineZoomLevel {
+  if (events.length === 0) return "years";
+  const dates = events.map((e) => parseTimelineDate(e.date).getTime()).sort((a, b) => a - b);
+  const spanMs = dates[dates.length - 1] - dates[0];
+  const spanDays = spanMs / (1000 * 60 * 60 * 24);
+  if (spanDays <= 7) return "days";
+  if (spanDays <= 365) return "months";
+  if (spanDays <= 365 * 30) return "years";
+  return "decades";
+}
+
 // ── Helper: sort events chronologically ──
 
 export function sortEventsByDate(events: TimelineEvent[]): TimelineEvent[] {
