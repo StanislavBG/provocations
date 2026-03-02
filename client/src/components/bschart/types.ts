@@ -1,5 +1,39 @@
 // ── BS Chart Data Model ──────────────────────────────────────────────
 
+// ── Limits & Constants ──
+
+export const CHART_LIMITS = {
+  MAX_NODES: 500,
+  MAX_CONNECTORS: 1000,
+  MAX_TABLE_ROWS: 200,
+  MAX_TABLE_COLUMNS: 30,
+  MAX_LABEL_LENGTH: 500,
+  MAX_CELL_LENGTH: 500,
+  MAX_UNDO_HISTORY: 50,
+} as const;
+
+export const ZOOM = {
+  MIN: 0.1,
+  MAX: 4,
+  STEP: 1.1,
+  FIT_MAX: 2,
+  FIT_PADDING: 60,
+} as const;
+
+export const NODE_BOUNDS = {
+  MIN_WIDTH: 40,
+  MIN_HEIGHT: 24,
+  MAX_WIDTH: 2000,
+  MAX_HEIGHT: 2000,
+  MIN_FONT_SIZE: 8,
+  MAX_FONT_SIZE: 48,
+  MAX_BORDER_RADIUS: 100,
+  MIN_STROKE_WIDTH: 1,
+  MAX_STROKE_WIDTH: 8,
+} as const;
+
+export const CONNECTOR_PATH_OFFSET = 30;
+
 export type BSNodeType = "table" | "diamond" | "text" | "rectangle" | "rounded-rect" | "badge";
 export type BSPortSide = "top" | "right" | "bottom" | "left";
 export type BSLineStyle = "solid" | "dashed" | "dotted";

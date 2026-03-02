@@ -1125,12 +1125,56 @@ export interface PipelineStatus {
 export const researchFocusModes = ["explore", "verify", "gather", "analyze", "synthesize", "reason", "deep-research"] as const;
 export type ResearchFocus = (typeof researchFocusModes)[number];
 
+// ── Response configuration (how the researcher responds, distinct from focus mode) ──
+
+export const responseDetailLevels = ["brief", "standard", "detailed", "exhaustive"] as const;
+export type ResponseDetailLevel = (typeof responseDetailLevels)[number];
+
+export const responseFormats = ["prose", "structured", "outline", "academic"] as const;
+export type ResponseFormat = (typeof responseFormats)[number];
+
+export const responseAudienceLevels = ["non-technical", "general", "technical", "expert"] as const;
+export type ResponseAudienceLevel = (typeof responseAudienceLevels)[number];
+
+export const responseTones = ["neutral", "conversational", "assertive", "critical"] as const;
+export type ResponseTone = (typeof responseTones)[number];
+
+export const responseConfigSchema = z.object({
+  detail: z.enum(responseDetailLevels).optional(),
+  format: z.enum(responseFormats).optional(),
+  audience: z.enum(responseAudienceLevels).optional(),
+  tone: z.enum(responseTones).optional(),
+});
+
+export type ResponseConfig = z.infer<typeof responseConfigSchema>;
+
 export const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
 });
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
+
+/** Extended chat message with metadata for display (not sent to API) */
+export interface ChatMessageWithMeta extends ChatMessage {
+  followUps?: string[];
+  durationMs?: number;
+  model?: string;
+  groundingSource?: "web" | "context" | "both";
+}
+
+/** Research plan step for Deep Research mode */
+export interface ResearchPlanStep {
+  area: string;
+  questions: string[];
+}
+
+/** Research plan generated before deep research execution */
+export interface ResearchPlan {
+  title: string;
+  estimatedTime: string;
+  steps: ResearchPlanStep[];
+}
 
 export const chatRequestSchema = z.object({
   message: z.string().min(1, "Message is required"),
@@ -1141,6 +1185,8 @@ export const chatRequestSchema = z.object({
   appType: z.enum(templateIds).optional(),
   chatModel: z.string().optional(),
   researchFocus: z.enum(researchFocusModes).optional(),
+  responseConfig: responseConfigSchema.optional(),
+  researchPlan: z.string().optional(),
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -1376,3 +1422,77 @@ export const chatPreferencesSchema = z.object({
   compactMode: z.boolean().default(false),
 });
 export type ChatPreferencesData = z.infer<typeof chatPreferencesSchema>;
+
+// ══════════════════════════════════════════════════════════════════
+// Sharing — Document & Folder sharing between connected users
+// ══════════════════════════════════════════════════════════════════
+
+export const shareItemTypes = ["document", "folder"] as const;
+export type ShareItemType = typeof shareItemTypes[number];
+
+export const sharePermissions = ["read", "write"] as const;
+export type SharePermission = typeof sharePermissions[number];
+
+export const shareStatuses = ["pending", "accepted", "declined", "revoked"] as const;
+export type ShareStatus = typeof shareStatuses[number];
+
+export const shareItemRequestSchema = z.object({
+  recipientId: z.string().min(1, "Recipient ID required"),
+  itemType: z.enum(shareItemTypes),
+  itemId: z.number(),
+  permission: z.enum(sharePermissions).default("read"),
+  note: z.string().max(500).optional(),
+});
+export type ShareItemRequest = z.infer<typeof shareItemRequestSchema>;
+
+export const respondShareRequestSchema = z.object({
+  shareId: z.number(),
+  action: z.enum(["accept", "decline"]),
+});
+export type RespondShareRequest = z.infer<typeof respondShareRequestSchema>;
+
+/** Shared item as returned by the API (with display info) */
+export interface SharedItemDisplay {
+  id: number;
+  ownerId: string;
+  recipientId: string;
+  itemType: ShareItemType;
+  itemId: number;
+  permission: SharePermission;
+  status: ShareStatus;
+  note?: string;           // decrypted
+  itemTitle?: string;      // decrypted doc/folder title for display
+  ownerName?: string;
+  ownerEmail?: string;
+  ownerAvatar?: string | null;
+  recipientName?: string;
+  recipientEmail?: string;
+  recipientAvatar?: string | null;
+  createdAt: string;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Notifications — Global Mailbox
+// ══════════════════════════════════════════════════════════════════
+
+export const notificationTypes = [
+  "connection_request",    // someone wants to connect
+  "connection_accepted",   // your connection request was accepted
+  "item_shared",           // someone shared a doc/folder with you
+  "share_accepted",        // recipient accepted your share
+] as const;
+export type NotificationType = typeof notificationTypes[number];
+
+/** Notification as returned by the API (with display info) */
+export interface NotificationItem {
+  id: number;
+  userId: string;
+  notificationType: NotificationType;
+  fromUserId: string;
+  fromUserName?: string;
+  fromUserEmail?: string;
+  fromUserAvatar?: string | null;
+  metadata?: Record<string, any>;   // parsed JSON
+  readAt: string | null;
+  createdAt: string;
+}
