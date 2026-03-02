@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
@@ -41,6 +41,7 @@ import type {
 
 export default function NotebookWorkspace() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const { isAdmin } = useRole();
   const { panelLayout, setPanelLayout } = usePanelLayout();
@@ -51,6 +52,7 @@ export default function NotebookWorkspace() {
   const [objective, setObjective] = useState("");
   /** When editing a document from the Context Store, tracks its DB id for in-place save */
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
+  const [activeDocumentTitle, setActiveDocumentTitle] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     routeMatch ? routeParams?.templateId ?? null : null,
   );
@@ -466,13 +468,17 @@ export default function NotebookWorkspace() {
 
   // ── Save document to Context Store ──
   const [isSavingToContext, setIsSavingToContext] = useState(false);
-  const handleSaveToContext = useCallback(async () => {
+  const handleSaveToContext = useCallback(async (tabTitle?: string) => {
     if (!document.rawText.trim()) return;
     setIsSavingToContext(true);
     try {
-      const title = objective?.trim()
-        ? objective.trim().slice(0, 120)
-        : `Document ${new Date().toLocaleDateString()}`;
+      // Use the document tab title (filename) as the storage title.
+      // Fall back to objective, then a date-based default.
+      const title = tabTitle?.trim()
+        ? tabTitle.trim().slice(0, 120)
+        : objective?.trim()
+          ? objective.trim().slice(0, 120)
+          : `Document ${new Date().toLocaleDateString()}`;
       const content = document.rawText;
 
       if (activeDocumentId) {
@@ -485,6 +491,7 @@ export default function NotebookWorkspace() {
             [activeDocumentId]: { title, content },
           }));
         }
+        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
         trackEvent("document_saved");
         toast({ title: "Document saved", description: title });
       } else {
@@ -493,6 +500,7 @@ export default function NotebookWorkspace() {
         const data = await res.json();
         // Track the newly created document so subsequent saves update it
         if (data.id) setActiveDocumentId(data.id);
+        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
         trackEvent("document_saved");
         toast({ title: "Saved to Context Store", description: title });
       }
@@ -501,7 +509,7 @@ export default function NotebookWorkspace() {
     } finally {
       setIsSavingToContext(false);
     }
-  }, [document.rawText, objective, activeDocumentId, pinnedDocIds, toast]);
+  }, [document.rawText, objective, activeDocumentId, pinnedDocIds, toast, queryClient]);
 
   // ── Save an image to the Context Store ──
   const handleSaveImageToContext = useCallback(async (imageUrl: string, prompt: string) => {
@@ -514,6 +522,7 @@ export default function NotebookWorkspace() {
       // Save just the image — the prompt lives in the title.
       const content = imageUrl;
       await apiRequest("POST", "/api/documents", { title, content });
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       trackEvent("document_saved");
       toast({ title: "Saved to Context Store", description: title });
     } catch {
@@ -521,7 +530,7 @@ export default function NotebookWorkspace() {
     } finally {
       setIsSavingToContext(false);
     }
-  }, [toast]);
+  }, [toast, queryClient]);
 
   // ── Writer voice/text feedback — sends user feedback through the write mutation ──
   const handleWriterFeedback = useCallback(
@@ -724,23 +733,28 @@ export default function NotebookWorkspace() {
     }
   }, [pinnedDocContents, toast]);
 
-  // ── Open a context document directly into the editor (double-click) ──
+  // ── Open a context document directly into the editor (double-click or "Open Document" button) ──
   const handleOpenDoc = useCallback(async (id: number, title: string) => {
+    // Clear any preview overlay so the document is visible
+    setPreviewDoc(null);
     // Check if already in pinned cache
     const cached = pinnedDocContents[id];
     if (cached) {
       setDocument({ id: generateId("doc"), rawText: cached.content });
       setObjective(cached.title);
       setActiveDocumentId(id);
+      setActiveDocumentTitle(cached.title);
       return;
     }
     // Fetch from server
     try {
       const res = await apiRequest("GET", `/api/documents/${id}`);
       const data = await res.json();
+      const docTitle = data.title || title;
       setDocument({ id: generateId("doc"), rawText: data.content || "" });
-      setObjective(data.title || title);
+      setObjective(docTitle);
       setActiveDocumentId(id);
+      setActiveDocumentTitle(docTitle);
     } catch {
       toast({ title: "Failed to load document", variant: "destructive" });
     }
@@ -852,6 +866,7 @@ export default function NotebookWorkspace() {
                     setDocument({ id: generateId("doc"), rawText: content });
                     setObjective(title);
                     setActiveDocumentId(docId ?? null);
+                    setActiveDocumentTitle(title);
                     setPreviewDoc(null);
                   }}
                   onChartActiveChange={setIsChartActive}
@@ -863,6 +878,7 @@ export default function NotebookWorkspace() {
                   onSaveTimelineToContext={(json, label) => handleCaptureToContext(json, label)}
                   onTimelineSummaryChange={setTimelineSummary}
                   onWriterFeedback={handleWriterFeedback}
+                  activeDocumentTitle={activeDocumentTitle}
                 />
               )}
             </ResizablePanel>
