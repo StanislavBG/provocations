@@ -696,6 +696,18 @@ Replit is the **sole build and deployment environment** for this project. The de
 - **Match `.replit` config**: if you change ports, build commands, or deployment targets, update both `.replit` and `replit.md`
 - The goal: after Git Sync + Deploy on Replit, the app works. Zero manual steps.
 
+## Critical Rules
+
+### No OPENAI_API_KEY — Use Gemini
+
+This project does **NOT** have and will **NOT** have an `OPENAI_API_KEY`. The available LLM key is `GEMINI_API_KEY`. Never write code that depends on `OPENAI_API_KEY` being present. If an LLM call is needed, use the Gemini provider.
+
+### Browser-First for Voice / Media
+
+Voice capture, transcription, and media processing must use **browser-native APIs first** (Web Speech API, MediaRecorder, Canvas, etc.). Do NOT route voice input through an LLM for basic transcription — the browser does this for free in real-time. LLM calls are only for post-processing (summarization, intent cleaning, etc.) after you already have a transcript to work with.
+
+This applies to both desktop and mobile. As a web-powered app, always prefer the device's local hardware and built-in browser capabilities before reaching for a server-side API.
+
 ## Not Yet Implemented
 
 - Testing framework (Jest/Vitest)

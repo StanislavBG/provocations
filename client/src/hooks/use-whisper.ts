@@ -1,15 +1,13 @@
 /**
  * useWhisperRecorder — unified voice capture hook.
  *
- * 2026 best practices:
- *   1. Uses gpt-4o-mini-transcribe (faster, more accurate than whisper-1)
- *   2. Streaming SSE transcription — deltas arrive in real time via
- *      POST /api/transcribe/stream so users see words as they appear
- *   3. Chunked recording enabled by default (3s intervals) so every
- *      voice input shows progressive text while the user speaks
- *   4. Consistent deduplication — full re-transcription per flush,
- *      accumulated text replaces (never appends) to avoid duplication
- *   5. Falls back to Web Speech API when the server endpoint is unavailable
+ * STRATEGY: Browser-first. Use the Web Speech API (free, real-time,
+ * no LLM cost) as the primary transcription method. Only fall back to
+ * server-side transcription when the browser doesn't support Web Speech
+ * (extremely rare in modern browsers).
+ *
+ * Web Speech API provides real-time interim results natively — no reason
+ * to send audio to an LLM just to get a transcript.
  */
 import { useState, useCallback, useRef, useEffect } from "react";
 
@@ -212,17 +210,20 @@ export function useWhisperRecorder({
   const speechTranscriptRef = useRef("");
   const speechStoppingRef = useRef(false);
 
-  // Check availability on mount
+  // Check availability on mount — prefer Web Speech API (browser-native, free, real-time)
   useEffect(() => {
-    checkTranscribeAvailable().then((available) => {
-      setIsWhisper(available);
-      if (!available) {
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-          setIsSupported(false);
-        }
-      }
-    });
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      // Browser supports Web Speech — use it as primary, no server needed
+      setIsWhisper(false);
+      setIsSupported(true);
+    } else {
+      // Rare: no Web Speech support — check if server transcription is available
+      checkTranscribeAvailable().then((available) => {
+        setIsWhisper(available);
+        setIsSupported(available);
+      });
+    }
   }, []);
 
   // ── Flush current chunks — streaming SSE transcription ──
@@ -450,31 +451,24 @@ export function useWhisperRecorder({
   const startRecording = useCallback(async () => {
     if (isRecordingRef.current) return;
 
-    // Re-check availability if previously failed (handles transient outages)
-    if (whisperFailedRef.current) {
-      resetTranscribeCache();
-      const available = await checkTranscribeAvailable();
-      if (available) {
-        whisperFailedRef.current = false;
-        setIsWhisper(true);
-      }
-    }
-
-    if (isWhisper && !whisperFailedRef.current) {
-      startWhisper();
-    } else {
+    // Prefer Web Speech API (browser-native, free, real-time)
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
       startSpeechFallback();
+    } else if (isWhisper && !whisperFailedRef.current) {
+      startWhisper();
     }
   }, [isWhisper, startWhisper, startSpeechFallback]);
 
   const stopRecording = useCallback(() => {
     if (!isRecordingRef.current) return;
-    if (isWhisper && !whisperFailedRef.current) {
-      stopWhisper();
-    } else {
+    // Stop whichever engine is active
+    if (recognitionRef.current) {
       stopSpeechFallback();
+    } else {
+      stopWhisper();
     }
-  }, [isWhisper, stopWhisper, stopSpeechFallback]);
+  }, [stopWhisper, stopSpeechFallback]);
 
   const toggleRecording = useCallback(() => {
     if (isRecordingRef.current) {
