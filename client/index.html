@@ -33,14 +33,33 @@
     <script type="module" src="/src/main.tsx"></script>
     <!-- AIQA QA Overlay -->
     <style>
-      /* Force AIQA overlay visible — debug border to see its bounds */
+      /* Force AIQA overlay to center of screen with proper dimensions */
       #aiqa-overlay-root {
         z-index: 2147483647 !important;
-        outline: 4px solid red !important;
-        background: rgba(255,0,0,0.05) !important;
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        right: auto !important;
+        bottom: auto !important;
+        transform: translate(-50%, -50%) !important;
+        width: 460px !important;
+        max-width: 95vw !important;
+        height: 80vh !important;
+        max-height: 90vh !important;
+        outline: 3px solid #6366f1 !important;
+        border-radius: 12px !important;
+        overflow: auto !important;
+        background: white !important;
+        box-shadow: 0 25px 50px rgba(0,0,0,0.3) !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        display: block !important;
       }
       #aiqa-overlay-root iframe {
-        z-index: 2147483647 !important;
+        width: 100% !important;
+        height: 100% !important;
+        border: none !important;
         visibility: visible !important;
         opacity: 1 !important;
         display: block !important;
