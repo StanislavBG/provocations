@@ -96,10 +96,25 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "ftux-slide-up": {
+          from: { transform: "translateY(8px)", opacity: "0" },
+          to: { transform: "translateY(0)", opacity: "1" },
+        },
+        "ftux-slide-down": {
+          from: { transform: "translateY(0)", opacity: "1" },
+          to: { transform: "translateY(8px)", opacity: "0" },
+        },
+        "ftux-dock-bounce": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.15)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "ftux-slide-up": "ftux-slide-up 0.2s ease-out",
+        "ftux-slide-down": "ftux-slide-down 0.2s ease-out",
+        "ftux-dock-bounce": "ftux-dock-bounce 0.3s ease-in-out",
       },
     },
   },
