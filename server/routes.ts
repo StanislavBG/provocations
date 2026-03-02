@@ -51,6 +51,7 @@ import {
   summarizeSessionRequestSchema,
   saveChatSessionRequestSchema,
   type YouTubeChannelResponse,
+  type ResponseConfig,
   type GenerateSummaryResponse,
   type InfographicSpec,
 } from "@shared/schema";
@@ -3883,8 +3884,10 @@ Output only valid JSON, no markdown.`,
     objective: string,
     notesContext: string,
     focusMode?: string,
+    responseConfig?: ResponseConfig,
   ): string {
     const focusSection = getFocusModePrompt(focusMode || "explore");
+    const responseSection = getResponseConfigPrompt(responseConfig);
 
     return `You are a rigorous, senior research analyst. Your purpose is to help the user build a well-sourced, trustworthy body of knowledge on their topic. You are precise, skeptical of unverified claims, and always transparent about what you know versus what you're uncertain about.
 ${topicContext}
@@ -3908,6 +3911,8 @@ TRUST & ACCURACY — NON-NEGOTIABLE:
 - **Surface contradictions.** If sources disagree, present both sides and explain the discrepancy.
 
 ${focusSection}
+
+${responseSection}
 
 RESPONSE FORMATTING — MANDATORY:
 - Always respond in clean, well-structured **Markdown**.
@@ -4018,6 +4023,144 @@ You are operating in exploration mode. Your primary goal is to help the user dis
     }
   }
 
+  function getResponseConfigPrompt(config?: ResponseConfig): string {
+    if (!config) return "";
+
+    const sections: string[] = [];
+
+    // Detail level
+    if (config.detail && config.detail !== "standard") {
+      switch (config.detail) {
+        case "brief":
+          sections.push(`DETAIL LEVEL: BRIEF
+- Keep responses short and scannable — aim for the minimum needed to answer the question.
+- Use bullet points over paragraphs. One sentence per point maximum.
+- Skip background context and preamble — go straight to the answer.
+- Omit examples unless they are essential to understanding.
+- Target 150-300 words unless the question demands more.`);
+          break;
+        case "detailed":
+          sections.push(`DETAIL LEVEL: DETAILED
+- Provide thorough coverage with supporting evidence, examples, and context.
+- Explain the "why" behind each point, not just the "what".
+- Include relevant background information the user may not have considered.
+- Use multiple subsections with clear headings for different aspects.
+- Add concrete examples, data points, or case studies where relevant.
+- Target 500-1500 words depending on complexity.`);
+          break;
+        case "exhaustive":
+          sections.push(`DETAIL LEVEL: EXHAUSTIVE
+- Leave nothing out — this is a comprehensive reference response.
+- Cover every relevant dimension: history, current state, alternatives, edge cases, trade-offs.
+- Include multiple examples for each major point.
+- Add caveats, limitations, and counterarguments for completeness.
+- Provide enough detail that the response could serve as standalone documentation.
+- Use extensive cross-referencing between sections.
+- No length constraint — thoroughness is the priority.`);
+          break;
+      }
+    }
+
+    // Format
+    if (config.format && config.format !== "structured") {
+      switch (config.format) {
+        case "prose":
+          sections.push(`FORMAT: PROSE NARRATIVE
+- Write in flowing, connected paragraphs — not bullet lists.
+- Use topic sentences and transitions between ideas.
+- Structure as a readable essay or article with natural flow.
+- Minimize bullet points — reserve them only for enumerating specific items (feature lists, requirements, etc.).
+- Use **bold** sparingly for emphasis, not as a structural device.`);
+          break;
+        case "outline":
+          sections.push(`FORMAT: HIERARCHICAL OUTLINE
+- Structure the entire response as a nested outline.
+- Use numbered lists (1., 1.1, 1.1.1) for main points and sub-points.
+- Keep each point to a single sentence or short phrase.
+- Show relationships through indentation and nesting depth.
+- This format is designed for quick scanning and easy copy-paste into documents.`);
+          break;
+        case "academic":
+          sections.push(`FORMAT: ACADEMIC / FORMAL
+- Structure with formal sections: Overview, Background, Analysis, Findings, Conclusion.
+- Use precise, formal language — avoid colloquialisms and contractions.
+- Cite every factual claim with source attribution (author/org, year, publication).
+- Include a brief abstract or executive summary at the top.
+- Use footnote-style references where appropriate.
+- Distinguish clearly between established consensus and emerging/disputed views.`);
+          break;
+      }
+    }
+
+    // Audience level
+    if (config.audience && config.audience !== "general") {
+      switch (config.audience) {
+        case "non-technical":
+          sections.push(`AUDIENCE: NON-TECHNICAL
+- Use plain language throughout — no jargon, no acronyms without explanation.
+- Replace technical terms with everyday equivalents (e.g., "database" → "where the data is stored").
+- Use analogies and real-world comparisons to explain complex concepts.
+- Focus on outcomes and implications rather than implementation details.
+- Assume the reader has no background in this field.`);
+          break;
+        case "technical":
+          sections.push(`AUDIENCE: TECHNICAL PRACTITIONER
+- Assume the reader has solid domain knowledge and working experience.
+- Use proper technical terminology without over-explaining.
+- Include implementation-relevant details: APIs, configurations, code patterns, architecture decisions.
+- Reference specific tools, libraries, and standards by name.
+- Skip introductory context — get to the substance.`);
+          break;
+        case "expert":
+          sections.push(`AUDIENCE: DOMAIN EXPERT
+- Write for someone deeply experienced in this field — skip fundamentals entirely.
+- Use specialized vocabulary, abbreviations, and field-specific conventions freely.
+- Focus on nuances, trade-offs, edge cases, and non-obvious implications.
+- Reference advanced concepts, research papers, and industry debates without explanation.
+- Challenge the user's assumptions when appropriate — experts value precision over comfort.
+- Include performance characteristics, scaling considerations, and failure modes.`);
+          break;
+      }
+    }
+
+    // Tone
+    if (config.tone && config.tone !== "neutral") {
+      switch (config.tone) {
+        case "conversational":
+          sections.push(`TONE: CONVERSATIONAL
+- Write as if explaining to a knowledgeable colleague over coffee.
+- Use "you" and "we" to create a direct, engaging voice.
+- Inject brief asides or observations that show genuine thinking, not just recitation.
+- It's okay to use phrases like "Interestingly...", "Here's the thing...", "Worth noting...".
+- Keep it warm and approachable without sacrificing accuracy.`);
+          break;
+        case "assertive":
+          sections.push(`TONE: ASSERTIVE / OPINIONATED
+- Take clear positions and make confident recommendations.
+- Lead with "You should..." or "The best approach is..." rather than hedging.
+- When there's a clear winner among options, say so directly.
+- Still acknowledge alternatives, but be explicit about ranking and reasoning.
+- Prioritize actionable guidance over balanced neutrality.
+- Save caveats for genuinely uncertain areas — don't hedge everything.`);
+          break;
+        case "critical":
+          sections.push(`TONE: CRITICAL / SKEPTICAL
+- Question assumptions, challenge conventional wisdom, and probe for weaknesses.
+- For each claim or recommendation, ask "But what could go wrong?" and answer it.
+- Highlight risks, failure modes, and commonly overlooked downsides.
+- Play devil's advocate — present the strongest counterargument to popular positions.
+- Use phrases like "However...", "The risk here is...", "What's often overlooked...".
+- Still provide balanced conclusions, but weighted toward surfacing hidden problems.`);
+          break;
+      }
+    }
+
+    if (sections.length === 0) return "";
+
+    return `RESPONSE CONFIGURATION — USER-SPECIFIED PREFERENCES (override defaults):
+${sections.join("\n\n")}`;
+  }
+
   // ==========================================
   // Clean-context chat (Research & Data Gathering)
   // Minimal-context LLM interaction — only the user's
@@ -4032,12 +4175,12 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus);
+      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -4074,7 +4217,7 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
 
       res.writeHead(200, {
@@ -4085,7 +4228,7 @@ You are operating in exploration mode. Your primary goal is to help the user dis
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus);
+      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
