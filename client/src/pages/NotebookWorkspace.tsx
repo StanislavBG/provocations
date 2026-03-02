@@ -19,7 +19,7 @@ import { NotebookTopBar } from "@/components/notebook/NotebookTopBar";
 import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
-import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPanel";
+import type { PainterConfig, PainterMode, PainterSource } from "@/components/notebook/PainterPanel";
 import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
@@ -486,14 +486,16 @@ export default function NotebookWorkspace() {
       painterObjective: string;
       negativePrompt?: string;
       painterMode: PainterMode;
+      excludedSources?: Set<PainterSource>;
     }) => {
-      const { painterConfigs, painterObjective, negativePrompt, painterMode } = config;
+      const { painterConfigs, painterObjective, negativePrompt, painterMode, excludedSources } = config;
 
-      // Include Active Context (pinned docs) — infographic mode sends more
-      // context since Nano Banana 2 excels at data visualization from rich input
+      // Include Active Context (pinned docs) — unless "context" is excluded for this call.
+      // Infographic mode sends more context since Nano Banana 2 excels at data visualization.
+      const skipContext = excludedSources?.has("context");
       const contextLimit = painterMode === "infographic" ? 1500 : 500;
       const contextJoinLimit = painterMode === "infographic" ? 3000 : 1000;
-      const contextSnippets = Object.values(pinnedDocContents)
+      const contextSnippets = skipContext ? [] : Object.values(pinnedDocContents)
         .map((doc) => doc.content.slice(0, contextLimit))
         .filter(Boolean);
       const contextSuffix = contextSnippets.length > 0
@@ -549,9 +551,12 @@ export default function NotebookWorkspace() {
         ? stylePart
         : [stylePart, ...parts.filter((p) => p.includes("mood"))].filter(Boolean).join(", ");
 
-      // Create or reuse the active image tab
-      const tabId = activeImageTabId || generateId("img");
-      if (!activeImageTabId) {
+      // Always create a new image tab — never overwrite a previous painting.
+      // Reuse the active tab only when it has no finished image yet (e.g. empty placeholder).
+      const existingData = activeImageTabId ? imageTabData.get(activeImageTabId) : undefined;
+      const canReuse = activeImageTabId && existingData && !existingData.imageUrl && !existingData.isGenerating;
+      const tabId = canReuse ? activeImageTabId : generateId("img");
+      if (!canReuse) {
         centerPanelRef.current?.addImageTab(tabId);
       }
 
@@ -603,7 +608,7 @@ export default function NotebookWorkspace() {
         setIsPainting(false);
       }
     },
-    [activeImageTabId, toast, pinnedDocContents],
+    [activeImageTabId, imageTabData, toast, pinnedDocContents],
   );
 
   const handleImageActiveChange = useCallback((isActive: boolean, tabId: string | null) => {
