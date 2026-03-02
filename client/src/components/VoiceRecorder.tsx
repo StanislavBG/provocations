@@ -14,6 +14,13 @@ interface VoiceRecorderProps {
   label?: string;
   /** When true, automatically starts recording once speech recognition is ready. */
   autoStart?: boolean;
+  /**
+   * Interval in ms for sending audio chunks to Whisper during recording.
+   * Enables progressive (real-time) transcription so interim results appear
+   * while the user is still speaking. Default: 5000ms when onInterimTranscript
+   * is provided, undefined otherwise.
+   */
+  chunkIntervalMs?: number;
 }
 
 export function VoiceRecorder({
@@ -25,8 +32,13 @@ export function VoiceRecorder({
   className = "",
   label,
   autoStart,
+  chunkIntervalMs,
 }: VoiceRecorderProps) {
   const { toast } = useToast();
+
+  // Auto-enable chunked Whisper transcription when interim callbacks are
+  // provided so users see progressive text while still speaking.
+  const effectiveChunkInterval = chunkIntervalMs ?? (onInterimTranscript ? 5000 : undefined);
 
   const {
     isRecording,
@@ -51,6 +63,7 @@ export function VoiceRecorder({
         });
       }
     },
+    chunkIntervalMs: effectiveChunkInterval,
   });
 
   // Auto-start recording when requested

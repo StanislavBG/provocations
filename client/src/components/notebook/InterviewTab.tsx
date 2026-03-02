@@ -99,6 +99,9 @@ export function InterviewTab({
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Persistent Audio element for mobile — created once on first user gesture
+  // so that subsequent .play() calls from async callbacks are permitted.
+  const mobileAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -121,6 +124,27 @@ export function InterviewTab({
     };
   }, [podcastAudioUrl]);
 
+  /**
+   * Unlock audio on mobile — must be called from a direct user gesture
+   * (click handler). Creates a persistent Audio element and plays a tiny
+   * silent buffer so the browser marks it as user-activated. All subsequent
+   * .play() calls on this element succeed even from async callbacks.
+   */
+  const unlockMobileAudio = useCallback(() => {
+    if (mobileAudioRef.current) return; // already unlocked
+    const audio = new Audio();
+    // Tiny silent WAV (44 bytes) — enough to satisfy the user-gesture requirement
+    audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+    audio.volume = 0;
+    audio.play().then(() => {
+      audio.pause();
+      audio.volume = 1;
+      mobileAudioRef.current = audio;
+    }).catch(() => {
+      // If even this fails, we'll fall back to creating new Audio elements
+    });
+  }, []);
+
   /** Speak text via /api/tts — plays the question aloud */
   const speakQuestion = useCallback(async (text: string) => {
     if (!ttsEnabled || !text.trim()) return;
@@ -128,7 +152,10 @@ export function InterviewTab({
       setIsSpeaking(true);
       const res = await apiRequest("POST", "/api/tts", { text, voice: "nova" });
       const data = (await res.json()) as { audio: string; mimeType: string };
-      if (!data.audio) return;
+      if (!data.audio) {
+        setIsSpeaking(false);
+        return;
+      }
       // Convert base64 to blob URL
       const byteChars = atob(data.audio);
       const byteArray = new Uint8Array(byteChars.length);
@@ -137,13 +164,24 @@ export function InterviewTab({
       }
       const blob = new Blob([byteArray], { type: data.mimeType || "audio/mp3" });
       const url = URL.createObjectURL(blob);
+
+      // Prefer the mobile-unlocked Audio element so playback works on mobile.
+      // If it was never unlocked (user didn't click TTS toggle / Start), fall
+      // back to creating a fresh Audio element.
+      const audio = mobileAudioRef.current ?? new Audio();
+
       // Stop previous TTS playback
-      if (ttsAudioRef.current) {
+      if (ttsAudioRef.current && ttsAudioRef.current !== audio) {
         ttsAudioRef.current.pause();
         const oldSrc = ttsAudioRef.current.src;
         if (oldSrc.startsWith("blob:")) URL.revokeObjectURL(oldSrc);
       }
-      const audio = new Audio(url);
+
+      // Revoke previous blob URL if the same element is being reused
+      const prevSrc = audio.src;
+      if (prevSrc && prevSrc.startsWith("blob:")) URL.revokeObjectURL(prevSrc);
+
+      audio.src = url;
       ttsAudioRef.current = audio;
       audio.onended = () => setIsSpeaking(false);
       audio.onerror = () => setIsSpeaking(false);
@@ -250,10 +288,12 @@ export function InterviewTab({
       toast({ title: "Objective required", description: "Set a document objective before starting the interview.", variant: "destructive" });
       return;
     }
+    // Unlock audio on mobile — must happen inside a user gesture handler
+    if (ttsEnabled) unlockMobileAudio();
     setIsActive(true);
     questionMutation.mutate(undefined);
     trackEvent("interview_started");
-  }, [objective, questionMutation, toast]);
+  }, [objective, questionMutation, toast, ttsEnabled, unlockMobileAudio]);
 
   const handleStop = useCallback(() => {
     setIsActive(false);
@@ -438,7 +478,12 @@ export function InterviewTab({
 
             {/* Voice conversation mode toggle */}
             <button
-              onClick={() => setTtsEnabled(!ttsEnabled)}
+              onClick={() => {
+                const next = !ttsEnabled;
+                setTtsEnabled(next);
+                // Unlock audio on mobile when enabling TTS (user gesture required)
+                if (next) unlockMobileAudio();
+              }}
               className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
                 ttsEnabled
                   ? "border-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400"
@@ -514,6 +559,8 @@ export function InterviewTab({
                 onClick={() => {
                   const next = !ttsEnabled;
                   setTtsEnabled(next);
+                  // Unlock audio on mobile when enabling TTS (user gesture required)
+                  if (next) unlockMobileAudio();
                   if (!next && ttsAudioRef.current) {
                     ttsAudioRef.current.pause();
                     setIsSpeaking(false);
