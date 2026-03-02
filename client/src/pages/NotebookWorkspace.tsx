@@ -521,7 +521,7 @@ export default function NotebookWorkspace() {
       const title = `${label} — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
       // Save just the image — the prompt lives in the title.
       const content = imageUrl;
-      await apiRequest("POST", "/api/documents", { title, content });
+      await apiRequest("POST", "/api/documents", { title, content, docType: "image" });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       trackEvent("document_saved");
       toast({ title: "Saved to Context Store", description: title });

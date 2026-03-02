@@ -156,7 +156,7 @@ function QuickCaptureView({
         ? firstLine.slice(0, 77) + "..."
         : firstLine || `Note ${new Date().toLocaleTimeString()}`;
 
-      await apiRequest("POST", "/api/documents", { title, content: text });
+      await apiRequest("POST", "/api/documents", { title, content: text, docType: "note" });
       trackEvent("mobile_note_captured");
 
       setNoteText("");
@@ -501,6 +501,7 @@ function InterviewView({
       await apiRequest("POST", "/api/documents", {
         title: title.slice(0, 200),
         content,
+        docType: "note",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/documents", "mobile-notes"] });
     } catch {
