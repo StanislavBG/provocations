@@ -19,7 +19,6 @@ import {
   Maximize,
   Copy,
   Trash2,
-  Mic,
 } from "lucide-react";
 import type { BSToolMode } from "./types";
 
@@ -36,8 +35,6 @@ interface BSChartToolbarProps {
   onDuplicate: () => void;
   onDelete: () => void;
   hasSelection: boolean;
-  onToggleVoiceMode?: () => void;
-  isVoiceMode?: boolean;
 }
 
 interface ToolEntry {
@@ -75,8 +72,6 @@ export function BSChartToolbar({
   onDuplicate,
   onDelete,
   hasSelection,
-  onToggleVoiceMode,
-  isVoiceMode,
 }: BSChartToolbarProps) {
   return (
     <div className="h-full flex flex-col bg-card border-r overflow-y-auto">
@@ -248,30 +243,6 @@ export function BSChartToolbar({
         )}
       </div>
 
-      {/* Voice mode toggle */}
-      {onToggleVoiceMode && (
-        <>
-          <Separator />
-          <div className="px-1.5 py-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={isVoiceMode ? "default" : "outline"}
-                  size="sm"
-                  className="w-full gap-2 h-8 text-xs font-semibold"
-                  onClick={onToggleVoiceMode}
-                >
-                  <Mic className={`w-3.5 h-3.5 ${isVoiceMode ? "animate-pulse" : ""}`} />
-                  Design with Voice
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                Use voice commands to add, move, and connect elements
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </>
-      )}
     </div>
   );
 }
