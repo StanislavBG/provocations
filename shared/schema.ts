@@ -1150,6 +1150,20 @@ export interface ChatMessageWithMeta extends ChatMessage {
   followUps?: string[];
   durationMs?: number;
   model?: string;
+  groundingSource?: "web" | "context" | "both";
+}
+
+/** Research plan step for Deep Research mode */
+export interface ResearchPlanStep {
+  area: string;
+  questions: string[];
+}
+
+/** Research plan generated before deep research execution */
+export interface ResearchPlan {
+  title: string;
+  estimatedTime: string;
+  steps: ResearchPlanStep[];
 }
 
 export const chatRequestSchema = z.object({
@@ -1162,6 +1176,7 @@ export const chatRequestSchema = z.object({
   chatModel: z.string().optional(),
   researchFocus: z.enum(researchFocusModes).optional(),
   responseConfig: responseConfigSchema.optional(),
+  researchPlan: z.string().optional(),
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
