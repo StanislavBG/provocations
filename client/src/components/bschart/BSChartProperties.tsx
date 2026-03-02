@@ -209,19 +209,6 @@ export function BSChartProperties({
             />
           </div>
 
-          {/* Voice label */}
-          <div className="space-y-1">
-            <Label className="text-[10px]">Voice Name</Label>
-            <Input
-              value={node.voiceLabel}
-              onChange={(e) =>
-                onUpdateNode(node.id, { voiceLabel: e.target.value })
-              }
-              className="h-7 text-xs"
-              placeholder="Name for voice commands"
-            />
-          </div>
-
           <Separator />
 
           {/* Position & size */}
