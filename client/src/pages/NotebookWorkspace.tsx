@@ -51,6 +51,7 @@ export default function NotebookWorkspace() {
   const [objective, setObjective] = useState("");
   /** When editing a document from the Context Store, tracks its DB id for in-place save */
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
+  const [activeDocumentTitle, setActiveDocumentTitle] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     routeMatch ? routeParams?.templateId ?? null : null,
   );
@@ -466,13 +467,17 @@ export default function NotebookWorkspace() {
 
   // ── Save document to Context Store ──
   const [isSavingToContext, setIsSavingToContext] = useState(false);
-  const handleSaveToContext = useCallback(async () => {
+  const handleSaveToContext = useCallback(async (tabTitle?: string) => {
     if (!document.rawText.trim()) return;
     setIsSavingToContext(true);
     try {
-      const title = objective?.trim()
-        ? objective.trim().slice(0, 120)
-        : `Document ${new Date().toLocaleDateString()}`;
+      // Use the document tab title (filename) as the storage title.
+      // Fall back to objective, then a date-based default.
+      const title = tabTitle?.trim()
+        ? tabTitle.trim().slice(0, 120)
+        : objective?.trim()
+          ? objective.trim().slice(0, 120)
+          : `Document ${new Date().toLocaleDateString()}`;
       const content = document.rawText;
 
       if (activeDocumentId) {
@@ -732,15 +737,18 @@ export default function NotebookWorkspace() {
       setDocument({ id: generateId("doc"), rawText: cached.content });
       setObjective(cached.title);
       setActiveDocumentId(id);
+      setActiveDocumentTitle(cached.title);
       return;
     }
     // Fetch from server
     try {
       const res = await apiRequest("GET", `/api/documents/${id}`);
       const data = await res.json();
+      const docTitle = data.title || title;
       setDocument({ id: generateId("doc"), rawText: data.content || "" });
-      setObjective(data.title || title);
+      setObjective(docTitle);
       setActiveDocumentId(id);
+      setActiveDocumentTitle(docTitle);
     } catch {
       toast({ title: "Failed to load document", variant: "destructive" });
     }
@@ -852,6 +860,7 @@ export default function NotebookWorkspace() {
                     setDocument({ id: generateId("doc"), rawText: content });
                     setObjective(title);
                     setActiveDocumentId(docId ?? null);
+                    setActiveDocumentTitle(title);
                     setPreviewDoc(null);
                   }}
                   onChartActiveChange={setIsChartActive}
@@ -863,6 +872,7 @@ export default function NotebookWorkspace() {
                   onSaveTimelineToContext={(json, label) => handleCaptureToContext(json, label)}
                   onTimelineSummaryChange={setTimelineSummary}
                   onWriterFeedback={handleWriterFeedback}
+                  activeDocumentTitle={activeDocumentTitle}
                 />
               )}
             </ResizablePanel>
