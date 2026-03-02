@@ -3333,10 +3333,43 @@ Return ONLY a JSON array of objects with "question" (string) and "category" (one
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, document: docText, appType, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors } = parsed.data;
+      const { objective, document: docText, appType, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors, timelineContext } = parsed.data;
 
       const appConfig = getAppTypeConfig(appType);
       const appContext = formatAppTypeContext(appType);
+
+      // Build timeline historical context (for autobiography interviews)
+      let timelineHistoricalContext = "";
+      if (timelineContext && appType === "timeline") {
+        const parts: string[] = [];
+        if (timelineContext.dateRange) {
+          parts.push(`The user's timeline spans from ${timelineContext.dateRange.earliest} to ${timelineContext.dateRange.latest}.`);
+        }
+        if (timelineContext.places && timelineContext.places.length > 0) {
+          parts.push(`Key places on their timeline: ${timelineContext.places.join(", ")}.`);
+        }
+        if (timelineContext.themes && timelineContext.themes.length > 0) {
+          parts.push(`Recurring themes: ${timelineContext.themes.join(", ")}.`);
+        }
+        if (timelineContext.eventCount) {
+          parts.push(`They have ${timelineContext.eventCount} events captured so far.`);
+        }
+
+        if (parts.length > 0) {
+          timelineHistoricalContext = `\n\nTIMELINE CONTEXT & HISTORICAL AWARENESS:
+${parts.join(" ")}
+
+USE THIS CONTEXT TO SPARK MEMORIES: Reference major historical events, cultural moments, or local events that occurred during the user's timeline periods and in their locations. For example:
+- If they were in New York around 2001 → reference 9/11 and ask how it affected them
+- If they were starting a business in 2008 → reference the financial crisis
+- If they were a teenager in the 1990s → reference the rise of the internet, Nirvana, the fall of the Berlin Wall
+- If they lived in a specific city → reference local events, sports teams, cultural shifts
+
+Your goal is to use shared historical anchors to unlock personal memories the user hasn't thought to mention. Say things like: "You were living in [place] around [year] — that was when [major event] happened. Did that affect your experience?" or "The [decade] was a time of [cultural shift]. How did that show up in your life?"
+
+IMPORTANT: Only reference historical events that are RELEVANT to the user's specific time period and location. Don't force connections. If a historical event genuinely overlaps with their timeline, weave it naturally into your question.`;
+        }
+      }
 
       // Build context from previous Q&A
       const previousContext = previousEntries && previousEntries.length > 0
@@ -3505,7 +3538,7 @@ YOUR JOURNALISTIC APPROACH:
 ${directionContext}${universalLensesBlock}
 
 OBJECTIVE: ${objective || "Not explicitly stated — infer the document's purpose from its content and help the interviewee clarify it."}
-${templateContext}${documentContext}${provocationsContext}${guidanceContext}
+${templateContext}${documentContext}${provocationsContext}${guidanceContext}${timelineHistoricalContext}
 
 PREVIOUS Q&A:
 ${previousContext}
@@ -6891,6 +6924,99 @@ RULES:
     } catch (error) {
       console.error("Timeline transform error:", error);
       res.status(500).json({ error: "Failed to transform notes into timeline events" });
+    }
+  });
+
+  // ── Timeline: Discover Era — generate historical/cultural events for a date range ──
+  app.post("/api/timeline/discover-era", async (req, res) => {
+    try {
+      const { dateRange, places, themes, existingEventTitles } = req.body;
+      if (!dateRange || !dateRange.earliest || !dateRange.latest) {
+        return res.status(400).json({ error: "Date range with earliest and latest dates is required" });
+      }
+
+      const placesContext = places?.length
+        ? `\nKEY PLACES on the user's timeline (prioritize events related to these locations): ${places.join(", ")}`
+        : "";
+
+      const themesContext = themes?.length
+        ? `\nRECURRING THEMES in the user's timeline (find historical parallels): ${themes.join(", ")}`
+        : "";
+
+      const existingContext = existingEventTitles?.length
+        ? `\nEXISTING EVENTS on the timeline (do NOT duplicate these):\n${existingEventTitles.map((t: string) => `- ${t}`).join("\n")}`
+        : "";
+
+      const response = await llm.generate({
+        maxTokens: 4000,
+        temperature: 0.4,
+        system: `You are a historian and cultural analyst. Your job is to generate major historical, cultural, and local events that occurred within a specific time period and set of locations. These events are meant to serve as MEMORY ANCHORS for someone building a personal autobiography timeline.
+
+DATE RANGE: ${dateRange.earliest} to ${dateRange.latest}
+${placesContext}${themesContext}${existingContext}
+
+Generate events that would be MEANINGFUL to someone who lived through this era — not just headline news, but cultural touchstones, technological shifts, economic changes, and local developments that shaped daily life.
+
+CATEGORIES TO COVER:
+1. WORLD EVENTS — wars, elections, disasters, treaties, political shifts
+2. CULTURAL MOMENTS — music, movies, TV, books, fashion, sports milestones
+3. TECHNOLOGY — product launches, internet milestones, communication shifts
+4. ECONOMIC — recessions, booms, market events, cost-of-living changes
+5. LOCAL — if places are specified, include city/region-specific events (elections, sports, disasters, cultural shifts)
+
+OUTPUT FORMAT: Respond with valid JSON only, no markdown code fences:
+{
+  "events": [
+    {
+      "title": "...",
+      "description": "Brief description of the event and why it matters to personal memory",
+      "date": "YYYY-MM-DD or YYYY-MM or YYYY",
+      "dateLabel": "Human-readable date label (e.g. 'September 2001', 'Early 1990s')",
+      "dateConfidence": "exact|approximate",
+      "type": "event",
+      "tags": ["tag label 1"],
+      "source": "note",
+      "category": "world|cultural|technology|economic|local"
+    }
+  ],
+  "suggestedTags": [
+    { "label": "...", "category": "theme" }
+  ]
+}
+
+RULES:
+- Generate 15-25 events spread across the full date range
+- Prioritize events that are CONVERSATION STARTERS — things people remember where they were when it happened
+- Include both major global events AND smaller cultural touchstones (e.g. "Friends finale" or "iPhone launch")
+- If places are specified, include at least 3-5 events specific to those locations
+- Sort chronologically
+- Mark all dates as "exact" or "approximate" honestly
+- Use "event" as the type for all historical events
+- Each event description should hint at how it might connect to personal experience`,
+        messages: [
+          {
+            role: "user",
+            content: `Generate historical and cultural events for the period ${dateRange.earliest} to ${dateRange.latest}${places?.length ? ` with focus on ${places.join(", ")}` : ""}. These will be shown alongside a personal autobiography timeline to spark memories.`,
+          },
+        ],
+      });
+
+      const text = response.text.trim();
+      let parsed;
+      try {
+        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+        parsed = JSON.parse(jsonMatch[1]?.trim() ?? text);
+      } catch {
+        return res.status(500).json({ error: "Failed to parse LLM response as JSON" });
+      }
+
+      res.json({
+        events: parsed.events ?? [],
+        suggestedTags: parsed.suggestedTags ?? [],
+      });
+    } catch (error) {
+      console.error("Timeline discover-era error:", error);
+      res.status(500).json({ error: "Failed to discover historical events" });
     }
   });
 
