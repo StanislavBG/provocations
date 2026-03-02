@@ -3,7 +3,7 @@ import { ProvoThread } from "./ProvoThread";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { NotebookResearchChat } from "./NotebookResearchChat";
 import { InterviewTab } from "./InterviewTab";
-import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPanel";
+import { PainterPanel, type PaintImageRequest } from "./PainterPanel";
 import { WriterPanel, type WriterConfig } from "./WriterPanel";
 import { ContextSidebar } from "./ContextSidebar";
 import { resolveVisibleTabs } from "./panelTabs";
@@ -49,14 +49,10 @@ interface NotebookRightPanelProps {
 
   // Painter tab + Interview tab
   documentText: string;
-  onPaintImage: (config: {
-    painterConfigs: PainterConfig[];
-    painterObjective: string;
-    negativePrompt?: string;
-    painterMode: PainterMode;
-  }) => void;
+  onPaintImage: (config: PaintImageRequest) => void;
   isPainting?: boolean;
   pinnedDocContents?: Record<number, { title: string; content: string }>;
+  onOpenPainterStudio?: () => void;
 
   // Interview tab
   appType?: string;
@@ -100,6 +96,7 @@ export function NotebookRightPanel({
   onPaintImage,
   isPainting = false,
   pinnedDocContents,
+  onOpenPainterStudio,
   appType,
   visibleTabs,
   // Left-panel tab props (optional)
@@ -239,6 +236,7 @@ export function NotebookRightPanel({
           onPaintImage={onPaintImage}
           isPainting={isPainting}
           pinnedDocContents={pinnedDocContents}
+          onOpenStudio={onOpenPainterStudio}
         />
       </div>
 

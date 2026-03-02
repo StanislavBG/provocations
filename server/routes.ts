@@ -2346,7 +2346,17 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   app.post("/api/generate-imagen", async (req, res) => {
     try {
-      const { prompt, aspectRatio, negativePrompt, style, numberOfImages } = req.body;
+      const {
+        prompt, aspectRatio, negativePrompt, style, numberOfImages,
+        // Advanced generation parameters
+        temperature, topP, topK, seed,
+        // Image config
+        imageSize, personGeneration, outputMimeType,
+        // Safety override
+        safetyLevel,
+        // System instruction for image guidance
+        systemInstruction,
+      } = req.body;
       if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
         return res.status(400).json({ error: "prompt is required" });
       }
@@ -2358,20 +2368,31 @@ Output only valid JSON, no markdown.`;
         });
       }
 
-      const { GoogleGenAI, HarmCategory, HarmBlockThreshold } = await import("@google/genai");
+      const { GoogleGenAI, HarmCategory, HarmBlockThreshold, PersonGeneration } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: geminiKey });
 
-      // Relax safety filters to maximum — BLOCK_NONE disables client-side
-      // filtering entirely so the model decides. Previous BLOCK_ONLY_HIGH was
-      // still too aggressive for legitimate artistic content (bikini, swimwear,
-      // mythology, etc.). Note: the model may still refuse at inference level
-      // regardless of this setting for truly harmful content.
+      // Safety level mapping — default to OFF (most permissive)
+      const thresholdMap: Record<string, string> = {
+        off: "OFF",
+        none: "BLOCK_NONE",
+        high: "BLOCK_ONLY_HIGH",
+        medium: "BLOCK_MEDIUM_AND_ABOVE",
+        low: "BLOCK_LOW_AND_ABOVE",
+      };
+      const threshold = (thresholdMap[safetyLevel as string] || "OFF") as any;
       const safetySettings = [
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT,               threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,              threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,        threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,        threshold },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT,               threshold },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,              threshold },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,        threshold },
       ];
+
+      // Person generation mapping
+      const personMap: Record<string, any> = {
+        all: PersonGeneration.ALLOW_ALL,
+        adult: PersonGeneration.ALLOW_ADULT,
+        none: PersonGeneration.DONT_ALLOW,
+      };
 
       // Build the final prompt: prepend style directive if provided
       let fullPrompt = prompt.slice(0, 4000);
@@ -2381,8 +2402,21 @@ Output only valid JSON, no markdown.`;
       if (negativePrompt && typeof negativePrompt === "string") {
         fullPrompt += `. Avoid: ${negativePrompt}`;
       }
-      if (aspectRatio && aspectRatio !== "1:1") {
-        fullPrompt += `. Aspect ratio: ${aspectRatio}`;
+
+      // Build imageConfig for native Gemini image params
+      const imageConfig: Record<string, any> = {};
+      const effectiveAspect = aspectRatio || "1:1";
+      if (effectiveAspect !== "1:1") {
+        imageConfig.aspectRatio = effectiveAspect;
+      }
+      if (imageSize && typeof imageSize === "string") {
+        imageConfig.imageSize = imageSize;
+      }
+      if (personGeneration && personMap[personGeneration as string]) {
+        imageConfig.personGeneration = personMap[personGeneration as string];
+      }
+      if (outputMimeType && typeof outputMimeType === "string") {
+        imageConfig.outputMimeType = outputMimeType;
       }
 
       // Use Nano Banana 2 (gemini-3.1-flash-image-preview) via generateContent
@@ -2390,13 +2424,24 @@ Output only valid JSON, no markdown.`;
       const images: string[] = [];
 
       for (let i = 0; i < count; i++) {
+        const config: Record<string, any> = {
+          responseModalities: ["IMAGE", "TEXT"],
+          safetySettings,
+        };
+        // Advanced generation params (when provided)
+        if (typeof temperature === "number") config.temperature = temperature;
+        if (typeof topP === "number") config.topP = topP;
+        if (typeof topK === "number") config.topK = topK;
+        if (typeof seed === "number") config.seed = seed;
+        if (Object.keys(imageConfig).length > 0) config.imageConfig = imageConfig;
+        if (systemInstruction && typeof systemInstruction === "string") {
+          config.systemInstruction = systemInstruction;
+        }
+
         const response = await ai.models.generateContent({
           model: "gemini-3.1-flash-image-preview",
           contents: fullPrompt,
-          config: {
-            responseModalities: ["IMAGE", "TEXT"],
-            safetySettings,
-          },
+          config,
         });
 
         // Log safety feedback when content is blocked for debugging
