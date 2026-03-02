@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Copy, Eraser, Loader2, Wand2, ListCollapse, Eye, EyeOff, RotateCcw, Save, HardDrive } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAutoDictate } from "@/hooks/use-auto-dictate";
+
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import type { LucideIcon } from "lucide-react";
@@ -298,12 +298,10 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     ref,
   ) {
     const { toast } = useToast();
-    const { autoDictate } = useAutoDictate();
 
     /* ── Voice state ── */
     const [isRecording, setIsRecording] = useState(false);
     const [interimText, setInterimText] = useState("");
-    const [focusAutoRecord, setFocusAutoRecord] = useState(false);
     const internalRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
 
     // Snapshot of the value when recording started — used to avoid word
@@ -366,13 +364,6 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
     const voiceInline = effectiveVoice?.inline !== false;
     const hasVoice = !!effectiveVoice && !!effectiveOnVoiceTranscript;
 
-    /* ── Auto-dictate on focus ── */
-    const handleFocus = useCallback(() => {
-      if (autoDictate && hasVoice && !isRecording) {
-        setFocusAutoRecord(true);
-      }
-    }, [autoDictate, hasVoice, isRecording]);
-
     /* ── Voice handlers ── */
 
     const handleRecordingChange = useCallback(
@@ -385,12 +376,8 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           preVoiceContentRef.current = valueRef.current;
         }
         if (!recording) setInterimText("");
-        // Reset the focus-triggered auto-record once recording actually starts
-        if (recording && focusAutoRecord) {
-          setFocusAutoRecord(false);
-        }
       },
-      [onRecordingChangeProp, focusAutoRecord],
+      [onRecordingChangeProp],
     );
 
     const handleInterimTranscript = useCallback(
@@ -677,7 +664,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
             size="icon"
             variant={isRecording ? "destructive" : "ghost"}
             className={toolbarSize.btn}
-            autoStart={autoRecord || focusAutoRecord}
+            autoStart={autoRecord}
           />
         )}
         {SubmitIcon && onSubmit && (
@@ -777,7 +764,6 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           disabled={disabled}
           autoFocus={autoFocus}
           onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
           className={cn(
             chrome === "bare" && "border-none shadow-none focus-visible:ring-0",
             isRecording && "text-primary",
@@ -799,7 +785,6 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
           autoFocus={autoFocus}
           onKeyDown={handleKeyDown as React.KeyboardEventHandler<HTMLTextAreaElement>}
           onSelect={onSelect}
-          onFocus={handleFocus}
           className={cn(
             chrome === "container" && "border-none shadow-none focus-visible:ring-0",
             chrome === "bare" &&
