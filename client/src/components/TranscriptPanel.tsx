@@ -70,6 +70,7 @@ export function TranscriptPanel({
       await apiRequest("POST", "/api/documents", {
         title,
         content: note.text.trim(),
+        docType: "note",
       });
       onNotesChange(notes.map((n) => n.id === note.id ? { ...n, savedToContext: true } : n));
       trackEvent("note_saved_to_context");
