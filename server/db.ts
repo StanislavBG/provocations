@@ -67,7 +67,7 @@ export async function ensureTables(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS user_preferences (
         id SERIAL PRIMARY KEY,
-        user_id VARCHAR(128) NOT NULL UNIQUE,
+        user_id VARCHAR(128) NOT NULL,
         auto_dictate BOOLEAN DEFAULT FALSE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -122,7 +122,7 @@ export async function ensureTables(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS pipeline_artifacts (
         id SERIAL PRIMARY KEY,
-        uuid VARCHAR(36) NOT NULL UNIQUE,
+        uuid VARCHAR(36) NOT NULL,
         user_id VARCHAR(128) NOT NULL,
         document_id INTEGER,
         parent_artifact_id INTEGER,
@@ -142,7 +142,7 @@ export async function ensureTables(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS persona_overrides (
         id SERIAL PRIMARY KEY,
-        persona_id VARCHAR(64) NOT NULL UNIQUE,
+        persona_id VARCHAR(64) NOT NULL,
         definition TEXT NOT NULL,
         human_curated BOOLEAN DEFAULT FALSE NOT NULL,
         curated_by VARCHAR(128),
@@ -153,7 +153,7 @@ export async function ensureTables(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS agent_definitions (
         id SERIAL PRIMARY KEY,
-        agent_id VARCHAR(128) NOT NULL UNIQUE,
+        agent_id VARCHAR(128) NOT NULL,
         user_id VARCHAR(128) NOT NULL,
         name VARCHAR(256) NOT NULL,
         description TEXT,
@@ -165,7 +165,7 @@ export async function ensureTables(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS agent_prompt_overrides (
         id SERIAL PRIMARY KEY,
-        task_type VARCHAR(64) NOT NULL UNIQUE,
+        task_type VARCHAR(64) NOT NULL,
         system_prompt TEXT NOT NULL,
         human_curated BOOLEAN DEFAULT FALSE NOT NULL,
         curated_by VARCHAR(128),
@@ -207,7 +207,7 @@ export async function ensureTables(): Promise<void> {
       -- LLM call logs for gateway-level observability
       CREATE TABLE IF NOT EXISTS llm_call_logs (
         id SERIAL PRIMARY KEY,
-        call_id VARCHAR(36) NOT NULL UNIQUE,
+        call_id VARCHAR(36) NOT NULL,
         user_id VARCHAR(128) NOT NULL,
         session_id VARCHAR(64),
         app_type VARCHAR(64),
@@ -284,7 +284,7 @@ export async function ensureTables(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS chat_preferences (
         id SERIAL PRIMARY KEY,
-        user_id VARCHAR(128) NOT NULL UNIQUE,
+        user_id VARCHAR(128) NOT NULL,
         presence_status VARCHAR(16) DEFAULT 'available' NOT NULL,
         custom_status_text VARCHAR(100),
         notifications_enabled BOOLEAN DEFAULT TRUE NOT NULL,
@@ -380,10 +380,21 @@ export async function ensureTables(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_definitions_agent_id ON agent_definitions(agent_id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_prompt_overrides_task_type ON agent_prompt_overrides(task_type);
 
-      -- Ensure unique constraints match Drizzle's naming convention ({table}_{column}_unique).
-      -- ensureTables creates inline UNIQUE (PostgreSQL names these {table}_{column}_key),
-      -- but drizzle-kit push expects {table}_{column}_unique. Without matching names,
-      -- drizzle-kit push keeps generating ADD CONSTRAINT statements every deploy.
+      -- Ensure unique constraints use Drizzle's naming convention ({table}_{column}_unique).
+      -- drizzle-kit push expects constraints named {table}_{column}_unique.
+      -- Previous versions used inline UNIQUE which created {table}_{column}_key names —
+      -- drop those stale constraints so drizzle-kit doesn't see unexpected objects.
+      DO $$ BEGIN
+        ALTER TABLE user_preferences DROP CONSTRAINT IF EXISTS user_preferences_user_id_key;
+        ALTER TABLE pipeline_artifacts DROP CONSTRAINT IF EXISTS pipeline_artifacts_uuid_key;
+        ALTER TABLE persona_overrides DROP CONSTRAINT IF EXISTS persona_overrides_persona_id_key;
+        ALTER TABLE agent_definitions DROP CONSTRAINT IF EXISTS agent_definitions_agent_id_key;
+        ALTER TABLE agent_prompt_overrides DROP CONSTRAINT IF EXISTS agent_prompt_overrides_task_type_key;
+        ALTER TABLE llm_call_logs DROP CONSTRAINT IF EXISTS llm_call_logs_call_id_key;
+        ALTER TABLE chat_preferences DROP CONSTRAINT IF EXISTS chat_preferences_user_id_key;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
+
       DO $$ BEGIN
         ALTER TABLE user_preferences ADD CONSTRAINT user_preferences_user_id_unique UNIQUE(user_id);
       EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
