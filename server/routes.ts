@@ -6396,6 +6396,90 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
   // Sharing — Document & Folder sharing between connected users
   // ══════════════════════════════════════════════════════════════════
 
+  // ── Sharing helpers ──
+
+  /** Batch-fetch Clerk user info for a set of user IDs. Returns a map of userId → display info. */
+  async function batchResolveClerkUsers(userIds: string[]): Promise<Map<string, { name: string; email: string; avatar: string | null }>> {
+    const unique = Array.from(new Set(userIds)).filter(Boolean);
+    const map = new Map<string, { name: string; email: string; avatar: string | null }>();
+    if (unique.length === 0) return map;
+    try {
+      const clerkUsers = (await clerkClient.users.getUserList({ userId: unique })).data;
+      for (const u of clerkUsers) {
+        const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.emailAddresses[0]?.emailAddress || u.id;
+        map.set(u.id, {
+          name,
+          email: u.emailAddresses[0]?.emailAddress ?? "",
+          avatar: u.imageUrl ?? null,
+        });
+      }
+    } catch { /* Clerk unavailable — return empty map */ }
+    return map;
+  }
+
+  /** Decrypt a shared item's title (document or folder) using the existing decryptField helper. */
+  async function resolveShareItemTitle(share: { itemType: string; itemId: number }, key: string): Promise<string | undefined> {
+    if (share.itemType === "document") {
+      const doc = await storage.getDocument(share.itemId);
+      if (doc) return decryptField(doc.title, doc.titleCiphertext, doc.titleSalt, doc.titleIv, key);
+    } else if (share.itemType === "folder") {
+      const folder = await storage.getFolder(share.itemId);
+      if (folder) return decryptField(folder.name, folder.nameCiphertext, folder.nameSalt, folder.nameIv, key);
+    }
+    return undefined;
+  }
+
+  /** Enrich shared items with decrypted titles and Clerk user info. Batches Clerk calls. */
+  async function enrichSharedItems(
+    shares: Awaited<ReturnType<typeof storage.listSharedWithMe>>,
+    enrichSide: "owner" | "recipient",
+  ): Promise<SharedItemDisplay[]> {
+    const key = getEncryptionKey();
+
+    // Batch-resolve Clerk users (the "other" party)
+    const userIds = shares.map(s => enrichSide === "owner" ? s.ownerId : s.recipientId);
+    const userMap = await batchResolveClerkUsers(userIds);
+
+    // Resolve titles and notes concurrently per share
+    return Promise.all(shares.map(async (share) => {
+      const itemTitle = await resolveShareItemTitle(share, key);
+
+      // Decrypt optional note
+      let note: string | undefined;
+      if (share.noteCiphertext && share.noteSalt && share.noteIv) {
+        note = decryptField("", share.noteCiphertext, share.noteSalt, share.noteIv, key) || undefined;
+      }
+
+      const otherUserId = enrichSide === "owner" ? share.ownerId : share.recipientId;
+      const userInfo = userMap.get(otherUserId);
+
+      const item: SharedItemDisplay = {
+        id: share.id,
+        ownerId: share.ownerId,
+        recipientId: share.recipientId,
+        itemType: share.itemType as any,
+        itemId: share.itemId,
+        permission: share.permission as any,
+        status: share.status as any,
+        note,
+        itemTitle,
+        createdAt: new Date(share.createdAt).toISOString(),
+      };
+
+      if (enrichSide === "owner") {
+        item.ownerName = userInfo?.name;
+        item.ownerEmail = userInfo?.email;
+        item.ownerAvatar = userInfo?.avatar ?? null;
+      } else {
+        item.recipientName = userInfo?.name;
+        item.recipientEmail = userInfo?.email;
+        item.recipientAvatar = userInfo?.avatar ?? null;
+      }
+
+      return item;
+    }));
+  }
+
   /** Share a document or folder with a connected user */
   app.post("/api/share", async (req, res) => {
     try {
@@ -6544,73 +6628,7 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
       const shares = await storage.listSharedWithMe(userId);
-
-      // Enrich with display info
-      const items: SharedItemDisplay[] = [];
-      for (const share of shares) {
-        let itemTitle: string | undefined;
-
-        // Decrypt item title for display
-        if (share.itemType === "document") {
-          const doc = await storage.getDocument(share.itemId);
-          if (doc) {
-            if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
-              try { itemTitle = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, getEncryptionKey()); } catch { itemTitle = doc.title; }
-            } else {
-              itemTitle = doc.title;
-            }
-          }
-        } else if (share.itemType === "folder") {
-          const folder = await storage.getFolder(share.itemId);
-          if (folder) {
-            if (folder.nameCiphertext && folder.nameSalt && folder.nameIv) {
-              try { itemTitle = decrypt({ ciphertext: folder.nameCiphertext, salt: folder.nameSalt, iv: folder.nameIv }, getEncryptionKey()); } catch { itemTitle = folder.name; }
-            } else {
-              itemTitle = folder.name;
-            }
-          }
-        }
-
-        // Decrypt optional note
-        let note: string | undefined;
-        if (share.noteCiphertext && share.noteSalt && share.noteIv) {
-          try { note = decrypt({ ciphertext: share.noteCiphertext, salt: share.noteSalt, iv: share.noteIv }, getEncryptionKey()); } catch { /* ignore */ }
-        }
-
-        // Fetch owner info from Clerk
-        let ownerName: string | undefined;
-        let ownerEmail: string | undefined;
-        let ownerAvatar: string | null = null;
-        try {
-          const clerk = clerkClient as any;
-          const getUsers = clerk.users?.getUser || clerk.getUser;
-          if (getUsers) {
-            const ownerUser = await getUsers(share.ownerId);
-            ownerName = ownerUser?.firstName
-              ? `${ownerUser.firstName} ${ownerUser.lastName ?? ""}`.trim()
-              : ownerUser?.emailAddresses?.[0]?.emailAddress;
-            ownerEmail = ownerUser?.emailAddresses?.[0]?.emailAddress;
-            ownerAvatar = ownerUser?.imageUrl ?? null;
-          }
-        } catch { /* ignore */ }
-
-        items.push({
-          id: share.id,
-          ownerId: share.ownerId,
-          recipientId: share.recipientId,
-          itemType: share.itemType as any,
-          itemId: share.itemId,
-          permission: share.permission as any,
-          status: share.status as any,
-          note,
-          itemTitle,
-          ownerName,
-          ownerEmail,
-          ownerAvatar,
-          createdAt: new Date(share.createdAt).toISOString(),
-        });
-      }
-
+      const items = await enrichSharedItems(shares, "owner");
       res.json(items);
     } catch (error) {
       console.error("List shared-with-me error:", error);
@@ -6625,64 +6643,7 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
       const shares = await storage.listSharedByMe(userId);
-
-      const items: SharedItemDisplay[] = [];
-      for (const share of shares) {
-        let itemTitle: string | undefined;
-
-        if (share.itemType === "document") {
-          const doc = await storage.getDocument(share.itemId);
-          if (doc) {
-            if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
-              try { itemTitle = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, getEncryptionKey()); } catch { itemTitle = doc.title; }
-            } else {
-              itemTitle = doc.title;
-            }
-          }
-        } else if (share.itemType === "folder") {
-          const folder = await storage.getFolder(share.itemId);
-          if (folder) {
-            if (folder.nameCiphertext && folder.nameSalt && folder.nameIv) {
-              try { itemTitle = decrypt({ ciphertext: folder.nameCiphertext, salt: folder.nameSalt, iv: folder.nameIv }, getEncryptionKey()); } catch { itemTitle = folder.name; }
-            } else {
-              itemTitle = folder.name;
-            }
-          }
-        }
-
-        // Fetch recipient info
-        let recipientName: string | undefined;
-        let recipientEmail: string | undefined;
-        let recipientAvatar: string | null = null;
-        try {
-          const clerk = clerkClient as any;
-          const getUsers = clerk.users?.getUser || clerk.getUser;
-          if (getUsers) {
-            const recipientUser = await getUsers(share.recipientId);
-            recipientName = recipientUser?.firstName
-              ? `${recipientUser.firstName} ${recipientUser.lastName ?? ""}`.trim()
-              : recipientUser?.emailAddresses?.[0]?.emailAddress;
-            recipientEmail = recipientUser?.emailAddresses?.[0]?.emailAddress;
-            recipientAvatar = recipientUser?.imageUrl ?? null;
-          }
-        } catch { /* ignore */ }
-
-        items.push({
-          id: share.id,
-          ownerId: share.ownerId,
-          recipientId: share.recipientId,
-          itemType: share.itemType as any,
-          itemId: share.itemId,
-          permission: share.permission as any,
-          status: share.status as any,
-          itemTitle,
-          recipientName,
-          recipientEmail,
-          recipientAvatar,
-          createdAt: new Date(share.createdAt).toISOString(),
-        });
-      }
-
+      const items = await enrichSharedItems(shares, "recipient");
       res.json(items);
     } catch (error) {
       console.error("List shared-by-me error:", error);
@@ -6707,12 +6668,8 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
 
       // Decrypt for the recipient
       const key = getEncryptionKey();
-      let title = doc.title;
-      if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
-        try { title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* use legacy */ }
-      }
-      let content = "";
-      try { content = decrypt({ ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv }, key); } catch { /* empty */ }
+      const title = decryptField(doc.title, doc.titleCiphertext, doc.titleSalt, doc.titleIv, key);
+      const content = decryptField("", doc.ciphertext, doc.salt, doc.iv, key);
 
       res.json({
         id: doc.id,
@@ -6750,18 +6707,12 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
 
       // Decrypt titles for display
       const key = getEncryptionKey();
-      const items = folderDocs.map(doc => {
-        let title = doc.title;
-        if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
-          try { title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* use legacy */ }
-        }
-        return {
-          id: doc.id,
-          title,
-          createdAt: String(doc.createdAt),
-          updatedAt: String(doc.updatedAt),
-        };
-      });
+      const items = folderDocs.map(doc => ({
+        id: doc.id,
+        title: decryptField(doc.title, doc.titleCiphertext, doc.titleSalt, doc.titleIv, key),
+        createdAt: String(doc.createdAt),
+        updatedAt: String(doc.updatedAt),
+      }));
 
       res.json(items);
     } catch (error) {
@@ -6783,43 +6734,29 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const rows = await storage.listNotifications(userId, limit);
 
-      // Enrich with sender info
-      const items: NotificationItem[] = [];
-      for (const row of rows) {
-        let fromUserName: string | undefined;
-        let fromUserEmail: string | undefined;
-        let fromUserAvatar: string | null = null;
-        try {
-          const clerk = clerkClient as any;
-          const getUsers = clerk.users?.getUser || clerk.getUser;
-          if (getUsers) {
-            const fromUser = await getUsers(row.fromUserId);
-            fromUserName = fromUser?.firstName
-              ? `${fromUser.firstName} ${fromUser.lastName ?? ""}`.trim()
-              : fromUser?.emailAddresses?.[0]?.emailAddress;
-            fromUserEmail = fromUser?.emailAddresses?.[0]?.emailAddress;
-            fromUserAvatar = fromUser?.imageUrl ?? null;
-          }
-        } catch { /* ignore */ }
+      // Batch-resolve all sender user info in one Clerk call
+      const senderIds = rows.map(r => r.fromUserId);
+      const userMap = await batchResolveClerkUsers(senderIds);
 
+      const items: NotificationItem[] = rows.map(row => {
+        const sender = userMap.get(row.fromUserId);
         let metadata: Record<string, any> | undefined;
         if (row.metadata) {
           try { metadata = JSON.parse(row.metadata); } catch { /* ignore */ }
         }
-
-        items.push({
+        return {
           id: row.id,
           userId: row.userId,
           notificationType: row.notificationType as NotificationType,
           fromUserId: row.fromUserId,
-          fromUserName,
-          fromUserEmail,
-          fromUserAvatar,
+          fromUserName: sender?.name,
+          fromUserEmail: sender?.email,
+          fromUserAvatar: sender?.avatar ?? null,
           metadata,
           readAt: row.readAt ? new Date(row.readAt).toISOString() : null,
           createdAt: new Date(row.createdAt).toISOString(),
-        });
-      }
+        };
+      });
 
       res.json(items);
     } catch (error) {
