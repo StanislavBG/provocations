@@ -417,7 +417,8 @@ export default function NotebookWorkspace() {
       const title = prompt
         ? prompt.slice(0, 120)
         : `Image ${new Date().toLocaleDateString()}`;
-      const content = `![${title}](${imageUrl})\n\n${prompt ? `**Prompt:** ${prompt}` : ""}`;
+      // Save just the image — the prompt lives in the title.
+      const content = imageUrl;
       await apiRequest("POST", "/api/documents", { title, content });
       trackEvent("document_saved");
       toast({ title: "Saved to Context Store", description: title });
