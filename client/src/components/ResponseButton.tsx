@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, Pencil, Send, X, Square } from "lucide-react";
-import { useAutoDictate } from "@/hooks/use-auto-dictate";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 type InputMode = "mic" | "pencil";
@@ -23,20 +22,12 @@ export function ResponseButton({
   onTranscriptUpdate,
   isProcessing,
 }: ResponseButtonProps) {
-  const { autoDictate } = useAutoDictate();
   const [isOpen, setIsOpen] = useState(false);
-  const [mode, setMode] = useState<InputMode>(autoDictate ? "mic" : "pencil");
+  const [mode, setMode] = useState<InputMode>("pencil");
   const [textValue, setTextValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Sync mode with autoDictate when button is not open
-  useEffect(() => {
-    if (!isOpen) {
-      setMode(autoDictate ? "mic" : "pencil");
-    }
-  }, [autoDictate, isOpen]);
 
   // Focus input when switching to pencil mode while open
   useEffect(() => {

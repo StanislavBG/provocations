@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PaletteToggle } from "@/components/PaletteToggle";
-import { AutoDictateToggle } from "@/components/AutoDictateToggle";
+
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
@@ -116,7 +116,6 @@ export function NotebookTopBar({
 
           <div className="w-px h-4 bg-border mx-0.5" />
 
-          <AutoDictateToggle />
           {panelLayout && onPanelLayoutChange && (
             <Tooltip>
               <TooltipTrigger asChild>
