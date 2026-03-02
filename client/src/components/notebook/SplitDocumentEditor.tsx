@@ -5,11 +5,13 @@ import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { ImageCanvas } from "./ImageCanvas";
 import { ImageLightbox, extractImageUrl } from "./ImageLightbox";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { generateId } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   Eye,
   Download,
@@ -25,6 +27,10 @@ import {
   Paintbrush,
   Clock,
   Maximize2,
+  PenLine,
+  Mic,
+  Pencil,
+  Send,
 } from "lucide-react";
 
 interface DocTab {
@@ -81,6 +87,14 @@ interface SplitDocumentEditorProps {
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
   /** Save timeline JSON to the Context Store */
   onSaveTimelineToContext?: (json: string, label: string) => void;
+  /**
+   * Callback for writer voice/edit feedback. Sends user feedback through
+   * the write mutation to be intelligently remixed into the document.
+   * @param instruction - The feedback/instruction text
+   * @param selectedText - Optional selected text the feedback targets
+   * @param description - Optional description for the edit history
+   */
+  onWriterFeedback?: (instruction: string, selectedText?: string, description?: string) => void;
 }
 
 /** Imperative handle for parent to add image tabs */
@@ -106,10 +120,26 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   onAddImageTab,
   onImageActiveChange,
   onSaveTimelineToContext,
+  onWriterFeedback,
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
   const [previewLightbox, setPreviewLightbox] = useState(false);
+
+  // ── Writer voice feedback state ──
+  const [writerVoiceActive, setWriterVoiceActive] = useState(false);
+  const [writerFeedbackText, setWriterFeedbackText] = useState("");
+
+  // ── Selection popover state ──
+  const [selectionPopover, setSelectionPopover] = useState<{
+    text: string;
+    top: number;
+    left: number;
+  } | null>(null);
+  const [selectionEditMode, setSelectionEditMode] = useState(false);
+  const [selectionEditText, setSelectionEditText] = useState("");
+  const [selectionVoiceActive, setSelectionVoiceActive] = useState(false);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
 
   // ── Chrome-style document tabs ──
   const [tabs, setTabs] = useState<DocTab[]>(() => [
@@ -285,6 +315,107 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
     setEditingTabId(null);
   }, []);
 
+  // ── Writer voice feedback handler ──
+  const handleWriterVoiceTranscript = useCallback(
+    (transcript: string) => {
+      if (!transcript.trim() || !onWriterFeedback) return;
+      onWriterFeedback(
+        transcript,
+        undefined,
+        "Writer voice feedback",
+      );
+      setWriterVoiceActive(false);
+      toast({ title: "Feedback sent", description: "Remixing your feedback into the document..." });
+    },
+    [onWriterFeedback, toast],
+  );
+
+  // ── Writer text feedback handler (from input) ──
+  const handleWriterTextSubmit = useCallback(() => {
+    if (!writerFeedbackText.trim() || !onWriterFeedback) return;
+    onWriterFeedback(
+      writerFeedbackText.trim(),
+      undefined,
+      "Writer text feedback",
+    );
+    setWriterFeedbackText("");
+    toast({ title: "Feedback sent", description: "Remixing your feedback into the document..." });
+  }, [writerFeedbackText, onWriterFeedback, toast]);
+
+  // ── Selection popover handlers ──
+  const handleTextSelect = useCallback(() => {
+    if (!onWriterFeedback) return;
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim();
+    if (!selectedText || selectedText.length < 3) {
+      setSelectionPopover(null);
+      return;
+    }
+
+    // Get position relative to the editor container
+    const range = selection?.getRangeAt(0);
+    if (!range || !editorContainerRef.current) return;
+    const rect = range.getBoundingClientRect();
+    const containerRect = editorContainerRef.current.getBoundingClientRect();
+
+    setSelectionPopover({
+      text: selectedText,
+      top: rect.top - containerRect.top - 40,
+      left: rect.left - containerRect.left + rect.width / 2,
+    });
+    setSelectionEditMode(false);
+    setSelectionEditText("");
+    setSelectionVoiceActive(false);
+  }, [onWriterFeedback]);
+
+  // Close selection popover on click outside
+  useEffect(() => {
+    if (!selectionPopover) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-selection-popover]")) return;
+      // Small delay to allow selection to happen
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel?.toString().trim()) {
+          setSelectionPopover(null);
+        }
+      }, 100);
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [selectionPopover]);
+
+  const handleSelectionVoiceTranscript = useCallback(
+    (transcript: string) => {
+      if (!transcript.trim() || !onWriterFeedback || !selectionPopover) return;
+      onWriterFeedback(
+        transcript,
+        selectionPopover.text,
+        "Voice feedback on selection",
+      );
+      setSelectionPopover(null);
+      setSelectionVoiceActive(false);
+      window.getSelection()?.removeAllRanges();
+      toast({ title: "Feedback sent", description: "Remixing your feedback into the selected area..." });
+    },
+    [onWriterFeedback, selectionPopover, toast],
+  );
+
+  const handleSelectionEditSubmit = useCallback(() => {
+    if (!selectionEditText.trim() || !onWriterFeedback || !selectionPopover) return;
+    onWriterFeedback(
+      selectionEditText.trim(),
+      selectionPopover.text,
+      "Edit feedback on selection",
+    );
+    setSelectionPopover(null);
+    setSelectionEditMode(false);
+    setSelectionEditText("");
+    window.getSelection()?.removeAllRanges();
+    toast({ title: "Feedback sent", description: "Remixing your feedback into the selected area..." });
+  }, [selectionEditText, onWriterFeedback, selectionPopover, toast]);
+
   const handleDownload = () => {
     const blob = new Blob([text], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
@@ -326,6 +457,155 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
       </Button>
     </div>
   );
+
+  // ── Writer feedback row (second row under toolbar) ──
+  const writerFeedbackRow = onWriterFeedback ? (
+    <div className="flex items-center gap-1.5 px-4 py-1.5 border-b bg-muted/20">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div>
+            <VoiceRecorder
+              onTranscript={handleWriterVoiceTranscript}
+              onRecordingChange={setWriterVoiceActive}
+              size="icon"
+              variant={writerVoiceActive ? "destructive" : "ghost"}
+              className="h-7 w-7"
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="font-semibold">Writer Voice</p>
+          <p className="text-xs text-muted-foreground">Dictate feedback for the AI to remix into your document</p>
+        </TooltipContent>
+      </Tooltip>
+      {writerVoiceActive ? (
+        <span className="text-xs text-primary animate-pulse flex-1">
+          Listening for feedback... speak your changes, the AI will remix them into the document
+        </span>
+      ) : (
+        <div className="flex items-center gap-1.5 flex-1">
+          <PenLine className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <input
+            type="text"
+            value={writerFeedbackText}
+            onChange={(e) => setWriterFeedbackText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleWriterTextSubmit();
+              }
+            }}
+            placeholder="Type feedback for the AI to remix into the document..."
+            className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
+            disabled={isMerging}
+          />
+          {writerFeedbackText.trim() && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 shrink-0"
+              onClick={handleWriterTextSubmit}
+              disabled={isMerging}
+            >
+              <Send className="w-3 h-3" />
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  // ── Selection popover (Voice + Edit on highlighted text) ──
+  const selectionPopoverEl = selectionPopover ? (
+    <div
+      data-selection-popover
+      className="absolute z-50 flex flex-col items-center gap-1"
+      style={{
+        top: `${selectionPopover.top}px`,
+        left: `${selectionPopover.left}px`,
+        transform: "translateX(-50%)",
+      }}
+    >
+      {selectionEditMode ? (
+        <div className="flex items-center gap-1 bg-popover border rounded-lg shadow-lg px-2 py-1.5">
+          <input
+            type="text"
+            value={selectionEditText}
+            onChange={(e) => setSelectionEditText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSelectionEditSubmit();
+              }
+              if (e.key === "Escape") {
+                setSelectionEditMode(false);
+                setSelectionEditText("");
+              }
+            }}
+            placeholder="Describe how to change this..."
+            className="bg-transparent text-xs outline-none w-[200px] placeholder:text-muted-foreground/50"
+            autoFocus
+          />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 shrink-0"
+            onClick={handleSelectionEditSubmit}
+            disabled={!selectionEditText.trim() || isMerging}
+          >
+            <Send className="w-3 h-3" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5 shrink-0"
+            onClick={() => { setSelectionEditMode(false); setSelectionEditText(""); }}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-0.5 bg-popover border rounded-lg shadow-lg px-1.5 py-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <VoiceRecorder
+                  onTranscript={handleSelectionVoiceTranscript}
+                  onRecordingChange={setSelectionVoiceActive}
+                  size="icon"
+                  variant={selectionVoiceActive ? "destructive" : "ghost"}
+                  className="h-7 w-7"
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Dictate feedback for this selection</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={() => setSelectionEditMode(true)}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Type feedback for this selection</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
+      {selectionVoiceActive && (
+        <span className="text-[10px] text-primary animate-pulse bg-popover border rounded px-2 py-0.5 shadow">
+          Listening... describe your changes
+        </span>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div className="h-full flex flex-col">
@@ -600,17 +880,24 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
             )}
           </div>
 
-          {/* ─── Document pane (remaining ~80%) ─── */}
-          <ProvokeText
-            chrome="container"
-            variant="editor"
-            containerClassName="flex-1 min-h-0"
-            value={text}
-            onChange={onTextChange}
-            placeholder="Start writing your document here... (Markdown supported)"
-            headerActions={documentHeaderActions}
-            className="text-sm leading-relaxed font-serif"
-          />
+          {/* ─── Writer feedback row (voice + text input for AI remixing) ─── */}
+          {writerFeedbackRow}
+
+          {/* ─── Document pane with selection popover ─── */}
+          <div ref={editorContainerRef} className="relative flex-1 min-h-0">
+            {selectionPopoverEl}
+            <ProvokeText
+              chrome="container"
+              variant="editor"
+              containerClassName="h-full"
+              value={text}
+              onChange={onTextChange}
+              onSelect={handleTextSelect}
+              placeholder="Start writing your document here... (Markdown supported)"
+              headerActions={documentHeaderActions}
+              className="text-sm leading-relaxed font-serif"
+            />
+          </div>
         </div>
       ) : null}
     </div>
