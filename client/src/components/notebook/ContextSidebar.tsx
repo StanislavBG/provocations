@@ -517,7 +517,7 @@ export function ContextSidebar({
                 e.preventDefault();
                 onOpenDoc?.(doc.id, doc.title);
               }}
-              title="Click to preview, double-click to edit"
+              title="Click to preview, double-click to open document"
             >
               {isPinned ? (
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
@@ -588,7 +588,7 @@ export function ContextSidebar({
                       <FileOutput className="w-2.5 h-2.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">Open as document</TooltipContent>
+                  <TooltipContent side="right">Open Document</TooltipContent>
                 </Tooltip>
               )}
               <Tooltip>
