@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PaletteToggle } from "@/components/PaletteToggle";
 import { AutoDictateToggle } from "@/components/AutoDictateToggle";
 import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
+import { MailboxDrawer } from "@/components/MailboxDrawer";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 import { DebugButton } from "@/components/DebugButton";
@@ -19,6 +22,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Video,
+  Bell,
 } from "lucide-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
 import type { PanelLayoutConfig } from "@/hooks/use-panel-layout";
@@ -54,6 +58,14 @@ export function NotebookTopBar({
   const [layoutDialogOpen, setLayoutDialogOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
+  const [mailboxOpen, setMailboxOpen] = useState(false);
+
+  // Unread notification count for badge
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/mailbox/unread-count"],
+    refetchInterval: 15000,
+  });
+  const unreadCount = unreadData?.count ?? 0;
 
   return (
     <header className="border-b bg-card shrink-0">
@@ -84,7 +96,28 @@ export function NotebookTopBar({
 
           <div className="w-px h-4 bg-border mx-0.5" />
 
-          {/* Chat & Video */}
+          {/* Mailbox, Chat & Video */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={mailboxOpen ? "default" : "ghost"}
+                size="sm"
+                className="h-7 w-7 p-0 relative"
+                onClick={() => setMailboxOpen(true)}
+              >
+                <Bell className="w-3.5 h-3.5" />
+                {unreadCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 text-[8px] px-1 py-0 min-w-[14px] h-[14px] flex items-center justify-center"
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Badge>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Mailbox</TooltipContent>
+          </Tooltip>
           {chatSessionContext && onActiveChatConversationChange && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -169,6 +202,9 @@ export function NotebookTopBar({
           onActiveConversationChange={onActiveChatConversationChange}
         />
       )}
+
+      {/* Mailbox drawer */}
+      <MailboxDrawer open={mailboxOpen} onOpenChange={setMailboxOpen} />
 
       {/* Video room (Sheet) */}
       <Sheet open={videoOpen} onOpenChange={setVideoOpen}>

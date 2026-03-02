@@ -25,6 +25,7 @@ interface NotebookCenterPanelProps {
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
   onSaveTimelineToContext?: (json: string, label: string) => void;
   onTimelineSummaryChange?: (summary: TimelineSummary) => void;
+  onWriterFeedback?: (instruction: string, selectedText?: string, description?: string) => void;
 }
 
 export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, NotebookCenterPanelProps>(
@@ -48,6 +49,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
       onImageActiveChange,
       onSaveTimelineToContext,
       onTimelineSummaryChange,
+      onWriterFeedback,
     },
     ref,
   ) {
@@ -73,6 +75,7 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
           onImageActiveChange={onImageActiveChange}
           onSaveTimelineToContext={onSaveTimelineToContext}
           onTimelineSummaryChange={onTimelineSummaryChange}
+          onWriterFeedback={onWriterFeedback}
         />
       </div>
     );

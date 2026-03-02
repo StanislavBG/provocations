@@ -122,6 +122,8 @@ function QuickCaptureView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [noteText, setNoteText] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  // Snapshot existing text when recording starts so interim updates preserve it
+  const preRecordNoteRef = useRef("");
   const [expandedNoteId, setExpandedNoteId] = useState<number | null>(null);
   const [expandedContent, setExpandedContent] = useState<string>("");
   const [loadingContentId, setLoadingContentId] = useState<number | null>(null);
@@ -239,6 +241,11 @@ function QuickCaptureView({
             <div className="flex items-center gap-1">
               <VoiceRecorder
                 onTranscript={handleVoiceTranscript}
+                onInterimTranscript={(t) => {
+                  const pre = preRecordNoteRef.current;
+                  setNoteText(pre ? `${pre}\n\n${t}` : t);
+                }}
+                onRecordingChange={(r) => { if (r) preRecordNoteRef.current = noteText; }}
                 size="sm"
                 variant="ghost"
                 className="h-8 w-8 text-muted-foreground"
@@ -349,6 +356,8 @@ function InterviewView({
   // ── Stance & focus state ──
   const [stance, setStance] = useState<InterviewStance>("balanced");
   const [focusText, setFocusText] = useState("");
+  const preRecordObjectiveRef = useRef("");
+  const preRecordFocusRef = useRef("");
 
   // ── TTS (Text-to-Speech) state ──
   const [ttsEnabled, setTtsEnabled] = useState(false);
@@ -621,6 +630,11 @@ function InterviewView({
                 </div>
                 <VoiceRecorder
                   onTranscript={(t) => setObjective((prev) => prev ? prev + " " + t : t)}
+                  onInterimTranscript={(t) => {
+                    const pre = preRecordObjectiveRef.current;
+                    setObjective(pre ? `${pre} ${t}` : t);
+                  }}
+                  onRecordingChange={(r) => { if (r) preRecordObjectiveRef.current = objective; }}
                   size="sm"
                   variant="ghost"
                   className="h-7 w-7 text-muted-foreground"
@@ -695,6 +709,11 @@ function InterviewView({
                 />
                 <VoiceRecorder
                   onTranscript={(t) => setFocusText((prev) => prev ? prev + " " + t : t)}
+                  onInterimTranscript={(t) => {
+                    const pre = preRecordFocusRef.current;
+                    setFocusText(pre ? `${pre} ${t}` : t);
+                  }}
+                  onRecordingChange={(r) => { if (r) preRecordFocusRef.current = focusText; }}
                   size="sm"
                   variant="ghost"
                   className="h-9 w-9 shrink-0 text-muted-foreground"

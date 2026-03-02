@@ -51,8 +51,14 @@ import {
   summarizeSessionRequestSchema,
   saveChatSessionRequestSchema,
   type YouTubeChannelResponse,
+  type ResponseConfig,
   type GenerateSummaryResponse,
   type InfographicSpec,
+  shareItemRequestSchema,
+  respondShareRequestSchema,
+  type SharedItemDisplay,
+  type NotificationItem,
+  type NotificationType,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
 import { personaSchema } from "@shared/schema";
@@ -2499,12 +2505,28 @@ Output only valid JSON, no markdown.`;
         console.log(`[Write API] Cleaned voice transcript: "${rawInstruction.slice(0, 50)}..." → "${instruction.slice(0, 50)}..."`);
       }
 
+      // Detect writer feedback mode (voice/text feedback from the author to remix)
+      const isWriterFeedback = instruction.startsWith("WRITER FEEDBACK");
+      const isSelectionFeedback = instruction.startsWith("WRITER FEEDBACK ON SELECTION");
+
       // Detect multi-config instructions (from the multi-select writer controls)
       const isMultiConfig = instruction.startsWith("Apply the following document evolution configurations");
 
       // Classify the instruction type
-      const instructionType = isMultiConfig ? "general" as const : classifyInstruction(instruction);
-      const strategy = isMultiConfig
+      const instructionType = isWriterFeedback
+        ? "general" as const
+        : isMultiConfig ? "general" as const : classifyInstruction(instruction);
+      const strategy = isWriterFeedback
+        ? (isSelectionFeedback
+          ? "The author has highlighted a specific section and provided editorial feedback. " +
+            "Interpret their intent — which may be expressed casually or as stream-of-consciousness — " +
+            "and apply the requested changes to the selected area. Keep the rest of the document intact. " +
+            "The feedback is DIRECTION, not literal text to insert."
+          : "The author has provided editorial feedback (possibly via voice) to be intelligently remixed " +
+            "into the document. This is NOT literal text to append — it is creative direction. " +
+            "Interpret the author's intent, identify which parts of the document the feedback applies to, " +
+            "and weave the changes naturally into the existing text. Maintain the document's voice and flow.")
+        : isMultiConfig
         ? "Apply multiple document evolution operations in a single coherent pass. " +
           "Prioritize the user's holistic intent over individual operations. " +
           "Where operations conflict, find the best synthesis — e.g., expand underserved " +
@@ -2524,7 +2546,20 @@ Output only valid JSON, no markdown.`;
       const contextParts: string[] = [];
 
       // Add instruction strategy
-      if (isMultiConfig) {
+      if (isWriterFeedback) {
+        contextParts.push(`INSTRUCTION MODE: Writer Feedback${isSelectionFeedback ? " (Selection-Targeted)" : ""}
+STRATEGY: ${strategy}
+
+WRITER FEEDBACK RULES:
+1. The author's feedback is EDITORIAL DIRECTION — interpret their intent, don't copy it literally.
+2. Voice feedback may contain speech artifacts, filler words, or casual phrasing — look past the surface to understand the underlying request.
+3. ${isSelectionFeedback
+  ? "Focus changes on the selected text area. Preserve everything outside the selection unless the feedback explicitly requires broader changes."
+  : "Identify which parts of the document the feedback applies to and make targeted changes there."}
+4. Maintain the document's existing voice, tone, and structure unless the feedback explicitly asks to change them.
+5. If the feedback is vague (e.g. "make this better" or "I don't like this part"), improve clarity, conciseness, and impact in the relevant area.
+6. The output must be the COMPLETE document with the feedback integrated — not just the changed section.`);
+      } else if (isMultiConfig) {
         contextParts.push(`INSTRUCTION MODE: Multi-configuration evolution
 STRATEGY: ${strategy}
 
@@ -2639,6 +2674,12 @@ The user's response should be integrated thoughtfully - don't just append it, we
       if (selectedText) {
         preservationDirectives.push("- PRESERVE all text outside the selected area unless the instruction explicitly affects it");
         preservationDirectives.push("- DO NOT reformat or restructure sections that weren't mentioned");
+      }
+      if (isWriterFeedback && !isSelectionFeedback) {
+        preservationDirectives.push("- Apply changes surgically to the areas the feedback addresses");
+        preservationDirectives.push("- PRESERVE sections that the feedback does not mention or imply changes to");
+        preservationDirectives.push("- DO NOT rewrite the entire document — only modify what the feedback directs");
+        preservationDirectives.push("- The author's feedback may be informal — translate it into polished prose that matches the document's voice");
       }
       if (isMultiConfig) {
         // Multi-config mode: more flexible — user explicitly asked for multiple changes
@@ -2925,34 +2966,30 @@ Output only the evolved markdown document. No explanations.`;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // WHISPER TRANSCRIPTION — translate any-language audio to English text
+  // VOICE TRANSCRIPTION — unified audio-to-text via gpt-4o-mini-transcribe
   // ═══════════════════════════════════════════════════════════════════════
 
-  /** Check if Whisper transcription is available (requires OpenAI API key) */
-  app.get("/api/transcribe/status", (_req, res) => {
-    // Audio endpoints are NOT supported through the Replit proxy —
-    // only direct OpenAI keys work for Whisper.  Accept OPENAI_API_KEY
-    // or the Replit-injected key but only when NOT proxied.
+  /** Resolve the OpenAI API key for audio endpoints (direct key only) */
+  function getAudioApiKey(): string | null {
     const directKey = process.env.OPENAI_API_KEY;
     const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
     const hasProxy = !!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-    // Available when: a direct key exists, OR the integration key exists without a proxy
-    const available = !!directKey || (!!integrationKey && !hasProxy);
-    res.json({ available });
+    return directKey ?? (!hasProxy && integrationKey ? integrationKey : null);
+  }
+
+  /** Check if voice transcription is available (requires OpenAI API key) */
+  app.get("/api/transcribe/status", (_req, res) => {
+    const available = !!getAudioApiKey();
+    res.json({ available, model: "gpt-4o-mini-transcribe" });
   });
 
-  /** Accept base64-encoded audio, translate+transcribe to English via Whisper */
+  /** Accept base64-encoded audio, transcribe via gpt-4o-mini-transcribe */
   app.post("/api/transcribe", async (req, res) => {
     try {
-      // Audio endpoints require a direct OpenAI connection (not the Replit proxy)
-      const directKey = process.env.OPENAI_API_KEY;
-      const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      const hasProxy = !!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-      const apiKey = directKey || (!hasProxy ? integrationKey : null);
-
+      const apiKey = getAudioApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "Whisper transcription not available — audio endpoints require a direct OpenAI API key (OPENAI_API_KEY), not the Replit proxy",
+          error: "Voice transcription not available — requires a direct OpenAI API key (OPENAI_API_KEY)",
         });
       }
 
@@ -2971,17 +3008,15 @@ Output only the evolved markdown document. No explanations.`;
 
       const OpenAI = (await import("openai")).default;
       const { toFile } = await import("openai");
-      // Never use the Replit proxy for audio — connect directly to OpenAI
       const client = new OpenAI({ apiKey });
 
-      // Determine file extension from MIME type
       const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
       const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
 
-      // Use "translations" endpoint — always outputs English regardless of input language
-      const result = await client.audio.translations.create({
+      // Use gpt-4o-mini-transcribe — faster, more accurate than whisper-1
+      const result = await client.audio.transcriptions.create({
         file,
-        model: "whisper-1",
+        model: "gpt-4o-mini-transcribe",
       });
 
       res.json({ text: result.text });
@@ -2989,6 +3024,76 @@ Output only the evolved markdown document. No explanations.`;
       console.error("Transcribe error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Transcription failed", details: errorMessage });
+    }
+  });
+
+  /**
+   * Streaming transcription via SSE — sends text deltas as they arrive
+   * so the client can render progressive results in real time.
+   */
+  app.post("/api/transcribe/stream", async (req, res) => {
+    try {
+      const apiKey = getAudioApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: "Voice transcription not available — requires a direct OpenAI API key (OPENAI_API_KEY)",
+        });
+      }
+
+      const { audio, mimeType } = req.body;
+      if (!audio || typeof audio !== "string") {
+        return res.status(400).json({ error: "audio (base64) is required" });
+      }
+
+      const buffer = Buffer.from(audio, "base64");
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: "Empty audio data" });
+      }
+      if (buffer.length > 25 * 1024 * 1024) {
+        return res.status(400).json({ error: "Audio exceeds 25MB limit" });
+      }
+
+      // Set SSE headers
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      const OpenAI = (await import("openai")).default;
+      const { toFile } = await import("openai");
+      const client = new OpenAI({ apiKey });
+
+      const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
+      const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
+
+      // Stream transcription deltas via gpt-4o-mini-transcribe
+      const stream = await client.audio.transcriptions.create({
+        file,
+        model: "gpt-4o-mini-transcribe",
+        stream: true,
+      });
+
+      let fullText = "";
+      for await (const event of stream as any) {
+        if (event.type === "transcript.text.delta") {
+          fullText += event.delta;
+          res.write(`data: ${JSON.stringify({ type: "delta", text: event.delta, accumulated: fullText })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ type: "done", text: fullText })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Streaming transcribe error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      // If headers already sent, send error as SSE event
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ type: "error", error: errorMessage })}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ error: "Transcription failed", details: errorMessage });
+      }
     }
   });
 
@@ -3916,8 +4021,10 @@ Output only valid JSON, no markdown.`,
     objective: string,
     notesContext: string,
     focusMode?: string,
+    responseConfig?: ResponseConfig,
   ): string {
     const focusSection = getFocusModePrompt(focusMode || "explore");
+    const responseSection = getResponseConfigPrompt(responseConfig);
 
     return `You are a rigorous, senior research analyst. Your purpose is to help the user build a well-sourced, trustworthy body of knowledge on their topic. You are precise, skeptical of unverified claims, and always transparent about what you know versus what you're uncertain about.
 ${topicContext}
@@ -3941,6 +4048,8 @@ TRUST & ACCURACY — NON-NEGOTIABLE:
 - **Surface contradictions.** If sources disagree, present both sides and explain the discrepancy.
 
 ${focusSection}
+
+${responseSection}
 
 RESPONSE FORMATTING — MANDATORY:
 - Always respond in clean, well-structured **Markdown**.
@@ -4051,6 +4160,144 @@ You are operating in exploration mode. Your primary goal is to help the user dis
     }
   }
 
+  function getResponseConfigPrompt(config?: ResponseConfig): string {
+    if (!config) return "";
+
+    const sections: string[] = [];
+
+    // Detail level
+    if (config.detail && config.detail !== "standard") {
+      switch (config.detail) {
+        case "brief":
+          sections.push(`DETAIL LEVEL: BRIEF
+- Keep responses short and scannable — aim for the minimum needed to answer the question.
+- Use bullet points over paragraphs. One sentence per point maximum.
+- Skip background context and preamble — go straight to the answer.
+- Omit examples unless they are essential to understanding.
+- Target 150-300 words unless the question demands more.`);
+          break;
+        case "detailed":
+          sections.push(`DETAIL LEVEL: DETAILED
+- Provide thorough coverage with supporting evidence, examples, and context.
+- Explain the "why" behind each point, not just the "what".
+- Include relevant background information the user may not have considered.
+- Use multiple subsections with clear headings for different aspects.
+- Add concrete examples, data points, or case studies where relevant.
+- Target 500-1500 words depending on complexity.`);
+          break;
+        case "exhaustive":
+          sections.push(`DETAIL LEVEL: EXHAUSTIVE
+- Leave nothing out — this is a comprehensive reference response.
+- Cover every relevant dimension: history, current state, alternatives, edge cases, trade-offs.
+- Include multiple examples for each major point.
+- Add caveats, limitations, and counterarguments for completeness.
+- Provide enough detail that the response could serve as standalone documentation.
+- Use extensive cross-referencing between sections.
+- No length constraint — thoroughness is the priority.`);
+          break;
+      }
+    }
+
+    // Format
+    if (config.format && config.format !== "structured") {
+      switch (config.format) {
+        case "prose":
+          sections.push(`FORMAT: PROSE NARRATIVE
+- Write in flowing, connected paragraphs — not bullet lists.
+- Use topic sentences and transitions between ideas.
+- Structure as a readable essay or article with natural flow.
+- Minimize bullet points — reserve them only for enumerating specific items (feature lists, requirements, etc.).
+- Use **bold** sparingly for emphasis, not as a structural device.`);
+          break;
+        case "outline":
+          sections.push(`FORMAT: HIERARCHICAL OUTLINE
+- Structure the entire response as a nested outline.
+- Use numbered lists (1., 1.1, 1.1.1) for main points and sub-points.
+- Keep each point to a single sentence or short phrase.
+- Show relationships through indentation and nesting depth.
+- This format is designed for quick scanning and easy copy-paste into documents.`);
+          break;
+        case "academic":
+          sections.push(`FORMAT: ACADEMIC / FORMAL
+- Structure with formal sections: Overview, Background, Analysis, Findings, Conclusion.
+- Use precise, formal language — avoid colloquialisms and contractions.
+- Cite every factual claim with source attribution (author/org, year, publication).
+- Include a brief abstract or executive summary at the top.
+- Use footnote-style references where appropriate.
+- Distinguish clearly between established consensus and emerging/disputed views.`);
+          break;
+      }
+    }
+
+    // Audience level
+    if (config.audience && config.audience !== "general") {
+      switch (config.audience) {
+        case "non-technical":
+          sections.push(`AUDIENCE: NON-TECHNICAL
+- Use plain language throughout — no jargon, no acronyms without explanation.
+- Replace technical terms with everyday equivalents (e.g., "database" → "where the data is stored").
+- Use analogies and real-world comparisons to explain complex concepts.
+- Focus on outcomes and implications rather than implementation details.
+- Assume the reader has no background in this field.`);
+          break;
+        case "technical":
+          sections.push(`AUDIENCE: TECHNICAL PRACTITIONER
+- Assume the reader has solid domain knowledge and working experience.
+- Use proper technical terminology without over-explaining.
+- Include implementation-relevant details: APIs, configurations, code patterns, architecture decisions.
+- Reference specific tools, libraries, and standards by name.
+- Skip introductory context — get to the substance.`);
+          break;
+        case "expert":
+          sections.push(`AUDIENCE: DOMAIN EXPERT
+- Write for someone deeply experienced in this field — skip fundamentals entirely.
+- Use specialized vocabulary, abbreviations, and field-specific conventions freely.
+- Focus on nuances, trade-offs, edge cases, and non-obvious implications.
+- Reference advanced concepts, research papers, and industry debates without explanation.
+- Challenge the user's assumptions when appropriate — experts value precision over comfort.
+- Include performance characteristics, scaling considerations, and failure modes.`);
+          break;
+      }
+    }
+
+    // Tone
+    if (config.tone && config.tone !== "neutral") {
+      switch (config.tone) {
+        case "conversational":
+          sections.push(`TONE: CONVERSATIONAL
+- Write as if explaining to a knowledgeable colleague over coffee.
+- Use "you" and "we" to create a direct, engaging voice.
+- Inject brief asides or observations that show genuine thinking, not just recitation.
+- It's okay to use phrases like "Interestingly...", "Here's the thing...", "Worth noting...".
+- Keep it warm and approachable without sacrificing accuracy.`);
+          break;
+        case "assertive":
+          sections.push(`TONE: ASSERTIVE / OPINIONATED
+- Take clear positions and make confident recommendations.
+- Lead with "You should..." or "The best approach is..." rather than hedging.
+- When there's a clear winner among options, say so directly.
+- Still acknowledge alternatives, but be explicit about ranking and reasoning.
+- Prioritize actionable guidance over balanced neutrality.
+- Save caveats for genuinely uncertain areas — don't hedge everything.`);
+          break;
+        case "critical":
+          sections.push(`TONE: CRITICAL / SKEPTICAL
+- Question assumptions, challenge conventional wisdom, and probe for weaknesses.
+- For each claim or recommendation, ask "But what could go wrong?" and answer it.
+- Highlight risks, failure modes, and commonly overlooked downsides.
+- Play devil's advocate — present the strongest counterargument to popular positions.
+- Use phrases like "However...", "The risk here is...", "What's often overlooked...".
+- Still provide balanced conclusions, but weighted toward surfacing hidden problems.`);
+          break;
+      }
+    }
+
+    if (sections.length === 0) return "";
+
+    return `RESPONSE CONFIGURATION — USER-SPECIFIED PREFERENCES (override defaults):
+${sections.join("\n\n")}`;
+  }
+
   // ==========================================
   // Clean-context chat (Research & Data Gathering)
   // Minimal-context LLM interaction — only the user's
@@ -4065,12 +4312,13 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus);
+      const planContext = researchPlan ? `\n\nAPPROVED RESEARCH PLAN — Follow this plan systematically:\n${researchPlan}` : "";
+      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -4099,6 +4347,61 @@ You are operating in exploration mode. Your primary goal is to help the user dis
     }
   });
 
+  // Generate research plan for Deep Research mode
+  app.post("/api/chat/research-plan", async (req, res) => {
+    try {
+      const parsed = chatRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { message, objective, chatModel } = parsed.data;
+      const selectedModel = chatModel || "gemini-2.5-flash";
+
+      const result = await llm.generateWithModel(selectedModel, {
+        system: `You are a research planning assistant. Given a research question and objective, create a structured research plan.
+
+Return ONLY a valid JSON object with this exact structure:
+{
+  "title": "Brief title for this research investigation",
+  "estimatedTime": "3-5 min",
+  "steps": [
+    {"area": "Topic area name", "questions": ["Specific question 1", "Specific question 2"]},
+    {"area": "Another topic area", "questions": ["Question 3", "Question 4"]}
+  ]
+}
+
+Rules:
+- Create 3-6 research areas that systematically cover the topic
+- Each area should have 2-3 specific research questions
+- Be concrete and specific, not generic
+- Cover: background, current state, key players, trade-offs, and emerging trends
+- Tailor the plan to the stated objective
+- Keep area names short (2-4 words)
+- Keep questions actionable and specific`,
+        messages: [
+          { role: "user", content: `Research question: ${message}\n\nObjective: ${objective || "General research"}` },
+        ],
+        maxTokens: 1024,
+        temperature: 0.7,
+      });
+
+      try {
+        const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const plan = JSON.parse(jsonMatch[0]);
+          return res.json({ plan });
+        }
+      } catch {
+        // Fall through to error
+      }
+      res.status(500).json({ error: "Failed to generate research plan" });
+    } catch (error) {
+      console.error("Research plan error:", error);
+      res.status(500).json({ error: "Failed to generate research plan" });
+    }
+  });
+
   // Streaming chat endpoint (SSE)
   app.post("/api/chat/stream", async (req, res) => {
     try {
@@ -4107,8 +4410,9 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
+      const streamStartMs = Date.now();
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -4118,7 +4422,8 @@ You are operating in exploration mode. Your primary goal is to help the user dis
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus);
+      const planContext = researchPlan ? `\n\nAPPROVED RESEARCH PLAN — Follow this plan systematically:\n${researchPlan}` : "";
+      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -4139,15 +4444,54 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         enableSearch: true,
       });
 
+      let fullResponse = "";
       for await (const chunk of stream) {
+        fullResponse += chunk;
         res.write(`data: ${JSON.stringify({ type: "content", content: chunk })}\n\n`);
       }
+
+      const durationMs = Date.now() - streamStartMs;
 
       // Send verbose metadata if verbose mode is enabled
       const scope = getActiveGatewayScope();
       if (scope && scope.verboseList.length > 0) {
         res.write(`data: ${JSON.stringify({ type: "verbose", _verbose: scope.verboseList })}\n\n`);
       }
+
+      // Generate follow-up suggestions asynchronously (non-blocking)
+      try {
+        const followUpResult = await llm.generateWithModel(selectedModel, {
+          system: `You generate follow-up research questions. Given a research conversation, suggest exactly 3 short follow-up questions (max 60 chars each) the user might want to explore next. Return ONLY a JSON array of 3 strings, no other text. Example: ["How does X compare to Y?","What are the risks of Z?","Who are the key players?"]`,
+          messages: [
+            { role: "user", content: message },
+            { role: "assistant", content: fullResponse.slice(0, 2000) },
+            { role: "user", content: "Suggest 3 follow-up questions as a JSON array:" },
+          ],
+          maxTokens: 256,
+          temperature: 0.8,
+        });
+        try {
+          const jsonMatch = followUpResult.text.match(/\[[\s\S]*?\]/);
+          if (jsonMatch) {
+            const followUps = JSON.parse(jsonMatch[0]) as string[];
+            if (Array.isArray(followUps) && followUps.length > 0) {
+              res.write(`data: ${JSON.stringify({ type: "followups", followUps: followUps.slice(0, 3) })}\n\n`);
+            }
+          }
+        } catch {
+          // Silently skip malformed follow-ups
+        }
+      } catch {
+        // Follow-ups are best-effort — don't fail the response
+      }
+
+      // Determine grounding source based on what context was included
+      const hasNotes = !!(notes && notes.trim());
+      const hasResearchTopic = !!(researchTopic && researchTopic.trim());
+      const groundingSource = (hasNotes || hasResearchTopic) ? "both" : "web";
+
+      // Send metadata (timing, model, grounding)
+      res.write(`data: ${JSON.stringify({ type: "meta", durationMs, model: selectedModel, groundingSource })}\n\n`);
 
       res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       res.end();
@@ -5616,6 +5960,15 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       }
 
       const connection = await storage.createConnection(userId, target.id);
+
+      // Create notification for the recipient
+      await storage.createNotification({
+        userId: target.id,
+        notificationType: "connection_request",
+        fromUserId: userId,
+        metadata: JSON.stringify({ connectionId: connection.id }),
+      });
+
       res.status(201).json(connection);
     } catch (error) {
       console.error("Invite connection error:", error);
@@ -5702,6 +6055,14 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
         if (!existing) {
           await storage.createConversation(connectionId, conn.requesterId, conn.responderId);
         }
+
+        // Notify the original requester that their invitation was accepted
+        await storage.createNotification({
+          userId: conn.requesterId,
+          notificationType: "connection_accepted",
+          fromUserId: userId,
+          metadata: JSON.stringify({ connectionId }),
+        });
       }
 
       res.json(updated);
@@ -5998,6 +6359,489 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       res.status(500).json({ error: "Failed to set chat preferences" });
     }
   });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Sharing — Document & Folder sharing between connected users
+  // ══════════════════════════════════════════════════════════════════
+
+  /** Share a document or folder with a connected user */
+  app.post("/api/share", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = shareItemRequestSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const { recipientId, itemType, itemId, permission, note } = parsed.data;
+
+      // Can't share with yourself
+      if (recipientId === userId) {
+        return res.status(400).json({ error: "Cannot share with yourself" });
+      }
+
+      // Verify connection exists and is accepted
+      const conn = await storage.findConnectionBetween(userId, recipientId);
+      if (!conn || conn.status !== "accepted") {
+        return res.status(403).json({ error: "You must be connected to share items" });
+      }
+
+      // Verify ownership of the item
+      if (itemType === "document") {
+        const doc = await storage.getDocument(itemId);
+        if (!doc || doc.userId !== userId) {
+          return res.status(404).json({ error: "Document not found or you don't own it" });
+        }
+      } else if (itemType === "folder") {
+        const folder = await storage.getFolder(itemId);
+        if (!folder || folder.userId !== userId) {
+          return res.status(404).json({ error: "Folder not found or you don't own it" });
+        }
+      }
+
+      // Check for existing share
+      const existing = await storage.findExistingShare(userId, recipientId, itemType, itemId);
+      if (existing && existing.status !== "revoked" && existing.status !== "declined") {
+        return res.status(409).json({ error: "Item already shared with this user" });
+      }
+
+      // Encrypt optional note
+      let noteCiphertext: string | undefined;
+      let noteSalt: string | undefined;
+      let noteIv: string | undefined;
+      if (note) {
+        const enc = encrypt(note, getEncryptionKey());
+        noteCiphertext = enc.ciphertext;
+        noteSalt = enc.salt;
+        noteIv = enc.iv;
+      }
+
+      // If there was a previously revoked/declined share, delete it and create fresh
+      if (existing) {
+        await storage.deleteSharedItem(existing.id);
+      }
+
+      const shared = await storage.createSharedItem({
+        ownerId: userId,
+        recipientId,
+        itemType,
+        itemId,
+        permission,
+        noteCiphertext,
+        noteSalt,
+        noteIv,
+      });
+
+      // Create notification for recipient
+      await storage.createNotification({
+        userId: recipientId,
+        notificationType: "item_shared",
+        fromUserId: userId,
+        metadata: JSON.stringify({ shareId: shared.id, itemType, itemId }),
+      });
+
+      res.status(201).json(shared);
+    } catch (error) {
+      console.error("Share item error:", error);
+      res.status(500).json({ error: "Failed to share item" });
+    }
+  });
+
+  /** Respond to a share invitation (accept/decline) */
+  app.post("/api/share/respond", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = respondShareRequestSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const { shareId, action } = parsed.data;
+      const share = await storage.getSharedItem(shareId);
+      if (!share || share.recipientId !== userId) {
+        return res.status(404).json({ error: "Share not found" });
+      }
+      if (share.status !== "pending") {
+        return res.status(400).json({ error: "Share already responded to" });
+      }
+
+      const newStatus = action === "accept" ? "accepted" : "declined";
+      const updated = await storage.updateSharedItemStatus(shareId, newStatus);
+
+      // Notify owner of acceptance
+      if (action === "accept") {
+        await storage.createNotification({
+          userId: share.ownerId,
+          notificationType: "share_accepted",
+          fromUserId: userId,
+          metadata: JSON.stringify({ shareId, itemType: share.itemType, itemId: share.itemId }),
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Respond to share error:", error);
+      res.status(500).json({ error: "Failed to respond to share" });
+    }
+  });
+
+  /** Revoke a share (owner only) */
+  app.delete("/api/share/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id);
+      const share = await storage.getSharedItem(id);
+      if (!share || share.ownerId !== userId) {
+        return res.status(404).json({ error: "Share not found" });
+      }
+
+      await storage.updateSharedItemStatus(id, "revoked");
+      res.json({ revoked: true });
+    } catch (error) {
+      console.error("Revoke share error:", error);
+      res.status(500).json({ error: "Failed to revoke share" });
+    }
+  });
+
+  /** List items shared with me */
+  app.get("/api/shared-with-me", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const shares = await storage.listSharedWithMe(userId);
+
+      // Enrich with display info
+      const items: SharedItemDisplay[] = [];
+      for (const share of shares) {
+        let itemTitle: string | undefined;
+
+        // Decrypt item title for display
+        if (share.itemType === "document") {
+          const doc = await storage.getDocument(share.itemId);
+          if (doc) {
+            if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+              try { itemTitle = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, getEncryptionKey()); } catch { itemTitle = doc.title; }
+            } else {
+              itemTitle = doc.title;
+            }
+          }
+        } else if (share.itemType === "folder") {
+          const folder = await storage.getFolder(share.itemId);
+          if (folder) {
+            if (folder.nameCiphertext && folder.nameSalt && folder.nameIv) {
+              try { itemTitle = decrypt({ ciphertext: folder.nameCiphertext, salt: folder.nameSalt, iv: folder.nameIv }, getEncryptionKey()); } catch { itemTitle = folder.name; }
+            } else {
+              itemTitle = folder.name;
+            }
+          }
+        }
+
+        // Decrypt optional note
+        let note: string | undefined;
+        if (share.noteCiphertext && share.noteSalt && share.noteIv) {
+          try { note = decrypt({ ciphertext: share.noteCiphertext, salt: share.noteSalt, iv: share.noteIv }, getEncryptionKey()); } catch { /* ignore */ }
+        }
+
+        // Fetch owner info from Clerk
+        let ownerName: string | undefined;
+        let ownerEmail: string | undefined;
+        let ownerAvatar: string | null = null;
+        try {
+          const clerk = clerkClient as any;
+          const getUsers = clerk.users?.getUser || clerk.getUser;
+          if (getUsers) {
+            const ownerUser = await getUsers(share.ownerId);
+            ownerName = ownerUser?.firstName
+              ? `${ownerUser.firstName} ${ownerUser.lastName ?? ""}`.trim()
+              : ownerUser?.emailAddresses?.[0]?.emailAddress;
+            ownerEmail = ownerUser?.emailAddresses?.[0]?.emailAddress;
+            ownerAvatar = ownerUser?.imageUrl ?? null;
+          }
+        } catch { /* ignore */ }
+
+        items.push({
+          id: share.id,
+          ownerId: share.ownerId,
+          recipientId: share.recipientId,
+          itemType: share.itemType as any,
+          itemId: share.itemId,
+          permission: share.permission as any,
+          status: share.status as any,
+          note,
+          itemTitle,
+          ownerName,
+          ownerEmail,
+          ownerAvatar,
+          createdAt: new Date(share.createdAt).toISOString(),
+        });
+      }
+
+      res.json(items);
+    } catch (error) {
+      console.error("List shared-with-me error:", error);
+      res.status(500).json({ error: "Failed to list shared items" });
+    }
+  });
+
+  /** List items I've shared with others */
+  app.get("/api/shared-by-me", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const shares = await storage.listSharedByMe(userId);
+
+      const items: SharedItemDisplay[] = [];
+      for (const share of shares) {
+        let itemTitle: string | undefined;
+
+        if (share.itemType === "document") {
+          const doc = await storage.getDocument(share.itemId);
+          if (doc) {
+            if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+              try { itemTitle = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, getEncryptionKey()); } catch { itemTitle = doc.title; }
+            } else {
+              itemTitle = doc.title;
+            }
+          }
+        } else if (share.itemType === "folder") {
+          const folder = await storage.getFolder(share.itemId);
+          if (folder) {
+            if (folder.nameCiphertext && folder.nameSalt && folder.nameIv) {
+              try { itemTitle = decrypt({ ciphertext: folder.nameCiphertext, salt: folder.nameSalt, iv: folder.nameIv }, getEncryptionKey()); } catch { itemTitle = folder.name; }
+            } else {
+              itemTitle = folder.name;
+            }
+          }
+        }
+
+        // Fetch recipient info
+        let recipientName: string | undefined;
+        let recipientEmail: string | undefined;
+        let recipientAvatar: string | null = null;
+        try {
+          const clerk = clerkClient as any;
+          const getUsers = clerk.users?.getUser || clerk.getUser;
+          if (getUsers) {
+            const recipientUser = await getUsers(share.recipientId);
+            recipientName = recipientUser?.firstName
+              ? `${recipientUser.firstName} ${recipientUser.lastName ?? ""}`.trim()
+              : recipientUser?.emailAddresses?.[0]?.emailAddress;
+            recipientEmail = recipientUser?.emailAddresses?.[0]?.emailAddress;
+            recipientAvatar = recipientUser?.imageUrl ?? null;
+          }
+        } catch { /* ignore */ }
+
+        items.push({
+          id: share.id,
+          ownerId: share.ownerId,
+          recipientId: share.recipientId,
+          itemType: share.itemType as any,
+          itemId: share.itemId,
+          permission: share.permission as any,
+          status: share.status as any,
+          itemTitle,
+          recipientName,
+          recipientEmail,
+          recipientAvatar,
+          createdAt: new Date(share.createdAt).toISOString(),
+        });
+      }
+
+      res.json(items);
+    } catch (error) {
+      console.error("List shared-by-me error:", error);
+      res.status(500).json({ error: "Failed to list shared items" });
+    }
+  });
+
+  /** Read a shared document (recipient must have accepted access) */
+  app.get("/api/shared/document/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const docId = parseInt(req.params.id);
+      const access = await storage.hasAccess(userId, "document", docId);
+      if (!access) {
+        return res.status(403).json({ error: "No access to this document" });
+      }
+
+      const doc = await storage.getDocument(docId);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+
+      // Decrypt for the recipient
+      const key = getEncryptionKey();
+      let title = doc.title;
+      if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+        try { title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* use legacy */ }
+      }
+      let content = "";
+      try { content = decrypt({ ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv }, key); } catch { /* empty */ }
+
+      res.json({
+        id: doc.id,
+        title,
+        content,
+        permission: access.permission,
+        ownerId: doc.userId,
+        createdAt: String(doc.createdAt),
+        updatedAt: String(doc.updatedAt),
+      });
+    } catch (error) {
+      console.error("Read shared document error:", error);
+      res.status(500).json({ error: "Failed to read shared document" });
+    }
+  });
+
+  /** List documents in a shared folder */
+  app.get("/api/shared/folder/:id/documents", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const folderId = parseInt(req.params.id);
+      const access = await storage.hasAccess(userId, "folder", folderId);
+      if (!access) {
+        return res.status(403).json({ error: "No access to this folder" });
+      }
+
+      const folder = await storage.getFolder(folderId);
+      if (!folder) return res.status(404).json({ error: "Folder not found" });
+
+      // List docs owned by folder owner in this folder
+      const allDocs = await storage.listDocuments(folder.userId);
+      const folderDocs = allDocs.filter(d => d.folderId === folderId);
+
+      // Decrypt titles for display
+      const key = getEncryptionKey();
+      const items = folderDocs.map(doc => {
+        let title = doc.title;
+        if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+          try { title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* use legacy */ }
+        }
+        return {
+          id: doc.id,
+          title,
+          createdAt: String(doc.createdAt),
+          updatedAt: String(doc.updatedAt),
+        };
+      });
+
+      res.json(items);
+    } catch (error) {
+      console.error("List shared folder docs error:", error);
+      res.status(500).json({ error: "Failed to list shared folder documents" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Notifications — Global Mailbox
+  // ══════════════════════════════════════════════════════════════════
+
+  /** Get notifications (mailbox) for current user */
+  app.get("/api/mailbox", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const rows = await storage.listNotifications(userId, limit);
+
+      // Enrich with sender info
+      const items: NotificationItem[] = [];
+      for (const row of rows) {
+        let fromUserName: string | undefined;
+        let fromUserEmail: string | undefined;
+        let fromUserAvatar: string | null = null;
+        try {
+          const clerk = clerkClient as any;
+          const getUsers = clerk.users?.getUser || clerk.getUser;
+          if (getUsers) {
+            const fromUser = await getUsers(row.fromUserId);
+            fromUserName = fromUser?.firstName
+              ? `${fromUser.firstName} ${fromUser.lastName ?? ""}`.trim()
+              : fromUser?.emailAddresses?.[0]?.emailAddress;
+            fromUserEmail = fromUser?.emailAddresses?.[0]?.emailAddress;
+            fromUserAvatar = fromUser?.imageUrl ?? null;
+          }
+        } catch { /* ignore */ }
+
+        let metadata: Record<string, any> | undefined;
+        if (row.metadata) {
+          try { metadata = JSON.parse(row.metadata); } catch { /* ignore */ }
+        }
+
+        items.push({
+          id: row.id,
+          userId: row.userId,
+          notificationType: row.notificationType as NotificationType,
+          fromUserId: row.fromUserId,
+          fromUserName,
+          fromUserEmail,
+          fromUserAvatar,
+          metadata,
+          readAt: row.readAt ? new Date(row.readAt).toISOString() : null,
+          createdAt: new Date(row.createdAt).toISOString(),
+        });
+      }
+
+      res.json(items);
+    } catch (error) {
+      console.error("Get mailbox error:", error);
+      res.status(500).json({ error: "Failed to get notifications" });
+    }
+  });
+
+  /** Get unread notification count */
+  app.get("/api/mailbox/unread-count", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const count = await storage.countUnreadNotifications(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Get unread count error:", error);
+      res.status(500).json({ error: "Failed to get unread count" });
+    }
+  });
+
+  /** Mark a single notification as read */
+  app.post("/api/mailbox/:id/read", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id);
+      await storage.markNotificationRead(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark notification read error:", error);
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  /** Mark all notifications as read */
+  app.post("/api/mailbox/read-all", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      await storage.markAllNotificationsRead(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark all notifications read error:", error);
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Also: inject notifications when connection requests are created/accepted
+  // (Existing connection invite endpoint already exists — we add notification creation
+  //  by modifying the connection invite and respond endpoints above to also create notifications.)
 
   // ── Timeline: Transform notes into structured timeline events ──
   app.post("/api/timeline/transform", async (req, res) => {
