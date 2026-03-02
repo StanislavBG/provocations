@@ -23,7 +23,7 @@ import type { PainterConfig, PainterMode } from "@/components/notebook/PainterPa
 import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
-import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
+import { TimelineWorkspace, type TimelineSummary } from "@/components/timeline/TimelineWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
 
 import { templateIds } from "@shared/schema";
@@ -67,6 +67,9 @@ export default function NotebookWorkspace() {
   const [imageTabData, setImageTabData] = useState<Map<string, ImageTabData>>(new Map());
   const [activeImageTabId, setActiveImageTabId] = useState<string | null>(null);
   const centerPanelRef = useRef<SplitDocumentEditorHandle>(null);
+
+  // ── Timeline summary state (for interview context) ──
+  const [timelineSummary, setTimelineSummary] = useState<TimelineSummary | null>(null);
 
   // ── User-to-user chat state (embedded in left panel) ──
   const [activeChatConversationId, setActiveChatConversationId] = useState<number | null>(null);
@@ -782,6 +785,7 @@ export default function NotebookWorkspace() {
                     isPainting={isPainting}
                     pinnedDocContents={pinnedDocContents}
                     appType={validAppType}
+                    timelineContext={timelineSummary}
                   />
                 </ResizablePanel>
                 <ResizableHandle withHandle />
@@ -822,6 +826,7 @@ export default function NotebookWorkspace() {
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
                   onSaveTimelineToContext={(json, label) => handleCaptureToContext(json, label)}
+                  onTimelineSummaryChange={setTimelineSummary}
                 />
               )}
             </ResizablePanel>

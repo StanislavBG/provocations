@@ -72,6 +72,14 @@ Your questions should feel like a warm but thorough biographer capturing someone
 
 // ── Props ──
 
+/** Timeline summary for autobiography interview context */
+interface TimelineContextSummary {
+  dateRange?: { earliest: string; latest: string };
+  places: string[];
+  themes: string[];
+  eventCount: number;
+}
+
 interface InterviewTabProps {
   objective: string;
   documentText: string;
@@ -79,6 +87,8 @@ interface InterviewTabProps {
   onEvolveDocument?: (instruction: string, description: string) => void;
   isMerging?: boolean;
   onCaptureToContext?: (text: string, label: string) => void;
+  /** Timeline summary data for autobiography interviews (era-aware questions) */
+  timelineContext?: TimelineContextSummary | null;
 }
 
 // ── Component ──
@@ -90,6 +100,7 @@ export function InterviewTab({
   onEvolveDocument,
   isMerging = false,
   onCaptureToContext,
+  timelineContext,
 }: InterviewTabProps) {
   const { toast } = useToast();
 
@@ -224,6 +235,7 @@ export function InterviewTab({
         previousEntries: allEntries.length > 0 ? allEntries : undefined,
         directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" || stance === "autobiography" ? "advise" : undefined,
         directionGuidance: buildGuidance(stance, focusText, appType),
+        ...(stance === "autobiography" && timelineContext ? { timelineContext } : {}),
       });
       return (await response.json()) as InterviewQuestionResponse;
     },

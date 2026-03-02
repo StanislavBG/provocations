@@ -13,16 +13,26 @@ import type {
   TimelineTagCategory,
   TimelineEvent,
 } from "./types";
-import { Save, Sparkles } from "lucide-react";
+import { Save, Sparkles, Loader2, Globe } from "lucide-react";
+
+/** Summary of timeline state for external consumers (e.g. interview context) */
+export interface TimelineSummary {
+  dateRange?: { earliest: string; latest: string };
+  places: string[];
+  themes: string[];
+  eventCount: number;
+}
 
 interface TimelineWorkspaceProps {
   /** Callback to save timeline JSON to context store */
   onSaveToContext?: (json: string, label: string) => void;
   /** Optional JSON string to auto-import on first mount (e.g. from "Map Notes to Timeline") */
   initialData?: string;
+  /** Called when timeline events/tags change, reporting a summary for external context */
+  onTimelineSummaryChange?: (summary: TimelineSummary) => void;
 }
 
-export function TimelineWorkspace({ onSaveToContext, initialData }: TimelineWorkspaceProps) {
+export function TimelineWorkspace({ onSaveToContext, initialData, onTimelineSummaryChange }: TimelineWorkspaceProps) {
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
@@ -48,6 +58,24 @@ export function TimelineWorkspace({ onSaveToContext, initialData }: TimelineWork
     exportTimeline,
     importTimeline,
   } = useTimelineState();
+
+  // ── Report timeline summary to parent when events/tags change ──
+  useEffect(() => {
+    if (!onTimelineSummaryChange) return;
+    const events = timeline.events;
+    const tags = timeline.tags;
+
+    let dateRange: { earliest: string; latest: string } | undefined;
+    if (events.length > 0) {
+      const dates = events.map((e) => e.date).sort();
+      dateRange = { earliest: dates[0], latest: dates[dates.length - 1] };
+    }
+
+    const places = tags.filter((t) => t.category === "place").map((t) => t.label);
+    const themes = tags.filter((t) => t.category === "theme").map((t) => t.label);
+
+    onTimelineSummaryChange({ dateRange, places, themes, eventCount: events.length });
+  }, [timeline.events, timeline.tags, onTimelineSummaryChange]);
 
   // ── Import initial data on first mount ──
   const initialDataConsumedRef = useRef(false);
@@ -170,6 +198,80 @@ export function TimelineWorkspace({ onSaveToContext, initialData }: TimelineWork
     },
   });
 
+  // ── Discover Era mutation (LLM call for historical/cultural events) ──
+  const discoverEraMutation = useMutation({
+    mutationFn: async () => {
+      if (timeline.events.length === 0) throw new Error("Add some events first so we know what era to discover");
+
+      const dates = timeline.events.map((e) => e.date).sort();
+      const dateRange = { earliest: dates[0], latest: dates[dates.length - 1] };
+      const places = timeline.tags.filter((t) => t.category === "place").map((t) => t.label);
+      const themes = timeline.tags.filter((t) => t.category === "theme").map((t) => t.label);
+      const existingEventTitles = timeline.events.map((e) => e.title);
+
+      const res = await apiRequest("POST", "/api/timeline/discover-era", {
+        dateRange,
+        places: places.length > 0 ? places : undefined,
+        themes: themes.length > 0 ? themes : undefined,
+        existingEventTitles,
+      });
+      return res.json() as Promise<{
+        events: Omit<TimelineEvent, "id">[];
+        suggestedTags: { label: string; category: TimelineTagCategory }[];
+      }>;
+    },
+    onSuccess: (data) => {
+      // Add new tags
+      const newTagIds: Record<string, string> = {};
+      for (const suggested of data.suggestedTags) {
+        const existing = timeline.tags.find(
+          (t) => t.label.toLowerCase() === suggested.label.toLowerCase(),
+        );
+        if (existing) {
+          newTagIds[suggested.label.toLowerCase()] = existing.id;
+        } else {
+          const id = addTag(suggested.label, suggested.category);
+          newTagIds[suggested.label.toLowerCase()] = id;
+        }
+      }
+
+      // Map tag labels to IDs and add events
+      const eventsToAdd = data.events.map((e) => ({
+        ...e,
+        tags: (e.tags as string[])
+          .map((tagLabel) => {
+            const existing = timeline.tags.find(
+              (t) => t.label.toLowerCase() === tagLabel.toLowerCase(),
+            );
+            return existing?.id ?? newTagIds[tagLabel.toLowerCase()] ?? null;
+          })
+          .filter(Boolean) as string[],
+      }));
+
+      if (eventsToAdd.length > 0) {
+        addEvents(eventsToAdd);
+        toast({
+          title: "Era discovered",
+          description: `Added ${eventsToAdd.length} historical event${eventsToAdd.length !== 1 ? "s" : ""} to spark your memories.`,
+        });
+      } else {
+        toast({
+          title: "No events found",
+          description: "No historical events were generated for this era.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : "Failed to discover era";
+      toast({
+        title: "Discovery failed",
+        description: msg,
+        variant: "destructive",
+      });
+    },
+  });
+
   // ── Handlers ──
 
   const handleAddManualEvent = useCallback(() => {
@@ -266,6 +368,27 @@ export function TimelineWorkspace({ onSaveToContext, initialData }: TimelineWork
                   Save to Context
                 </Button>
               )}
+
+              {/* Discover Era — generate historical events for the timeline's date range */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                onClick={() => discoverEraMutation.mutate()}
+                disabled={discoverEraMutation.isPending || timeline.events.length === 0}
+              >
+                {discoverEraMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Discovering...
+                  </>
+                ) : (
+                  <>
+                    <Globe className="h-3.5 w-3.5" />
+                    Discover Era
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </ResizablePanel>

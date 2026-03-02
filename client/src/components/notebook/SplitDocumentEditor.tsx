@@ -81,6 +81,8 @@ interface SplitDocumentEditorProps {
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
   /** Save timeline JSON to the Context Store */
   onSaveTimelineToContext?: (json: string, label: string) => void;
+  /** Reports timeline summary when events/tags change (for interview context) */
+  onTimelineSummaryChange?: (summary: import("@/components/timeline/TimelineWorkspace").TimelineSummary) => void;
 }
 
 /** Imperative handle for parent to add image/timeline tabs */
@@ -107,6 +109,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   onAddImageTab,
   onImageActiveChange,
   onSaveTimelineToContext,
+  onTimelineSummaryChange,
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
@@ -511,6 +514,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
             <TimelineWorkspace
               onSaveToContext={onSaveTimelineToContext}
               initialData={timelineInitDataRef.current.get(tab.id)}
+              onTimelineSummaryChange={onTimelineSummaryChange}
             />
           </div>
         ))}
