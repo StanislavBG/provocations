@@ -62,6 +62,8 @@ interface NotebookLeftPanelProps {
   isPainting?: boolean;
   pinnedDocContents?: Record<number, { title: string; content: string }>;
   appType?: string;
+  /** Timeline summary for autobiography interview context */
+  timelineContext?: { dateRange?: { earliest: string; latest: string }; places: string[]; themes: string[]; eventCount: number } | null;
 }
 
 export function NotebookLeftPanel({
@@ -92,6 +94,7 @@ export function NotebookLeftPanel({
   isPainting = false,
   pinnedDocContents,
   appType,
+  timelineContext,
   hasDocument = false,
   objective = "",
 }: NotebookLeftPanelProps) {
@@ -220,6 +223,7 @@ export function NotebookLeftPanel({
               onEvolveDocument={onEvolveDocument}
               isMerging={isMerging}
               onCaptureToContext={onCaptureToContext}
+              timelineContext={timelineContext}
             />
           </div>
         )}

@@ -462,6 +462,13 @@ export const interviewQuestionRequestSchema = z.object({
   directionPersonas: z.array(z.enum(provocationType)).optional(),
   directionGuidance: z.string().optional(),
   thinkBigVectors: z.array(z.enum(thinkBigVectors)).optional(),
+  // Timeline context for autobiography interviews — date ranges, places, themes from existing events
+  timelineContext: z.object({
+    dateRange: z.object({ earliest: z.string(), latest: z.string() }).optional(),
+    places: z.array(z.string()).optional(),
+    themes: z.array(z.string()).optional(),
+    eventCount: z.number().optional(),
+  }).optional(),
 });
 
 export type InterviewQuestionRequest = z.infer<typeof interviewQuestionRequestSchema>;
