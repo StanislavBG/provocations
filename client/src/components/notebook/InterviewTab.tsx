@@ -70,6 +70,10 @@ Your questions should feel like a warm but thorough biographer capturing someone
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
 
+// ── Default objective for autobiography interviews (no context required) ──
+const AUTOBIOGRAPHY_DEFAULT_OBJECTIVE =
+  "Capture the subject's life story — key events, turning points, people, places, and eras — through a warm, thorough biographical interview that builds depth and sophistication over time.";
+
 // ── Props ──
 
 /** Timeline summary for autobiography interview context */
@@ -228,8 +232,10 @@ export function InterviewTab({
   const questionMutation = useMutation({
     mutationFn: async (updatedEntries?: InterviewEntry[]) => {
       const allEntries = updatedEntries ?? entries;
+      // Autobiography mode uses a default objective when none is provided
+      const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
       const response = await apiRequest("POST", "/api/interview/question", {
-        objective,
+        objective: effectiveObjective,
         document: documentText,
         appType,
         previousEntries: allEntries.length > 0 ? allEntries : undefined,
@@ -255,8 +261,9 @@ export function InterviewTab({
   // ── Summary mutation ──
   const summaryMutation = useMutation({
     mutationFn: async () => {
+      const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
       const response = await apiRequest("POST", "/api/interview/summary", {
-        objective,
+        objective: effectiveObjective,
         entries,
         document: documentText,
         appType,
@@ -279,8 +286,9 @@ export function InterviewTab({
   // ── Podcast mutation ──
   const podcastMutation = useMutation({
     mutationFn: async () => {
+      const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
       const response = await apiRequest("POST", "/api/interview/podcast", {
-        objective,
+        objective: effectiveObjective,
         entries,
         document: documentText,
         appType,
@@ -315,7 +323,8 @@ export function InterviewTab({
   // ── Handlers ──
 
   const handleStart = useCallback(() => {
-    if (!objective.trim()) {
+    // Autobiography mode can start without an objective — it uses a sensible default
+    if (!objective.trim() && stance !== "autobiography") {
       toast({ title: "Objective required", description: "Set a document objective before starting the interview.", variant: "destructive" });
       return;
     }
@@ -324,7 +333,7 @@ export function InterviewTab({
     setIsActive(true);
     questionMutation.mutate(undefined);
     trackEvent("interview_started");
-  }, [objective, questionMutation, toast, ttsEnabled, unlockMobileAudio]);
+  }, [objective, stance, questionMutation, toast, ttsEnabled, unlockMobileAudio]);
 
   const handleStop = useCallback(() => {
     setIsActive(false);
@@ -548,14 +557,19 @@ export function InterviewTab({
               size="sm"
               className="gap-1.5 w-full"
               onClick={handleStart}
-              disabled={!objective.trim()}
+              disabled={!objective.trim() && stance !== "autobiography"}
             >
               <Mic className="w-3.5 h-3.5" />
               Start Interview
             </Button>
-            {!objective.trim() && (
+            {!objective.trim() && stance !== "autobiography" && (
               <p className="text-[10px] text-muted-foreground/60 text-center">
                 Set a document objective first
+              </p>
+            )}
+            {!objective.trim() && stance === "autobiography" && (
+              <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 text-center">
+                Biography mode — ready to capture your story
               </p>
             )}
           </div>
