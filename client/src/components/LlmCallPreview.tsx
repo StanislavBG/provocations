@@ -18,7 +18,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { formatTokens, formatCost } from "@/lib/llm-verbose";
+import { formatTokens, formatCost, getProviderColor } from "@/lib/llm-verbose";
 import {
   Cpu,
   DollarSign,
@@ -84,17 +84,40 @@ export interface LlmCallPreviewProps {
   summaryItems: SummaryItem[];
 }
 
-/** Hook to fetch the active LLM model ID */
-export function useActiveModel(): string {
-  const { data } = useQuery<{ defaultModel: string }>({
+export interface ActiveModelInfo {
+  id: string;
+  label: string;
+  provider: string;
+  tier: "premium" | "value";
+}
+
+/** Hook to fetch the active LLM model with full info (provider, label, tier) */
+export function useActiveModelInfo(): ActiveModelInfo {
+  const { data } = useQuery<{
+    models: Array<{ id: string; label: string; provider: string; tier: string }>;
+    defaultModel: string;
+  }>({
     queryKey: ["/api/chat/models"],
     staleTime: 60_000,
   });
-  return data?.defaultModel ?? "gpt-4o";
+  const defaultId = data?.defaultModel ?? "gpt-4o";
+  const match = data?.models?.find((m) => m.id === defaultId);
+  return {
+    id: defaultId,
+    label: match?.label ?? defaultId,
+    provider: match?.provider ?? "openai",
+    tier: (match?.tier as "premium" | "value") ?? "premium",
+  };
+}
+
+/** Hook to fetch the active LLM model ID (backward-compatible) */
+export function useActiveModel(): string {
+  return useActiveModelInfo().id;
 }
 
 export function LlmCallPreview({ title, blocks, summaryItems }: LlmCallPreviewProps) {
-  const model = useActiveModel();
+  const modelInfo = useActiveModelInfo();
+  const model = modelInfo.id;
 
   // ── Compute derived values ──
   const { enrichedBlocks, totalChars, totalTokens, estimatedCost } = useMemo(() => {
@@ -118,9 +141,24 @@ export function LlmCallPreview({ title, blocks, summaryItems }: LlmCallPreviewPr
           <Cpu className="w-3.5 h-3.5 text-amber-500" />
           <span className="text-amber-400 font-semibold text-[11px]">{title} — Context Preview</span>
         </div>
-        <Badge variant="outline" className="text-[9px] py-0 px-1.5 border-amber-500/40 text-amber-300 font-mono">
-          {model}
-        </Badge>
+        <div className="flex items-center gap-1.5 text-[9px]">
+          <span className={`flex items-center gap-1 ${getProviderColor(modelInfo.provider)}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${getProviderColor(modelInfo.provider).replace("text-", "bg-")}`} />
+            <span className="capitalize">{modelInfo.provider}</span>
+          </span>
+          <span className="text-gray-500">/</span>
+          <span className="text-amber-300 font-semibold">{modelInfo.label}</span>
+          <Badge
+            variant="outline"
+            className={`text-[8px] py-0 px-1 ${
+              modelInfo.tier === "premium"
+                ? "border-yellow-500/40 text-yellow-300"
+                : "border-green-500/40 text-green-300"
+            }`}
+          >
+            {modelInfo.tier}
+          </Badge>
+        </div>
       </div>
 
       {/* ── Tabs ── */}

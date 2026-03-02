@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { DebugButton } from "@/components/DebugButton";
 import { LlmTraceButton } from "@/components/LlmTraceButton";
 import { MessageLogButton } from "@/components/MessageLogButton";
 import { PanelLayoutDialog } from "./PanelLayoutDialog";
-import { UserButton } from "@clerk/clerk-react";
+import { UserButton, useUser } from "@clerk/clerk-react";
 import { Link } from "wouter";
 import {
   GitCompare,
@@ -27,7 +27,10 @@ import {
 import { ProvoIcon } from "@/components/ProvoIcon";
 import type { PanelLayoutConfig } from "@/hooks/use-panel-layout";
 
-const VIDEO_ROOM_URL = "https://bs-chatt.replit.app/room/sam";
+// ── PeerChat configuration ──
+const PEERCHAT_SERVER = "https://peerchat.app";
+const PEERCHAT_ROOM = "provocations";
+const PEERCHAT_BRAND_COLOR = "%23B35C1E"; // URL-encoded #B35C1E (Provocations primary amber)
 
 interface NotebookTopBarProps {
   isAdmin: boolean;
@@ -59,6 +62,23 @@ export function NotebookTopBar({
   const [chatOpen, setChatOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
   const [mailboxOpen, setMailboxOpen] = useState(false);
+
+  // User info for PeerChat display name
+  const { user } = useUser();
+  const peerChatUrl = useMemo(() => {
+    const name = user?.firstName || user?.username || "Guest";
+    const params = new URLSearchParams({
+      embed: "1",
+      name,
+      tab: "chat",
+      transcribe: "1",
+      brandTitle: "Provocations",
+      brandColor: PEERCHAT_BRAND_COLOR,
+      hideBranding: "1",
+      layout: "auto",
+    });
+    return `${PEERCHAT_SERVER}/room/${PEERCHAT_ROOM}?${params.toString()}`;
+  }, [user?.firstName, user?.username]);
 
   // Unread notification count for badge
   const { data: unreadData } = useQuery<{ count: number }>({
@@ -144,7 +164,7 @@ export function NotebookTopBar({
                 <Video className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Video — Room 317</TooltipContent>
+            <TooltipContent>PeerChat Video</TooltipContent>
           </Tooltip>
 
           <div className="w-px h-4 bg-border mx-0.5" />
@@ -205,20 +225,22 @@ export function NotebookTopBar({
       {/* Mailbox drawer */}
       <MailboxDrawer open={mailboxOpen} onOpenChange={setMailboxOpen} />
 
-      {/* Video room (Sheet) */}
+      {/* PeerChat video room (Sheet) — only mount iframe when open to save resources */}
       <Sheet open={videoOpen} onOpenChange={setVideoOpen}>
         <SheetContent side="right" className="w-[480px] sm:max-w-[480px] p-0 flex flex-col">
           <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
             <Video className="w-4 h-4 text-primary" />
-            <SheetTitle className="text-sm font-semibold">Video — Room 317</SheetTitle>
+            <SheetTitle className="text-sm font-semibold">PeerChat Video</SheetTitle>
           </div>
           <div className="flex-1 min-h-0">
-            <iframe
-              src={VIDEO_ROOM_URL}
-              className="w-full h-full border-0"
-              allow="camera; microphone; display-capture; autoplay"
-              title="Video Room 317"
-            />
+            {videoOpen && (
+              <iframe
+                src={peerChatUrl}
+                className="w-full h-full border-0 rounded-b-lg"
+                allow="camera; microphone; display-capture; autoplay"
+                title="PeerChat Video Room"
+              />
+            )}
           </div>
         </SheetContent>
       </Sheet>

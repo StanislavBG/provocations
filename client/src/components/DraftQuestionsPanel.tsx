@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "./ProvokeText";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import {
   MessageCircleQuestion,
   Send,
@@ -10,6 +11,7 @@ import {
   Sparkles,
   Loader2,
   RotateCcw,
+  Target,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -112,6 +114,20 @@ export function DraftQuestionsPanel({ questions, onResponse, objective, secondar
     setState((prev) => ({ ...prev, responded: new Set(), expandedIndex: null, textValue: "" }));
   };
 
+  // ── LLM preview: Tailor to objective button ──
+  const tailorBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 600, color: "text-purple-400" },
+    { label: "Objective", chars: objective?.length ?? 0, color: "text-amber-400" },
+    { label: "Project Description", chars: secondaryObjective?.length ?? 0, color: "text-blue-400" },
+    { label: "Existing Questions", chars: questions.reduce((s, q) => s + q.length, 0), color: "text-cyan-400" },
+  ], [objective, secondaryObjective, questions]);
+
+  const tailorSummary: SummaryItem[] = useMemo(() => [
+    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective?.trim() ? 1 : 0, detail: objective?.slice(0, 50) },
+    { icon: <MessageCircleQuestion className="w-3 h-3 text-cyan-400" />, label: "Template Questions", count: questions.length, detail: `${questions.length} to tailor` },
+    { icon: <Sparkles className="w-3 h-3 text-purple-400" />, label: "Template", count: templateId ? 1 : 0, detail: templateId },
+  ], [objective, questions, templateId]);
+
   return (
     <div className="w-72 shrink-0 flex flex-col gap-2">
       {/* Header */}
@@ -129,25 +145,27 @@ export function DraftQuestionsPanel({ questions, onResponse, objective, secondar
       {objective?.trim() && (
         <div className="flex items-center gap-1">
           {!dynamicQuestions ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs h-6 w-full"
-              onClick={handleTailorQuestions}
-              disabled={isGenerating}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Tailoring...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3 h-3" />
-                  Tailor to your objective
-                </>
-              )}
-            </Button>
+            <LlmHoverButton previewTitle="Tailor Questions" previewBlocks={tailorBlocks} previewSummary={tailorSummary} side="right" align="start">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-6 w-full"
+                onClick={handleTailorQuestions}
+                disabled={isGenerating}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Tailoring...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3" />
+                    Tailor to your objective
+                  </>
+                )}
+              </Button>
+            </LlmHoverButton>
           ) : (
             <Button
               variant="ghost"
