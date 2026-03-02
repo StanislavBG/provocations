@@ -450,6 +450,20 @@ export default function NotebookWorkspace() {
     setCapturedContext((prev) => prev.filter((i) => i.id !== itemId));
   }, []);
 
+  const handleMoveToDocument = useCallback(
+    (content: string) => {
+      setDocument((prev) => ({
+        ...prev,
+        rawText: prev.rawText
+          ? `${prev.rawText}\n\n${content}`
+          : content,
+      }));
+      toast({ title: "Moved to Document", description: "Note content appended to document." });
+      trackEvent("note_moved_to_document");
+    },
+    [toast],
+  );
+
   // ── Save document to Context Store ──
   const [isSavingToContext, setIsSavingToContext] = useState(false);
   const handleSaveToContext = useCallback(async () => {
@@ -785,6 +799,7 @@ export default function NotebookWorkspace() {
                     onCaptureToContext={handleCaptureToContext}
                     capturedContext={capturedContext}
                     onRemoveCapturedItem={handleRemoveCapturedItem}
+                    onMoveToDocument={handleMoveToDocument}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
                     onMapNotesToTimeline={handleMapNotesToTimeline}
@@ -864,6 +879,7 @@ export default function NotebookWorkspace() {
                     onCaptureToContext={handleCaptureToContext}
                     capturedContext={capturedContext}
                     onRemoveCapturedItem={handleRemoveCapturedItem}
+                    onMoveToDocument={handleMoveToDocument}
                     onEvolveDocument={(instruction, description) => writeMutation.mutate({ instruction, description })}
                     isMerging={writeMutation.isPending}
                     onMapNotesToTimeline={handleMapNotesToTimeline}
