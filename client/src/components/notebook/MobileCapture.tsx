@@ -422,11 +422,14 @@ function InterviewView({
   }, []);
 
   // ── Fetch next question ──
+  // Accept optional updatedEntries to avoid stale closure when called
+  // immediately after setEntries (React state updates are async).
   const questionMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (updatedEntries?: InterviewEntry[]) => {
+      const allEntries = updatedEntries ?? entries;
       const response = await apiRequest("POST", "/api/interview/question", {
         objective,
-        previousEntries: entries.length > 0 ? entries : undefined,
+        previousEntries: allEntries.length > 0 ? allEntries : undefined,
         directionMode: stance === "writer" ? "challenge" : stance === "painter" ? "advise" : undefined,
         directionGuidance: buildInterviewGuidance(stance, focusText),
       });
@@ -470,7 +473,7 @@ function InterviewView({
       return;
     }
     setIsActive(true);
-    questionMutation.mutate();
+    questionMutation.mutate(undefined);
     trackEvent("interview_started");
   }, [objective, questionMutation, toast]);
 
@@ -495,7 +498,10 @@ function InterviewView({
         timestamp: Date.now(),
       };
 
-      setEntries((prev) => [...prev, entry]);
+      // Build the full entries array including this new answer so the
+      // mutation sees it immediately (setEntries is async).
+      const nextEntries = [...entries, entry];
+      setEntries(nextEntries);
       setCurrentQuestion(null);
       setCurrentTopic(null);
       setAnswerText("");
@@ -505,10 +511,10 @@ function InterviewView({
       // Auto-save this Q&A to the store as a separate document
       saveEntryToStore(entry);
 
-      // Fetch next question
-      questionMutation.mutate();
+      // Pass the up-to-date entries so the LLM sees ALL previous Q&A
+      questionMutation.mutate(nextEntries);
     },
-    [currentQuestion, currentTopic, questionMutation, saveEntryToStore],
+    [currentQuestion, currentTopic, questionMutation, saveEntryToStore, entries],
   );
 
   const handleSubmitAnswer = useCallback(() => {
@@ -519,7 +525,7 @@ function InterviewView({
     (transcript: string) => {
       if (!transcript.trim()) return;
       trackEvent("voice_recorded");
-      const endKeyword = /provo\s+end\s+message/i;
+      const endKeyword = /provo\s+message/i;
       const cleaned = transcript.replace(endKeyword, "").trim();
       if (cleaned) {
         handleAnswer(cleaned);
@@ -528,11 +534,11 @@ function InterviewView({
     [handleAnswer],
   );
 
-  // Watch answerText mid-stream for "Provo End Message" keyword
+  // Watch answerText mid-stream for "Provo Message" keyword
   const endKeywordRef = useRef(false);
   useEffect(() => {
     if (!answerText || !isRecordingAnswer || endKeywordRef.current) return;
-    const endKeyword = /provo\s+end\s+message/i;
+    const endKeyword = /provo\s+message/i;
     if (endKeyword.test(answerText)) {
       endKeywordRef.current = true;
       const cleaned = answerText.replace(endKeyword, "").trim();
@@ -551,7 +557,7 @@ function InterviewView({
     trackEvent("interview_skip");
     setCurrentQuestion(null);
     setCurrentTopic(null);
-    questionMutation.mutate();
+    questionMutation.mutate(undefined);
   }, [questionMutation]);
 
   // ── Not started: show objective input + start button ──
@@ -881,7 +887,7 @@ function InterviewView({
           {isRecordingAnswer && (
             <div className="flex items-center justify-center gap-1.5 text-xs text-primary animate-pulse mt-2">
               <Mic className="w-3 h-3" />
-              Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo End Message&quot; to submit</span>
+              Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo Message&quot; to submit</span>
             </div>
           )}
           {isSpeaking && (

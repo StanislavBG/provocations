@@ -3414,6 +3414,8 @@ ${personaRules}
 
 6. **Keep it conversational and direct.** Write like a journalist in conversation, not a form. "You mention X — but what happens when Y?" is better than "How does X handle Y at scale?"
 
+7. **Build on the user's LATEST answer.** Your very next question MUST directly reference or follow up on what the user just said in their most recent answer. Quote or paraphrase something from their latest response before asking your follow-up. The interview should feel like a natural conversation where each question flows from the previous response — never a disconnected checklist. If the user expressed interest in a topic, dig deeper into it before moving on.
+
 Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
 {"question": "...", "topic": "PersonaName: Specific Topic", "reasoning": "..."}
 

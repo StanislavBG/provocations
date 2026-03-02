@@ -5,7 +5,7 @@ import { generateId } from "@/lib/utils";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useToast } from "@/hooks/use-toast";
-import { ProvokeText } from "@/components/ProvokeText";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,6 +30,9 @@ import {
   Target,
   Volume2,
   VolumeX,
+  Radio,
+  Info,
+  type LucideIcon,
 } from "lucide-react";
 import type {
   InterviewEntry,
@@ -52,6 +55,14 @@ function buildGuidance(stance: InterviewStance, focus: string): string | undefin
   if (focus.trim()) parts.push(focus.trim());
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
+
+// ── Interview stance options (pill selector, like research chat focus modes) ──
+
+const INTERVIEW_STANCES: { id: InterviewStance; label: string; icon: LucideIcon; description: string }[] = [
+  { id: "balanced", label: "Balanced", icon: Scale, description: "Mix of analytical and creative questioning" },
+  { id: "investigative", label: "Investigative", icon: Search, description: "Rigorous — digs into claims, demands evidence" },
+  { id: "exploratory", label: "Exploratory", icon: Compass, description: "Curious — opens new angles, draws connections" },
+];
 
 // ── Props ──
 
@@ -87,6 +98,7 @@ export function InterviewTab({
   // ── Stance & focus state ──
   const [stance, setStance] = useState<InterviewStance>("investigative");
   const [focusText, setFocusText] = useState("");
+  const [trueInterview, setTrueInterview] = useState(false);
 
   // ── Podcast state ──
   const [podcastAudioUrl, setPodcastAudioUrl] = useState<string | null>(null);
@@ -120,6 +132,11 @@ export function InterviewTab({
       }
     };
   }, [podcastAudioUrl]);
+
+  // Auto-enable TTS when True Interview mode is on
+  useEffect(() => {
+    if (trueInterview && !ttsEnabled) setTtsEnabled(true);
+  }, [trueInterview, ttsEnabled]);
 
   /** Speak text via /api/tts — plays the question aloud */
   const speakQuestion = useCallback(async (text: string) => {
@@ -298,7 +315,7 @@ export function InterviewTab({
       if (!transcript.trim()) return;
       trackEvent("voice_recorded");
       // Check for "Provo End Message" keyword — strip it and submit
-      const endKeyword = /provo\s+end\s+message/i;
+      const endKeyword = /provo\s+message/i;
       const cleaned = transcript.replace(endKeyword, "").trim();
       if (cleaned) {
         handleAnswer(cleaned);
@@ -311,7 +328,7 @@ export function InterviewTab({
   const endKeywordRef = useRef(false);
   useEffect(() => {
     if (!answerText || !isRecordingAnswer || endKeywordRef.current) return;
-    const endKeyword = /provo\s+end\s+message/i;
+    const endKeyword = /provo\s+message/i;
     if (endKeyword.test(answerText)) {
       endKeywordRef.current = true;
       const cleaned = answerText.replace(endKeyword, "").trim();
@@ -385,72 +402,104 @@ export function InterviewTab({
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Interview</span>
         </div>
 
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="space-y-4 max-w-sm w-full">
-            {/* Investigative stance — primary choice */}
-            <div className="space-y-1">
-              <button
-                onClick={() => setStance("investigative")}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-xs font-medium transition-colors ${
-                  stance === "investigative"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                }`}
-              >
-                <Search className="w-4 h-4 shrink-0" />
-                <div>
-                  <div className="font-semibold">Investigative</div>
-                  <div className="text-[10px] opacity-70">Rigorous, analytical — digs into claims, finds gaps, demands evidence</div>
-                </div>
-              </button>
+        <ScrollArea className="flex-1">
+          <div className="p-4 space-y-4 max-w-sm mx-auto">
+            {/* Instructions callout */}
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">Before you start</span>
+              </div>
+              <ul className="text-[11px] text-muted-foreground space-y-1 pl-5 list-disc">
+                <li><strong>Document objective</strong> must be set in the center panel</li>
+                <li><strong>A text/markdown document</strong> should be started or loaded as the target</li>
+                <li>The interviewer asks questions based on your objective and document content</li>
+                <li>Answer by <strong>typing or voice</strong> — say <strong>&quot;Provo Message&quot;</strong> to submit via voice</li>
+              </ul>
             </div>
 
-            {/* Config options */}
-            <div className="space-y-2.5 pl-1">
-              {/* Exploratory toggle */}
+            {/* Stance selector — pill style like research chat focus modes */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Interview Style</p>
+              <div className="flex flex-wrap items-center gap-1 bg-muted/20 rounded-lg p-1.5 border">
+                {INTERVIEW_STANCES.map((s) => {
+                  const Icon = s.icon;
+                  const isSelected = stance === s.id;
+                  return (
+                    <Tooltip key={s.id}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setStance(s.id)}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          }`}
+                        >
+                          <Icon className="w-3 h-3" />
+                          {s.label}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                        {s.description}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Focus input */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Focus (optional)</p>
+              <input
+                type="text"
+                value={focusText}
+                onChange={(e) => setFocusText(e.target.value)}
+                placeholder="e.g. Push me on pricing strategy"
+                className="w-full px-2.5 py-1.5 text-xs bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+              />
+            </div>
+
+            {/* Mode toggles */}
+            <div className="space-y-2">
+              {/* True Interview — continuous dialog */}
               <button
-                onClick={() => setStance(stance === "exploratory" ? "investigative" : "exploratory")}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
-                  stance === "exploratory"
-                    ? "border-primary/60 bg-primary/5 text-primary"
+                onClick={() => {
+                  const next = !trueInterview;
+                  setTrueInterview(next);
+                  if (next) setTtsEnabled(true);
+                }}
+                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md border text-xs transition-colors ${
+                  trueInterview
+                    ? "border-emerald-500/60 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
                     : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
                 }`}
               >
-                <Compass className="w-3.5 h-3.5 shrink-0" />
-                <div className="text-left">
-                  <span className="font-medium">Exploratory</span>
-                  <span className="text-[10px] opacity-70 ml-1.5">curious, opens new angles</span>
+                <Radio className="w-3.5 h-3.5 shrink-0" />
+                <div className="text-left flex-1">
+                  <span className="font-medium">True Interview</span>
+                  <span className="text-[10px] opacity-70 ml-1.5">continuous voice dialog — hands-free</span>
                 </div>
               </button>
 
-              {/* Focus input */}
-              <div className="space-y-1">
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Focus (optional)</p>
-                <input
-                  type="text"
-                  value={focusText}
-                  onChange={(e) => setFocusText(e.target.value)}
-                  placeholder="e.g. Push me on pricing strategy"
-                  className="w-full px-2.5 py-1.5 text-xs bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
-                />
-              </div>
+              {/* Voice conversation toggle */}
+              <button
+                onClick={() => setTtsEnabled(!ttsEnabled)}
+                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md border text-xs transition-colors ${
+                  ttsEnabled
+                    ? "border-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400"
+                    : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
+                }`}
+              >
+                {ttsEnabled ? <Volume2 className="w-3.5 h-3.5 shrink-0" /> : <VolumeX className="w-3.5 h-3.5 shrink-0" />}
+                <div className="text-left flex-1">
+                  <span className="font-medium">Voice Conversation</span>
+                  <span className="text-[10px] opacity-70 ml-1.5">questions read aloud</span>
+                </div>
+              </button>
             </div>
-
-            {/* Voice conversation mode toggle */}
-            <button
-              onClick={() => setTtsEnabled(!ttsEnabled)}
-              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
-                ttsEnabled
-                  ? "border-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400"
-                  : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
-              }`}
-            >
-              {ttsEnabled ? <Volume2 className="w-3.5 h-3.5 shrink-0" /> : <VolumeX className="w-3.5 h-3.5 shrink-0" />}
-              <div className="text-left">
-                <span className="font-medium">Voice Conversation</span>
-                <span className="text-[10px] opacity-70 ml-1.5">questions read aloud</span>
-              </div>
-            </button>
 
             <Button
               size="sm"
@@ -459,15 +508,15 @@ export function InterviewTab({
               disabled={!objective.trim()}
             >
               <Mic className="w-3.5 h-3.5" />
-              Start Interview
+              {trueInterview ? "Start True Interview" : "Start Interview"}
             </Button>
             {!objective.trim() && (
               <p className="text-[10px] text-muted-foreground/60 text-center">
-                Set a document objective first
+                Set a document objective in the center panel first
               </p>
             )}
           </div>
-        </div>
+        </ScrollArea>
       </div>
     );
   }
@@ -768,37 +817,61 @@ export function InterviewTab({
               </div>
 
               {/* Answer input */}
-              <div className="pl-4">
-                <ProvokeText
-                  chrome="inline"
-                  placeholder="Type your answer or use the mic..."
-                  value={answerText}
-                  onChange={setAnswerText}
-                  className="text-sm"
-                  minRows={2}
-                  maxRows={6}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSubmitAnswer();
-                    }
-                  }}
-                  voice={{ mode: "replace" }}
-                  onVoiceTranscript={handleVoiceAnswer}
-                  onRecordingChange={setIsRecordingAnswer}
-                  onSubmit={handleSubmitAnswer}
-                  submitIcon={Send}
-                />
+              <div className="pl-4 space-y-1.5">
+                <div className="flex items-end gap-2">
+                  <VoiceRecorder
+                    onTranscript={handleVoiceAnswer}
+                    onRecordingChange={setIsRecordingAnswer}
+                    size="sm"
+                    variant={isRecordingAnswer ? "destructive" : "ghost"}
+                    className={`h-8 w-8 shrink-0 rounded-full ${isRecordingAnswer ? "animate-pulse" : "text-muted-foreground"}`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <textarea
+                      value={answerText}
+                      onChange={(e) => setAnswerText(e.target.value)}
+                      placeholder={isRecordingAnswer ? "Listening..." : "Type your answer..."}
+                      className="w-full bg-muted/30 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground/50 resize-none outline-none px-3 py-2 min-h-[36px] max-h-[120px] leading-relaxed"
+                      rows={2}
+                      onInput={(e) => {
+                        const target = e.target as HTMLTextAreaElement;
+                        target.style.height = "auto";
+                        target.style.height = Math.min(target.scrollHeight, 120) + "px";
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSubmitAnswer();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleSubmitAnswer}
+                    disabled={!answerText.trim()}
+                    className="h-8 w-8 shrink-0"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
                 {isRecordingAnswer && (
-                  <div className="flex items-center gap-1.5 text-xs text-primary animate-pulse mt-1">
+                  <div className="flex items-center gap-1.5 text-xs text-primary animate-pulse">
                     <Mic className="w-3 h-3" />
-                    Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo End Message&quot; to submit</span>
+                    Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo Message&quot; to submit</span>
                   </div>
                 )}
                 {isSpeaking && (
-                  <div className="flex items-center gap-1.5 text-xs text-violet-500 animate-pulse mt-1">
+                  <div className="flex items-center gap-1.5 text-xs text-violet-500 animate-pulse">
                     <Volume2 className="w-3 h-3" />
                     Speaking question...
+                  </div>
+                )}
+                {trueInterview && !isSpeaking && !isRecordingAnswer && currentQuestion && (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-500">
+                    <Mic className="w-3 h-3" />
+                    Your turn — tap mic to answer
                   </div>
                 )}
               </div>
