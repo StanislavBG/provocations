@@ -2966,32 +2966,23 @@ Output only the evolved markdown document. No explanations.`;
 
   // ═══════════════════════════════════════════════════════════════════════
   // VOICE TRANSCRIPTION — unified audio-to-text via gpt-4o-mini-transcribe
+  // Uses the Replit AI Integrations audio client so transcription works
+  // through the proxy (no separate OPENAI_API_KEY required).
   // ═══════════════════════════════════════════════════════════════════════
 
-  /** Resolve the OpenAI API key for audio endpoints (direct key only) */
-  function getAudioApiKey(): string | null {
-    const directKey = process.env.OPENAI_API_KEY;
-    const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-    const hasProxy = !!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-    return directKey ?? (!hasProxy && integrationKey ? integrationKey : null);
-  }
-
-  /** Check if voice transcription is available (requires OpenAI API key) */
+  /** Check if voice transcription is available */
   app.get("/api/transcribe/status", (_req, res) => {
-    const available = !!getAudioApiKey();
+    // Available whenever we have any OpenAI key (direct or integration proxy)
+    const available = !!(
+      process.env.OPENAI_API_KEY ||
+      process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+    );
     res.json({ available, model: "gpt-4o-mini-transcribe" });
   });
 
   /** Accept base64-encoded audio, transcribe via gpt-4o-mini-transcribe */
   app.post("/api/transcribe", async (req, res) => {
     try {
-      const apiKey = getAudioApiKey();
-      if (!apiKey) {
-        return res.status(503).json({
-          error: "Voice transcription not available — requires a direct OpenAI API key (OPENAI_API_KEY)",
-        });
-      }
-
       const { audio, mimeType } = req.body;
       if (!audio || typeof audio !== "string") {
         return res.status(400).json({ error: "audio (base64) is required" });
@@ -3005,15 +2996,18 @@ Output only the evolved markdown document. No explanations.`;
         return res.status(400).json({ error: "Audio exceeds 25MB limit" });
       }
 
-      const OpenAI = (await import("openai")).default;
+      const { openai: audioClient, ensureCompatibleFormat } = await import(
+        "./replit_integrations/audio/client.js"
+      );
       const { toFile } = await import("openai");
-      const client = new OpenAI({ apiKey });
 
-      const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
-      const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
+      // Ensure the audio is in an OpenAI-compatible format (WAV/MP3)
+      const { buffer: compatBuffer, format } = await ensureCompatibleFormat(buffer);
+      const file = await toFile(compatBuffer, `audio.${format}`, {
+        type: format === "mp3" ? "audio/mpeg" : "audio/wav",
+      });
 
-      // Use gpt-4o-mini-transcribe — faster, more accurate than whisper-1
-      const result = await client.audio.transcriptions.create({
+      const result = await audioClient.audio.transcriptions.create({
         file,
         model: "gpt-4o-mini-transcribe",
       });
@@ -3032,13 +3026,6 @@ Output only the evolved markdown document. No explanations.`;
    */
   app.post("/api/transcribe/stream", async (req, res) => {
     try {
-      const apiKey = getAudioApiKey();
-      if (!apiKey) {
-        return res.status(503).json({
-          error: "Voice transcription not available — requires a direct OpenAI API key (OPENAI_API_KEY)",
-        });
-      }
-
       const { audio, mimeType } = req.body;
       if (!audio || typeof audio !== "string") {
         return res.status(400).json({ error: "audio (base64) is required" });
@@ -3059,15 +3046,18 @@ Output only the evolved markdown document. No explanations.`;
         Connection: "keep-alive",
       });
 
-      const OpenAI = (await import("openai")).default;
+      const { openai: audioClient, ensureCompatibleFormat } = await import(
+        "./replit_integrations/audio/client.js"
+      );
       const { toFile } = await import("openai");
-      const client = new OpenAI({ apiKey });
 
-      const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
-      const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
+      const { buffer: compatBuffer, format } = await ensureCompatibleFormat(buffer);
+      const file = await toFile(compatBuffer, `audio.${format}`, {
+        type: format === "mp3" ? "audio/mpeg" : "audio/wav",
+      });
 
       // Stream transcription deltas via gpt-4o-mini-transcribe
-      const stream = await client.audio.transcriptions.create({
+      const stream = await audioClient.audio.transcriptions.create({
         file,
         model: "gpt-4o-mini-transcribe",
         stream: true,
