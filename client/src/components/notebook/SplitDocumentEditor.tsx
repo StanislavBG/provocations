@@ -10,8 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { generateId } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { generateId, cn } from "@/lib/utils";
 import {
   Eye,
   Download,
@@ -128,7 +127,9 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
 
   // ── Writer voice feedback state ──
   const [writerVoiceActive, setWriterVoiceActive] = useState(false);
+  const [writerTextOpen, setWriterTextOpen] = useState(false);
   const [writerFeedbackText, setWriterFeedbackText] = useState("");
+  const writerTextInputRef = useRef<HTMLInputElement>(null);
 
   // ── Selection popover state ──
   const [selectionPopover, setSelectionPopover] = useState<{
@@ -339,8 +340,16 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
       "Writer text feedback",
     );
     setWriterFeedbackText("");
+    setWriterTextOpen(false);
     toast({ title: "Feedback sent", description: "Remixing your feedback into the document..." });
   }, [writerFeedbackText, onWriterFeedback, toast]);
+
+  // Auto-focus text input when opened
+  useEffect(() => {
+    if (writerTextOpen) {
+      setTimeout(() => writerTextInputRef.current?.focus(), 50);
+    }
+  }, [writerTextOpen]);
 
   // ── Selection popover handlers ──
   const handleTextSelect = useCallback(() => {
@@ -458,59 +467,82 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
     </div>
   );
 
-  // ── Writer feedback row (second row under toolbar) ──
-  const writerFeedbackRow = onWriterFeedback ? (
-    <div className="flex items-center gap-1.5 px-4 py-1.5 border-b bg-muted/20">
+  // ── Writer lead actions (left side of document header) ──
+  const writerLeadActions = onWriterFeedback ? (
+    <div className="flex items-center gap-1">
+      {/* Writer Voice button — distinctive accent styling */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div>
+          <div
+            className={cn(
+              "relative rounded-md transition-all",
+              writerVoiceActive
+                ? "ring-2 ring-primary/50 bg-primary/10"
+                : "hover:bg-primary/10",
+            )}
+          >
             <VoiceRecorder
               onTranscript={handleWriterVoiceTranscript}
               onRecordingChange={setWriterVoiceActive}
               size="icon"
-              variant={writerVoiceActive ? "destructive" : "ghost"}
-              className="h-7 w-7"
+              variant="ghost"
+              className={cn(
+                "h-7 w-7",
+                writerVoiceActive
+                  ? "text-primary animate-pulse"
+                  : "text-primary/80 hover:text-primary",
+              )}
             />
+            {/* Accent dot to distinguish from regular mic */}
+            <span className={cn(
+              "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background",
+              writerVoiceActive ? "bg-destructive animate-ping" : "bg-primary",
+            )} />
           </div>
         </TooltipTrigger>
-        <TooltipContent>
+        <TooltipContent side="bottom">
           <p className="font-semibold">Writer Voice</p>
-          <p className="text-xs text-muted-foreground">Dictate feedback for the AI to remix into your document</p>
+          <p className="text-xs text-muted-foreground max-w-[200px]">
+            Dictate feedback — the AI will remix it into your document
+          </p>
         </TooltipContent>
       </Tooltip>
-      {writerVoiceActive ? (
-        <span className="text-xs text-primary animate-pulse flex-1">
-          Listening for feedback... speak your changes, the AI will remix them into the document
+
+      {/* Writer Text button — toggles inline text input */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn(
+              "h-7 w-7 relative",
+              writerTextOpen
+                ? "text-primary bg-primary/10 ring-2 ring-primary/50"
+                : "text-primary/80 hover:text-primary hover:bg-primary/10",
+            )}
+            onClick={() => setWriterTextOpen(!writerTextOpen)}
+          >
+            <PenLine className="w-3.5 h-3.5" />
+            {/* Accent dot */}
+            <span className={cn(
+              "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background",
+              writerTextOpen ? "bg-primary" : "bg-primary",
+            )} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <p className="font-semibold">Writer Edit</p>
+          <p className="text-xs text-muted-foreground max-w-[200px]">
+            Type feedback — the AI will remix it into your document
+          </p>
+        </TooltipContent>
+      </Tooltip>
+
+      {/* Status text when voice active */}
+      {writerVoiceActive && (
+        <span className="text-[11px] text-primary font-medium animate-pulse ml-1">
+          Listening...
         </span>
-      ) : (
-        <div className="flex items-center gap-1.5 flex-1">
-          <PenLine className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <input
-            type="text"
-            value={writerFeedbackText}
-            onChange={(e) => setWriterFeedbackText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleWriterTextSubmit();
-              }
-            }}
-            placeholder="Type feedback for the AI to remix into the document..."
-            className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
-            disabled={isMerging}
-          />
-          {writerFeedbackText.trim() && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 shrink-0"
-              onClick={handleWriterTextSubmit}
-              disabled={isMerging}
-            >
-              <Send className="w-3 h-3" />
-            </Button>
-          )}
-        </div>
       )}
     </div>
   ) : null;
@@ -880,8 +912,50 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
             )}
           </div>
 
-          {/* ─── Writer feedback row (voice + text input for AI remixing) ─── */}
-          {writerFeedbackRow}
+          {/* ─── Writer text input bar (appears when Writer Edit icon clicked) ─── */}
+          {writerTextOpen && onWriterFeedback && (
+            <div className="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b bg-primary/5">
+              <PenLine className="w-3.5 h-3.5 text-primary shrink-0" />
+              <input
+                ref={writerTextInputRef}
+                type="text"
+                value={writerFeedbackText}
+                onChange={(e) => setWriterFeedbackText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleWriterTextSubmit();
+                  }
+                  if (e.key === "Escape") {
+                    setWriterTextOpen(false);
+                    setWriterFeedbackText("");
+                  }
+                }}
+                placeholder="Type feedback for the AI to remix into the document..."
+                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
+                disabled={isMerging}
+              />
+              {writerFeedbackText.trim() && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 shrink-0 text-primary"
+                  onClick={handleWriterTextSubmit}
+                  disabled={isMerging}
+                >
+                  <Send className="w-3 h-3" />
+                </Button>
+              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 shrink-0 text-muted-foreground"
+                onClick={() => { setWriterTextOpen(false); setWriterFeedbackText(""); }}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          )}
 
           {/* ─── Document pane with selection popover ─── */}
           <div ref={editorContainerRef} className="relative flex-1 min-h-0">
@@ -894,6 +968,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
               onChange={onTextChange}
               onSelect={handleTextSelect}
               placeholder="Start writing your document here... (Markdown supported)"
+              headerLeadActions={writerLeadActions}
               headerActions={documentHeaderActions}
               className="text-sm leading-relaxed font-serif"
             />
