@@ -93,6 +93,12 @@ export function BSChartCanvas({
     [onUpdateNode],
   );
 
+  // ── Memoize sorted nodes to avoid O(n log n) sort on every render ──
+  const sortedNodes = useMemo(
+    () => [...chart.nodes].sort((a, b) => a.zIndex - b.zIndex),
+    [chart.nodes],
+  );
+
   // ── Cursor style based on tool ──
   const cursorClass = useMemo(() => {
     switch (toolMode) {
@@ -161,10 +167,7 @@ export function BSChartCanvas({
         />
 
         {/* Nodes */}
-        {chart.nodes
-          .slice()
-          .sort((a, b) => a.zIndex - b.zIndex)
-          .map((node) => (
+        {sortedNodes.map((node) => (
             <BSNodeRenderer
               key={node.id}
               node={node}

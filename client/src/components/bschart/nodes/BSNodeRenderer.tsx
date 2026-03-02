@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, memo } from "react";
 import type { BSNode, BSPortSide } from "../types";
 
 interface BSNodeRendererProps {
@@ -12,7 +12,7 @@ interface BSNodeRendererProps {
   showPorts: boolean;
 }
 
-export function BSNodeRenderer({
+export const BSNodeRenderer = memo(function BSNodeRenderer({
   node,
   isSelected,
   onMouseDown,
@@ -421,4 +421,4 @@ export function BSNodeRenderer({
       {renderPorts()}
     </div>
   );
-}
+});

@@ -1,6 +1,6 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, memo } from "react";
 import type { BSNode, BSConnector, BSPortSide } from "./types";
-import { getPortPosition } from "./types";
+import { getPortPosition, CONNECTOR_PATH_OFFSET } from "./types";
 
 interface BSConnectorLayerProps {
   nodes: BSNode[];
@@ -17,7 +17,7 @@ interface BSConnectorLayerProps {
   } | null;
 }
 
-export function BSConnectorLayer({
+export const BSConnectorLayer = memo(function BSConnectorLayer({
   nodes,
   connectors,
   selectedConnectorIds,
@@ -25,7 +25,22 @@ export function BSConnectorLayer({
   onDoubleClickConnector,
   connectPreview,
 }: BSConnectorLayerProps) {
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  // Collect unique marker types needed across all connectors
+  const markerDefs = useMemo(() => {
+    const types = new Set<string>();
+    const selTypes = new Set<string>();
+    for (const c of connectors) {
+      if (c.endArrow !== "none") {
+        types.add(`${c.endArrow}-${c.color}`);
+        if (selectedConnectorIds.includes(c.id)) {
+          selTypes.add(c.endArrow);
+        }
+      }
+    }
+    return { types, selTypes };
+  }, [connectors, selectedConnectorIds]);
 
   const renderConnector = useCallback(
     (connector: BSConnector) => {
@@ -39,67 +54,15 @@ export function BSConnectorLayer({
 
       const path = buildOrthogonalPath(from, to, connector.fromPort, connector.toPort);
 
-      // Arrow marker
-      const markerId = `arrow-${connector.id}`;
-      const endMarkerId = connector.endArrow !== "none" ? `url(#${markerId})` : undefined;
+      // Use shared marker ID based on type + color (or selected variant)
+      const markerColor = isSelected ? "selected" : connector.color;
+      const markerId = connector.endArrow !== "none"
+        ? `marker-${connector.endArrow}-${markerColor.replace(/[^a-zA-Z0-9]/g, "")}`
+        : undefined;
+      const endMarkerId = markerId ? `url(#${markerId})` : undefined;
 
       return (
         <g key={connector.id}>
-          {/* Arrow marker definition */}
-          {connector.endArrow === "arrow" && (
-            <defs>
-              <marker
-                id={markerId}
-                markerWidth="10"
-                markerHeight="8"
-                refX="9"
-                refY="4"
-                orient="auto"
-              >
-                <polygon
-                  points="0,0 10,4 0,8"
-                  fill={isSelected ? "hsl(var(--primary))" : connector.color}
-                />
-              </marker>
-            </defs>
-          )}
-          {connector.endArrow === "diamond" && (
-            <defs>
-              <marker
-                id={markerId}
-                markerWidth="12"
-                markerHeight="8"
-                refX="12"
-                refY="4"
-                orient="auto"
-              >
-                <polygon
-                  points="0,4 6,0 12,4 6,8"
-                  fill={isSelected ? "hsl(var(--primary))" : connector.color}
-                />
-              </marker>
-            </defs>
-          )}
-          {connector.endArrow === "circle" && (
-            <defs>
-              <marker
-                id={markerId}
-                markerWidth="8"
-                markerHeight="8"
-                refX="8"
-                refY="4"
-                orient="auto"
-              >
-                <circle
-                  cx="4"
-                  cy="4"
-                  r="3"
-                  fill={isSelected ? "hsl(var(--primary))" : connector.color}
-                />
-              </marker>
-            </defs>
-          )}
-
           {/* Invisible wider hit area */}
           <path
             d={path}
@@ -151,8 +114,51 @@ export function BSConnectorLayer({
     [nodeMap, selectedConnectorIds, onSelectConnector, onDoubleClickConnector],
   );
 
+  // Build shared marker definitions
+  const sharedMarkers = useMemo(() => {
+    const markers: JSX.Element[] = [];
+    const seen = new Set<string>();
+
+    const addMarker = (arrowType: string, color: string, colorKey: string) => {
+      const id = `marker-${arrowType}-${colorKey.replace(/[^a-zA-Z0-9]/g, "")}`;
+      if (seen.has(id)) return;
+      seen.add(id);
+
+      if (arrowType === "arrow") {
+        markers.push(
+          <marker key={id} id={id} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+            <polygon points="0,0 10,4 0,8" fill={color} />
+          </marker>
+        );
+      } else if (arrowType === "diamond") {
+        markers.push(
+          <marker key={id} id={id} markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+            <polygon points="0,4 6,0 12,4 6,8" fill={color} />
+          </marker>
+        );
+      } else if (arrowType === "circle") {
+        markers.push(
+          <marker key={id} id={id} markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
+            <circle cx="4" cy="4" r="3" fill={color} />
+          </marker>
+        );
+      }
+    };
+
+    for (const c of connectors) {
+      if (c.endArrow !== "none") {
+        addMarker(c.endArrow, c.color, c.color);
+        if (selectedConnectorIds.includes(c.id)) {
+          addMarker(c.endArrow, "hsl(var(--primary))", "selected");
+        }
+      }
+    }
+    return markers;
+  }, [connectors, selectedConnectorIds]);
+
   return (
     <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+      <defs>{sharedMarkers}</defs>
       <g className="pointer-events-auto">
         {connectors.map(renderConnector)}
       </g>
@@ -172,7 +178,7 @@ export function BSConnectorLayer({
       )}
     </svg>
   );
-}
+});
 
 // ── Orthogonal path builder ──
 
@@ -182,7 +188,7 @@ function buildOrthogonalPath(
   fromPort: BSPortSide,
   toPort: BSPortSide,
 ): string {
-  const offset = 30;
+  const offset = CONNECTOR_PATH_OFFSET;
 
   // Get control points based on port directions
   let fx = from.x;

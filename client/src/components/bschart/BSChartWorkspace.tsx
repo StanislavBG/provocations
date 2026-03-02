@@ -7,6 +7,7 @@ import { BSChartToolbar } from "./BSChartToolbar";
 import { BSChartProperties } from "./BSChartProperties";
 import { useChartState } from "./hooks/useChartState";
 import type { BSToolMode, BSNodeType, BSPortSide } from "./types";
+import { ZOOM, CHART_LIMITS } from "./types";
 import {
   Download, Upload, Save,
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize, Grid3X3,
@@ -160,13 +161,14 @@ export function BSChartWorkspace({
       maxX = Math.max(maxX, n.x + n.width);
       maxY = Math.max(maxY, n.y + n.height);
     }
-    const padding = 60;
-    minX -= padding; minY -= padding; maxX += padding; maxY += padding;
+    minX -= ZOOM.FIT_PADDING; minY -= ZOOM.FIT_PADDING; maxX += ZOOM.FIT_PADDING; maxY += ZOOM.FIT_PADDING;
     const contentW = maxX - minX;
     const contentH = maxY - minY;
-    const canvasW = 800;
-    const canvasH = 600;
-    const zoom = Math.min(canvasW / contentW, canvasH / contentH, 2);
+    // Use actual canvas size if available, fallback to reasonable defaults
+    const canvasEl = document.querySelector(".overflow-hidden.bg-background") as HTMLElement | null;
+    const canvasW = canvasEl?.clientWidth ?? 800;
+    const canvasH = canvasEl?.clientHeight ?? 600;
+    const zoom = Math.min(canvasW / contentW, canvasH / contentH, ZOOM.FIT_MAX);
     const x = (canvasW - contentW * zoom) / 2 - minX * zoom;
     const y = (canvasH - contentH * zoom) / 2 - minY * zoom;
     setViewport(x, y, zoom);
@@ -222,8 +224,8 @@ export function BSChartWorkspace({
       {/* Top action bar */}
       <div className="flex items-center justify-between px-3 py-1 border-b bg-card shrink-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-semibold text-muted-foreground">
-            {chart.nodes.length} nodes, {chart.connectors.length} connectors
+          <span className={`text-xs font-semibold ${chart.nodes.length >= CHART_LIMITS.MAX_NODES * 0.9 ? "text-destructive" : "text-muted-foreground"}`}>
+            {chart.nodes.length}/{CHART_LIMITS.MAX_NODES} nodes, {chart.connectors.length} connectors
           </span>
         </div>
         <div className="flex items-center gap-1">
