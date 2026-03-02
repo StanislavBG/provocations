@@ -79,6 +79,14 @@
   --font-sans: 'Source Serif 4', 'Georgia', serif;
   --font-serif: 'Libre Baskerville', 'Georgia', serif;
   --font-mono: 'JetBrains Mono', monospace;
+
+  /* FTUX shell variables */
+  --ftux-status-bar-height: 36px;
+  --ftux-dock-height: 56px;
+  --ftux-dock-blur: 16px;
+  --ftux-dock-opacity: 0.75;
+  --ftux-dock-radius: 1.5rem;
+  --ftux-transition-speed: 200ms;
   --radius: .5rem;
   --shadow-2xs: 0px 1px 2px 0px rgba(30, 20, 10, 0.03);
   --shadow-xs: 0px 1px 3px 0px rgba(30, 20, 10, 0.05);
