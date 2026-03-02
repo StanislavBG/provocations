@@ -2358,8 +2358,19 @@ Output only valid JSON, no markdown.`;
         });
       }
 
-      const { GoogleGenAI } = await import("@google/genai");
+      const { GoogleGenAI, HarmCategory, HarmBlockThreshold } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: geminiKey });
+
+      // Relax safety filters — default BLOCK_LOW_AND_ABOVE is too aggressive for
+      // legitimate cultural, mythological, and historical content (e.g. folklore
+      // creatures, ancient legends).  BLOCK_ONLY_HIGH still blocks genuinely harmful
+      // material while allowing artistic / educational imagery.
+      const safetySettings = [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT,               threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      ];
 
       // Build the final prompt: prepend style directive if provided
       let fullPrompt = prompt.slice(0, 4000);
@@ -2383,11 +2394,19 @@ Output only valid JSON, no markdown.`;
           contents: fullPrompt,
           config: {
             responseModalities: ["IMAGE", "TEXT"],
+            safetySettings,
           },
         });
 
+        // Log safety feedback when content is blocked for debugging
+        const candidate = (response as any)?.candidates?.[0];
+        if (candidate?.finishReason === "SAFETY") {
+          const ratings = candidate?.safetyRatings || [];
+          console.warn("[generate-imagen] blocked by safety filter:", JSON.stringify(ratings));
+        }
+
         // Extract image parts from the response
-        const parts = (response as any)?.candidates?.[0]?.content?.parts || [];
+        const parts = candidate?.content?.parts || [];
         for (const part of parts) {
           if (part?.inlineData?.data && part?.inlineData?.mimeType) {
             images.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
@@ -2443,8 +2462,15 @@ Output only valid JSON, no markdown.`;
         });
       }
 
-      const { GoogleGenAI } = await import("@google/genai");
+      const { GoogleGenAI, HarmCategory, HarmBlockThreshold } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: geminiKey });
+
+      const safetySettings = [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT,               threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      ];
 
       // Use Nano Banana 2 (gemini-3.1-flash-image-preview) via generateContent
       const response = await ai.models.generateContent({
@@ -2452,11 +2478,17 @@ Output only valid JSON, no markdown.`;
         contents: `${imagePrompt}. Aspect ratio: 16:9`,
         config: {
           responseModalities: ["IMAGE", "TEXT"],
+          safetySettings,
         },
       });
 
       const images: string[] = [];
-      const parts = (response as any)?.candidates?.[0]?.content?.parts || [];
+      const candidate = (response as any)?.candidates?.[0];
+      if (candidate?.finishReason === "SAFETY") {
+        const ratings = candidate?.safetyRatings || [];
+        console.warn("[text-to-visual] blocked by safety filter:", JSON.stringify(ratings));
+      }
+      const parts = candidate?.content?.parts || [];
       for (const part of parts) {
         if (part?.inlineData?.data && part?.inlineData?.mimeType) {
           images.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
