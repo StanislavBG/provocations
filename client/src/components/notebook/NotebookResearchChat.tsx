@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -9,7 +9,7 @@ import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/component
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import type { ChatMessage } from "@shared/schema";
-import type { ResearchFocus } from "@shared/schema";
+import type { ResearchFocus, ResponseConfig, ResponseDetailLevel, ResponseFormat, ResponseAudienceLevel, ResponseTone } from "@shared/schema";
 import type { LucideIcon } from "lucide-react";
 
 const FOCUS_MODES: { id: ResearchFocus; label: string; icon: LucideIcon; description: string }[] = [
@@ -20,6 +20,36 @@ const FOCUS_MODES: { id: ResearchFocus; label: string; icon: LucideIcon; descrip
   { id: "synthesize", label: "Synthesize", icon: Layers, description: "Weave sources into coherent narratives, find themes" },
   { id: "reason", label: "Reason", icon: BrainCircuit, description: "Step-by-step logical reasoning, break down complexity" },
   { id: "deep-research", label: "Deep Research", icon: Microscope, description: "Deep multi-step investigation with cited findings" },
+];
+
+// ── Response configuration options ──
+
+const DETAIL_OPTIONS: { id: ResponseDetailLevel; label: string; icon: LucideIcon; description: string }[] = [
+  { id: "brief", label: "Brief", icon: Zap, description: "Short, scannable — key facts only" },
+  { id: "standard", label: "Standard", icon: AlignLeft, description: "Balanced coverage with supporting detail" },
+  { id: "detailed", label: "Detailed", icon: List, description: "Thorough with examples and context" },
+  { id: "exhaustive", label: "Exhaustive", icon: BookOpen, description: "Comprehensive reference — leave nothing out" },
+];
+
+const FORMAT_OPTIONS: { id: ResponseFormat; label: string; icon: LucideIcon; description: string }[] = [
+  { id: "prose", label: "Prose", icon: AlignLeft, description: "Flowing narrative paragraphs" },
+  { id: "structured", label: "Structured", icon: List, description: "Headers, bullet points, tables" },
+  { id: "outline", label: "Outline", icon: List, description: "Hierarchical numbered outline" },
+  { id: "academic", label: "Academic", icon: GraduationCap, description: "Formal sections, citations, abstract" },
+];
+
+const AUDIENCE_OPTIONS: { id: ResponseAudienceLevel; label: string; icon: LucideIcon; description: string }[] = [
+  { id: "non-technical", label: "Simple", icon: Users, description: "Plain language, no jargon" },
+  { id: "general", label: "General", icon: MessageCircle, description: "Some technical terms, explained" },
+  { id: "technical", label: "Technical", icon: Code2, description: "Assumes domain knowledge" },
+  { id: "expert", label: "Expert", icon: Zap, description: "Deep technical, no hand-holding" },
+];
+
+const TONE_OPTIONS: { id: ResponseTone; label: string; icon: LucideIcon; description: string }[] = [
+  { id: "neutral", label: "Neutral", icon: Shield, description: "Objective and balanced" },
+  { id: "conversational", label: "Casual", icon: MessageCircle, description: "Friendly, like a colleague" },
+  { id: "assertive", label: "Assertive", icon: Zap, description: "Clear opinions and recommendations" },
+  { id: "critical", label: "Critical", icon: SearchIcon, description: "Skeptical, surfaces risks and flaws" },
 ];
 
 interface NotebookResearchChatProps {
@@ -40,8 +70,21 @@ export function NotebookResearchChat({
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [focusMode, setFocusMode] = useState<ResearchFocus>("explore");
+  const [responseConfig, setResponseConfig] = useState<ResponseConfig>({
+    detail: "standard",
+    format: "structured",
+    audience: "general",
+    tone: "neutral",
+  });
+  const [showResponseConfig, setShowResponseConfig] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Check if any response config differs from defaults
+  const hasCustomConfig = responseConfig.detail !== "standard" ||
+    responseConfig.format !== "structured" ||
+    responseConfig.audience !== "general" ||
+    responseConfig.tone !== "neutral";
 
   // Auto-scroll on new content
   useEffect(() => {
@@ -76,6 +119,7 @@ export function NotebookResearchChat({
           objective: objective || "General research",
           history: messages.slice(-30),
           researchFocus: focusMode,
+          responseConfig: hasCustomConfig ? responseConfig : undefined,
         }),
       });
 
@@ -125,7 +169,7 @@ export function NotebookResearchChat({
       setIsLoading(false);
       setStreamingContent("");
     }
-  }, [input, isLoading, messages, objective, focusMode, toast]);
+  }, [input, isLoading, messages, objective, focusMode, hasCustomConfig, responseConfig, toast]);
 
   const handleCapture = useCallback(
     (content: string) => {
@@ -193,6 +237,59 @@ export function NotebookResearchChat({
             </Tooltip>
           );
         })}
+      </div>
+
+      {/* Response config toggle + panel */}
+      <div className="border-b shrink-0">
+        <button
+          type="button"
+          onClick={() => setShowResponseConfig(!showResponseConfig)}
+          className={`flex items-center gap-1.5 w-full px-2 py-1 text-[10px] font-medium transition-colors hover:bg-muted/30 ${
+            hasCustomConfig ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          <SlidersHorizontal className="w-3 h-3" />
+          <span>Response</span>
+          {hasCustomConfig && (
+            <span className="px-1 py-px rounded bg-primary/15 text-primary text-[9px]">
+              Custom
+            </span>
+          )}
+          <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${showResponseConfig ? "rotate-180" : ""}`} />
+        </button>
+
+        {showResponseConfig && (
+          <div className="px-2 pb-2 space-y-1.5">
+            {/* Detail Level */}
+            <ResponseConfigRow
+              label="Detail"
+              options={DETAIL_OPTIONS}
+              value={responseConfig.detail || "standard"}
+              onChange={(v) => setResponseConfig((prev) => ({ ...prev, detail: v as ResponseDetailLevel }))}
+            />
+            {/* Format */}
+            <ResponseConfigRow
+              label="Format"
+              options={FORMAT_OPTIONS}
+              value={responseConfig.format || "structured"}
+              onChange={(v) => setResponseConfig((prev) => ({ ...prev, format: v as ResponseFormat }))}
+            />
+            {/* Audience */}
+            <ResponseConfigRow
+              label="Audience"
+              options={AUDIENCE_OPTIONS}
+              value={responseConfig.audience || "general"}
+              onChange={(v) => setResponseConfig((prev) => ({ ...prev, audience: v as ResponseAudienceLevel }))}
+            />
+            {/* Tone */}
+            <ResponseConfigRow
+              label="Tone"
+              options={TONE_OPTIONS}
+              value={responseConfig.tone || "neutral"}
+              onChange={(v) => setResponseConfig((prev) => ({ ...prev, tone: v as ResponseTone }))}
+            />
+          </div>
+        )}
       </div>
 
       {/* Messages */}
@@ -330,6 +427,7 @@ export function NotebookResearchChat({
             objective={objective}
             messages={messages}
             focusMode={focusMode}
+            responseConfig={hasCustomConfig ? responseConfig : undefined}
             onSend={handleSend}
           />
         </div>
@@ -346,6 +444,7 @@ function ResearchSendButton({
   objective,
   messages,
   focusMode,
+  responseConfig,
   onSend,
 }: {
   input: string;
@@ -353,6 +452,7 @@ function ResearchSendButton({
   objective: string;
   messages: ChatMessage[];
   focusMode: ResearchFocus;
+  responseConfig?: ResponseConfig;
   onSend: () => void;
 }) {
   const historyChars = useMemo(
@@ -360,19 +460,37 @@ function ResearchSendButton({
     [messages],
   );
 
-  const blocks: ContextBlock[] = useMemo(() => [
-    { label: "System Prompt", chars: 1500, color: "text-purple-400" },
-    { label: "User Query", chars: input.length, color: "text-blue-400" },
-    { label: "Objective", chars: objective.length, color: "text-amber-400" },
-    { label: "Chat History", chars: historyChars, color: "text-cyan-400" },
-  ], [input, objective, historyChars]);
+  const responseConfigChars = responseConfig ? 300 : 0;
 
-  const summary: SummaryItem[] = useMemo(() => [
-    { icon: <MessageSquare className="w-3 h-3 text-blue-400" />, label: "Query", count: input.trim() ? 1 : 0, detail: input.trim() ? input.slice(0, 60) + (input.length > 60 ? "..." : "") : undefined },
-    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0, detail: objective.trim() ? objective.slice(0, 50) + (objective.length > 50 ? "..." : "") : undefined },
-    { icon: <FileText className="w-3 h-3 text-cyan-400" />, label: "Chat History", count: messages.length, detail: messages.length > 0 ? `${messages.length} message${messages.length !== 1 ? "s" : ""}` : undefined },
-    { icon: <Compass className="w-3 h-3 text-emerald-400" />, label: "Focus Mode", count: 1, detail: focusMode },
-  ], [input, objective, messages, focusMode]);
+  const blocks: ContextBlock[] = useMemo(() => {
+    const b: ContextBlock[] = [
+      { label: "System Prompt", chars: 1500, color: "text-purple-400" },
+      { label: "User Query", chars: input.length, color: "text-blue-400" },
+      { label: "Objective", chars: objective.length, color: "text-amber-400" },
+      { label: "Chat History", chars: historyChars, color: "text-cyan-400" },
+    ];
+    if (responseConfigChars > 0) {
+      b.push({ label: "Response Config", chars: responseConfigChars, color: "text-rose-400" });
+    }
+    return b;
+  }, [input, objective, historyChars, responseConfigChars]);
+
+  const responseConfigDetail = responseConfig
+    ? [responseConfig.detail, responseConfig.format, responseConfig.audience, responseConfig.tone].filter(Boolean).join(", ")
+    : undefined;
+
+  const summary: SummaryItem[] = useMemo(() => {
+    const s: SummaryItem[] = [
+      { icon: <MessageSquare className="w-3 h-3 text-blue-400" />, label: "Query", count: input.trim() ? 1 : 0, detail: input.trim() ? input.slice(0, 60) + (input.length > 60 ? "..." : "") : undefined },
+      { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0, detail: objective.trim() ? objective.slice(0, 50) + (objective.length > 50 ? "..." : "") : undefined },
+      { icon: <FileText className="w-3 h-3 text-cyan-400" />, label: "Chat History", count: messages.length, detail: messages.length > 0 ? `${messages.length} message${messages.length !== 1 ? "s" : ""}` : undefined },
+      { icon: <Compass className="w-3 h-3 text-emerald-400" />, label: "Focus Mode", count: 1, detail: focusMode },
+    ];
+    if (responseConfigDetail) {
+      s.push({ icon: <SlidersHorizontal className="w-3 h-3 text-rose-400" />, label: "Response Config", count: 1, detail: responseConfigDetail });
+    }
+    return s;
+  }, [input, objective, messages, focusMode, responseConfigDetail]);
 
   return (
     <LlmHoverButton
@@ -392,5 +510,54 @@ function ResearchSendButton({
         <Send className="w-4 h-4" />
       </Button>
     </LlmHoverButton>
+  );
+}
+
+// ── Response config row (compact pill selector) ──
+
+function ResponseConfigRow<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { id: T; label: string; icon: LucideIcon; description: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[9px] font-medium text-muted-foreground w-[46px] shrink-0 text-right">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-0.5">
+        {options.map((opt) => {
+          const Icon = opt.icon;
+          const isActive = value === opt.id;
+          return (
+            <Tooltip key={opt.id}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onChange(opt.id)}
+                  className={`flex items-center gap-0.5 px-1.5 py-px rounded text-[9px] font-medium transition-colors ${
+                    isActive
+                      ? "bg-primary/15 text-primary border border-primary/30"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
+                  }`}
+                >
+                  <Icon className="w-2.5 h-2.5" />
+                  {opt.label}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                {opt.description}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </div>
   );
 }
