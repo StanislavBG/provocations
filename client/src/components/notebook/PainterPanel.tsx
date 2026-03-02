@@ -39,6 +39,9 @@ interface SmartButtonDef {
 /** Art vs Infographic mode */
 export type PainterMode = "art" | "infographic";
 
+/** Context sources that can be excluded per-call */
+export type PainterSource = "description" | "document" | "context";
+
 /** A selected painter configuration — same shape as WriterConfig */
 export interface PainterConfig {
   category: string;
@@ -204,6 +207,7 @@ interface PainterPanelProps {
     painterObjective: string;
     negativePrompt?: string;
     painterMode: PainterMode;
+    excludedSources?: Set<PainterSource>;
   }) => void;
   isPainting: boolean;
   pinnedDocContents?: Record<number, { title: string; content: string }>;
@@ -225,6 +229,8 @@ export function PainterPanel({
   const [showNegative, setShowNegative] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("sliders");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["style"]));
+  // Per-call source exclusions — items here are skipped from this paint call only
+  const [excludedSources, setExcludedSources] = useState<Set<PainterSource>>(new Set());
 
   const selections = painterMode === "art" ? artSelections : infoSelections;
   const setSelections = painterMode === "art" ? setArtSelections : setInfoSelections;
@@ -243,6 +249,15 @@ export function PainterPanel({
       return next;
     });
   }, [setSelections]);
+
+  const toggleSource = useCallback((source: PainterSource) => {
+    setExcludedSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+  }, []);
 
   const toggleSection = useCallback((catId: string) => {
     setExpandedSections((prev) => {
@@ -274,25 +289,33 @@ export function PainterPanel({
 
   const handlePaint = useCallback(() => {
     const configs = buildConfigs();
-    // Fall back through: explicit painter objective → workspace objective → document summary
-    const contextSummary = pinnedDocs.length > 0
-      ? pinnedDocs.map((d) => `[${d.title}] ${d.content.slice(0, 300)}`).join("\n")
-      : "";
-    const effectiveObjective = painterObjective.trim()
-      || objective
-      || (documentText.trim()
-        ? `Create a visual representation of: ${documentText.slice(0, 300)}`
-        : "")
-      || (contextSummary
-        ? `Create a visual representation based on this context:\n${contextSummary}`
-        : "");
+    const skipDesc = excludedSources.has("description");
+    const skipDoc = excludedSources.has("document");
+    const skipCtx = excludedSources.has("context");
+
+    // Build effective objective respecting exclusions.
+    // Each source is checked independently — excluded sources are never used,
+    // even as fallbacks.
+    let effectiveObjective = "";
+    if (!skipDesc) {
+      effectiveObjective = painterObjective.trim() || objective || "";
+    }
+    if (!effectiveObjective && !skipDoc && documentText.trim()) {
+      effectiveObjective = `Create a visual representation of: ${documentText.slice(0, 300)}`;
+    }
+    if (!effectiveObjective && !skipCtx && pinnedDocs.length > 0) {
+      const contextSummary = pinnedDocs.map((d) => `[${d.title}] ${d.content.slice(0, 300)}`).join("\n");
+      effectiveObjective = `Create a visual representation based on this context:\n${contextSummary}`;
+    }
+
     onPaintImage({
       painterConfigs: configs,
       painterObjective: effectiveObjective,
       negativePrompt: negativePrompt.trim() || undefined,
       painterMode,
+      excludedSources: excludedSources.size > 0 ? new Set(excludedSources) : undefined,
     });
-  }, [buildConfigs, onPaintImage, painterObjective, objective, documentText, negativePrompt, painterMode]);
+  }, [buildConfigs, onPaintImage, painterObjective, objective, documentText, negativePrompt, painterMode, excludedSources, pinnedDocs]);
 
   // Compute current labels for summary display
   const currentLabels = useMemo(() => {
@@ -309,42 +332,49 @@ export function PainterPanel({
 
   // ── LLM preview blocks for the Paint button hover ──
   const previewBlocks: ContextBlock[] = useMemo(() => {
+    const skipDesc = excludedSources.has("description");
+    const skipDoc = excludedSources.has("document");
+    const skipCtx = excludedSources.has("context");
     const descriptionText = painterObjective.trim() || objective;
     const configText = buildConfigs()
       .map((c) => `${c.categoryLabel}: ${c.optionLabel}`)
       .join(", ");
-    const pinnedChars = pinnedDocs.reduce((s, d) => s + Math.min(d.content.length, 500), 0);
+    const pinnedChars = skipCtx ? 0 : pinnedDocs.reduce((s, d) => s + Math.min(d.content.length, 500), 0);
 
     return [
-      { label: "Description", chars: descriptionText.length, color: painterMode === "art" ? "text-rose-400" : "text-indigo-400" },
-      { label: "Document", chars: documentText.length, color: "text-blue-400" },
-      { label: "Active Context", chars: pinnedChars, color: "text-cyan-400" },
+      { label: skipDesc ? "Description (excluded)" : "Description", chars: skipDesc ? 0 : descriptionText.length, color: painterMode === "art" ? "text-rose-400" : "text-indigo-400" },
+      { label: skipDoc ? "Document (excluded)" : "Document", chars: skipDoc ? 0 : documentText.length, color: "text-blue-400" },
+      { label: skipCtx ? "Active Context (excluded)" : "Active Context", chars: pinnedChars, color: "text-cyan-400" },
       { label: painterMode === "art" ? "Style / Config" : "Infographic Config", chars: configText.length + 50, color: "text-emerald-400" },
     ];
-  }, [painterObjective, objective, documentText, pinnedDocs, buildConfigs, painterMode]);
+  }, [painterObjective, objective, documentText, pinnedDocs, buildConfigs, painterMode, excludedSources]);
 
   const previewSummary: SummaryItem[] = useMemo(() => {
+    const skipDesc = excludedSources.has("description");
+    const skipDoc = excludedSources.has("document");
+    const skipCtx = excludedSources.has("context");
     const descriptionText = painterObjective.trim() || objective;
-    const docWords = documentText.trim() ? documentText.split(/\s+/).filter(Boolean).length : 0;
+    const docWords = (!skipDoc && documentText.trim()) ? documentText.split(/\s+/).filter(Boolean).length : 0;
 
     return [
       {
         icon: <Target className="w-3 h-3 text-rose-400" />,
-        label: "Description",
-        count: descriptionText.trim() ? 1 : 0,
-        detail: descriptionText.trim() ? descriptionText.slice(0, 60) + (descriptionText.length > 60 ? "..." : "") : undefined,
+        label: skipDesc ? "Description (excluded)" : "Description",
+        count: (!skipDesc && descriptionText.trim()) ? 1 : 0,
+        detail: (!skipDesc && descriptionText.trim()) ? descriptionText.slice(0, 60) + (descriptionText.length > 60 ? "..." : "") : skipDesc ? "Excluded" : undefined,
       },
       {
         icon: <FileText className="w-3 h-3 text-blue-400" />,
-        label: "Document",
+        label: skipDoc ? "Document (excluded)" : "Document",
         count: docWords > 0 ? 1 : 0,
-        detail: docWords > 0 ? `${docWords} words` : undefined,
+        detail: docWords > 0 ? `${docWords} words` : skipDoc ? "Excluded" : undefined,
         emptyLabel: "No document",
       },
       {
         icon: <Pin className="w-3 h-3 text-cyan-400" />,
-        label: "Active Context Docs",
-        count: pinnedDocs.length,
+        label: skipCtx ? "Active Context (excluded)" : "Active Context Docs",
+        count: skipCtx ? 0 : pinnedDocs.length,
+        detail: skipCtx ? "Excluded" : undefined,
         emptyLabel: "None pinned",
       },
       {
@@ -354,12 +384,15 @@ export function PainterPanel({
         emptyLabel: painterMode === "art" ? "No style selected" : "No config selected",
       },
     ];
-  }, [painterObjective, objective, documentText, pinnedDocs, selections, painterMode]);
+  }, [painterObjective, objective, documentText, pinnedDocs, selections, painterMode, excludedSources]);
 
   // Determine which sources are active for the indicator
   const hasDescription = !!(painterObjective.trim() || objective.trim());
   const hasDocument = !!documentText.trim();
   const hasContext = pinnedDocs.length > 0;
+  const descExcluded = excludedSources.has("description");
+  const docExcluded = excludedSources.has("document");
+  const ctxExcluded = excludedSources.has("context");
 
   const isArt = painterMode === "art";
   // Explicit Tailwind classes (no dynamic interpolation — required for purge safety)
@@ -493,30 +526,69 @@ export function PainterPanel({
               )}
             </p>
             <div className="flex flex-wrap gap-1.5 pt-0.5">
-              <span className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
-                hasDescription
-                  ? accentBg
-                  : "bg-muted/60 text-muted-foreground/50"
-              }`}>
-                <Target className="w-2.5 h-2.5" />
-                {isArt ? "Description" : "Brief"} {hasDescription ? "" : "(empty)"}
-              </span>
-              <span className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
-                hasDocument
-                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                  : "bg-muted/60 text-muted-foreground/50"
-              }`}>
-                <FileText className="w-2.5 h-2.5" />
-                Document {hasDocument ? "" : "(empty)"}
-              </span>
-              <span className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
-                hasContext
-                  ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
-                  : "bg-muted/60 text-muted-foreground/50"
-              }`}>
-                <Pin className="w-2.5 h-2.5" />
-                Context {hasContext ? `(${pinnedDocs.length})` : "(none)"}
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => hasDescription && toggleSource("description")}
+                    className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full transition-all ${
+                      !hasDescription
+                        ? "bg-muted/60 text-muted-foreground/50"
+                        : descExcluded
+                          ? "bg-muted/40 text-muted-foreground/40 line-through cursor-pointer"
+                          : `${accentBg} cursor-pointer hover:opacity-80`
+                    }`}
+                  >
+                    <Target className="w-2.5 h-2.5" />
+                    {isArt ? "Description" : "Brief"} {hasDescription ? "" : "(empty)"}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[10px]">
+                  {!hasDescription ? "No description provided" : descExcluded ? "Click to include in this paint call" : "Click to exclude from this paint call"}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => hasDocument && toggleSource("document")}
+                    className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full transition-all ${
+                      !hasDocument
+                        ? "bg-muted/60 text-muted-foreground/50"
+                        : docExcluded
+                          ? "bg-muted/40 text-muted-foreground/40 line-through cursor-pointer"
+                          : "bg-blue-500/10 text-blue-600 dark:text-blue-400 cursor-pointer hover:opacity-80"
+                    }`}
+                  >
+                    <FileText className="w-2.5 h-2.5" />
+                    Document {hasDocument ? "" : "(empty)"}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[10px]">
+                  {!hasDocument ? "No document content" : docExcluded ? "Click to include in this paint call" : "Click to exclude from this paint call"}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => hasContext && toggleSource("context")}
+                    className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full transition-all ${
+                      !hasContext
+                        ? "bg-muted/60 text-muted-foreground/50"
+                        : ctxExcluded
+                          ? "bg-muted/40 text-muted-foreground/40 line-through cursor-pointer"
+                          : "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 cursor-pointer hover:opacity-80"
+                    }`}
+                  >
+                    <Pin className="w-2.5 h-2.5" />
+                    Context {hasContext ? `(${pinnedDocs.length})` : "(none)"}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[10px]">
+                  {!hasContext ? "No context pinned" : ctxExcluded ? "Click to include in this paint call" : "Click to exclude from this paint call"}
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
