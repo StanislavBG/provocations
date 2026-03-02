@@ -354,6 +354,9 @@ function InterviewView({
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Persistent Audio element for mobile — created once on first user gesture
+  // so that subsequent .play() calls from async callbacks are permitted.
+  const mobileAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const objectiveRef = useRef<HTMLTextAreaElement>(null);
@@ -384,14 +387,37 @@ function InterviewView({
     };
   }, []);
 
-  /** Speak text via /api/tts */
+  /**
+   * Unlock audio on mobile — must be called from a direct user gesture
+   * (click handler). Creates a persistent Audio element and plays a tiny
+   * silent buffer so the browser marks it as user-activated. All subsequent
+   * .play() calls on this element succeed even from async callbacks.
+   */
+  const unlockMobileAudio = useCallback(() => {
+    if (mobileAudioRef.current) return; // already unlocked
+    const audio = new Audio();
+    audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+    audio.volume = 0;
+    audio.play().then(() => {
+      audio.pause();
+      audio.volume = 1;
+      mobileAudioRef.current = audio;
+    }).catch(() => {
+      // If even this fails, we'll fall back to creating new Audio elements
+    });
+  }, []);
+
+  /** Speak text via /api/tts — plays the question aloud */
   const speakQuestion = useCallback(async (text: string) => {
     if (!ttsEnabled || !text.trim()) return;
     try {
       setIsSpeaking(true);
       const res = await apiRequest("POST", "/api/tts", { text, voice: "nova" });
       const data = (await res.json()) as { audio: string; mimeType: string };
-      if (!data.audio) return;
+      if (!data.audio) {
+        setIsSpeaking(false);
+        return;
+      }
       const byteChars = atob(data.audio);
       const byteArray = new Uint8Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) {
@@ -399,12 +425,22 @@ function InterviewView({
       }
       const blob = new Blob([byteArray], { type: data.mimeType || "audio/mp3" });
       const url = URL.createObjectURL(blob);
-      if (ttsAudioRef.current) {
+
+      // Prefer the mobile-unlocked Audio element so playback works on mobile.
+      const audio = mobileAudioRef.current ?? new Audio();
+
+      // Stop previous TTS playback
+      if (ttsAudioRef.current && ttsAudioRef.current !== audio) {
         ttsAudioRef.current.pause();
         const oldSrc = ttsAudioRef.current.src;
         if (oldSrc.startsWith("blob:")) URL.revokeObjectURL(oldSrc);
       }
-      const audio = new Audio(url);
+
+      // Revoke previous blob URL if the same element is being reused
+      const prevSrc = audio.src;
+      if (prevSrc && prevSrc.startsWith("blob:")) URL.revokeObjectURL(prevSrc);
+
+      audio.src = url;
       ttsAudioRef.current = audio;
       audio.onended = () => setIsSpeaking(false);
       audio.onerror = () => setIsSpeaking(false);
@@ -469,10 +505,12 @@ function InterviewView({
       toast({ title: "Objective required", description: "What are you trying to capture?", variant: "destructive" });
       return;
     }
+    // Unlock audio on mobile — must happen inside a user gesture handler
+    if (ttsEnabled) unlockMobileAudio();
     setIsActive(true);
     questionMutation.mutate();
     trackEvent("interview_started");
-  }, [objective, questionMutation, toast]);
+  }, [objective, questionMutation, toast, ttsEnabled, unlockMobileAudio]);
 
   // ── Stop interview ──
   const handleStop = useCallback(() => {
@@ -527,6 +565,11 @@ function InterviewView({
     },
     [handleAnswer],
   );
+
+  // Show live transcript in the textarea while the user is speaking
+  const handleInterimTranscript = useCallback((text: string) => {
+    setAnswerText(text);
+  }, []);
 
   // Watch answerText mid-stream for "Provo End Message" keyword
   const endKeywordRef = useRef(false);
@@ -662,7 +705,12 @@ function InterviewView({
 
             {/* Voice Conversation toggle */}
             <button
-              onClick={() => setTtsEnabled(!ttsEnabled)}
+              onClick={() => {
+                const next = !ttsEnabled;
+                setTtsEnabled(next);
+                // Unlock audio on mobile when enabling TTS (user gesture required)
+                if (next) unlockMobileAudio();
+              }}
               className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
                 ttsEnabled
                   ? "border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-400"
@@ -701,6 +749,7 @@ function InterviewView({
             onClick={() => {
               const next = !ttsEnabled;
               setTtsEnabled(next);
+              if (next) unlockMobileAudio();
               if (!next && ttsAudioRef.current) {
                 ttsAudioRef.current.pause();
                 setIsSpeaking(false);
@@ -840,6 +889,7 @@ function InterviewView({
             {/* Voice button — large and prominent */}
             <VoiceRecorder
               onTranscript={handleVoiceAnswer}
+              onInterimTranscript={handleInterimTranscript}
               onRecordingChange={setIsRecordingAnswer}
               size="default"
               variant={isRecordingAnswer ? "destructive" : "outline"}
