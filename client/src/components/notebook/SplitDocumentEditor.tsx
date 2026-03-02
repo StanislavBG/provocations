@@ -69,7 +69,7 @@ interface SplitDocumentEditorProps {
   /** Notifies parent when the active tab type changes (chart vs document) */
   onChartActiveChange?: (isActive: boolean) => void;
   /** Save the current document + objective to the Context Store */
-  onSaveToContext?: () => void;
+  onSaveToContext?: (tabTitle?: string) => void;
   /** Save an image to the Context Store */
   onSaveImageToContext?: (imageUrl: string, prompt: string) => void;
   isSaving?: boolean;
@@ -81,6 +81,8 @@ interface SplitDocumentEditorProps {
   onImageActiveChange?: (isActive: boolean, tabId: string | null) => void;
   /** Save timeline JSON to the Context Store */
   onSaveTimelineToContext?: (json: string, label: string) => void;
+  /** When set, updates the active document tab title (used when loading from Context Store) */
+  activeDocumentTitle?: string | null;
 }
 
 /** Imperative handle for parent to add image tabs */
@@ -106,6 +108,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   onAddImageTab,
   onImageActiveChange,
   onSaveTimelineToContext,
+  activeDocumentTitle,
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
@@ -144,6 +147,16 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
       tabEditRef.current?.select();
     }
   }, [editingTabId]);
+
+  // Sync active document tab title when a document is loaded from the Context Store
+  useEffect(() => {
+    if (!activeDocumentTitle) return;
+    setTabs((prev) => {
+      const active = prev.find((t) => t.id === activeTabId);
+      if (!active || active.type !== "document" || active.title === activeDocumentTitle) return prev;
+      return prev.map((t) => (t.id === activeTabId ? { ...t, title: activeDocumentTitle } : t));
+    });
+  }, [activeDocumentTitle, activeTabId]);
 
   const handleSwitchTab = useCallback(
     (tabId: string) => {
@@ -304,7 +317,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
               variant="ghost"
               size="icon"
               className="h-6 w-6"
-              onClick={onSaveToContext}
+              onClick={() => onSaveToContext?.(activeTab?.title)}
               disabled={isSaving || !text.trim()}
               title="Save to Context Store"
             >
