@@ -300,6 +300,40 @@ export async function ensureTables(): Promise<void> {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_preferences_user ON chat_preferences(user_id);
 
+      -- Shared items — document/folder shares between connected users
+      CREATE TABLE IF NOT EXISTS shared_items (
+        id SERIAL PRIMARY KEY,
+        owner_id VARCHAR(128) NOT NULL,
+        recipient_id VARCHAR(128) NOT NULL,
+        item_type VARCHAR(16) NOT NULL,
+        item_id INTEGER NOT NULL,
+        permission VARCHAR(16) DEFAULT 'read' NOT NULL,
+        status VARCHAR(16) DEFAULT 'pending' NOT NULL,
+        note_ciphertext TEXT,
+        note_salt VARCHAR(64),
+        note_iv VARCHAR(32),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_shared_items_owner ON shared_items(owner_id);
+      CREATE INDEX IF NOT EXISTS idx_shared_items_recipient ON shared_items(recipient_id);
+      CREATE INDEX IF NOT EXISTS idx_shared_items_item ON shared_items(item_type, item_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_items_unique ON shared_items(owner_id, recipient_id, item_type, item_id);
+
+      -- Notifications — global mailbox for system events
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        notification_type VARCHAR(32) NOT NULL,
+        from_user_id VARCHAR(128) NOT NULL,
+        metadata TEXT,
+        read_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read_at);
+      CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+
       -- Workspace sessions — saves full workspace state for resume functionality
       CREATE TABLE IF NOT EXISTS workspace_sessions (
         id SERIAL PRIMARY KEY,

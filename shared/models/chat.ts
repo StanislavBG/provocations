@@ -457,3 +457,55 @@ export const chatPreferences = pgTable("chat_preferences", {
 
 export type StoredChatPreferences = typeof chatPreferences.$inferSelect;
 
+// ══════════════════════════════════════════════════════════════════
+// Sharing — Documents & Folders shared between connected users
+// ══════════════════════════════════════════════════════════════════
+
+// Shared items — tracks document/folder shares between connected users.
+// Only accepted connections can share. Recipient must accept before access is granted.
+export const sharedItems = pgTable("shared_items", {
+  id: serial("id").primaryKey(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),         // Clerk userId who owns the item
+  recipientId: varchar("recipient_id", { length: 128 }).notNull(),  // Clerk userId who receives access
+  itemType: varchar("item_type", { length: 16 }).notNull(),         // "document" | "folder"
+  itemId: integer("item_id").notNull(),                              // documents.id or folders.id
+  permission: varchar("permission", { length: 16 }).default("read").notNull(), // "read" | "write"
+  status: varchar("status", { length: 16 }).default("pending").notNull(),      // "pending" | "accepted" | "declined" | "revoked"
+  // Optional encrypted note from sharer
+  noteCiphertext: text("note_ciphertext"),
+  noteSalt: varchar("note_salt", { length: 64 }),
+  noteIv: varchar("note_iv", { length: 32 }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_shared_items_owner").on(table.ownerId),
+  index("idx_shared_items_recipient").on(table.recipientId),
+  index("idx_shared_items_item").on(table.itemType, table.itemId),
+  uniqueIndex("idx_shared_items_unique").on(table.ownerId, table.recipientId, table.itemType, table.itemId),
+]);
+
+export type StoredSharedItem = typeof sharedItems.$inferSelect;
+
+// ══════════════════════════════════════════════════════════════════
+// Notifications — Global mailbox for system events
+// ══════════════════════════════════════════════════════════════════
+
+// Notifications — aggregates system events into a user's mailbox.
+// Types: connection requests, share invitations, acceptances, etc.
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),            // Clerk userId who receives this notification
+  notificationType: varchar("notification_type", { length: 32 }).notNull(), // see notificationTypes const
+  fromUserId: varchar("from_user_id", { length: 128 }).notNull(),   // Clerk userId who triggered it
+  // Non-sensitive metadata (IDs and types only, no user content)
+  metadata: text("metadata"),                                         // JSON: { itemType?, itemId?, connectionId?, etc. }
+  readAt: timestamp("read_at"),                                       // null if unread
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_notifications_user").on(table.userId),
+  index("idx_notifications_user_unread").on(table.userId, table.readAt),
+  index("idx_notifications_created").on(table.createdAt),
+]);
+
+export type StoredNotification = typeof notifications.$inferSelect;
+

@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -1526,6 +1526,174 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+  // ══════════════════════════════════════════════════════════════════
+  // Sharing — Shared Items
+  // ══════════════════════════════════════════════════════════════════
+
+  async createSharedItem(data: {
+    ownerId: string;
+    recipientId: string;
+    itemType: string;
+    itemId: number;
+    permission?: string;
+    noteCiphertext?: string;
+    noteSalt?: string;
+    noteIv?: string;
+  }): Promise<StoredSharedItem> {
+    const [row] = await db
+      .insert(sharedItems)
+      .values({
+        ownerId: data.ownerId,
+        recipientId: data.recipientId,
+        itemType: data.itemType,
+        itemId: data.itemId,
+        permission: data.permission ?? "read",
+        status: "pending",
+        noteCiphertext: data.noteCiphertext ?? null,
+        noteSalt: data.noteSalt ?? null,
+        noteIv: data.noteIv ?? null,
+      })
+      .returning();
+    return row;
+  }
+
+  async getSharedItem(id: number): Promise<StoredSharedItem | null> {
+    const [row] = await db.select().from(sharedItems).where(eq(sharedItems.id, id));
+    return row ?? null;
+  }
+
+  /** Items shared WITH the current user (incoming shares) */
+  async listSharedWithMe(userId: string): Promise<StoredSharedItem[]> {
+    return db
+      .select()
+      .from(sharedItems)
+      .where(
+        and(
+          eq(sharedItems.recipientId, userId),
+          sql`${sharedItems.status} != 'revoked'`,
+        ),
+      )
+      .orderBy(desc(sharedItems.updatedAt));
+  }
+
+  /** Items shared BY the current user (outgoing shares) */
+  async listSharedByMe(userId: string): Promise<StoredSharedItem[]> {
+    return db
+      .select()
+      .from(sharedItems)
+      .where(eq(sharedItems.ownerId, userId))
+      .orderBy(desc(sharedItems.updatedAt));
+  }
+
+  /** Find existing share between owner and recipient for a specific item */
+  async findExistingShare(ownerId: string, recipientId: string, itemType: string, itemId: number): Promise<StoredSharedItem | null> {
+    const [row] = await db
+      .select()
+      .from(sharedItems)
+      .where(
+        and(
+          eq(sharedItems.ownerId, ownerId),
+          eq(sharedItems.recipientId, recipientId),
+          eq(sharedItems.itemType, itemType),
+          eq(sharedItems.itemId, itemId),
+        ),
+      );
+    return row ?? null;
+  }
+
+  async updateSharedItemStatus(id: number, status: string): Promise<StoredSharedItem | null> {
+    const [row] = await db
+      .update(sharedItems)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(sharedItems.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteSharedItem(id: number): Promise<void> {
+    await db.delete(sharedItems).where(eq(sharedItems.id, id));
+  }
+
+  /** Check if a user has accepted access to a specific item */
+  async hasAccess(userId: string, itemType: string, itemId: number): Promise<StoredSharedItem | null> {
+    const [row] = await db
+      .select()
+      .from(sharedItems)
+      .where(
+        and(
+          eq(sharedItems.recipientId, userId),
+          eq(sharedItems.itemType, itemType),
+          eq(sharedItems.itemId, itemId),
+          eq(sharedItems.status, "accepted"),
+        ),
+      );
+    return row ?? null;
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Notifications — Global Mailbox
+  // ══════════════════════════════════════════════════════════════════
+
+  async createNotification(data: {
+    userId: string;
+    notificationType: string;
+    fromUserId: string;
+    metadata?: string;   // JSON string
+  }): Promise<StoredNotification> {
+    const [row] = await db
+      .insert(notifications)
+      .values({
+        userId: data.userId,
+        notificationType: data.notificationType,
+        fromUserId: data.fromUserId,
+        metadata: data.metadata ?? null,
+      })
+      .returning();
+    return row;
+  }
+
+  /** List notifications for a user, most recent first */
+  async listNotifications(userId: string, limit = 50): Promise<StoredNotification[]> {
+    return db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+  }
+
+  /** Count unread notifications */
+  async countUnreadNotifications(userId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          isNull(notifications.readAt),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  async markNotificationRead(id: number): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(eq(notifications.id, id));
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          isNull(notifications.readAt),
+        ),
+      );
   }
 }
 

@@ -37,5 +37,7 @@ export default defineConfig({
     "conversations",
     "messages",
     "chat_preferences",
+    "shared_items",
+    "notifications",
   ],
 });

@@ -53,6 +53,11 @@ import {
   type YouTubeChannelResponse,
   type GenerateSummaryResponse,
   type InfographicSpec,
+  shareItemRequestSchema,
+  respondShareRequestSchema,
+  type SharedItemDisplay,
+  type NotificationItem,
+  type NotificationType,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
 import { personaSchema } from "@shared/schema";
@@ -5583,6 +5588,15 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       }
 
       const connection = await storage.createConnection(userId, target.id);
+
+      // Create notification for the recipient
+      await storage.createNotification({
+        userId: target.id,
+        notificationType: "connection_request",
+        fromUserId: userId,
+        metadata: JSON.stringify({ connectionId: connection.id }),
+      });
+
       res.status(201).json(connection);
     } catch (error) {
       console.error("Invite connection error:", error);
@@ -5669,6 +5683,14 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
         if (!existing) {
           await storage.createConversation(connectionId, conn.requesterId, conn.responderId);
         }
+
+        // Notify the original requester that their invitation was accepted
+        await storage.createNotification({
+          userId: conn.requesterId,
+          notificationType: "connection_accepted",
+          fromUserId: userId,
+          metadata: JSON.stringify({ connectionId }),
+        });
       }
 
       res.json(updated);
@@ -5965,6 +5987,489 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       res.status(500).json({ error: "Failed to set chat preferences" });
     }
   });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Sharing — Document & Folder sharing between connected users
+  // ══════════════════════════════════════════════════════════════════
+
+  /** Share a document or folder with a connected user */
+  app.post("/api/share", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = shareItemRequestSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const { recipientId, itemType, itemId, permission, note } = parsed.data;
+
+      // Can't share with yourself
+      if (recipientId === userId) {
+        return res.status(400).json({ error: "Cannot share with yourself" });
+      }
+
+      // Verify connection exists and is accepted
+      const conn = await storage.findConnectionBetween(userId, recipientId);
+      if (!conn || conn.status !== "accepted") {
+        return res.status(403).json({ error: "You must be connected to share items" });
+      }
+
+      // Verify ownership of the item
+      if (itemType === "document") {
+        const doc = await storage.getDocument(itemId);
+        if (!doc || doc.userId !== userId) {
+          return res.status(404).json({ error: "Document not found or you don't own it" });
+        }
+      } else if (itemType === "folder") {
+        const folder = await storage.getFolder(itemId);
+        if (!folder || folder.userId !== userId) {
+          return res.status(404).json({ error: "Folder not found or you don't own it" });
+        }
+      }
+
+      // Check for existing share
+      const existing = await storage.findExistingShare(userId, recipientId, itemType, itemId);
+      if (existing && existing.status !== "revoked" && existing.status !== "declined") {
+        return res.status(409).json({ error: "Item already shared with this user" });
+      }
+
+      // Encrypt optional note
+      let noteCiphertext: string | undefined;
+      let noteSalt: string | undefined;
+      let noteIv: string | undefined;
+      if (note) {
+        const enc = encrypt(note, getEncryptionKey());
+        noteCiphertext = enc.ciphertext;
+        noteSalt = enc.salt;
+        noteIv = enc.iv;
+      }
+
+      // If there was a previously revoked/declined share, delete it and create fresh
+      if (existing) {
+        await storage.deleteSharedItem(existing.id);
+      }
+
+      const shared = await storage.createSharedItem({
+        ownerId: userId,
+        recipientId,
+        itemType,
+        itemId,
+        permission,
+        noteCiphertext,
+        noteSalt,
+        noteIv,
+      });
+
+      // Create notification for recipient
+      await storage.createNotification({
+        userId: recipientId,
+        notificationType: "item_shared",
+        fromUserId: userId,
+        metadata: JSON.stringify({ shareId: shared.id, itemType, itemId }),
+      });
+
+      res.status(201).json(shared);
+    } catch (error) {
+      console.error("Share item error:", error);
+      res.status(500).json({ error: "Failed to share item" });
+    }
+  });
+
+  /** Respond to a share invitation (accept/decline) */
+  app.post("/api/share/respond", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const parsed = respondShareRequestSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const { shareId, action } = parsed.data;
+      const share = await storage.getSharedItem(shareId);
+      if (!share || share.recipientId !== userId) {
+        return res.status(404).json({ error: "Share not found" });
+      }
+      if (share.status !== "pending") {
+        return res.status(400).json({ error: "Share already responded to" });
+      }
+
+      const newStatus = action === "accept" ? "accepted" : "declined";
+      const updated = await storage.updateSharedItemStatus(shareId, newStatus);
+
+      // Notify owner of acceptance
+      if (action === "accept") {
+        await storage.createNotification({
+          userId: share.ownerId,
+          notificationType: "share_accepted",
+          fromUserId: userId,
+          metadata: JSON.stringify({ shareId, itemType: share.itemType, itemId: share.itemId }),
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Respond to share error:", error);
+      res.status(500).json({ error: "Failed to respond to share" });
+    }
+  });
+
+  /** Revoke a share (owner only) */
+  app.delete("/api/share/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id);
+      const share = await storage.getSharedItem(id);
+      if (!share || share.ownerId !== userId) {
+        return res.status(404).json({ error: "Share not found" });
+      }
+
+      await storage.updateSharedItemStatus(id, "revoked");
+      res.json({ revoked: true });
+    } catch (error) {
+      console.error("Revoke share error:", error);
+      res.status(500).json({ error: "Failed to revoke share" });
+    }
+  });
+
+  /** List items shared with me */
+  app.get("/api/shared-with-me", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const shares = await storage.listSharedWithMe(userId);
+
+      // Enrich with display info
+      const items: SharedItemDisplay[] = [];
+      for (const share of shares) {
+        let itemTitle: string | undefined;
+
+        // Decrypt item title for display
+        if (share.itemType === "document") {
+          const doc = await storage.getDocument(share.itemId);
+          if (doc) {
+            if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+              try { itemTitle = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, getEncryptionKey()); } catch { itemTitle = doc.title; }
+            } else {
+              itemTitle = doc.title;
+            }
+          }
+        } else if (share.itemType === "folder") {
+          const folder = await storage.getFolder(share.itemId);
+          if (folder) {
+            if (folder.nameCiphertext && folder.nameSalt && folder.nameIv) {
+              try { itemTitle = decrypt({ ciphertext: folder.nameCiphertext, salt: folder.nameSalt, iv: folder.nameIv }, getEncryptionKey()); } catch { itemTitle = folder.name; }
+            } else {
+              itemTitle = folder.name;
+            }
+          }
+        }
+
+        // Decrypt optional note
+        let note: string | undefined;
+        if (share.noteCiphertext && share.noteSalt && share.noteIv) {
+          try { note = decrypt({ ciphertext: share.noteCiphertext, salt: share.noteSalt, iv: share.noteIv }, getEncryptionKey()); } catch { /* ignore */ }
+        }
+
+        // Fetch owner info from Clerk
+        let ownerName: string | undefined;
+        let ownerEmail: string | undefined;
+        let ownerAvatar: string | null = null;
+        try {
+          const clerk = clerkClient as any;
+          const getUsers = clerk.users?.getUser || clerk.getUser;
+          if (getUsers) {
+            const ownerUser = await getUsers(share.ownerId);
+            ownerName = ownerUser?.firstName
+              ? `${ownerUser.firstName} ${ownerUser.lastName ?? ""}`.trim()
+              : ownerUser?.emailAddresses?.[0]?.emailAddress;
+            ownerEmail = ownerUser?.emailAddresses?.[0]?.emailAddress;
+            ownerAvatar = ownerUser?.imageUrl ?? null;
+          }
+        } catch { /* ignore */ }
+
+        items.push({
+          id: share.id,
+          ownerId: share.ownerId,
+          recipientId: share.recipientId,
+          itemType: share.itemType as any,
+          itemId: share.itemId,
+          permission: share.permission as any,
+          status: share.status as any,
+          note,
+          itemTitle,
+          ownerName,
+          ownerEmail,
+          ownerAvatar,
+          createdAt: new Date(share.createdAt).toISOString(),
+        });
+      }
+
+      res.json(items);
+    } catch (error) {
+      console.error("List shared-with-me error:", error);
+      res.status(500).json({ error: "Failed to list shared items" });
+    }
+  });
+
+  /** List items I've shared with others */
+  app.get("/api/shared-by-me", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const shares = await storage.listSharedByMe(userId);
+
+      const items: SharedItemDisplay[] = [];
+      for (const share of shares) {
+        let itemTitle: string | undefined;
+
+        if (share.itemType === "document") {
+          const doc = await storage.getDocument(share.itemId);
+          if (doc) {
+            if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+              try { itemTitle = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, getEncryptionKey()); } catch { itemTitle = doc.title; }
+            } else {
+              itemTitle = doc.title;
+            }
+          }
+        } else if (share.itemType === "folder") {
+          const folder = await storage.getFolder(share.itemId);
+          if (folder) {
+            if (folder.nameCiphertext && folder.nameSalt && folder.nameIv) {
+              try { itemTitle = decrypt({ ciphertext: folder.nameCiphertext, salt: folder.nameSalt, iv: folder.nameIv }, getEncryptionKey()); } catch { itemTitle = folder.name; }
+            } else {
+              itemTitle = folder.name;
+            }
+          }
+        }
+
+        // Fetch recipient info
+        let recipientName: string | undefined;
+        let recipientEmail: string | undefined;
+        let recipientAvatar: string | null = null;
+        try {
+          const clerk = clerkClient as any;
+          const getUsers = clerk.users?.getUser || clerk.getUser;
+          if (getUsers) {
+            const recipientUser = await getUsers(share.recipientId);
+            recipientName = recipientUser?.firstName
+              ? `${recipientUser.firstName} ${recipientUser.lastName ?? ""}`.trim()
+              : recipientUser?.emailAddresses?.[0]?.emailAddress;
+            recipientEmail = recipientUser?.emailAddresses?.[0]?.emailAddress;
+            recipientAvatar = recipientUser?.imageUrl ?? null;
+          }
+        } catch { /* ignore */ }
+
+        items.push({
+          id: share.id,
+          ownerId: share.ownerId,
+          recipientId: share.recipientId,
+          itemType: share.itemType as any,
+          itemId: share.itemId,
+          permission: share.permission as any,
+          status: share.status as any,
+          itemTitle,
+          recipientName,
+          recipientEmail,
+          recipientAvatar,
+          createdAt: new Date(share.createdAt).toISOString(),
+        });
+      }
+
+      res.json(items);
+    } catch (error) {
+      console.error("List shared-by-me error:", error);
+      res.status(500).json({ error: "Failed to list shared items" });
+    }
+  });
+
+  /** Read a shared document (recipient must have accepted access) */
+  app.get("/api/shared/document/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const docId = parseInt(req.params.id);
+      const access = await storage.hasAccess(userId, "document", docId);
+      if (!access) {
+        return res.status(403).json({ error: "No access to this document" });
+      }
+
+      const doc = await storage.getDocument(docId);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+
+      // Decrypt for the recipient
+      const key = getEncryptionKey();
+      let title = doc.title;
+      if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+        try { title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* use legacy */ }
+      }
+      let content = "";
+      try { content = decrypt({ ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv }, key); } catch { /* empty */ }
+
+      res.json({
+        id: doc.id,
+        title,
+        content,
+        permission: access.permission,
+        ownerId: doc.userId,
+        createdAt: String(doc.createdAt),
+        updatedAt: String(doc.updatedAt),
+      });
+    } catch (error) {
+      console.error("Read shared document error:", error);
+      res.status(500).json({ error: "Failed to read shared document" });
+    }
+  });
+
+  /** List documents in a shared folder */
+  app.get("/api/shared/folder/:id/documents", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const folderId = parseInt(req.params.id);
+      const access = await storage.hasAccess(userId, "folder", folderId);
+      if (!access) {
+        return res.status(403).json({ error: "No access to this folder" });
+      }
+
+      const folder = await storage.getFolder(folderId);
+      if (!folder) return res.status(404).json({ error: "Folder not found" });
+
+      // List docs owned by folder owner in this folder
+      const allDocs = await storage.listDocuments(folder.userId);
+      const folderDocs = allDocs.filter(d => d.folderId === folderId);
+
+      // Decrypt titles for display
+      const key = getEncryptionKey();
+      const items = folderDocs.map(doc => {
+        let title = doc.title;
+        if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+          try { title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* use legacy */ }
+        }
+        return {
+          id: doc.id,
+          title,
+          createdAt: String(doc.createdAt),
+          updatedAt: String(doc.updatedAt),
+        };
+      });
+
+      res.json(items);
+    } catch (error) {
+      console.error("List shared folder docs error:", error);
+      res.status(500).json({ error: "Failed to list shared folder documents" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Notifications — Global Mailbox
+  // ══════════════════════════════════════════════════════════════════
+
+  /** Get notifications (mailbox) for current user */
+  app.get("/api/mailbox", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const rows = await storage.listNotifications(userId, limit);
+
+      // Enrich with sender info
+      const items: NotificationItem[] = [];
+      for (const row of rows) {
+        let fromUserName: string | undefined;
+        let fromUserEmail: string | undefined;
+        let fromUserAvatar: string | null = null;
+        try {
+          const clerk = clerkClient as any;
+          const getUsers = clerk.users?.getUser || clerk.getUser;
+          if (getUsers) {
+            const fromUser = await getUsers(row.fromUserId);
+            fromUserName = fromUser?.firstName
+              ? `${fromUser.firstName} ${fromUser.lastName ?? ""}`.trim()
+              : fromUser?.emailAddresses?.[0]?.emailAddress;
+            fromUserEmail = fromUser?.emailAddresses?.[0]?.emailAddress;
+            fromUserAvatar = fromUser?.imageUrl ?? null;
+          }
+        } catch { /* ignore */ }
+
+        let metadata: Record<string, any> | undefined;
+        if (row.metadata) {
+          try { metadata = JSON.parse(row.metadata); } catch { /* ignore */ }
+        }
+
+        items.push({
+          id: row.id,
+          userId: row.userId,
+          notificationType: row.notificationType as NotificationType,
+          fromUserId: row.fromUserId,
+          fromUserName,
+          fromUserEmail,
+          fromUserAvatar,
+          metadata,
+          readAt: row.readAt ? new Date(row.readAt).toISOString() : null,
+          createdAt: new Date(row.createdAt).toISOString(),
+        });
+      }
+
+      res.json(items);
+    } catch (error) {
+      console.error("Get mailbox error:", error);
+      res.status(500).json({ error: "Failed to get notifications" });
+    }
+  });
+
+  /** Get unread notification count */
+  app.get("/api/mailbox/unread-count", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const count = await storage.countUnreadNotifications(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Get unread count error:", error);
+      res.status(500).json({ error: "Failed to get unread count" });
+    }
+  });
+
+  /** Mark a single notification as read */
+  app.post("/api/mailbox/:id/read", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id);
+      await storage.markNotificationRead(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark notification read error:", error);
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  /** Mark all notifications as read */
+  app.post("/api/mailbox/read-all", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      await storage.markAllNotificationsRead(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark all notifications read error:", error);
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Also: inject notifications when connection requests are created/accepted
+  // (Existing connection invite endpoint already exists — we add notification creation
+  //  by modifying the connection invite and respond endpoints above to also create notifications.)
 
   // ── Timeline: Transform notes into structured timeline events ──
   app.post("/api/timeline/transform", async (req, res) => {

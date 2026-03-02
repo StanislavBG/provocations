@@ -37,8 +37,11 @@ import {
   Zap,
   BookmarkPlus,
   FileOutput,
+  Share2,
+  Users,
 } from "lucide-react";
-import type { DocumentListItem, FolderItem } from "@shared/schema";
+import type { DocumentListItem, FolderItem, SharedItemDisplay } from "@shared/schema";
+import { ShareDialog } from "@/components/ShareDialog";
 
 interface ContextSidebarProps {
   pinnedDocIds: Set<number>;
@@ -160,6 +163,13 @@ export function ContextSidebar({
   const [dragOverFolderId, setDragOverFolderId] = useState<number | "root" | null>(null);
   const dragExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Share dialog state
+  const [shareTarget, setShareTarget] = useState<{
+    itemType: "document" | "folder";
+    itemId: number;
+    itemTitle: string;
+  } | null>(null);
+
   // ── Data queries ──
   const { data: docsData } = useQuery<{ documents: DocumentListItem[] }>({
     queryKey: ["/api/documents"],
@@ -182,6 +192,13 @@ export function ContextSidebar({
 
   const docs = docsData?.documents ?? [];
   const folders = foldersData ?? [];
+
+  // Shared with me
+  const { data: sharedWithMe = [] } = useQuery<SharedItemDisplay[]>({
+    queryKey: ["/api/shared-with-me"],
+    staleTime: 30_000,
+  });
+  const acceptedShares = sharedWithMe.filter(s => s.status === "accepted");
 
   // ── CRUD mutations ──
   const uploadMutation = useMutation({
@@ -599,6 +616,22 @@ export function ContextSidebar({
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="h-5 w-5 text-muted-foreground/50 hover:text-blue-500"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShareTarget({ itemType: "document", itemId: doc.id, itemTitle: doc.title });
+                    }}
+                  >
+                    <Share2 className="w-2.5 h-2.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Share</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-5 w-5 text-muted-foreground/50 hover:text-destructive"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -757,6 +790,22 @@ export function ContextSidebar({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="right">Rename</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 text-muted-foreground/50 hover:text-blue-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShareTarget({ itemType: "folder", itemId: folder.id, itemTitle: folder.name });
+                      }}
+                    >
+                      <Share2 className="w-2.5 h-2.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Share</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1063,6 +1112,51 @@ export function ContextSidebar({
           {/* Spacer to keep root drop zone accessible at bottom */}
           <div className="min-h-[40px]" />
         </div>
+
+        {/* ═══ SHARED WITH ME ═══ */}
+        {acceptedShares.length > 0 && (
+          <div className="border-t overflow-hidden">
+            <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
+              <Users className="w-3 h-3 text-blue-500" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                Shared With Me
+              </span>
+              <Badge className="text-[9px] h-4 px-1.5 bg-blue-600 ml-auto">
+                {acceptedShares.length}
+              </Badge>
+            </div>
+            <div className="px-2 pb-2 space-y-0.5">
+              {acceptedShares.map((share) => (
+                <div
+                  key={`shared-${share.id}`}
+                  className="flex items-center gap-1.5 py-1.5 px-2 rounded-md bg-blue-500/5 border border-blue-500/10 hover:bg-blue-500/10 cursor-pointer group min-w-0"
+                  onClick={() => {
+                    if (share.itemType === "document" && onPreviewDoc) {
+                      onPreviewDoc(share.itemId, share.itemTitle || "Shared document");
+                    }
+                  }}
+                >
+                  {share.itemType === "folder" ? (
+                    <FolderOpen className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs truncate block font-medium text-blue-700 dark:text-blue-400">
+                      {share.itemTitle || "Untitled"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground truncate block">
+                      from {share.ownerName || share.ownerEmail || "Unknown"}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[8px] h-3.5 px-1 shrink-0 border-blue-300 text-blue-500">
+                    {share.permission}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </ScrollArea>
 
       {/* ─── Delete confirmation dialog ─── */}
@@ -1111,6 +1205,17 @@ export function ContextSidebar({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ─── Share dialog ─── */}
+      {shareTarget && (
+        <ShareDialog
+          open={true}
+          onOpenChange={(open) => { if (!open) setShareTarget(null); }}
+          itemType={shareTarget.itemType}
+          itemId={shareTarget.itemId}
+          itemTitle={shareTarget.itemTitle}
+        />
+      )}
     </div>
   );
 }
