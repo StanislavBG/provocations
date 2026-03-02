@@ -118,7 +118,7 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   const [activeTabId, setActiveTabId] = useState("main");
   const tabSnapshotRef = useRef<Map<string, TabSnapshot>>(new Map());
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  const isChartActive = activeTab?.type === "chart" || activeTab?.type === "timeline";
+  const isChartActive = activeTab?.type === "chart";
   const isImageActive = activeTab?.type === "image";
   const isDocumentActive = activeTab?.type === "document";
   const isTimelineActive = activeTab?.type === "timeline";
