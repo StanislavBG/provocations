@@ -39,9 +39,29 @@ import {
   FileOutput,
   Share2,
   Users,
+  Image,
+  Clock,
+  BarChart3,
+  StickyNote,
 } from "lucide-react";
 import type { DocumentListItem, FolderItem, SharedItemDisplay } from "@shared/schema";
 import { ShareDialog } from "@/components/ShareDialog";
+
+/** Returns the appropriate icon and color for a document type */
+function docTypeIcon(docType?: string | null) {
+  switch (docType) {
+    case "image":
+      return { Icon: Image, color: "text-violet-500/70" };
+    case "timeline":
+      return { Icon: Clock, color: "text-amber-500/70" };
+    case "chart":
+      return { Icon: BarChart3, color: "text-blue-500/70" };
+    case "note":
+      return { Icon: StickyNote, color: "text-emerald-500/70" };
+    default:
+      return { Icon: FileText, color: "text-muted-foreground/50" };
+  }
+}
 
 interface ContextSidebarProps {
   pinnedDocIds: Set<number>;
@@ -521,9 +541,10 @@ export function ContextSidebar({
             >
               {isPinned ? (
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
-              ) : (
-                <FileText className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
-              )}
+              ) : (() => {
+                const { Icon, color } = docTypeIcon(doc.docType);
+                return <Icon className={`w-3.5 h-3.5 ${color} shrink-0`} />;
+              })()}
               <span
                 className={`text-xs truncate ${
                   isPinned ? "font-medium text-green-700 dark:text-green-400" : ""

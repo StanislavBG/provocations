@@ -63,7 +63,7 @@ export function TranscriptPanel({
     setSavingNoteId(item.id);
     try {
       const title = `Note: ${item.content.trim().slice(0, 80).replace(/\n/g, " ")}`;
-      await apiRequest("POST", "/api/documents", { title, content: item.content.trim() });
+      await apiRequest("POST", "/api/documents", { title, content: item.content.trim(), docType: "note" });
       setSavedNoteIds(prev => new Set(prev).add(item.id));
       trackEvent("note_saved_to_context");
       toast({ title: "Saved to Context Store", description: title });

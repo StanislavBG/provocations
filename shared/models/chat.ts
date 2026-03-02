@@ -68,6 +68,9 @@ export const documents = pgTable("documents", {
   folderId: integer("folder_id"),
   // Optional key version for encryption key rotation
   keyVersionId: integer("key_version_id"),
+  // Document type for icon display: 'document' | 'image' | 'timeline' | 'chart' | 'note'.
+  // Null treated as 'document' (default for legacy rows).
+  docType: varchar("doc_type", { length: 32 }),
   // When true, document cannot be renamed, moved, or deleted (system-managed structure).
   // Content updates are still allowed so admins can edit details.
   locked: boolean("locked").default(false).notNull(),
