@@ -428,6 +428,19 @@ export default function NotebookWorkspace() {
     }
   }, [toast]);
 
+  // ── Writer voice/text feedback — sends user feedback through the write mutation ──
+  const handleWriterFeedback = useCallback(
+    (instruction: string, selectedText?: string, description?: string) => {
+      writeMutation.mutate({
+        instruction: selectedText
+          ? `WRITER FEEDBACK ON SELECTION:\nThe author has highlighted the following text and provided feedback to remix it:\n\nSELECTED TEXT: "${selectedText}"\n\nAUTHOR FEEDBACK: ${instruction}\n\nApply the author's feedback to improve the selected area while keeping the rest of the document intact.`
+          : `WRITER FEEDBACK:\nThe author has provided the following feedback to be remixed into the document:\n\n${instruction}\n\nInterpret the author's intent and intelligently weave this feedback into the document. This is not a literal transcription to append — it is editorial direction from the author.`,
+        description: description || "Writer feedback",
+      });
+    },
+    [writeMutation],
+  );
+
   // ── Evolve document via writer (multi-config) ──
   const handleEvolve = useCallback(
     (configurations: WriterConfig[]) => {
@@ -744,6 +757,7 @@ export default function NotebookWorkspace() {
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
                   onSaveTimelineToContext={(json, label) => handleCaptureToContext(json, label)}
+                  onWriterFeedback={handleWriterFeedback}
                 />
               )}
             </ResizablePanel>

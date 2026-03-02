@@ -2499,12 +2499,28 @@ Output only valid JSON, no markdown.`;
         console.log(`[Write API] Cleaned voice transcript: "${rawInstruction.slice(0, 50)}..." → "${instruction.slice(0, 50)}..."`);
       }
 
+      // Detect writer feedback mode (voice/text feedback from the author to remix)
+      const isWriterFeedback = instruction.startsWith("WRITER FEEDBACK");
+      const isSelectionFeedback = instruction.startsWith("WRITER FEEDBACK ON SELECTION");
+
       // Detect multi-config instructions (from the multi-select writer controls)
       const isMultiConfig = instruction.startsWith("Apply the following document evolution configurations");
 
       // Classify the instruction type
-      const instructionType = isMultiConfig ? "general" as const : classifyInstruction(instruction);
-      const strategy = isMultiConfig
+      const instructionType = isWriterFeedback
+        ? "general" as const
+        : isMultiConfig ? "general" as const : classifyInstruction(instruction);
+      const strategy = isWriterFeedback
+        ? (isSelectionFeedback
+          ? "The author has highlighted a specific section and provided editorial feedback. " +
+            "Interpret their intent — which may be expressed casually or as stream-of-consciousness — " +
+            "and apply the requested changes to the selected area. Keep the rest of the document intact. " +
+            "The feedback is DIRECTION, not literal text to insert."
+          : "The author has provided editorial feedback (possibly via voice) to be intelligently remixed " +
+            "into the document. This is NOT literal text to append — it is creative direction. " +
+            "Interpret the author's intent, identify which parts of the document the feedback applies to, " +
+            "and weave the changes naturally into the existing text. Maintain the document's voice and flow.")
+        : isMultiConfig
         ? "Apply multiple document evolution operations in a single coherent pass. " +
           "Prioritize the user's holistic intent over individual operations. " +
           "Where operations conflict, find the best synthesis — e.g., expand underserved " +
@@ -2524,7 +2540,20 @@ Output only valid JSON, no markdown.`;
       const contextParts: string[] = [];
 
       // Add instruction strategy
-      if (isMultiConfig) {
+      if (isWriterFeedback) {
+        contextParts.push(`INSTRUCTION MODE: Writer Feedback${isSelectionFeedback ? " (Selection-Targeted)" : ""}
+STRATEGY: ${strategy}
+
+WRITER FEEDBACK RULES:
+1. The author's feedback is EDITORIAL DIRECTION — interpret their intent, don't copy it literally.
+2. Voice feedback may contain speech artifacts, filler words, or casual phrasing — look past the surface to understand the underlying request.
+3. ${isSelectionFeedback
+  ? "Focus changes on the selected text area. Preserve everything outside the selection unless the feedback explicitly requires broader changes."
+  : "Identify which parts of the document the feedback applies to and make targeted changes there."}
+4. Maintain the document's existing voice, tone, and structure unless the feedback explicitly asks to change them.
+5. If the feedback is vague (e.g. "make this better" or "I don't like this part"), improve clarity, conciseness, and impact in the relevant area.
+6. The output must be the COMPLETE document with the feedback integrated — not just the changed section.`);
+      } else if (isMultiConfig) {
         contextParts.push(`INSTRUCTION MODE: Multi-configuration evolution
 STRATEGY: ${strategy}
 
@@ -2639,6 +2668,12 @@ The user's response should be integrated thoughtfully - don't just append it, we
       if (selectedText) {
         preservationDirectives.push("- PRESERVE all text outside the selected area unless the instruction explicitly affects it");
         preservationDirectives.push("- DO NOT reformat or restructure sections that weren't mentioned");
+      }
+      if (isWriterFeedback && !isSelectionFeedback) {
+        preservationDirectives.push("- Apply changes surgically to the areas the feedback addresses");
+        preservationDirectives.push("- PRESERVE sections that the feedback does not mention or imply changes to");
+        preservationDirectives.push("- DO NOT rewrite the entire document — only modify what the feedback directs");
+        preservationDirectives.push("- The author's feedback may be informal — translate it into polished prose that matches the document's voice");
       }
       if (isMultiConfig) {
         // Multi-config mode: more flexible — user explicitly asked for multiple changes
