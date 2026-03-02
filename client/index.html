@@ -33,13 +33,22 @@
     <script type="module" src="/src/main.tsx"></script>
     <!-- AIQA QA Overlay -->
     <style>
-      /* Force AIQA overlay above all app elements */
+      /* Force AIQA overlay above all app elements and visible on screen */
       #aiqa-overlay-root {
         z-index: 2147483647 !important;
         position: fixed !important;
-      }
-      #aiqa-overlay-root * {
-        z-index: auto;
+        top: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 420px !important;
+        max-width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        pointer-events: auto !important;
+        overflow: auto !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        display: block !important;
       }
     </style>
     <script src="https://aiqastudio.com/snippet.js" data-base-url="https://aiqastudio.com"></script>
@@ -137,7 +146,7 @@
           log('localStorage aiqa keys:', Object.keys(localStorage).filter(function(k) { return k.toLowerCase().indexOf('aiqa') !== -1; }));
         }, 200);
 
-        // 5. Watch for any button with text "QA" getting hidden
+        // 5. Watch for any button with text "QA" getting hidden + overlay root visibility
         setInterval(function() {
           var btns = document.querySelectorAll('button');
           btns.forEach(function(b) {
@@ -148,7 +157,17 @@
               }
             }
           });
-        }, 1000);
+          // Log overlay root position and visibility
+          var root = document.getElementById('aiqa-overlay-root');
+          if (root) {
+            var s = window.getComputedStyle(root);
+            var rect = root.getBoundingClientRect();
+            log('overlay-root — display:', s.display, 'visibility:', s.visibility, 'opacity:', s.opacity,
+              'position:', s.position, 'z-index:', s.zIndex,
+              'rect:', JSON.stringify({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left, width: rect.width, height: rect.height }),
+              'children:', root.children.length, 'innerHTML length:', root.innerHTML.length);
+          }
+        }, 2000);
 
         log('Debug watcher installed — click the QA button and check console');
       })();
