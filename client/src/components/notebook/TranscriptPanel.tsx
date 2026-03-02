@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -45,6 +45,9 @@ export function TranscriptPanel({
   const [noteText, setNoteText] = useState("");
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
   const [savedNoteIds, setSavedNoteIds] = useState<Set<string>>(new Set());
+  // Snapshot of noteText when recording starts — used to preserve existing
+  // content while showing interim transcription text.
+  const preRecordNoteRef = useRef("");
 
   // ── Save individual note to Context Store ──
   const handleSaveToStore = useCallback(async (item: ContextItem) => {
@@ -144,7 +147,13 @@ export function TranscriptPanel({
                 onTranscript={(t) =>
                   setNoteText((prev) => (prev ? `${prev} ${t}` : t))
                 }
-                onInterimTranscript={(t) => setNoteText(t)}
+                onInterimTranscript={(t) => {
+                  const pre = preRecordNoteRef.current;
+                  setNoteText(pre ? `${pre} ${t}` : t);
+                }}
+                onRecordingChange={(recording) => {
+                  if (recording) preRecordNoteRef.current = noteText;
+                }}
                 size="icon"
                 variant="ghost"
                 className="h-6 w-6 shrink-0 text-muted-foreground"
