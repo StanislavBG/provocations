@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
@@ -6,6 +6,7 @@ import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useToast } from "@/hooks/use-toast";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -473,6 +474,56 @@ export function InterviewTab({
     );
   }, []);
 
+  // ── LLM preview: Start Interview button ──
+  const interviewStartBlocks: ContextBlock[] = useMemo(() => {
+    const guidanceChars = buildGuidance(stance, focusText, appType)?.length ?? 0;
+    return [
+      { label: "System Prompt", chars: 2000, color: "text-purple-400" },
+      { label: "Objective", chars: objective.length, color: "text-amber-400" },
+      { label: "Document", chars: documentText.length, color: "text-blue-400" },
+      { label: "Stance Guidance", chars: guidanceChars, color: "text-emerald-400" },
+      { label: "Timeline Context", chars: timelineContext ? JSON.stringify(timelineContext).length : 0, color: "text-cyan-400" },
+    ];
+  }, [objective, documentText, stance, focusText, appType, timelineContext]);
+
+  const interviewStartSummary: SummaryItem[] = useMemo(() => [
+    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0, detail: objective.slice(0, 50) },
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Document", count: documentText.trim() ? 1 : 0, detail: `${documentText.split(/\s+/).filter(Boolean).length} words` },
+    { icon: <Search className="w-3 h-3 text-emerald-400" />, label: "Stance", count: 1, detail: stance },
+  ], [objective, documentText, stance]);
+
+  // ── LLM preview: Summary & Podcast buttons ──
+  const entriesChars = useMemo(
+    () => entries.reduce((s, e) => s + e.question.length + e.answer.length, 0),
+    [entries],
+  );
+
+  const summaryBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 1500, color: "text-purple-400" },
+    { label: "Objective", chars: objective.length, color: "text-amber-400" },
+    { label: "Interview Q&A", chars: entriesChars, color: "text-green-400" },
+    { label: "Document", chars: documentText.length, color: "text-blue-400" },
+  ], [objective, entriesChars, documentText]);
+
+  const summaryPreviewItems: SummaryItem[] = useMemo(() => [
+    { icon: <MessageCircleQuestion className="w-3 h-3 text-green-400" />, label: "Q&A Entries", count: entries.length, detail: `${entries.length} pairs` },
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Document", count: documentText.trim() ? 1 : 0, detail: `${documentText.split(/\s+/).filter(Boolean).length} words` },
+    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0 },
+  ], [entries, documentText, objective]);
+
+  const podcastBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 2500, color: "text-purple-400" },
+    { label: "Objective", chars: objective.length, color: "text-amber-400" },
+    { label: "Interview Q&A", chars: entriesChars, color: "text-green-400" },
+    { label: "Document", chars: documentText.length, color: "text-blue-400" },
+  ], [objective, entriesChars, documentText]);
+
+  const podcastPreviewItems: SummaryItem[] = useMemo(() => [
+    { icon: <MessageCircleQuestion className="w-3 h-3 text-green-400" />, label: "Q&A Entries", count: entries.length, detail: `${entries.length} pairs` },
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Document", count: documentText.trim() ? 1 : 0, detail: `${documentText.split(/\s+/).filter(Boolean).length} words` },
+    { icon: <Podcast className="w-3 h-3 text-violet-400" />, label: "Output", count: 1, detail: "Two-host podcast + TTS" },
+  ], [entries, documentText]);
+
   // ── Render: Not started ──
   if (!isActive && entries.length === 0) {
     return (
@@ -614,15 +665,17 @@ export function InterviewTab({
               </button>
             </div>
 
-            <Button
-              size="sm"
-              className="gap-1.5 w-full"
-              onClick={handleStart}
-              disabled={!objective.trim() && stance !== "autobiography"}
-            >
-              <Mic className="w-3.5 h-3.5" />
-              {trueInterview ? "Start True Interview" : "Start Interview"}
-            </Button>
+            <LlmHoverButton previewTitle="Start Interview" previewBlocks={interviewStartBlocks} previewSummary={interviewStartSummary} side="left" align="start">
+              <Button
+                size="sm"
+                className="gap-1.5 w-full"
+                onClick={handleStart}
+                disabled={!objective.trim() && stance !== "autobiography"}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                {trueInterview ? "Start True Interview" : "Start Interview"}
+              </Button>
+            </LlmHoverButton>
             {!objective.trim() && stance !== "autobiography" && (
               <p className="text-[10px] text-muted-foreground/60 text-center">
                 Set a document objective in the center panel first
@@ -698,46 +751,40 @@ export function InterviewTab({
           </Tooltip>
 
           {/* Podcast button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 text-xs h-7 px-2"
-                onClick={handleGeneratePodcast}
-                disabled={entries.length === 0 || podcastMutation.isPending}
-              >
-                {podcastMutation.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Podcast className="w-3.5 h-3.5" />
-                )}
-                Podcast
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Generate a two-host podcast episode from the interview</TooltipContent>
-          </Tooltip>
+          <LlmHoverButton previewTitle="Podcast" previewBlocks={podcastBlocks} previewSummary={podcastPreviewItems} side="bottom" align="end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-xs h-7 px-2"
+              onClick={handleGeneratePodcast}
+              disabled={entries.length === 0 || podcastMutation.isPending}
+            >
+              {podcastMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Podcast className="w-3.5 h-3.5" />
+              )}
+              Podcast
+            </Button>
+          </LlmHoverButton>
 
           {/* Summary → merge to doc */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 text-xs h-7 px-2"
-                onClick={handleGenerateSummary}
-                disabled={entries.length === 0 || summaryMutation.isPending || isMerging}
-              >
-                {summaryMutation.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <FileText className="w-3.5 h-3.5" />
-                )}
-                Summary
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Synthesize Q&A into document edits</TooltipContent>
-          </Tooltip>
+          <LlmHoverButton previewTitle="Interview Summary" previewBlocks={summaryBlocks} previewSummary={summaryPreviewItems} side="bottom" align="end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-xs h-7 px-2"
+              onClick={handleGenerateSummary}
+              disabled={entries.length === 0 || summaryMutation.isPending || isMerging}
+            >
+              {summaryMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileText className="w-3.5 h-3.5" />
+              )}
+              Summary
+            </Button>
+          </LlmHoverButton>
 
           {/* Stop / Restart */}
           {isActive ? (
@@ -1013,10 +1060,12 @@ export function InterviewTab({
                     Continue
                   </Button>
                   {entries.length >= 3 && (
-                    <Button size="sm" variant="outline" className="text-xs h-7 gap-1" onClick={handleGeneratePodcast} disabled={podcastMutation.isPending}>
-                      <Podcast className="w-3 h-3" />
-                      Podcast
-                    </Button>
+                    <LlmHoverButton previewTitle="Podcast" previewBlocks={podcastBlocks} previewSummary={podcastPreviewItems} side="top" align="end">
+                      <Button size="sm" variant="outline" className="text-xs h-7 gap-1" onClick={handleGeneratePodcast} disabled={podcastMutation.isPending}>
+                        <Podcast className="w-3 h-3" />
+                        Podcast
+                      </Button>
+                    </LlmHoverButton>
                   )}
                 </div>
               </div>

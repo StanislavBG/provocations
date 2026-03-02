@@ -14,7 +14,8 @@ import {
   type TimelineEvent,
   autoZoomLevel,
 } from "./types";
-import { Save, Sparkles, Loader2, Globe } from "lucide-react";
+import { Save, Sparkles, Loader2, Globe, MapPin, Tag, Calendar } from "lucide-react";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 
 /** Summary of timeline state for external consumers (e.g. interview context) */
 export interface TimelineSummary {
@@ -99,6 +100,32 @@ export function TimelineWorkspace({ onSaveToContext, initialData, onTimelineSumm
       setZoom(autoZoomLevel(timeline.events));
     }
   }, [timeline.events, setZoom]);
+
+  // ── LLM preview: Discover Era button ──
+  const discoverEraBlocks: ContextBlock[] = useMemo(() => {
+    const eventTitlesChars = timeline.events.reduce((s, e) => s + e.title.length, 0);
+    const places = timeline.tags.filter((t) => t.category === "place");
+    const themes = timeline.tags.filter((t) => t.category === "theme");
+    return [
+      { label: "System Prompt", chars: 1500, color: "text-purple-400" },
+      { label: "Date Range", chars: 40, color: "text-blue-400" },
+      { label: "Places", chars: places.reduce((s, t) => s + t.label.length, 0), color: "text-green-400" },
+      { label: "Themes", chars: themes.reduce((s, t) => s + t.label.length, 0), color: "text-amber-400" },
+      { label: "Existing Events", chars: eventTitlesChars, color: "text-cyan-400" },
+    ];
+  }, [timeline.events, timeline.tags]);
+
+  const discoverEraSummary: SummaryItem[] = useMemo(() => {
+    const places = timeline.tags.filter((t) => t.category === "place");
+    const themes = timeline.tags.filter((t) => t.category === "theme");
+    const dates = timeline.events.map((e) => e.date).sort();
+    return [
+      { icon: <Globe className="w-3 h-3 text-blue-400" />, label: "Date Range", count: dates.length > 0 ? 1 : 0, detail: dates.length > 0 ? `${dates[0]} — ${dates[dates.length - 1]}` : undefined },
+      { icon: <MapPin className="w-3 h-3 text-green-400" />, label: "Places", count: places.length },
+      { icon: <Tag className="w-3 h-3 text-amber-400" />, label: "Themes", count: themes.length },
+      { icon: <Calendar className="w-3 h-3 text-cyan-400" />, label: "Existing Events", count: timeline.events.length, detail: `excluded from results` },
+    ];
+  }, [timeline.events, timeline.tags]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -383,25 +410,27 @@ export function TimelineWorkspace({ onSaveToContext, initialData, onTimelineSumm
               )}
 
               {/* Discover Era — generate historical events for the timeline's date range */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                onClick={() => discoverEraMutation.mutate()}
-                disabled={discoverEraMutation.isPending || timeline.events.length === 0}
-              >
-                {discoverEraMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Discovering...
-                  </>
-                ) : (
-                  <>
-                    <Globe className="h-3.5 w-3.5" />
-                    Discover Era
-                  </>
-                )}
-              </Button>
+              <LlmHoverButton previewTitle="Discover Era" previewBlocks={discoverEraBlocks} previewSummary={discoverEraSummary} side="top" align="end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                  onClick={() => discoverEraMutation.mutate()}
+                  disabled={discoverEraMutation.isPending || timeline.events.length === 0}
+                >
+                  {discoverEraMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Discovering...
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="h-3.5 w-3.5" />
+                      Discover Era
+                    </>
+                  )}
+                </Button>
+              </LlmHoverButton>
             </div>
           </div>
         </ResizablePanel>

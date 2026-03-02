@@ -1,10 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { errorLogStore } from "@/lib/errorLog";
 import { generateId } from "@/lib/utils";
 import { ProvokeText } from "@/components/ProvokeText";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,7 @@ import {
   Shuffle,
   Check,
   Plus,
+  Target,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -265,6 +267,36 @@ export function InfographicStudioWorkspace({
   // ── Right panel state: image params + 3 variants ──
   const [userParams, setUserParams] = useState<ImageParams>(DEFAULT_PARAMS);
   const [variants, setVariants] = useState<InfographicVariant[]>(() => makeVariants(DEFAULT_PARAMS));
+
+  // ── LLM preview: Clean Summary button ──
+  const cleanSummaryBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 800, color: "text-purple-400" },
+    { label: "Raw Text", chars: rawText.length, color: "text-blue-400" },
+    { label: "Enrichment Config", chars: 120, color: "text-emerald-400" },
+    { label: "Focus Context", chars: summaryContext.length, color: "text-cyan-400" },
+    { label: "Objective", chars: objective.length, color: "text-amber-400" },
+  ], [rawText, summaryContext, objective]);
+
+  const cleanSummarySummary: SummaryItem[] = useMemo(() => [
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Raw Text", count: rawText.trim() ? 1 : 0, detail: `${rawText.split(/\s+/).filter(Boolean).length} words` },
+    { icon: <SlidersHorizontal className="w-3 h-3 text-emerald-400" />, label: "Enrichment", count: 1, detail: `${enrichment.audience}, ${enrichment.visualStyle}` },
+    { icon: <BookOpen className="w-3 h-3 text-cyan-400" />, label: "Focus Context", count: summaryContext.trim() ? 1 : 0 },
+    { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0 },
+  ], [rawText, enrichment, summaryContext, objective]);
+
+  // ── LLM preview: Artistic Summary button ──
+  const artisticBlocks: ContextBlock[] = useMemo(() => [
+    { label: "System Prompt", chars: 1200, color: "text-purple-400" },
+    { label: "Clean Summary", chars: cleanSummary.length, color: "text-blue-400" },
+    { label: "Artistic Presets", chars: Array.from(selectedPresets).join(", ").length + 100, color: "text-pink-400" },
+    { label: "Custom Direction", chars: artisticContext.length, color: "text-orange-400" },
+  ], [cleanSummary, selectedPresets, artisticContext]);
+
+  const artisticSummaryItems: SummaryItem[] = useMemo(() => [
+    { icon: <BookOpen className="w-3 h-3 text-blue-400" />, label: "Clean Summary", count: cleanSummary.trim() ? 1 : 0, detail: `${cleanSummary.split(/\s+/).filter(Boolean).length} words` },
+    { icon: <Palette className="w-3 h-3 text-pink-400" />, label: "Artistic Presets", count: selectedPresets.size, detail: Array.from(selectedPresets).join(", ") },
+    { icon: <PaintBucket className="w-3 h-3 text-orange-400" />, label: "Custom Direction", count: artisticContext.trim() ? 1 : 0 },
+  ], [cleanSummary, selectedPresets, artisticContext]);
 
   // ── Context store documents ──
   const { data: savedDocs, isLoading: isLoadingDocs } = useQuery<{ documents: { id: number; title: string; updatedAt: string }[] }>({
@@ -612,29 +644,31 @@ Format as rich markdown with visual direction embedded throughout.`,
                   <BookOpen className="w-3.5 h-3.5 text-primary" />
                   <h3 className="text-xs font-semibold">Clean Summary</h3>
                 </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-[10px] h-6 px-2"
-                  onClick={() => cleanSummaryMutation.mutate()}
-                  disabled={!hasRawText || cleanSummaryMutation.isPending}
-                >
-                  {cleanSummaryMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Generating...
-                    </>
-                  ) : hasCleanSummary ? (
-                    <>
-                      <RefreshCw className="w-3 h-3" />
-                      Regenerate
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-3 h-3" />
-                      Summarize
-                    </>
-                  )}
-                </Button>
+                <LlmHoverButton previewTitle="Clean Summary" previewBlocks={cleanSummaryBlocks} previewSummary={cleanSummarySummary} side="bottom" align="end">
+                  <Button
+                    size="sm"
+                    className="gap-1 text-[10px] h-6 px-2"
+                    onClick={() => cleanSummaryMutation.mutate()}
+                    disabled={!hasRawText || cleanSummaryMutation.isPending}
+                  >
+                    {cleanSummaryMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Generating...
+                      </>
+                    ) : hasCleanSummary ? (
+                      <>
+                        <RefreshCw className="w-3 h-3" />
+                        Regenerate
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-3 h-3" />
+                        Summarize
+                      </>
+                    )}
+                  </Button>
+                </LlmHoverButton>
               </div>
             </div>
 
@@ -732,29 +766,31 @@ Format as rich markdown with visual direction embedded throughout.`,
                   <PaintBucket className="w-3.5 h-3.5 text-primary" />
                   <h3 className="text-xs font-semibold">Artistic Summary</h3>
                 </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-[10px] h-6 px-2"
-                  onClick={() => artisticSummaryMutation.mutate()}
-                  disabled={!hasCleanSummary || artisticSummaryMutation.isPending}
-                >
-                  {artisticSummaryMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Generating...
-                    </>
-                  ) : hasArtisticSummary ? (
-                    <>
-                      <RefreshCw className="w-3 h-3" />
-                      Regenerate
-                    </>
-                  ) : (
-                    <>
-                      <PaintBucket className="w-3 h-3" />
-                      Artify
-                    </>
-                  )}
-                </Button>
+                <LlmHoverButton previewTitle="Artistic Summary" previewBlocks={artisticBlocks} previewSummary={artisticSummaryItems} side="bottom" align="end">
+                  <Button
+                    size="sm"
+                    className="gap-1 text-[10px] h-6 px-2"
+                    onClick={() => artisticSummaryMutation.mutate()}
+                    disabled={!hasCleanSummary || artisticSummaryMutation.isPending}
+                  >
+                    {artisticSummaryMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Generating...
+                      </>
+                    ) : hasArtisticSummary ? (
+                      <>
+                        <RefreshCw className="w-3 h-3" />
+                        Regenerate
+                      </>
+                    ) : (
+                      <>
+                        <PaintBucket className="w-3 h-3" />
+                        Artify
+                      </>
+                    )}
+                  </Button>
+                </LlmHoverButton>
               </div>
             </div>
 
