@@ -2361,15 +2361,16 @@ Output only valid JSON, no markdown.`;
       const { GoogleGenAI, HarmCategory, HarmBlockThreshold } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: geminiKey });
 
-      // Relax safety filters — default BLOCK_LOW_AND_ABOVE is too aggressive for
-      // legitimate cultural, mythological, and historical content (e.g. folklore
-      // creatures, ancient legends).  BLOCK_ONLY_HIGH still blocks genuinely harmful
-      // material while allowing artistic / educational imagery.
+      // Relax safety filters to maximum — BLOCK_NONE disables client-side
+      // filtering entirely so the model decides. Previous BLOCK_ONLY_HIGH was
+      // still too aggressive for legitimate artistic content (bikini, swimwear,
+      // mythology, etc.). Note: the model may still refuse at inference level
+      // regardless of this setting for truly harmful content.
       const safetySettings = [
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT,               threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,        threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT,               threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,              threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,        threshold: HarmBlockThreshold.BLOCK_NONE },
       ];
 
       // Build the final prompt: prepend style directive if provided

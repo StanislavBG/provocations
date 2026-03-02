@@ -292,25 +292,28 @@ export function PainterPanel({
     const skipDesc = excludedSources.has("description");
     const skipDoc = excludedSources.has("document");
     const skipCtx = excludedSources.has("context");
-    // Fall back through: explicit painter objective → workspace objective → document summary
-    const contextSummary = (!skipCtx && pinnedDocs.length > 0)
-      ? pinnedDocs.map((d) => `[${d.title}] ${d.content.slice(0, 300)}`).join("\n")
-      : "";
-    const effectiveObjective = (!skipDesc && painterObjective.trim())
-      ? painterObjective.trim()
-      : (!skipDesc && objective)
-        ? objective
-        : (!skipDoc && documentText.trim())
-          ? `Create a visual representation of: ${documentText.slice(0, 300)}`
-          : contextSummary
-            ? `Create a visual representation based on this context:\n${contextSummary}`
-            : "";
+
+    // Build effective objective respecting exclusions.
+    // Each source is checked independently — excluded sources are never used,
+    // even as fallbacks.
+    let effectiveObjective = "";
+    if (!skipDesc) {
+      effectiveObjective = painterObjective.trim() || objective || "";
+    }
+    if (!effectiveObjective && !skipDoc && documentText.trim()) {
+      effectiveObjective = `Create a visual representation of: ${documentText.slice(0, 300)}`;
+    }
+    if (!effectiveObjective && !skipCtx && pinnedDocs.length > 0) {
+      const contextSummary = pinnedDocs.map((d) => `[${d.title}] ${d.content.slice(0, 300)}`).join("\n");
+      effectiveObjective = `Create a visual representation based on this context:\n${contextSummary}`;
+    }
+
     onPaintImage({
       painterConfigs: configs,
       painterObjective: effectiveObjective,
       negativePrompt: negativePrompt.trim() || undefined,
       painterMode,
-      excludedSources: excludedSources.size > 0 ? excludedSources : undefined,
+      excludedSources: excludedSources.size > 0 ? new Set(excludedSources) : undefined,
     });
   }, [buildConfigs, onPaintImage, painterObjective, objective, documentText, negativePrompt, painterMode, excludedSources, pinnedDocs]);
 
