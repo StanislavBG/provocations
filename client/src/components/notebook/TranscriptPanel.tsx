@@ -20,6 +20,7 @@ import {
   Save,
   Check,
   StickyNote,
+  FileOutput,
   Clock,
 } from "lucide-react";
 import { trackEvent } from "@/lib/tracking";
@@ -29,6 +30,7 @@ interface TranscriptPanelProps {
   capturedContext: ContextItem[];
   onCaptureToContext: (text: string, label: string) => void;
   onRemoveCapturedItem?: (itemId: string) => void;
+  onMoveToDocument?: (content: string) => void;
   onEvolveDocument?: (instruction: string, description: string) => void;
   onMapNotesToTimeline?: () => void;
   isMapPending?: boolean;
@@ -40,6 +42,7 @@ export function TranscriptPanel({
   capturedContext,
   onCaptureToContext,
   onRemoveCapturedItem,
+  onMoveToDocument,
   onEvolveDocument,
   onMapNotesToTimeline,
   isMapPending = false,
@@ -253,6 +256,18 @@ export function TranscriptPanel({
                           <Save className="w-2.5 h-2.5" />
                         )}
                       </Button>
+                      {onMoveToDocument && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400"
+                          onClick={() => onMoveToDocument(item.content)}
+                          disabled={!item.content.trim()}
+                          title="Move to Document"
+                        >
+                          <FileOutput className="w-2.5 h-2.5" />
+                        </Button>
+                      )}
                       {onRemoveCapturedItem && (
                         <Button
                           variant="ghost"

@@ -34,6 +34,7 @@ interface NotebookRightPanelProps {
 
   // Evolve document (writer)
   onEvolveDocument?: (instruction: string, description: string) => void;
+  onMoveToDocument?: (content: string) => void;
   isMerging?: boolean;
 
   // Map notes to timeline
@@ -87,6 +88,7 @@ export function NotebookRightPanel({
   capturedContext,
   onRemoveCapturedItem,
   onEvolveDocument,
+  onMoveToDocument,
   isMerging = false,
   onMapNotesToTimeline,
   isMapPending = false,
@@ -190,6 +192,7 @@ export function NotebookRightPanel({
           capturedContext={capturedContext}
           onCaptureToContext={onCaptureToContext}
           onRemoveCapturedItem={onRemoveCapturedItem}
+          onMoveToDocument={onMoveToDocument}
           onEvolveDocument={onEvolveDocument}
           onMapNotesToTimeline={onMapNotesToTimeline}
           isMapPending={isMapPending}
