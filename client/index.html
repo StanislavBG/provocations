@@ -33,5 +33,115 @@
     <script type="module" src="/src/main.tsx"></script>
     <!-- AIQA QA Overlay -->
     <script src="https://aiqastudio.com/snippet.js" data-base-url="https://aiqastudio.com"></script>
+    <script>
+      // AIQA Debug — tracks why the overlay disappears on click
+      (function() {
+        var TAG = '[AIQA-DEBUG]';
+        var log = function() { console.log.apply(console, [TAG].concat(Array.prototype.slice.call(arguments))); };
+        var warn = function() { console.warn.apply(console, [TAG].concat(Array.prototype.slice.call(arguments))); };
+
+        // 1. Monitor overlay.js loading
+        var origFetch = window.fetch;
+        window.fetch = function() {
+          var url = arguments[0];
+          if (typeof url === 'string' && url.indexOf('aiqastudio') !== -1) {
+            log('Fetch →', url, arguments[1] || '');
+            return origFetch.apply(this, arguments).then(function(resp) {
+              log('Fetch ←', url, 'status:', resp.status, resp.ok ? 'OK' : 'FAILED');
+              if (!resp.ok) warn('Non-OK response from', url, '— overlay may not load');
+              return resp;
+            }).catch(function(err) {
+              warn('Fetch ERROR', url, err.message || err);
+              throw err;
+            });
+          }
+          return origFetch.apply(this, arguments);
+        };
+
+        // 2. Monitor script element injection (overlay.js loaded via <script>)
+        var origAppend = Element.prototype.appendChild;
+        Element.prototype.appendChild = function(child) {
+          if (child && child.tagName === 'SCRIPT' && child.src && child.src.indexOf('aiqastudio') !== -1) {
+            log('Script injected:', child.src);
+            child.addEventListener('load', function() { log('Script loaded OK:', child.src); });
+            child.addEventListener('error', function(e) { warn('Script FAILED to load:', child.src, e); });
+          }
+          return origAppend.call(this, child);
+        };
+
+        // 3. Watch for AIQA button & panel DOM mutations
+        var observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(m) {
+            m.addedNodes.forEach(function(n) {
+              if (n.nodeType === 1) {
+                var el = n;
+                if (el.textContent === 'QA' && el.tagName === 'BUTTON') log('QA button ADDED to DOM');
+                if (el.tagName === 'IFRAME' && el.src && el.src.indexOf('aiqastudio') !== -1) log('AIQA iframe ADDED:', el.src);
+                if (el.id && el.id.toLowerCase().indexOf('aiqa') !== -1) log('AIQA element ADDED:', el.tagName, el.id);
+              }
+            });
+            m.removedNodes.forEach(function(n) {
+              if (n.nodeType === 1) {
+                var el = n;
+                if (el.textContent === 'QA' && el.tagName === 'BUTTON') warn('QA button REMOVED from DOM');
+                if (el.tagName === 'IFRAME') warn('iframe REMOVED:', el.src || '(no src)');
+                if (el.id && el.id.toLowerCase().indexOf('aiqa') !== -1) warn('AIQA element REMOVED:', el.tagName, el.id);
+              }
+            });
+          });
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+
+        // 4. Monkeypatch window.AIQA when it appears
+        var patchInterval = setInterval(function() {
+          if (!window.AIQA) return;
+          clearInterval(patchInterval);
+          log('window.AIQA found:', Object.keys(window.AIQA));
+
+          if (window.AIQA.toggle) {
+            var origToggle = window.AIQA.toggle;
+            window.AIQA.toggle = function() {
+              log('toggle() called');
+              try { var r = origToggle.apply(this, arguments); log('toggle() completed'); return r; }
+              catch(e) { warn('toggle() THREW:', e.message, e.stack); throw e; }
+            };
+          }
+          if (window.AIQA.init) {
+            var origInit = window.AIQA.init;
+            window.AIQA.init = function() {
+              log('init() called');
+              try { var r = origInit.apply(this, arguments); log('init() completed'); return r; }
+              catch(e) { warn('init() THREW:', e.message, e.stack); throw e; }
+            };
+          }
+          if (window.AIQA.destroy) {
+            var origDestroy = window.AIQA.destroy;
+            window.AIQA.destroy = function() {
+              log('destroy() called');
+              try { var r = origDestroy.apply(this, arguments); log('destroy() completed'); return r; }
+              catch(e) { warn('destroy() THREW:', e.message, e.stack); throw e; }
+            };
+          }
+
+          // Log auth state
+          log('localStorage aiqa keys:', Object.keys(localStorage).filter(function(k) { return k.toLowerCase().indexOf('aiqa') !== -1; }));
+        }, 200);
+
+        // 5. Watch for any button with text "QA" getting hidden
+        setInterval(function() {
+          var btns = document.querySelectorAll('button');
+          btns.forEach(function(b) {
+            if (b.textContent.trim() === 'QA') {
+              var style = window.getComputedStyle(b);
+              if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                warn('QA button is HIDDEN — display:', style.display, 'visibility:', style.visibility, 'opacity:', style.opacity, 'parent:', b.parentElement && b.parentElement.tagName);
+              }
+            }
+          });
+        }, 1000);
+
+        log('Debug watcher installed — click the QA button and check console');
+      })();
+    </script>
   </body>
 </html>
