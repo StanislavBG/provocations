@@ -804,6 +804,7 @@ export const trackingEventType = [
 
   // ── Notes management ──
   "note_saved_to_context",    // User saved an individual note to Context Store
+  "note_moved_to_document",   // User moved a note's content into the document
   "note_text_to_visual",      // User generated a visual from notes
   "document_saved_to_context", // User saved the document to Context Store
   "writer_invoked",           // Writer was called to evolve document

@@ -34,6 +34,7 @@ interface NotebookRightPanelProps {
 
   // Evolve document (writer)
   onEvolveDocument?: (instruction: string, description: string) => void;
+  onMoveToDocument?: (content: string) => void;
   isMerging?: boolean;
 
   // Writer tab
@@ -83,6 +84,7 @@ export function NotebookRightPanel({
   capturedContext,
   onRemoveCapturedItem,
   onEvolveDocument,
+  onMoveToDocument,
   isMerging = false,
   onEvolve,
   isEvolving = false,
@@ -184,6 +186,7 @@ export function NotebookRightPanel({
           capturedContext={capturedContext}
           onCaptureToContext={onCaptureToContext}
           onRemoveCapturedItem={onRemoveCapturedItem}
+          onMoveToDocument={onMoveToDocument}
           onEvolveDocument={onEvolveDocument}
           hasDocument={hasDocument}
           isMerging={isMerging}
