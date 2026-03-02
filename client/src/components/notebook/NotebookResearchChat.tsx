@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -8,7 +8,7 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import type { ChatMessage, ChatMessageWithMeta } from "@shared/schema";
+import type { ChatMessage, ChatMessageWithMeta, ResearchPlan, ResearchPlanStep } from "@shared/schema";
 import type { ResearchFocus, ResponseConfig, ResponseDetailLevel, ResponseFormat, ResponseAudienceLevel, ResponseTone } from "@shared/schema";
 import type { LucideIcon } from "lucide-react";
 
@@ -77,6 +77,10 @@ export function NotebookResearchChat({
     tone: "neutral",
   });
   const [showResponseConfig, setShowResponseConfig] = useState(false);
+  // Deep Research plan state
+  const [pendingPlan, setPendingPlan] = useState<ResearchPlan | null>(null);
+  const [planQuery, setPlanQuery] = useState("");
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
@@ -106,29 +110,67 @@ export function NotebookResearchChat({
     abortRef.current?.abort();
   }, []);
 
-  const handleSend = useCallback(async () => {
-    const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+  // Generate research plan for Deep Research mode
+  const handleGeneratePlan = useCallback(async (query: string) => {
+    setIsGeneratingPlan(true);
+    try {
+      const response = await fetch("/api/chat/research-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: query,
+          objective: objective || "General research",
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to generate plan");
+      const data = await response.json();
+      if (data.plan) {
+        setPendingPlan(data.plan);
+        setPlanQuery(query);
+      }
+    } catch {
+      // Fallback: skip plan, execute directly
+      toast({ title: "Plan generation failed", description: "Proceeding with direct research", variant: "destructive" });
+      executeResearch(query);
+    } finally {
+      setIsGeneratingPlan(false);
+    }
+  }, [objective, toast]);
 
-    const userMessage: ChatMessageWithMeta = { role: "user", content: trimmed };
+  // Dismiss plan and clear state
+  const handleDismissPlan = useCallback(() => {
+    setPendingPlan(null);
+    setPlanQuery("");
+  }, []);
+
+  // Execute research (with or without plan)
+  const executeResearch = useCallback(async (query: string, plan?: ResearchPlan) => {
+    const userMessage: ChatMessageWithMeta = { role: "user", content: query };
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
     setIsLoading(true);
     setStreamingContent("");
+    setPendingPlan(null);
+    setPlanQuery("");
 
     const controller = new AbortController();
     abortRef.current = controller;
+
+    // Format plan as text context for the LLM
+    const planText = plan
+      ? plan.steps.map((s, i) => `${i + 1}. ${s.area}\n${s.questions.map((q) => `   - ${q}`).join("\n")}`).join("\n")
+      : undefined;
 
     try {
       const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: trimmed,
+          message: query,
           objective: objective || "General research",
           history: messages.slice(-30).map((m) => ({ role: m.role, content: m.content })),
           researchFocus: focusMode,
           responseConfig: hasCustomConfig ? responseConfig : undefined,
+          researchPlan: planText,
         }),
         signal: controller.signal,
       });
@@ -143,6 +185,7 @@ export function NotebookResearchChat({
       let followUps: string[] | undefined;
       let durationMs: number | undefined;
       let model: string | undefined;
+      let groundingSource: "web" | "context" | "both" | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -163,6 +206,7 @@ export function NotebookResearchChat({
             } else if (data.type === "meta") {
               durationMs = data.durationMs;
               model = data.model;
+              groundingSource = data.groundingSource;
             } else if (data.type === "done") {
               // Streaming complete
             }
@@ -176,17 +220,16 @@ export function NotebookResearchChat({
       if (accumulated) {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: accumulated, followUps, durationMs, model },
+          { role: "assistant", content: accumulated, followUps, durationMs, model, groundingSource },
         ]);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         // User stopped generation — commit what we have
-        const partial = streamingContent;
-        if (partial) {
+        if (streamingContent) {
           setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: partial },
+            { role: "assistant", content: streamingContent },
           ]);
         }
       } else {
@@ -199,7 +242,22 @@ export function NotebookResearchChat({
       setStreamingContent("");
       abortRef.current = null;
     }
-  }, [input, isLoading, messages, objective, focusMode, hasCustomConfig, responseConfig, streamingContent, toast]);
+  }, [messages, objective, focusMode, hasCustomConfig, responseConfig, streamingContent, toast]);
+
+  const handleSend = useCallback(async () => {
+    const trimmed = input.trim();
+    if (!trimmed || isLoading) return;
+
+    setInput("");
+
+    // Deep Research mode: generate plan first (if no plan already pending)
+    if (focusMode === "deep-research" && !pendingPlan) {
+      handleGeneratePlan(trimmed);
+      return;
+    }
+
+    executeResearch(trimmed);
+  }, [input, isLoading, focusMode, pendingPlan, handleGeneratePlan, executeResearch]);
 
   const handleCapture = useCallback(
     (content: string) => {
@@ -387,6 +445,26 @@ export function NotebookResearchChat({
                             {msg.model.replace(/^models\//, "")}
                           </span>
                         )}
+                        {msg.groundingSource && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className={`text-[9px] flex items-center gap-0.5 px-1 py-px rounded ${
+                                msg.groundingSource === "web" ? "text-blue-500/70 bg-blue-500/10" :
+                                msg.groundingSource === "context" ? "text-amber-500/70 bg-amber-500/10" :
+                                "text-emerald-500/70 bg-emerald-500/10"
+                              }`}>
+                                {msg.groundingSource === "web" ? <Globe className="w-2.5 h-2.5" /> :
+                                 msg.groundingSource === "context" ? <FolderOpen className="w-2.5 h-2.5" /> :
+                                 <><Globe className="w-2.5 h-2.5" /><span>+</span><FolderOpen className="w-2.5 h-2.5" /></>}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                              {msg.groundingSource === "web" ? "Grounded in web search" :
+                               msg.groundingSource === "context" ? "Grounded in your context" :
+                               "Grounded in web search + your context"}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                       </div>
                       <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -489,6 +567,64 @@ export function NotebookResearchChat({
           </div>
         )}
       </ScrollArea>
+
+      {/* Research plan preview (Deep Research mode) */}
+      {isGeneratingPlan && (
+        <div className="border-t px-3 py-2 shrink-0 bg-muted/10">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+            <span className="text-xs text-muted-foreground">Generating research plan...</span>
+          </div>
+        </div>
+      )}
+
+      {pendingPlan && (
+        <div className="border-t shrink-0 bg-muted/10">
+          <div className="px-3 py-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <ListChecks className="w-3.5 h-3.5 text-primary" />
+                <span className="text-xs font-medium">{pendingPlan.title}</span>
+              </div>
+              <span className="text-[9px] text-muted-foreground">{pendingPlan.estimatedTime}</span>
+            </div>
+            <div className="space-y-1 mb-2 max-h-[140px] overflow-y-auto">
+              {pendingPlan.steps.map((step, i) => (
+                <div key={i} className="text-[10px]">
+                  <div className="font-medium text-foreground/80">{i + 1}. {step.area}</div>
+                  <div className="pl-3 text-muted-foreground">
+                    {step.questions.map((q, j) => (
+                      <div key={j} className="flex items-start gap-1">
+                        <span className="text-muted-foreground/50 shrink-0">-</span>
+                        <span>{q}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                className="h-6 text-[10px] gap-1"
+                onClick={() => executeResearch(planQuery, pendingPlan)}
+              >
+                <Play className="w-2.5 h-2.5" />
+                Execute Plan
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] gap-1 text-muted-foreground"
+                onClick={handleDismissPlan}
+              >
+                <X className="w-2.5 h-2.5" />
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t p-2 shrink-0">

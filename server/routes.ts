@@ -4175,12 +4175,13 @@ ${sections.join("\n\n")}`;
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus, responseConfig);
+      const planContext = researchPlan ? `\n\nAPPROVED RESEARCH PLAN — Follow this plan systematically:\n${researchPlan}` : "";
+      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -4209,6 +4210,61 @@ ${sections.join("\n\n")}`;
     }
   });
 
+  // Generate research plan for Deep Research mode
+  app.post("/api/chat/research-plan", async (req, res) => {
+    try {
+      const parsed = chatRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { message, objective, chatModel } = parsed.data;
+      const selectedModel = chatModel || "gemini-2.5-flash";
+
+      const result = await llm.generateWithModel(selectedModel, {
+        system: `You are a research planning assistant. Given a research question and objective, create a structured research plan.
+
+Return ONLY a valid JSON object with this exact structure:
+{
+  "title": "Brief title for this research investigation",
+  "estimatedTime": "3-5 min",
+  "steps": [
+    {"area": "Topic area name", "questions": ["Specific question 1", "Specific question 2"]},
+    {"area": "Another topic area", "questions": ["Question 3", "Question 4"]}
+  ]
+}
+
+Rules:
+- Create 3-6 research areas that systematically cover the topic
+- Each area should have 2-3 specific research questions
+- Be concrete and specific, not generic
+- Cover: background, current state, key players, trade-offs, and emerging trends
+- Tailor the plan to the stated objective
+- Keep area names short (2-4 words)
+- Keep questions actionable and specific`,
+        messages: [
+          { role: "user", content: `Research question: ${message}\n\nObjective: ${objective || "General research"}` },
+        ],
+        maxTokens: 1024,
+        temperature: 0.7,
+      });
+
+      try {
+        const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const plan = JSON.parse(jsonMatch[0]);
+          return res.json({ plan });
+        }
+      } catch {
+        // Fall through to error
+      }
+      res.status(500).json({ error: "Failed to generate research plan" });
+    } catch (error) {
+      console.error("Research plan error:", error);
+      res.status(500).json({ error: "Failed to generate research plan" });
+    }
+  });
+
   // Streaming chat endpoint (SSE)
   app.post("/api/chat/stream", async (req, res) => {
     try {
@@ -4217,7 +4273,7 @@ ${sections.join("\n\n")}`;
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
       const streamStartMs = Date.now();
 
@@ -4229,7 +4285,8 @@ ${sections.join("\n\n")}`;
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus, responseConfig);
+      const planContext = researchPlan ? `\n\nAPPROVED RESEARCH PLAN — Follow this plan systematically:\n${researchPlan}` : "";
+      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -4291,8 +4348,13 @@ ${sections.join("\n\n")}`;
         // Follow-ups are best-effort — don't fail the response
       }
 
-      // Send metadata (timing, model)
-      res.write(`data: ${JSON.stringify({ type: "meta", durationMs, model: selectedModel })}\n\n`);
+      // Determine grounding source based on what context was included
+      const hasNotes = !!(notes && notes.trim());
+      const hasResearchTopic = !!(researchTopic && researchTopic.trim());
+      const groundingSource = (hasNotes || hasResearchTopic) ? "both" : "web";
+
+      // Send metadata (timing, model, grounding)
+      res.write(`data: ${JSON.stringify({ type: "meta", durationMs, model: selectedModel, groundingSource })}\n\n`);
 
       res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       res.end();
