@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Square, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -15,10 +15,9 @@ interface VoiceRecorderProps {
   /** When true, automatically starts recording once speech recognition is ready. */
   autoStart?: boolean;
   /**
-   * Interval in ms for sending audio chunks to Whisper during recording.
-   * Enables progressive (real-time) transcription so interim results appear
-   * while the user is still speaking. Default: 5000ms when onInterimTranscript
-   * is provided, undefined otherwise.
+   * Interval in ms for sending audio chunks for progressive transcription.
+   * The hook defaults to 3s chunked mode — all voice inputs get streaming
+   * feedback by default. Set to 0 to disable chunked mode.
    */
   chunkIntervalMs?: number;
 }
@@ -36,10 +35,6 @@ export function VoiceRecorder({
 }: VoiceRecorderProps) {
   const { toast } = useToast();
 
-  // Auto-enable chunked Whisper transcription when interim callbacks are
-  // provided so users see progressive text while still speaking.
-  const effectiveChunkInterval = chunkIntervalMs ?? (onInterimTranscript ? 5000 : undefined);
-
   const {
     isRecording,
     isSupported,
@@ -49,9 +44,7 @@ export function VoiceRecorder({
     stopRecording,
     toggleRecording,
   } = useWhisperRecorder({
-    onTranscript: (text) => {
-      onTranscript(text);
-    },
+    onTranscript,
     onInterimTranscript,
     onRecordingChange: (recording) => {
       onRecordingChange?.(recording);
@@ -63,7 +56,7 @@ export function VoiceRecorder({
         });
       }
     },
-    chunkIntervalMs: effectiveChunkInterval,
+    chunkIntervalMs,
   });
 
   // Auto-start recording when requested
@@ -103,7 +96,7 @@ export function VoiceRecorder({
       variant={isRecording ? "destructive" : variant}
       onClick={toggleRecording}
       disabled={isTranscribing}
-      title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : `Voice input (${isWhisper ? "Whisper" : "browser speech"})`}
+      title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : `Voice input (${isWhisper ? "streaming" : "browser speech"})`}
       className={`${className} ${isRecording ? "animate-pulse" : ""}`}
     >
       {isTranscribing ? (

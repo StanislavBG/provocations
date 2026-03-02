@@ -36,6 +36,7 @@ export function BSChartWorkspace({
   const [voiceMode, setVoiceMode] = useState(false);
   const [voicePanelExpanded, setVoicePanelExpanded] = useState(false);
   const [voiceHelpOpen, setVoiceHelpOpen] = useState(false);
+  const [voiceInterim, setVoiceInterim] = useState("");
 
   const {
     chart,
@@ -431,14 +432,19 @@ export function BSChartWorkspace({
                   {/* Compact bar: recorder + last result + controls */}
                   <div className="px-3 py-2 flex items-center gap-3">
                     <VoiceRecorder
-                      onTranscript={handleVoiceTranscript}
+                      onTranscript={(t) => { setVoiceInterim(""); handleVoiceTranscript(t); }}
+                      onInterimTranscript={(t) => setVoiceInterim(t)}
                       autoStart={false}
                       size="sm"
                       label="Speak"
                     />
 
                     <div className="flex-1 min-w-0">
-                      {lastResult ? (
+                      {voiceInterim ? (
+                        <span className="text-xs text-foreground/70 truncate block italic">
+                          {voiceInterim}
+                        </span>
+                      ) : lastResult ? (
                         <span className="text-xs text-muted-foreground truncate block">
                           {lastResult}
                         </span>

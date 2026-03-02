@@ -308,6 +308,7 @@ export function ChatSessionPanel({
           </div>
           <VoiceRecorder
             onTranscript={(text) => setInput(text)}
+            onInterimTranscript={(text) => setInput(text)}
             size="icon"
             variant="ghost"
             className="shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground"

@@ -1,46 +1,64 @@
 /**
- * useWhisperRecorder — captures audio via MediaRecorder and sends it to
- * the server's Whisper endpoint for translate+transcribe to English.
+ * useWhisperRecorder — unified voice capture hook.
  *
- * Falls back to Web Speech API when Whisper is not available.
+ * 2026 best practices:
+ *   1. Uses gpt-4o-mini-transcribe (faster, more accurate than whisper-1)
+ *   2. Streaming SSE transcription — deltas arrive in real time via
+ *      POST /api/transcribe/stream so users see words as they appear
+ *   3. Chunked recording enabled by default (3s intervals) so every
+ *      voice input shows progressive text while the user speaks
+ *   4. Consistent deduplication — full re-transcription per flush,
+ *      accumulated text replaces (never appends) to avoid duplication
+ *   5. Falls back to Web Speech API when the server endpoint is unavailable
  */
 import { useState, useCallback, useRef, useEffect } from "react";
-import { apiRequest } from "@/lib/queryClient";
 
-// ── Whisper availability (cached globally) ──
+// ── Transcription availability (cached globally) ──
 
-let whisperAvailable: boolean | null = null;
-let whisperCheckPromise: Promise<boolean> | null = null;
+let transcribeAvailable: boolean | null = null;
+let transcribeCheckPromise: Promise<boolean> | null = null;
 
-async function checkWhisperAvailable(): Promise<boolean> {
-  if (whisperAvailable !== null) return whisperAvailable;
-  if (whisperCheckPromise) return whisperCheckPromise;
-  whisperCheckPromise = (async () => {
+async function checkTranscribeAvailable(): Promise<boolean> {
+  if (transcribeAvailable !== null) return transcribeAvailable;
+  if (transcribeCheckPromise) return transcribeCheckPromise;
+  transcribeCheckPromise = (async () => {
     try {
       const res = await fetch("/api/transcribe/status");
       const data = await res.json();
-      whisperAvailable = !!data.available;
+      transcribeAvailable = !!data.available;
     } catch {
-      whisperAvailable = false;
+      transcribeAvailable = false;
     }
-    return whisperAvailable;
+    return transcribeAvailable;
   })();
-  return whisperCheckPromise;
+  return transcribeCheckPromise;
+}
+
+/**
+ * Reset the cached availability check so the next recording attempt
+ * re-probes the server. Called after a runtime failure so transient
+ * outages don't permanently disable the feature.
+ */
+function resetTranscribeCache() {
+  transcribeAvailable = null;
+  transcribeCheckPromise = null;
 }
 
 // ── Types ──
 
+/** Default chunk interval — 3 seconds gives a smooth progressive feel */
+const DEFAULT_CHUNK_INTERVAL_MS = 3000;
+
 interface UseWhisperRecorderOptions {
-  /** Called with final transcript text when a recording completes or a chunk is processed */
+  /** Called with final transcript text when a recording completes */
   onTranscript: (text: string) => void;
-  /** Called with interim accumulated text (Whisper: chunk-level updates; fallback: real-time) */
+  /** Called with interim accumulated text as the user speaks */
   onInterimTranscript?: (text: string) => void;
   /** Called when recording state changes */
   onRecordingChange?: (isRecording: boolean) => void;
   /**
-   * For streaming/continuous mode: interval in ms to send audio chunks to Whisper.
-   * When set, audio is sent every N ms for progressive transcription.
-   * When not set, audio is sent only when recording stops.
+   * Interval in ms to send audio chunks for progressive transcription.
+   * Defaults to 3000ms. Set to 0 to disable chunked mode (batch only).
    */
   chunkIntervalMs?: number;
 }
@@ -48,9 +66,9 @@ interface UseWhisperRecorderOptions {
 interface UseWhisperRecorderReturn {
   isRecording: boolean;
   isSupported: boolean;
-  /** True when using Whisper, false when using Web Speech API fallback */
+  /** True when using server transcription, false when using Web Speech API */
   isWhisper: boolean;
-  /** True when a Whisper transcription request is in-flight */
+  /** True when a transcription request is in-flight */
   isTranscribing: boolean;
   startRecording: () => void;
   stopRecording: () => void;
@@ -67,12 +85,98 @@ function getAudioMimeType(): string {
   return "audio/webm";
 }
 
+// ── Helpers ──
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return blob.arrayBuffer().then((buf) =>
+    btoa(new Uint8Array(buf).reduce((data, byte) => data + String.fromCharCode(byte), "")),
+  );
+}
+
+/**
+ * Transcribe a blob via streaming SSE (/api/transcribe/stream).
+ * Falls back to the non-streaming endpoint if SSE fails to connect.
+ * Calls `onDelta` with accumulated text as deltas arrive.
+ */
+async function transcribeBlobStreaming(
+  blob: Blob,
+  mimeType: string,
+  onDelta: (accumulated: string) => void,
+): Promise<string> {
+  const base64 = await blobToBase64(blob);
+  const body = JSON.stringify({ audio: base64, mimeType: mimeType.split(";")[0] });
+
+  const res = await fetch("/api/transcribe/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+
+  if (!res.ok || !res.body) {
+    // Fallback to non-streaming endpoint
+    return transcribeBlobBatch(blob, mimeType);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE events from the buffer
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const event = JSON.parse(line.slice(6));
+        if (event.type === "delta" && event.accumulated) {
+          fullText = event.accumulated;
+          onDelta(fullText);
+        } else if (event.type === "done" && event.text) {
+          fullText = event.text;
+        } else if (event.type === "error") {
+          throw new Error(event.error);
+        }
+      } catch {
+        // Skip unparseable lines
+      }
+    }
+  }
+
+  return fullText;
+}
+
+/** Non-streaming batch transcription (fallback) */
+async function transcribeBlobBatch(blob: Blob, mimeType: string): Promise<string> {
+  const base64 = await blobToBase64(blob);
+  const res = await fetch("/api/transcribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audio: base64, mimeType: mimeType.split(";")[0] }),
+  });
+  if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
+  const data = await res.json();
+  return data.text || "";
+}
+
+// ── Hook ──
+
 export function useWhisperRecorder({
   onTranscript,
   onInterimTranscript,
   onRecordingChange,
   chunkIntervalMs,
 }: UseWhisperRecorderOptions): UseWhisperRecorderReturn {
+  // Resolve effective chunk interval: default 3s, 0 = disabled
+  const effectiveChunkMs =
+    chunkIntervalMs !== undefined ? (chunkIntervalMs || undefined) : DEFAULT_CHUNK_INTERVAL_MS;
+
   const [isRecording, setIsRecording] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   const [isWhisper, setIsWhisper] = useState(false);
@@ -86,7 +190,7 @@ export function useWhisperRecorder({
   useEffect(() => { onInterimTranscriptRef.current = onInterimTranscript; }, [onInterimTranscript]);
   useEffect(() => { onRecordingChangeRef.current = onRecordingChange; }, [onRecordingChange]);
 
-  // Runtime Whisper failure → fall back to Web Speech API
+  // Runtime failure flag — cleared on next availability check
   const whisperFailedRef = useRef(false);
 
   // Whisper state
@@ -98,18 +202,21 @@ export function useWhisperRecorder({
   const isRecordingRef = useRef(false);
   const mimeTypeRef = useRef(getAudioMimeType());
 
+  // Track which chunks were already flushed
+  const lastFlushedCountRef = useRef(0);
+  // Guard against concurrent flush operations
+  const flushingRef = useRef(false);
+
   // Web Speech API fallback state
   const recognitionRef = useRef<any>(null);
   const speechTranscriptRef = useRef("");
-  /** When true the user intentionally stopped — do NOT auto-restart */
   const speechStoppingRef = useRef(false);
 
   // Check availability on mount
   useEffect(() => {
-    checkWhisperAvailable().then((available) => {
+    checkTranscribeAvailable().then((available) => {
       setIsWhisper(available);
       if (!available) {
-        // Check Web Speech API
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (!SpeechRecognition) {
           setIsSupported(false);
@@ -118,59 +225,45 @@ export function useWhisperRecorder({
     });
   }, []);
 
-  // ── Send audio blob to Whisper ──
-  const transcribeBlob = useCallback(async (blob: Blob): Promise<string> => {
-    const buffer = await blob.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
-    );
-
-    const res = await apiRequest("POST", "/api/transcribe", {
-      audio: base64,
-      mimeType: mimeTypeRef.current.split(";")[0],
-    });
-    const data = await res.json();
-    return data.text || "";
-  }, []);
-
-  // Track which chunks were already flushed so we know when new data exists
-  const lastFlushedCountRef = useRef(0);
-
-  // ── Flush current chunks and transcribe ──
-  // Sends ALL accumulated audio from recording start each time (not just new
-  // chunks). This is necessary because WebM/Opus chunks after the first lack
-  // the container header and aren't independently decodable. The returned
-  // transcription replaces (not appends to) the accumulated text.
+  // ── Flush current chunks — streaming SSE transcription ──
   const flushChunks = useCallback(async () => {
     if (chunksRef.current.length === 0) return;
-    // Skip if no new chunks since the last flush
     if (chunksRef.current.length <= lastFlushedCountRef.current) return;
+    if (flushingRef.current) return; // Skip if a flush is already in progress
 
     const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
     lastFlushedCountRef.current = chunksRef.current.length;
 
-    if (blob.size < 100) return; // Skip tiny/empty blobs
+    if (blob.size < 100) return;
 
+    flushingRef.current = true;
     setIsTranscribing(true);
     try {
-      const text = await transcribeBlob(blob);
+      const text = await transcribeBlobStreaming(
+        blob,
+        mimeTypeRef.current,
+        (accumulated) => {
+          // Deliver streaming deltas as interim transcripts
+          accumulatedTextRef.current = accumulated.trim();
+          onInterimTranscriptRef.current?.(accumulatedTextRef.current);
+        },
+      );
       if (text.trim()) {
-        // Replace — we're re-transcribing the full recording each flush
         accumulatedTextRef.current = text.trim();
         onInterimTranscriptRef.current?.(accumulatedTextRef.current);
       }
     } catch (err) {
-      console.error("Whisper chunk transcription failed:", err);
-      // Mark Whisper as failed for future recordings
+      console.error("Chunk transcription failed:", err);
       whisperFailedRef.current = true;
-      whisperAvailable = false;
+      resetTranscribeCache();
       setIsWhisper(false);
     } finally {
+      flushingRef.current = false;
       setIsTranscribing(false);
     }
-  }, [transcribeBlob]);
+  }, []);
 
-  // ── Start Whisper recording ──
+  // ── Start server-side transcription recording ──
   const startWhisper = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -189,8 +282,7 @@ export function useWhisperRecorder({
       };
 
       recorder.onstop = async () => {
-        // Final transcription — always transcribe the full recording for
-        // accuracy, but skip if no new audio arrived since the last flush.
+        // Final transcription with streaming deltas for immediate feedback
         const hasNewChunks = chunksRef.current.length > lastFlushedCountRef.current;
         if (chunksRef.current.length > 0 && hasNewChunks) {
           const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
@@ -198,16 +290,21 @@ export function useWhisperRecorder({
           if (blob.size >= 100) {
             setIsTranscribing(true);
             try {
-              const text = await transcribeBlob(blob);
+              const text = await transcribeBlobStreaming(
+                blob,
+                mimeTypeRef.current,
+                (accumulated) => {
+                  accumulatedTextRef.current = accumulated.trim();
+                  onInterimTranscriptRef.current?.(accumulatedTextRef.current);
+                },
+              );
               if (text.trim()) {
-                // Replace — full recording re-transcription
                 accumulatedTextRef.current = text.trim();
               }
             } catch (err) {
-              console.error("Whisper final transcription failed:", err);
-              // Mark Whisper as failed so future recordings use Web Speech fallback
+              console.error("Final transcription failed:", err);
               whisperFailedRef.current = true;
-              whisperAvailable = false;
+              resetTranscribeCache();
               setIsWhisper(false);
             } finally {
               setIsTranscribing(false);
@@ -225,16 +322,14 @@ export function useWhisperRecorder({
         accumulatedTextRef.current = "";
       };
 
-      // Start recording — use timeslice for chunked mode
-      if (chunkIntervalMs) {
-        recorder.start(chunkIntervalMs);
-        // Periodic flush
+      // Always use chunked recording for progressive feedback
+      if (effectiveChunkMs) {
+        recorder.start(effectiveChunkMs);
         chunkTimerRef.current = setInterval(() => {
           if (recorder.state === "recording") {
-            // Request data, then flush
             flushChunks();
           }
-        }, chunkIntervalMs + 200); // slight offset so ondataavailable fires first
+        }, effectiveChunkMs + 200);
       } else {
         recorder.start();
       }
@@ -243,13 +338,13 @@ export function useWhisperRecorder({
       setIsRecording(true);
       onRecordingChangeRef.current?.(true);
     } catch (err) {
-      console.error("Failed to start Whisper recording:", err);
+      console.error("Failed to start recording:", err);
       setIsRecording(false);
       onRecordingChangeRef.current?.(false);
     }
-  }, [chunkIntervalMs, flushChunks, transcribeBlob]);
+  }, [effectiveChunkMs, flushChunks]);
 
-  // ── Stop Whisper recording ──
+  // ── Stop server-side transcription recording ──
   const stopWhisper = useCallback(() => {
     if (chunkTimerRef.current) {
       clearInterval(chunkTimerRef.current);
@@ -291,16 +386,11 @@ export function useWhisperRecorder({
       if (newFinal) {
         speechTranscriptRef.current += newFinal + " ";
       }
-      // Deliver accumulated text via onInterimTranscript for live preview.
-      // onTranscript fires only once when recording stops (matching Whisper
-      // behavior) to avoid duplication in handlers that append.
       const full = speechTranscriptRef.current + interimTranscript;
       if (full) onInterimTranscriptRef.current?.(full);
     };
 
     recognition.onerror = (event: any) => {
-      // "no-speech" and "aborted" are recoverable — the onend handler
-      // will auto-restart. Only fatal errors should kill the session.
       if (event.error === "no-speech" || event.error === "aborted") return;
       console.error("Speech recognition error:", event.error);
       speechStoppingRef.current = true;
@@ -310,9 +400,6 @@ export function useWhisperRecorder({
     };
 
     recognition.onend = () => {
-      // If user intentionally stopped, deliver the final accumulated
-      // transcript once (matching Whisper's single-delivery behavior)
-      // and clean up.
       if (speechStoppingRef.current) {
         speechStoppingRef.current = false;
         if (speechTranscriptRef.current.trim()) {
@@ -324,13 +411,11 @@ export function useWhisperRecorder({
         onRecordingChangeRef.current?.(false);
         return;
       }
-      // Otherwise the browser killed the session (silence timeout, network
-      // hiccup, etc.) — auto-restart to keep listening
+      // Auto-restart on browser timeout
       if (isRecordingRef.current) {
         try {
           recognition.start();
         } catch {
-          // start() can throw if called too quickly — retry once
           setTimeout(() => {
             try { recognition.start(); } catch { /* give up */ }
           }, 200);
@@ -362,9 +447,19 @@ export function useWhisperRecorder({
   }, []);
 
   // ── Public API ──
-  const startRecording = useCallback(() => {
+  const startRecording = useCallback(async () => {
     if (isRecordingRef.current) return;
-    // If Whisper failed at runtime, always use Web Speech fallback
+
+    // Re-check availability if previously failed (handles transient outages)
+    if (whisperFailedRef.current) {
+      resetTranscribeCache();
+      const available = await checkTranscribeAvailable();
+      if (available) {
+        whisperFailedRef.current = false;
+        setIsWhisper(true);
+      }
+    }
+
     if (isWhisper && !whisperFailedRef.current) {
       startWhisper();
     } else {

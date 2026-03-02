@@ -2925,34 +2925,30 @@ Output only the evolved markdown document. No explanations.`;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // WHISPER TRANSCRIPTION — translate any-language audio to English text
+  // VOICE TRANSCRIPTION — unified audio-to-text via gpt-4o-mini-transcribe
   // ═══════════════════════════════════════════════════════════════════════
 
-  /** Check if Whisper transcription is available (requires OpenAI API key) */
-  app.get("/api/transcribe/status", (_req, res) => {
-    // Audio endpoints are NOT supported through the Replit proxy —
-    // only direct OpenAI keys work for Whisper.  Accept OPENAI_API_KEY
-    // or the Replit-injected key but only when NOT proxied.
+  /** Resolve the OpenAI API key for audio endpoints (direct key only) */
+  function getAudioApiKey(): string | null {
     const directKey = process.env.OPENAI_API_KEY;
     const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
     const hasProxy = !!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-    // Available when: a direct key exists, OR the integration key exists without a proxy
-    const available = !!directKey || (!!integrationKey && !hasProxy);
-    res.json({ available });
+    return directKey ?? (!hasProxy && integrationKey ? integrationKey : null);
+  }
+
+  /** Check if voice transcription is available (requires OpenAI API key) */
+  app.get("/api/transcribe/status", (_req, res) => {
+    const available = !!getAudioApiKey();
+    res.json({ available, model: "gpt-4o-mini-transcribe" });
   });
 
-  /** Accept base64-encoded audio, translate+transcribe to English via Whisper */
+  /** Accept base64-encoded audio, transcribe via gpt-4o-mini-transcribe */
   app.post("/api/transcribe", async (req, res) => {
     try {
-      // Audio endpoints require a direct OpenAI connection (not the Replit proxy)
-      const directKey = process.env.OPENAI_API_KEY;
-      const integrationKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      const hasProxy = !!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-      const apiKey = directKey || (!hasProxy ? integrationKey : null);
-
+      const apiKey = getAudioApiKey();
       if (!apiKey) {
         return res.status(503).json({
-          error: "Whisper transcription not available — audio endpoints require a direct OpenAI API key (OPENAI_API_KEY), not the Replit proxy",
+          error: "Voice transcription not available — requires a direct OpenAI API key (OPENAI_API_KEY)",
         });
       }
 
@@ -2971,17 +2967,15 @@ Output only the evolved markdown document. No explanations.`;
 
       const OpenAI = (await import("openai")).default;
       const { toFile } = await import("openai");
-      // Never use the Replit proxy for audio — connect directly to OpenAI
       const client = new OpenAI({ apiKey });
 
-      // Determine file extension from MIME type
       const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
       const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
 
-      // Use "translations" endpoint — always outputs English regardless of input language
-      const result = await client.audio.translations.create({
+      // Use gpt-4o-mini-transcribe — faster, more accurate than whisper-1
+      const result = await client.audio.transcriptions.create({
         file,
-        model: "whisper-1",
+        model: "gpt-4o-mini-transcribe",
       });
 
       res.json({ text: result.text });
@@ -2989,6 +2983,76 @@ Output only the evolved markdown document. No explanations.`;
       console.error("Transcribe error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Transcription failed", details: errorMessage });
+    }
+  });
+
+  /**
+   * Streaming transcription via SSE — sends text deltas as they arrive
+   * so the client can render progressive results in real time.
+   */
+  app.post("/api/transcribe/stream", async (req, res) => {
+    try {
+      const apiKey = getAudioApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: "Voice transcription not available — requires a direct OpenAI API key (OPENAI_API_KEY)",
+        });
+      }
+
+      const { audio, mimeType } = req.body;
+      if (!audio || typeof audio !== "string") {
+        return res.status(400).json({ error: "audio (base64) is required" });
+      }
+
+      const buffer = Buffer.from(audio, "base64");
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: "Empty audio data" });
+      }
+      if (buffer.length > 25 * 1024 * 1024) {
+        return res.status(400).json({ error: "Audio exceeds 25MB limit" });
+      }
+
+      // Set SSE headers
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      const OpenAI = (await import("openai")).default;
+      const { toFile } = await import("openai");
+      const client = new OpenAI({ apiKey });
+
+      const ext = (mimeType || "audio/webm").split("/")[1]?.split(";")[0] || "webm";
+      const file = await toFile(buffer, `audio.${ext}`, { type: mimeType || "audio/webm" });
+
+      // Stream transcription deltas via gpt-4o-mini-transcribe
+      const stream = await client.audio.transcriptions.create({
+        file,
+        model: "gpt-4o-mini-transcribe",
+        stream: true,
+      });
+
+      let fullText = "";
+      for await (const event of stream as any) {
+        if (event.type === "transcript.text.delta") {
+          fullText += event.delta;
+          res.write(`data: ${JSON.stringify({ type: "delta", text: event.delta, accumulated: fullText })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ type: "done", text: fullText })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Streaming transcribe error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      // If headers already sent, send error as SSE event
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ type: "error", error: errorMessage })}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ error: "Transcription failed", details: errorMessage });
+      }
     }
   });
 

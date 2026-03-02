@@ -144,6 +144,7 @@ export function TranscriptPanel({
                 onTranscript={(t) =>
                   setNoteText((prev) => (prev ? `${prev} ${t}` : t))
                 }
+                onInterimTranscript={(t) => setNoteText(t)}
                 size="icon"
                 variant="ghost"
                 className="h-6 w-6 shrink-0 text-muted-foreground"
