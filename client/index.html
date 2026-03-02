@@ -32,6 +32,16 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- AIQA QA Overlay -->
+    <style>
+      /* Force AIQA overlay above all app elements */
+      #aiqa-overlay-root {
+        z-index: 2147483647 !important;
+        position: fixed !important;
+      }
+      #aiqa-overlay-root * {
+        z-index: auto;
+      }
+    </style>
     <script src="https://aiqastudio.com/snippet.js" data-base-url="https://aiqastudio.com"></script>
     <script>
       // AIQA Debug — tracks why the overlay disappears on click
