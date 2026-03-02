@@ -78,6 +78,7 @@ export interface IStorage {
     iv: string;
     folderId?: number | null;
     locked?: boolean;
+    docType?: string | null;
   }): Promise<{ id: number; createdAt: string }>;
   listDocuments(userId: string, folderId?: number | null): Promise<DocumentListItem[]>;
   getDocument(id: number): Promise<StoredDocument | null>;
@@ -168,6 +169,7 @@ export class DatabaseStorage implements IStorage {
     iv: string;
     folderId?: number | null;
     locked?: boolean;
+    docType?: string | null;
   }): Promise<{ id: number; createdAt: string }> {
     const [row] = await db
       .insert(documents)
@@ -182,6 +184,7 @@ export class DatabaseStorage implements IStorage {
         iv: data.iv,
         folderId: data.folderId ?? null,
         locked: data.locked ?? false,
+        docType: data.docType ?? null,
       })
       .returning({ id: documents.id, createdAt: documents.createdAt });
 
@@ -204,6 +207,7 @@ export class DatabaseStorage implements IStorage {
         titleIv: documents.titleIv,
         folderId: documents.folderId,
         locked: documents.locked,
+        docType: documents.docType,
         createdAt: documents.createdAt,
         updatedAt: documents.updatedAt,
       })
@@ -219,6 +223,7 @@ export class DatabaseStorage implements IStorage {
       titleIv: r.titleIv,
       folderId: r.folderId,
       locked: r.locked,
+      docType: r.docType,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));

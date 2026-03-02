@@ -118,7 +118,7 @@ export function GeneratePanel({
       const content = doc.imageUrl
         ? `![${doc.title}](${doc.imageUrl})\n\n${doc.content}`
         : doc.content;
-      await apiRequest("POST", "/api/documents", { title: doc.title, content });
+      await apiRequest("POST", "/api/documents", { title: doc.title, content, docType: doc.imageUrl ? "image" : "document" });
       setSavedDocIds((prev) => new Set(prev).add(doc.id));
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       trackEvent("document_saved");
@@ -141,7 +141,7 @@ export function GeneratePanel({
       const content = doc.imageUrl
         ? `![${title}](${doc.imageUrl})\n\n${doc.content}`
         : doc.content;
-      await apiRequest("POST", "/api/documents", { title, content });
+      await apiRequest("POST", "/api/documents", { title, content, docType: doc.imageUrl ? "image" : "document" });
       trackEvent("document_saved");
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       toast({ title: "Saved to Context Store", description: title });

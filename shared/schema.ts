@@ -522,11 +522,16 @@ export interface WorkspaceState {
   currentPhase: "input" | "blank-document" | "workspace";
 }
 
+// Document type for icon display in the Context Store
+export const docTypes = ["document", "image", "timeline", "chart", "note"] as const;
+export type DocType = (typeof docTypes)[number];
+
 // Document save/load schemas (server-side encryption, Clerk auth for ownership)
 export const saveDocumentRequestSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   content: z.string().min(1, "Content is required"),
   folderId: z.number().nullable().optional(),
+  docType: z.enum(docTypes).optional(),
 });
 
 export type SaveDocumentRequest = z.infer<typeof saveDocumentRequestSchema>;
@@ -550,6 +555,7 @@ export interface DocumentListItem {
   title: string;
   folderId?: number | null;
   locked?: boolean;
+  docType?: string | null;
   createdAt: string;
   updatedAt: string;
 }

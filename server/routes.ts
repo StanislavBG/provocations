@@ -4699,7 +4699,7 @@ RULES:
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { title, content, folderId } = parsed.data;
+      const { title, content, folderId, docType } = parsed.data;
       const key = getEncryptionKey();
       const encryptedContent = encrypt(content, key);
       const encryptedTitle = encrypt(title, key);
@@ -4714,6 +4714,7 @@ RULES:
         salt: encryptedContent.salt,
         iv: encryptedContent.iv,
         folderId: folderId ?? null,
+        docType: docType ?? null,
       });
 
       res.json({ id: doc.id, createdAt: doc.createdAt });
@@ -4790,6 +4791,7 @@ RULES:
           id: item.id,
           title: await decryptFieldAsync(item.title, item.titleCiphertext, item.titleSalt, item.titleIv, key),
           folderId: item.folderId,
+          docType: item.docType ?? null,
           createdAt: item.createdAt,
           updatedAt: item.updatedAt,
         })),

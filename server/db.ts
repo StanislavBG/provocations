@@ -81,6 +81,7 @@ export async function ensureTables(): Promise<void> {
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_salt VARCHAR(64);
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS title_iv VARCHAR(32);
         ALTER TABLE documents ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE NOT NULL;
+        ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_type VARCHAR(32);
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_ciphertext TEXT;
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_salt VARCHAR(64);
         ALTER TABLE folders ADD COLUMN IF NOT EXISTS name_iv VARCHAR(32);
