@@ -507,6 +507,29 @@ export default function NotebookWorkspace() {
     }
   }, [toast]);
 
+  // ── Save timeline JSON to Context Store as a real document ──
+  const [timelineDocId, setTimelineDocId] = useState<number | null>(null);
+  const handleSaveTimelineToContextStore = useCallback(async (json: string, label: string) => {
+    setIsSavingToContext(true);
+    try {
+      const title = label || `Timeline ${new Date().toLocaleDateString()}`;
+      if (timelineDocId) {
+        await apiRequest("PUT", `/api/documents/${timelineDocId}`, { title, content: json });
+        toast({ title: "Timeline saved", description: title });
+      } else {
+        const res = await apiRequest("POST", "/api/documents", { title, content: json });
+        const data = await res.json();
+        if (data.id) setTimelineDocId(data.id);
+        toast({ title: "Saved to Context Store", description: title });
+      }
+      trackEvent("document_saved");
+    } catch {
+      toast({ title: "Save failed", description: "Could not save timeline.", variant: "destructive" });
+    } finally {
+      setIsSavingToContext(false);
+    }
+  }, [timelineDocId, toast]);
+
   // ── Writer voice/text feedback — sends user feedback through the write mutation ──
   const handleWriterFeedback = useCallback(
     (instruction: string, selectedText?: string, description?: string) => {
@@ -813,7 +836,7 @@ export default function NotebookWorkspace() {
                 />
               ) : appFlowConfig.workspaceLayout === "timeline" ? (
                 <TimelineWorkspace
-                  onSaveToContext={(json, label) => handleCaptureToContext(json, label)}
+                  onSaveToContext={handleSaveTimelineToContextStore}
                 />
               ) : (
                 <NotebookCenterPanel
@@ -838,7 +861,7 @@ export default function NotebookWorkspace() {
                   isSaving={isSavingToContext}
                   imageTabData={imageTabData}
                   onImageActiveChange={handleImageActiveChange}
-                  onSaveTimelineToContext={(json, label) => handleCaptureToContext(json, label)}
+                  onSaveTimelineToContext={handleSaveTimelineToContextStore}
                   onTimelineSummaryChange={setTimelineSummary}
                   onWriterFeedback={handleWriterFeedback}
                 />
