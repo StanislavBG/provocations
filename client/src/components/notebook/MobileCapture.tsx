@@ -239,6 +239,7 @@ function QuickCaptureView({
             <div className="flex items-center gap-1">
               <VoiceRecorder
                 onTranscript={handleVoiceTranscript}
+                onInterimTranscript={(t) => setNoteText(t)}
                 size="sm"
                 variant="ghost"
                 className="h-8 w-8 text-muted-foreground"
@@ -621,6 +622,7 @@ function InterviewView({
                 </div>
                 <VoiceRecorder
                   onTranscript={(t) => setObjective((prev) => prev ? prev + " " + t : t)}
+                  onInterimTranscript={(t) => setObjective(t)}
                   size="sm"
                   variant="ghost"
                   className="h-7 w-7 text-muted-foreground"
@@ -695,6 +697,7 @@ function InterviewView({
                 />
                 <VoiceRecorder
                   onTranscript={(t) => setFocusText((prev) => prev ? prev + " " + t : t)}
+                  onInterimTranscript={(t) => setFocusText(t)}
                   size="sm"
                   variant="ghost"
                   className="h-9 w-9 shrink-0 text-muted-foreground"

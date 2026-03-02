@@ -320,6 +320,7 @@ export function NotebookResearchChat({
           </div>
           <VoiceRecorder
             onTranscript={(text) => setInput(text)}
+            onInterimTranscript={(text) => setInput(text)}
             size="icon"
             variant="ghost"
             className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
