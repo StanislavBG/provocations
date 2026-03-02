@@ -133,12 +133,21 @@ export function useWhisperRecorder({
     return data.text || "";
   }, []);
 
+  // Track which chunks were already flushed so we know when new data exists
+  const lastFlushedCountRef = useRef(0);
+
   // ── Flush current chunks and transcribe ──
+  // Sends ALL accumulated audio from recording start each time (not just new
+  // chunks). This is necessary because WebM/Opus chunks after the first lack
+  // the container header and aren't independently decodable. The returned
+  // transcription replaces (not appends to) the accumulated text.
   const flushChunks = useCallback(async () => {
     if (chunksRef.current.length === 0) return;
+    // Skip if no new chunks since the last flush
+    if (chunksRef.current.length <= lastFlushedCountRef.current) return;
 
     const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
-    chunksRef.current = [];
+    lastFlushedCountRef.current = chunksRef.current.length;
 
     if (blob.size < 100) return; // Skip tiny/empty blobs
 
@@ -146,7 +155,8 @@ export function useWhisperRecorder({
     try {
       const text = await transcribeBlob(blob);
       if (text.trim()) {
-        accumulatedTextRef.current += (accumulatedTextRef.current ? " " : "") + text.trim();
+        // Replace — we're re-transcribing the full recording each flush
+        accumulatedTextRef.current = text.trim();
         onInterimTranscriptRef.current?.(accumulatedTextRef.current);
       }
     } catch (err) {
@@ -170,6 +180,7 @@ export function useWhisperRecorder({
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
       accumulatedTextRef.current = "";
+      lastFlushedCountRef.current = 0;
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -178,17 +189,19 @@ export function useWhisperRecorder({
       };
 
       recorder.onstop = async () => {
-        // Final flush — transcribe remaining audio
-        if (chunksRef.current.length > 0) {
+        // Final transcription — always transcribe the full recording for
+        // accuracy, but skip if no new audio arrived since the last flush.
+        const hasNewChunks = chunksRef.current.length > lastFlushedCountRef.current;
+        if (chunksRef.current.length > 0 && hasNewChunks) {
           const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
-          chunksRef.current = [];
 
           if (blob.size >= 100) {
             setIsTranscribing(true);
             try {
               const text = await transcribeBlob(blob);
               if (text.trim()) {
-                accumulatedTextRef.current += (accumulatedTextRef.current ? " " : "") + text.trim();
+                // Replace — full recording re-transcription
+                accumulatedTextRef.current = text.trim();
               }
             } catch (err) {
               console.error("Whisper final transcription failed:", err);
@@ -201,6 +214,9 @@ export function useWhisperRecorder({
             }
           }
         }
+
+        chunksRef.current = [];
+        lastFlushedCountRef.current = 0;
 
         // Deliver final transcript
         if (accumulatedTextRef.current.trim()) {
