@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -8,7 +8,7 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import type { ChatMessage } from "@shared/schema";
+import type { ChatMessage, ChatMessageWithMeta } from "@shared/schema";
 import type { ResearchFocus, ResponseConfig, ResponseDetailLevel, ResponseFormat, ResponseAudienceLevel, ResponseTone } from "@shared/schema";
 import type { LucideIcon } from "lucide-react";
 
@@ -65,7 +65,7 @@ export function NotebookResearchChat({
   onCaptureToContext,
   onMessageCountChange,
 }: NotebookResearchChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessageWithMeta[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -78,6 +78,7 @@ export function NotebookResearchChat({
   });
   const [showResponseConfig, setShowResponseConfig] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
 
   // Check if any response config differs from defaults
@@ -100,15 +101,23 @@ export function NotebookResearchChat({
     setMessages([]);
   }, []);
 
+  // Stop generation
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
 
-    const userMessage: ChatMessage = { role: "user", content: trimmed };
+    const userMessage: ChatMessageWithMeta = { role: "user", content: trimmed };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
     setStreamingContent("");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const response = await fetch("/api/chat/stream", {
@@ -117,10 +126,11 @@ export function NotebookResearchChat({
         body: JSON.stringify({
           message: trimmed,
           objective: objective || "General research",
-          history: messages.slice(-30),
+          history: messages.slice(-30).map((m) => ({ role: m.role, content: m.content })),
           researchFocus: focusMode,
           responseConfig: hasCustomConfig ? responseConfig : undefined,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) throw new Error("Chat request failed");
@@ -130,6 +140,9 @@ export function NotebookResearchChat({
 
       const decoder = new TextDecoder();
       let accumulated = "";
+      let followUps: string[] | undefined;
+      let durationMs: number | undefined;
+      let model: string | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -145,6 +158,11 @@ export function NotebookResearchChat({
             if (data.type === "content") {
               accumulated += data.content;
               setStreamingContent(accumulated);
+            } else if (data.type === "followups") {
+              followUps = data.followUps;
+            } else if (data.type === "meta") {
+              durationMs = data.durationMs;
+              model = data.model;
             } else if (data.type === "done") {
               // Streaming complete
             }
@@ -154,22 +172,34 @@ export function NotebookResearchChat({
         }
       }
 
-      // Commit the full response as a message
+      // Commit the full response as a message with metadata
       if (accumulated) {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: accumulated },
+          { role: "assistant", content: accumulated, followUps, durationMs, model },
         ]);
       }
     } catch (error) {
-      const msg =
-        error instanceof Error ? error.message : "Research chat failed";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      if (error instanceof DOMException && error.name === "AbortError") {
+        // User stopped generation — commit what we have
+        const partial = streamingContent;
+        if (partial) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: partial },
+          ]);
+        }
+      } else {
+        const msg =
+          error instanceof Error ? error.message : "Research chat failed";
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      }
     } finally {
       setIsLoading(false);
       setStreamingContent("");
+      abortRef.current = null;
     }
-  }, [input, isLoading, messages, objective, focusMode, hasCustomConfig, responseConfig, toast]);
+  }, [input, isLoading, messages, objective, focusMode, hasCustomConfig, responseConfig, streamingContent, toast]);
 
   const handleCapture = useCallback(
     (content: string) => {
@@ -186,6 +216,14 @@ export function NotebookResearchChat({
       });
     },
     [onCaptureToContext, toast],
+  );
+
+  // Click a follow-up suggestion to auto-populate and send
+  const handleFollowUp = useCallback(
+    (question: string) => {
+      setInput(question);
+    },
+    [],
   );
 
   const hasMessages = messages.length > 0;
@@ -336,22 +374,56 @@ export function NotebookResearchChat({
                         <span className="text-[10px] text-muted-foreground">
                           Research
                         </span>
+                        {/* Response metadata */}
+                        {msg.durationMs != null && (
+                          <span className="text-[9px] text-muted-foreground/60 ml-auto flex items-center gap-0.5">
+                            <Clock className="w-2.5 h-2.5" />
+                            {(msg.durationMs / 1000).toFixed(1)}s
+                          </span>
+                        )}
+                        {msg.model && (
+                          <span className="text-[9px] text-muted-foreground/60 flex items-center gap-0.5">
+                            <Cpu className="w-2.5 h-2.5" />
+                            {msg.model.replace(/^models\//, "")}
+                          </span>
+                        )}
                       </div>
                       <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
                     </div>
-                    {/* Capture button */}
-                    <div className="mt-1 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-primary"
-                        onClick={() => handleCapture(msg.content)}
-                      >
-                        <BookmarkPlus className="w-3 h-3" />
-                        Send to Notes
-                      </Button>
+
+                    {/* Action row: capture + follow-ups */}
+                    <div className="mt-1 flex flex-col gap-1">
+                      {/* Capture button */}
+                      <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-primary"
+                          onClick={() => handleCapture(msg.content)}
+                        >
+                          <BookmarkPlus className="w-3 h-3" />
+                          Send to Notes
+                        </Button>
+                      </div>
+
+                      {/* Follow-up suggestions */}
+                      {msg.followUps && msg.followUps.length > 0 && i === messages.length - 1 && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {msg.followUps.map((q, j) => (
+                            <button
+                              key={j}
+                              type="button"
+                              onClick={() => handleFollowUp(q)}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] bg-muted/50 hover:bg-muted text-foreground/70 hover:text-foreground transition-colors border border-border/50 hover:border-border"
+                            >
+                              <ArrowRight className="w-2.5 h-2.5 text-primary/60 shrink-0" />
+                              <span className="text-left">{q}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -361,15 +433,32 @@ export function NotebookResearchChat({
             {/* Streaming response */}
             {streamingContent && (
               <div className="flex justify-start">
-                <div className="max-w-[90%] bg-muted/40 rounded-lg px-3 py-2 text-sm">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Bot className="w-3 h-3 text-blue-500" />
-                    <span className="text-[10px] text-muted-foreground">
-                      Research
-                    </span>
+                <div className="max-w-[90%]">
+                  <div className="bg-muted/40 rounded-lg px-3 py-2 text-sm">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Bot className="w-3 h-3 text-blue-500" />
+                      <span className="text-[10px] text-muted-foreground">
+                        Research
+                      </span>
+                      <span className="text-[9px] text-muted-foreground/50 ml-auto">
+                        streaming...
+                      </span>
+                    </div>
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                    </div>
                   </div>
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                    <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                  {/* Stop button */}
+                  <div className="mt-1 flex justify-start">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-destructive border-muted"
+                      onClick={handleStop}
+                    >
+                      <Square className="w-2.5 h-2.5 fill-current" />
+                      Stop generating
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -383,6 +472,15 @@ export function NotebookResearchChat({
                   <span className="text-xs text-muted-foreground">
                     Researching...
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 text-[9px] gap-0.5 text-muted-foreground hover:text-destructive ml-1"
+                    onClick={handleStop}
+                  >
+                    <Square className="w-2 h-2 fill-current" />
+                    Stop
+                  </Button>
                 </div>
               </div>
             )}

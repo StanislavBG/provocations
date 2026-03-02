@@ -1145,6 +1145,13 @@ export const chatMessageSchema = z.object({
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
+/** Extended chat message with metadata for display (not sent to API) */
+export interface ChatMessageWithMeta extends ChatMessage {
+  followUps?: string[];
+  durationMs?: number;
+  model?: string;
+}
+
 export const chatRequestSchema = z.object({
   message: z.string().min(1, "Message is required"),
   objective: z.string().min(1, "Objective is required"),

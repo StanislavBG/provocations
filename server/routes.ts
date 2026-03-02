@@ -4219,6 +4219,7 @@ ${sections.join("\n\n")}`;
 
       const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
+      const streamStartMs = Date.now();
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -4249,15 +4250,49 @@ ${sections.join("\n\n")}`;
         enableSearch: true,
       });
 
+      let fullResponse = "";
       for await (const chunk of stream) {
+        fullResponse += chunk;
         res.write(`data: ${JSON.stringify({ type: "content", content: chunk })}\n\n`);
       }
+
+      const durationMs = Date.now() - streamStartMs;
 
       // Send verbose metadata if verbose mode is enabled
       const scope = getActiveGatewayScope();
       if (scope && scope.verboseList.length > 0) {
         res.write(`data: ${JSON.stringify({ type: "verbose", _verbose: scope.verboseList })}\n\n`);
       }
+
+      // Generate follow-up suggestions asynchronously (non-blocking)
+      try {
+        const followUpResult = await llm.generateWithModel(selectedModel, {
+          system: `You generate follow-up research questions. Given a research conversation, suggest exactly 3 short follow-up questions (max 60 chars each) the user might want to explore next. Return ONLY a JSON array of 3 strings, no other text. Example: ["How does X compare to Y?","What are the risks of Z?","Who are the key players?"]`,
+          messages: [
+            { role: "user", content: message },
+            { role: "assistant", content: fullResponse.slice(0, 2000) },
+            { role: "user", content: "Suggest 3 follow-up questions as a JSON array:" },
+          ],
+          maxTokens: 256,
+          temperature: 0.8,
+        });
+        try {
+          const jsonMatch = followUpResult.text.match(/\[[\s\S]*?\]/);
+          if (jsonMatch) {
+            const followUps = JSON.parse(jsonMatch[0]) as string[];
+            if (Array.isArray(followUps) && followUps.length > 0) {
+              res.write(`data: ${JSON.stringify({ type: "followups", followUps: followUps.slice(0, 3) })}\n\n`);
+            }
+          }
+        } catch {
+          // Silently skip malformed follow-ups
+        }
+      } catch {
+        // Follow-ups are best-effort — don't fail the response
+      }
+
+      // Send metadata (timing, model)
+      res.write(`data: ${JSON.stringify({ type: "meta", durationMs, model: selectedModel })}\n\n`);
 
       res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       res.end();
