@@ -1115,12 +1115,56 @@ export interface PipelineStatus {
 export const researchFocusModes = ["explore", "verify", "gather", "analyze", "synthesize", "reason", "deep-research"] as const;
 export type ResearchFocus = (typeof researchFocusModes)[number];
 
+// ── Response configuration (how the researcher responds, distinct from focus mode) ──
+
+export const responseDetailLevels = ["brief", "standard", "detailed", "exhaustive"] as const;
+export type ResponseDetailLevel = (typeof responseDetailLevels)[number];
+
+export const responseFormats = ["prose", "structured", "outline", "academic"] as const;
+export type ResponseFormat = (typeof responseFormats)[number];
+
+export const responseAudienceLevels = ["non-technical", "general", "technical", "expert"] as const;
+export type ResponseAudienceLevel = (typeof responseAudienceLevels)[number];
+
+export const responseTones = ["neutral", "conversational", "assertive", "critical"] as const;
+export type ResponseTone = (typeof responseTones)[number];
+
+export const responseConfigSchema = z.object({
+  detail: z.enum(responseDetailLevels).optional(),
+  format: z.enum(responseFormats).optional(),
+  audience: z.enum(responseAudienceLevels).optional(),
+  tone: z.enum(responseTones).optional(),
+});
+
+export type ResponseConfig = z.infer<typeof responseConfigSchema>;
+
 export const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
 });
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
+
+/** Extended chat message with metadata for display (not sent to API) */
+export interface ChatMessageWithMeta extends ChatMessage {
+  followUps?: string[];
+  durationMs?: number;
+  model?: string;
+  groundingSource?: "web" | "context" | "both";
+}
+
+/** Research plan step for Deep Research mode */
+export interface ResearchPlanStep {
+  area: string;
+  questions: string[];
+}
+
+/** Research plan generated before deep research execution */
+export interface ResearchPlan {
+  title: string;
+  estimatedTime: string;
+  steps: ResearchPlanStep[];
+}
 
 export const chatRequestSchema = z.object({
   message: z.string().min(1, "Message is required"),
@@ -1131,6 +1175,8 @@ export const chatRequestSchema = z.object({
   appType: z.enum(templateIds).optional(),
   chatModel: z.string().optional(),
   researchFocus: z.enum(researchFocusModes).optional(),
+  responseConfig: responseConfigSchema.optional(),
+  researchPlan: z.string().optional(),
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;

@@ -51,6 +51,7 @@ import {
   summarizeSessionRequestSchema,
   saveChatSessionRequestSchema,
   type YouTubeChannelResponse,
+  type ResponseConfig,
   type GenerateSummaryResponse,
   type InfographicSpec,
   shareItemRequestSchema,
@@ -3987,8 +3988,10 @@ Output only valid JSON, no markdown.`,
     objective: string,
     notesContext: string,
     focusMode?: string,
+    responseConfig?: ResponseConfig,
   ): string {
     const focusSection = getFocusModePrompt(focusMode || "explore");
+    const responseSection = getResponseConfigPrompt(responseConfig);
 
     return `You are a rigorous, senior research analyst. Your purpose is to help the user build a well-sourced, trustworthy body of knowledge on their topic. You are precise, skeptical of unverified claims, and always transparent about what you know versus what you're uncertain about.
 ${topicContext}
@@ -4012,6 +4015,8 @@ TRUST & ACCURACY — NON-NEGOTIABLE:
 - **Surface contradictions.** If sources disagree, present both sides and explain the discrepancy.
 
 ${focusSection}
+
+${responseSection}
 
 RESPONSE FORMATTING — MANDATORY:
 - Always respond in clean, well-structured **Markdown**.
@@ -4122,6 +4127,144 @@ You are operating in exploration mode. Your primary goal is to help the user dis
     }
   }
 
+  function getResponseConfigPrompt(config?: ResponseConfig): string {
+    if (!config) return "";
+
+    const sections: string[] = [];
+
+    // Detail level
+    if (config.detail && config.detail !== "standard") {
+      switch (config.detail) {
+        case "brief":
+          sections.push(`DETAIL LEVEL: BRIEF
+- Keep responses short and scannable — aim for the minimum needed to answer the question.
+- Use bullet points over paragraphs. One sentence per point maximum.
+- Skip background context and preamble — go straight to the answer.
+- Omit examples unless they are essential to understanding.
+- Target 150-300 words unless the question demands more.`);
+          break;
+        case "detailed":
+          sections.push(`DETAIL LEVEL: DETAILED
+- Provide thorough coverage with supporting evidence, examples, and context.
+- Explain the "why" behind each point, not just the "what".
+- Include relevant background information the user may not have considered.
+- Use multiple subsections with clear headings for different aspects.
+- Add concrete examples, data points, or case studies where relevant.
+- Target 500-1500 words depending on complexity.`);
+          break;
+        case "exhaustive":
+          sections.push(`DETAIL LEVEL: EXHAUSTIVE
+- Leave nothing out — this is a comprehensive reference response.
+- Cover every relevant dimension: history, current state, alternatives, edge cases, trade-offs.
+- Include multiple examples for each major point.
+- Add caveats, limitations, and counterarguments for completeness.
+- Provide enough detail that the response could serve as standalone documentation.
+- Use extensive cross-referencing between sections.
+- No length constraint — thoroughness is the priority.`);
+          break;
+      }
+    }
+
+    // Format
+    if (config.format && config.format !== "structured") {
+      switch (config.format) {
+        case "prose":
+          sections.push(`FORMAT: PROSE NARRATIVE
+- Write in flowing, connected paragraphs — not bullet lists.
+- Use topic sentences and transitions between ideas.
+- Structure as a readable essay or article with natural flow.
+- Minimize bullet points — reserve them only for enumerating specific items (feature lists, requirements, etc.).
+- Use **bold** sparingly for emphasis, not as a structural device.`);
+          break;
+        case "outline":
+          sections.push(`FORMAT: HIERARCHICAL OUTLINE
+- Structure the entire response as a nested outline.
+- Use numbered lists (1., 1.1, 1.1.1) for main points and sub-points.
+- Keep each point to a single sentence or short phrase.
+- Show relationships through indentation and nesting depth.
+- This format is designed for quick scanning and easy copy-paste into documents.`);
+          break;
+        case "academic":
+          sections.push(`FORMAT: ACADEMIC / FORMAL
+- Structure with formal sections: Overview, Background, Analysis, Findings, Conclusion.
+- Use precise, formal language — avoid colloquialisms and contractions.
+- Cite every factual claim with source attribution (author/org, year, publication).
+- Include a brief abstract or executive summary at the top.
+- Use footnote-style references where appropriate.
+- Distinguish clearly between established consensus and emerging/disputed views.`);
+          break;
+      }
+    }
+
+    // Audience level
+    if (config.audience && config.audience !== "general") {
+      switch (config.audience) {
+        case "non-technical":
+          sections.push(`AUDIENCE: NON-TECHNICAL
+- Use plain language throughout — no jargon, no acronyms without explanation.
+- Replace technical terms with everyday equivalents (e.g., "database" → "where the data is stored").
+- Use analogies and real-world comparisons to explain complex concepts.
+- Focus on outcomes and implications rather than implementation details.
+- Assume the reader has no background in this field.`);
+          break;
+        case "technical":
+          sections.push(`AUDIENCE: TECHNICAL PRACTITIONER
+- Assume the reader has solid domain knowledge and working experience.
+- Use proper technical terminology without over-explaining.
+- Include implementation-relevant details: APIs, configurations, code patterns, architecture decisions.
+- Reference specific tools, libraries, and standards by name.
+- Skip introductory context — get to the substance.`);
+          break;
+        case "expert":
+          sections.push(`AUDIENCE: DOMAIN EXPERT
+- Write for someone deeply experienced in this field — skip fundamentals entirely.
+- Use specialized vocabulary, abbreviations, and field-specific conventions freely.
+- Focus on nuances, trade-offs, edge cases, and non-obvious implications.
+- Reference advanced concepts, research papers, and industry debates without explanation.
+- Challenge the user's assumptions when appropriate — experts value precision over comfort.
+- Include performance characteristics, scaling considerations, and failure modes.`);
+          break;
+      }
+    }
+
+    // Tone
+    if (config.tone && config.tone !== "neutral") {
+      switch (config.tone) {
+        case "conversational":
+          sections.push(`TONE: CONVERSATIONAL
+- Write as if explaining to a knowledgeable colleague over coffee.
+- Use "you" and "we" to create a direct, engaging voice.
+- Inject brief asides or observations that show genuine thinking, not just recitation.
+- It's okay to use phrases like "Interestingly...", "Here's the thing...", "Worth noting...".
+- Keep it warm and approachable without sacrificing accuracy.`);
+          break;
+        case "assertive":
+          sections.push(`TONE: ASSERTIVE / OPINIONATED
+- Take clear positions and make confident recommendations.
+- Lead with "You should..." or "The best approach is..." rather than hedging.
+- When there's a clear winner among options, say so directly.
+- Still acknowledge alternatives, but be explicit about ranking and reasoning.
+- Prioritize actionable guidance over balanced neutrality.
+- Save caveats for genuinely uncertain areas — don't hedge everything.`);
+          break;
+        case "critical":
+          sections.push(`TONE: CRITICAL / SKEPTICAL
+- Question assumptions, challenge conventional wisdom, and probe for weaknesses.
+- For each claim or recommendation, ask "But what could go wrong?" and answer it.
+- Highlight risks, failure modes, and commonly overlooked downsides.
+- Play devil's advocate — present the strongest counterargument to popular positions.
+- Use phrases like "However...", "The risk here is...", "What's often overlooked...".
+- Still provide balanced conclusions, but weighted toward surfacing hidden problems.`);
+          break;
+      }
+    }
+
+    if (sections.length === 0) return "";
+
+    return `RESPONSE CONFIGURATION — USER-SPECIFIED PREFERENCES (override defaults):
+${sections.join("\n\n")}`;
+  }
+
   // ==========================================
   // Clean-context chat (Research & Data Gathering)
   // Minimal-context LLM interaction — only the user's
@@ -4136,12 +4279,13 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus);
+      const planContext = researchPlan ? `\n\nAPPROVED RESEARCH PLAN — Follow this plan systematically:\n${researchPlan}` : "";
+      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -4170,6 +4314,61 @@ You are operating in exploration mode. Your primary goal is to help the user dis
     }
   });
 
+  // Generate research plan for Deep Research mode
+  app.post("/api/chat/research-plan", async (req, res) => {
+    try {
+      const parsed = chatRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { message, objective, chatModel } = parsed.data;
+      const selectedModel = chatModel || "gemini-2.5-flash";
+
+      const result = await llm.generateWithModel(selectedModel, {
+        system: `You are a research planning assistant. Given a research question and objective, create a structured research plan.
+
+Return ONLY a valid JSON object with this exact structure:
+{
+  "title": "Brief title for this research investigation",
+  "estimatedTime": "3-5 min",
+  "steps": [
+    {"area": "Topic area name", "questions": ["Specific question 1", "Specific question 2"]},
+    {"area": "Another topic area", "questions": ["Question 3", "Question 4"]}
+  ]
+}
+
+Rules:
+- Create 3-6 research areas that systematically cover the topic
+- Each area should have 2-3 specific research questions
+- Be concrete and specific, not generic
+- Cover: background, current state, key players, trade-offs, and emerging trends
+- Tailor the plan to the stated objective
+- Keep area names short (2-4 words)
+- Keep questions actionable and specific`,
+        messages: [
+          { role: "user", content: `Research question: ${message}\n\nObjective: ${objective || "General research"}` },
+        ],
+        maxTokens: 1024,
+        temperature: 0.7,
+      });
+
+      try {
+        const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const plan = JSON.parse(jsonMatch[0]);
+          return res.json({ plan });
+        }
+      } catch {
+        // Fall through to error
+      }
+      res.status(500).json({ error: "Failed to generate research plan" });
+    } catch (error) {
+      console.error("Research plan error:", error);
+      res.status(500).json({ error: "Failed to generate research plan" });
+    }
+  });
+
   // Streaming chat endpoint (SSE)
   app.post("/api/chat/stream", async (req, res) => {
     try {
@@ -4178,8 +4377,9 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
+      const streamStartMs = Date.now();
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -4189,7 +4389,8 @@ You are operating in exploration mode. Your primary goal is to help the user dis
 
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext, objective, notesContext, researchFocus);
+      const planContext = researchPlan ? `\n\nAPPROVED RESEARCH PLAN — Follow this plan systematically:\n${researchPlan}` : "";
+      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -4210,15 +4411,54 @@ You are operating in exploration mode. Your primary goal is to help the user dis
         enableSearch: true,
       });
 
+      let fullResponse = "";
       for await (const chunk of stream) {
+        fullResponse += chunk;
         res.write(`data: ${JSON.stringify({ type: "content", content: chunk })}\n\n`);
       }
+
+      const durationMs = Date.now() - streamStartMs;
 
       // Send verbose metadata if verbose mode is enabled
       const scope = getActiveGatewayScope();
       if (scope && scope.verboseList.length > 0) {
         res.write(`data: ${JSON.stringify({ type: "verbose", _verbose: scope.verboseList })}\n\n`);
       }
+
+      // Generate follow-up suggestions asynchronously (non-blocking)
+      try {
+        const followUpResult = await llm.generateWithModel(selectedModel, {
+          system: `You generate follow-up research questions. Given a research conversation, suggest exactly 3 short follow-up questions (max 60 chars each) the user might want to explore next. Return ONLY a JSON array of 3 strings, no other text. Example: ["How does X compare to Y?","What are the risks of Z?","Who are the key players?"]`,
+          messages: [
+            { role: "user", content: message },
+            { role: "assistant", content: fullResponse.slice(0, 2000) },
+            { role: "user", content: "Suggest 3 follow-up questions as a JSON array:" },
+          ],
+          maxTokens: 256,
+          temperature: 0.8,
+        });
+        try {
+          const jsonMatch = followUpResult.text.match(/\[[\s\S]*?\]/);
+          if (jsonMatch) {
+            const followUps = JSON.parse(jsonMatch[0]) as string[];
+            if (Array.isArray(followUps) && followUps.length > 0) {
+              res.write(`data: ${JSON.stringify({ type: "followups", followUps: followUps.slice(0, 3) })}\n\n`);
+            }
+          }
+        } catch {
+          // Silently skip malformed follow-ups
+        }
+      } catch {
+        // Follow-ups are best-effort — don't fail the response
+      }
+
+      // Determine grounding source based on what context was included
+      const hasNotes = !!(notes && notes.trim());
+      const hasResearchTopic = !!(researchTopic && researchTopic.trim());
+      const groundingSource = (hasNotes || hasResearchTopic) ? "both" : "web";
+
+      // Send metadata (timing, model, grounding)
+      res.write(`data: ${JSON.stringify({ type: "meta", durationMs, model: selectedModel, groundingSource })}\n\n`);
 
       res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       res.end();
