@@ -24,9 +24,10 @@ interface ImageCanvasProps {
   isGenerating: boolean;
   onSaveToContext?: (imageUrl: string, prompt: string) => void;
   isSaving?: boolean;
+  onOpenStudio?: () => void;
 }
 
-export function ImageCanvas({ imageUrl, prompt, isGenerating, onSaveToContext, isSaving }: ImageCanvasProps) {
+export function ImageCanvas({ imageUrl, prompt, isGenerating, onSaveToContext, isSaving, onOpenStudio }: ImageCanvasProps) {
   const { toast } = useToast();
   const [zoom, setZoom] = useState(1);
   const [showLightbox, setShowLightbox] = useState(false);
@@ -122,6 +123,17 @@ export function ImageCanvas({ imageUrl, prompt, isGenerating, onSaveToContext, i
               </TooltipTrigger>
               <TooltipContent>Fullscreen</TooltipContent>
             </Tooltip>
+
+            {onOpenStudio && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onOpenStudio}>
+                    <Paintbrush className="w-3.5 h-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open Painter Studio</TooltipContent>
+              </Tooltip>
+            )}
 
             <div className="w-px h-4 bg-border mx-1" />
 
