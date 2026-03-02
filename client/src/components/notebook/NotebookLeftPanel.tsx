@@ -47,6 +47,8 @@ interface NotebookLeftPanelProps {
   onEvolveDocument?: (instruction: string, description: string) => void;
   onMoveToDocument?: (content: string) => void;
   isMerging?: boolean;
+  onMapNotesToTimeline?: () => void;
+  isMapPending?: boolean;
   onEvolve?: (configurations: WriterConfig[]) => void;
   isEvolving?: boolean;
   sessionNotes?: string;
@@ -61,6 +63,8 @@ interface NotebookLeftPanelProps {
   isPainting?: boolean;
   pinnedDocContents?: Record<number, { title: string; content: string }>;
   appType?: string;
+  /** Timeline summary for autobiography interview context */
+  timelineContext?: { dateRange?: { earliest: string; latest: string }; places: string[]; themes: string[]; eventCount: number } | null;
 }
 
 export function NotebookLeftPanel({
@@ -81,6 +85,8 @@ export function NotebookLeftPanel({
   onEvolveDocument,
   onMoveToDocument,
   isMerging = false,
+  onMapNotesToTimeline,
+  isMapPending = false,
   onEvolve,
   isEvolving = false,
   sessionNotes,
@@ -90,6 +96,7 @@ export function NotebookLeftPanel({
   isPainting = false,
   pinnedDocContents,
   appType,
+  timelineContext,
   hasDocument = false,
   objective = "",
 }: NotebookLeftPanelProps) {
@@ -218,6 +225,7 @@ export function NotebookLeftPanel({
               onEvolveDocument={onEvolveDocument}
               isMerging={isMerging}
               onCaptureToContext={onCaptureToContext}
+              timelineContext={timelineContext}
             />
           </div>
         )}
@@ -230,6 +238,8 @@ export function NotebookLeftPanel({
               onRemoveCapturedItem={onRemoveCapturedItem}
               onMoveToDocument={onMoveToDocument}
               onEvolveDocument={onEvolveDocument}
+              onMapNotesToTimeline={onMapNotesToTimeline}
+              isMapPending={isMapPending}
               hasDocument={hasDocument}
               isMerging={isMerging}
             />
