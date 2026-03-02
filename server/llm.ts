@@ -430,6 +430,16 @@ function toGeminiContents(messages: LLMMessage[]): Array<{ role: string; parts: 
   }));
 }
 
+/** Gemini safety settings — disable all content filters so the researcher
+ *  can discuss any topic without being blocked by default safety thresholds. */
+const GEMINI_SAFETY_OFF = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
+];
+
 /** Build the native Gemini request body */
 function buildGeminiBody(req: LLMRequest, enableSearch = false): Record<string, unknown> {
   const body: Record<string, unknown> = {
@@ -439,6 +449,7 @@ function buildGeminiBody(req: LLMRequest, enableSearch = false): Record<string, 
       maxOutputTokens: req.maxTokens,
       ...(req.temperature != null ? { temperature: req.temperature } : {}),
     },
+    safetySettings: GEMINI_SAFETY_OFF,
   };
   if (enableSearch) {
     body.tools = [{ googleSearch: {} }];
@@ -679,6 +690,7 @@ async function geminiSearchWithGrounding(query: string): Promise<SearchResult> {
       body: JSON.stringify({
         contents: [{ parts: [{ text: query }] }],
         tools: [{ googleSearch: {} }],
+        safetySettings: GEMINI_SAFETY_OFF,
       }),
     }
   );
