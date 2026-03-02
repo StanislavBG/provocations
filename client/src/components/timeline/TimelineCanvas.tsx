@@ -9,6 +9,7 @@ import {
   EVENT_TYPE_CONFIG,
   parseTimelineDate,
   sortEventsByDate,
+  detectDateGranularity,
 } from "./types";
 import {
   Star,
@@ -94,6 +95,43 @@ function formatPeriodLabel(key: string, zoom: TimelineZoomLevel): string {
         day: "numeric",
       });
     }
+  }
+}
+
+/** Format event date showing only detail beyond what the group header already shows */
+function formatEventDateInContext(dateStr: string, zoom: TimelineZoomLevel): string {
+  const granularity = detectDateGranularity(dateStr);
+  const date = parseTimelineDate(dateStr);
+
+  // If the event only has year-level data, the group header already covers it
+  if (granularity === "year") {
+    if (zoom === "decades") return `${date.getFullYear()}`;
+    return ""; // year group already shows this
+  }
+
+  if (granularity === "month") {
+    if (zoom === "decades" || zoom === "years") {
+      return date.toLocaleDateString("en-US", { month: "short" });
+    }
+    return ""; // month group already shows this
+  }
+
+  // day or time granularity
+  switch (zoom) {
+    case "decades":
+      return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    case "years":
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    case "months":
+      if (granularity === "time") {
+        return date.toLocaleDateString("en-US", { day: "numeric", hour: "numeric", minute: "2-digit" });
+      }
+      return date.toLocaleDateString("en-US", { day: "numeric" });
+    case "days":
+      if (granularity === "time") {
+        return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      }
+      return ""; // day group already shows this
   }
 }
 
@@ -240,11 +278,21 @@ export function TimelineCanvas({
                             </Badge>
                           )}
                         </div>
-                        {event.dateLabel && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {event.dateLabel}
-                          </p>
-                        )}
+                        {(() => {
+                          const datePart = formatEventDateInContext(event.date, zoom);
+                          const endPart = event.endDate ? formatEventDateInContext(event.endDate, zoom) : "";
+                          const labelPart = event.dateLabel || "";
+                          const parts = [
+                            datePart,
+                            endPart ? `— ${endPart}` : "",
+                            labelPart,
+                          ].filter(Boolean);
+                          return parts.length > 0 ? (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {parts.join(" · ")}
+                            </p>
+                          ) : null;
+                        })()}
                       </div>
                     </div>
 

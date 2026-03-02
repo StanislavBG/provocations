@@ -8,10 +8,11 @@ import { TimelineCanvas } from "./TimelineCanvas";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineProperties } from "./TimelineProperties";
 import { useTimelineState } from "./hooks/useTimelineState";
-import type {
-  TimelineEventType,
-  TimelineTagCategory,
-  TimelineEvent,
+import {
+  type TimelineEventType,
+  type TimelineTagCategory,
+  type TimelineEvent,
+  autoZoomLevel,
 } from "./types";
 import { Save, Sparkles, Loader2, Globe } from "lucide-react";
 
@@ -86,6 +87,18 @@ export function TimelineWorkspace({ onSaveToContext, initialData, onTimelineSumm
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Auto-zoom to best fit when events change significantly ──
+  const prevEventCountRef = useRef(0);
+  useEffect(() => {
+    const prev = prevEventCountRef.current;
+    const curr = timeline.events.length;
+    prevEventCountRef.current = curr;
+    // Auto-zoom when going from empty to populated, or after bulk add (5+ new events)
+    if (curr > 0 && (prev === 0 || curr - prev >= 5)) {
+      setZoom(autoZoomLevel(timeline.events));
+    }
+  }, [timeline.events, setZoom]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
