@@ -83,9 +83,10 @@ interface SplitDocumentEditorProps {
   onSaveTimelineToContext?: (json: string, label: string) => void;
 }
 
-/** Imperative handle for parent to add image tabs */
+/** Imperative handle for parent to add image/timeline tabs */
 export interface SplitDocumentEditorHandle {
   addImageTab: (tabId?: string) => void;
+  addTimelineTabWithData: (json: string) => void;
 }
 
 export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDocumentEditorProps>(function SplitDocumentEditor({
@@ -110,6 +111,8 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
   const [previewLightbox, setPreviewLightbox] = useState(false);
+  // Stores initial JSON data for timeline tabs, keyed by tab ID
+  const timelineInitDataRef = useRef<Map<string, string>>(new Map());
 
   // ── Chrome-style document tabs ──
   const [tabs, setTabs] = useState<DocTab[]>(() => [
@@ -237,10 +240,28 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
     onAddImageTab?.(newId);
   }, [activeTabId, text, objective, tabs, onAddImageTab]);
 
-  // Expose addImageTab to parent via ref
+  // Create a timeline tab pre-loaded with JSON data
+  const handleAddTimelineTabWithData = useCallback((json: string) => {
+    const currentTab = tabs.find((t) => t.id === activeTabId);
+    if (currentTab?.type === "document") {
+      tabSnapshotRef.current.set(activeTabId, {
+        text,
+        objective: objective || "",
+      });
+    }
+    const newId = generateId("tl");
+    const tlCount = tabs.filter((t) => t.type === "timeline").length;
+    const newTitle = `Timeline ${tlCount + 1}`;
+    timelineInitDataRef.current.set(newId, json);
+    setTabs((prev) => [...prev, { id: newId, title: newTitle, type: "timeline" }]);
+    setActiveTabId(newId);
+  }, [activeTabId, text, objective, tabs]);
+
+  // Expose addImageTab and addTimelineTabWithData to parent via ref
   useImperativeHandle(ref, () => ({
     addImageTab: (tabId?: string) => handleAddImageTab(tabId),
-  }), [handleAddImageTab]);
+    addTimelineTabWithData: (json: string) => handleAddTimelineTabWithData(json),
+  }), [handleAddImageTab, handleAddTimelineTabWithData]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -487,7 +508,10 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
               tab.id === activeTabId ? "flex-1 min-h-0" : "hidden"
             }
           >
-            <TimelineWorkspace onSaveToContext={onSaveTimelineToContext} />
+            <TimelineWorkspace
+              onSaveToContext={onSaveTimelineToContext}
+              initialData={timelineInitDataRef.current.get(tab.id)}
+            />
           </div>
         ))}
 

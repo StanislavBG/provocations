@@ -46,6 +46,8 @@ interface NotebookLeftPanelProps {
   onRemoveCapturedItem?: (itemId: string) => void;
   onEvolveDocument?: (instruction: string, description: string) => void;
   isMerging?: boolean;
+  onMapNotesToTimeline?: () => void;
+  isMapPending?: boolean;
   onEvolve?: (configurations: WriterConfig[]) => void;
   isEvolving?: boolean;
   sessionNotes?: string;
@@ -79,6 +81,8 @@ export function NotebookLeftPanel({
   onRemoveCapturedItem,
   onEvolveDocument,
   isMerging = false,
+  onMapNotesToTimeline,
+  isMapPending = false,
   onEvolve,
   isEvolving = false,
   sessionNotes,
@@ -227,6 +231,8 @@ export function NotebookLeftPanel({
               onCaptureToContext={onCaptureToContext}
               onRemoveCapturedItem={onRemoveCapturedItem}
               onEvolveDocument={onEvolveDocument}
+              onMapNotesToTimeline={onMapNotesToTimeline}
+              isMapPending={isMapPending}
               hasDocument={hasDocument}
               isMerging={isMerging}
             />

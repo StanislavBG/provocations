@@ -814,6 +814,9 @@ export const trackingEventType = [
 
   // ── Podcast ──
   "podcast_generated",        // User generated a podcast from interview Q&A
+
+  // ── Timeline ──
+  "notes_mapped_to_timeline", // User mapped notes to timeline events via LLM
 ] as const;
 
 export type TrackingEventType = typeof trackingEventType[number];

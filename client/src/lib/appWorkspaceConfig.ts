@@ -16,7 +16,7 @@ import type { ProvocationType, TemplateId } from "@shared/schema";
 // ---------------------------------------------------------------------------
 
 /** Identifiers for left-panel (toolbox) tabs */
-export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config" | "steps" | "generate" | "chat";
+export type LeftPanelTabId = "provoke" | "website" | "context" | "model-config" | "steps" | "generate" | "interview" | "chat";
 
 /** Configuration for a single left-panel tab */
 export interface LeftPanelTabConfig {
@@ -204,6 +204,12 @@ const RIGHT_NOTES: RightPanelTabConfig = {
 const RIGHT_TRANSCRIPT: RightPanelTabConfig = {
   id: "transcript",
   label: "Notes",
+};
+
+const TAB_INTERVIEW: LeftPanelTabConfig = {
+  id: "interview",
+  label: "Interview",
+  description: "AI-driven interview to capture structured notes and timeline events",
 };
 
 const TAB_CHAT: LeftPanelTabConfig = {
@@ -490,8 +496,8 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
 
   timeline: {
     workspaceLayout: "timeline",
-    defaultToolboxTab: "context",
-    autoStartInterview: false,
+    defaultToolboxTab: "interview",
+    autoStartInterview: true,
     autoStartPersonas: undefined,
 
     flowSteps: [
@@ -501,7 +507,7 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       { id: "explore", label: "Explore Timeline", description: "Zoom, filter, and analyze patterns across time" },
     ],
 
-    leftPanelTabs: [TAB_CONTEXT, TAB_PROVOKE, TAB_CHAT],
+    leftPanelTabs: [TAB_INTERVIEW, TAB_CONTEXT, TAB_PROVOKE, TAB_CHAT],
 
     rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_TRANSCRIPT],
 
