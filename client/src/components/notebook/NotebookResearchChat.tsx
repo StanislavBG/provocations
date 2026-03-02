@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type ComponentPropsWithoutRef } from "react";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X, ExternalLink, Copy, Check, Link2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X, ExternalLink, Copy, Check, Link2, Maximize2, Minimize2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -286,6 +287,28 @@ export function NotebookResearchChat({
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const fsBottomRef = useRef<HTMLDivElement>(null);
+
+  // Escape key closes full screen
+  useEffect(() => {
+    if (!isFullScreen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullScreen(false);
+    };
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [isFullScreen]);
+
+  // Copy entire thread as markdown
+  const handleCopyThread = useCallback(() => {
+    const md = messages
+      .map((m) => (m.role === "user" ? `**You:** ${m.content}` : m.content))
+      .join("\n\n---\n\n");
+    navigator.clipboard.writeText(md).then(() => {
+      toast({ title: "Thread copied", description: "Conversation copied as markdown" });
+    });
+  }, [messages, toast]);
 
   // Get the default config for the current focus mode
   const modeDefaults = FOCUS_MODE_DEFAULTS[focusMode];
@@ -304,8 +327,12 @@ export function NotebookResearchChat({
 
   // Auto-scroll on new content
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, streamingContent]);
+    if (isFullScreen) {
+      fsBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, streamingContent, isFullScreen]);
 
   // Report message count to parent
   useEffect(() => {
@@ -498,6 +525,7 @@ export function NotebookResearchChat({
   const hasMessages = messages.length > 0;
 
   return (
+    <>
     <div className="h-full flex flex-col">
       {/* Sticky header: message count + Clear */}
       {hasMessages && (
@@ -519,6 +547,19 @@ export function NotebookResearchChat({
 
       {/* Focus mode selector */}
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b shrink-0 bg-muted/20">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setIsFullScreen(true)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            >
+              <Maximize2 className="w-3 h-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">Expand to full screen</TooltipContent>
+        </Tooltip>
+        <div className="h-3.5 w-px bg-border/40 mr-0.5" />
         {FOCUS_MODES.map((mode) => {
           const Icon = mode.icon;
           const isActive = focusMode === mode.id;
@@ -886,6 +927,365 @@ export function NotebookResearchChat({
         </div>
       </div>
     </div>
+
+    {/* ══════ Full-Screen Research Experience ══════ */}
+    {isFullScreen && createPortal(
+      <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
+        {/* ── Top Command Bar ── */}
+        <div className="flex items-center gap-2 px-4 py-2 border-b bg-card/80 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <span className="text-sm font-semibold">Research</span>
+          </div>
+
+          {/* Center: Focus mode pills */}
+          <div className="flex-1 flex items-center justify-center gap-1 overflow-x-auto px-4">
+            {FOCUS_MODES.map((mode) => {
+              const Icon = mode.icon;
+              const isActive = focusMode === mode.id;
+              return (
+                <Tooltip key={mode.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => handleFocusModeChange(mode.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {mode.label}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[200px]">{mode.description}</TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setShowResponseConfig(!showResponseConfig)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+                    hasCustomConfig ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  {hasCustomConfig && <span className="text-[10px]">Custom</span>}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Response settings</TooltipContent>
+            </Tooltip>
+
+            {messages.length > 0 && (
+              <span className="text-[10px] text-muted-foreground/60 px-1">
+                {messages.length} msg{messages.length !== 1 ? "s" : ""}
+              </span>
+            )}
+
+            {messages.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopyThread}>
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Copy thread as markdown</TooltipContent>
+              </Tooltip>
+            )}
+
+            {messages.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={handleClear}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Clear thread</TooltipContent>
+              </Tooltip>
+            )}
+
+            <div className="h-5 w-px bg-border/40 mx-0.5" />
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsFullScreen(false)}>
+                  <Minimize2 className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Exit full screen <kbd className="ml-1 px-1 py-0.5 rounded bg-muted text-[9px] font-mono">Esc</kbd>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* Response config panel (slides down) */}
+        {showResponseConfig && (
+          <div className="border-b bg-card/50 backdrop-blur-sm shrink-0">
+            <div className="max-w-4xl mx-auto px-6 py-2 space-y-1.5">
+              <ResponseConfigRow label="Detail" options={DETAIL_OPTIONS} value={responseConfig.detail || "standard"} defaultValue={modeDefaults.detail} onChange={(v) => setResponseConfig((prev) => ({ ...prev, detail: v as ResponseDetailLevel }))} />
+              <ResponseConfigRow label="Format" options={FORMAT_OPTIONS} value={responseConfig.format || "structured"} defaultValue={modeDefaults.format} onChange={(v) => setResponseConfig((prev) => ({ ...prev, format: v as ResponseFormat }))} />
+              <ResponseConfigRow label="Audience" options={AUDIENCE_OPTIONS} value={responseConfig.audience || "general"} defaultValue={modeDefaults.audience} onChange={(v) => setResponseConfig((prev) => ({ ...prev, audience: v as ResponseAudienceLevel }))} />
+              <ResponseConfigRow label="Tone" options={TONE_OPTIONS} value={responseConfig.tone || "neutral"} defaultValue={modeDefaults.tone} onChange={(v) => setResponseConfig((prev) => ({ ...prev, tone: v as ResponseTone }))} />
+            </div>
+          </div>
+        )}
+
+        {/* ── Messages Area ── */}
+        <ScrollArea className="flex-1">
+          <div className="max-w-4xl mx-auto px-6 py-6">
+            {!hasMessages && !isLoading ? (
+              <div className="flex flex-col items-center justify-center gap-6 text-muted-foreground/50 py-24">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-primary/60" />
+                </div>
+                <div className="text-center space-y-2 max-w-md">
+                  <p className="text-lg font-medium text-foreground/60">Full-Screen Research</p>
+                  <p className="text-sm leading-relaxed">
+                    Immerse yourself in deep research. Ask questions, explore ideas, and capture findings into your notes.
+                  </p>
+                  <p className="text-xs text-muted-foreground/40 mt-4">
+                    Press <kbd className="px-1.5 py-0.5 rounded bg-muted/60 text-[10px] font-mono">Esc</kbd> to return to workspace
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {messages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.role === "user" ? (
+                      <div className="max-w-[70%] bg-primary text-primary-foreground rounded-2xl px-5 py-3 text-sm">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <User className="w-3.5 h-3.5" />
+                          <span className="text-[11px] opacity-70">You</span>
+                        </div>
+                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      </div>
+                    ) : (
+                      <div className="w-full group">
+                        <div className="bg-muted/30 rounded-2xl px-6 py-5">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Bot className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="text-[11px] text-muted-foreground">Research</span>
+                            {msg.durationMs != null && (
+                              <span className="text-[10px] text-muted-foreground/60 ml-auto flex items-center gap-0.5">
+                                <Clock className="w-3 h-3" />
+                                {(msg.durationMs / 1000).toFixed(1)}s
+                              </span>
+                            )}
+                            {msg.model && (
+                              <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
+                                <Cpu className="w-3 h-3" />
+                                {msg.model.replace(/^models\//, "")}
+                              </span>
+                            )}
+                            {msg.groundingSource && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className={`text-[10px] flex items-center gap-0.5 px-1.5 py-0.5 rounded ${
+                                    msg.groundingSource === "web" ? "text-blue-500/70 bg-blue-500/10" :
+                                    msg.groundingSource === "context" ? "text-amber-500/70 bg-amber-500/10" :
+                                    "text-emerald-500/70 bg-emerald-500/10"
+                                  }`}>
+                                    {msg.groundingSource === "web" ? <Globe className="w-3 h-3" /> :
+                                     msg.groundingSource === "context" ? <FolderOpen className="w-3 h-3" /> :
+                                     <><Globe className="w-3 h-3" /><span>+</span><FolderOpen className="w-3 h-3" /></>}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">
+                                  {msg.groundingSource === "web" ? "Grounded in web search" :
+                                   msg.groundingSource === "context" ? "Grounded in your context" :
+                                   "Grounded in web search + your context"}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                          <div className="prose dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:bg-muted/30 [&_pre]:rounded-md [&_pre]:p-4 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:text-xs">
+                            <ReactMarkdown components={researchMarkdownComponents}>{msg.content}</ReactMarkdown>
+                          </div>
+                        </div>
+
+                        {/* Action row */}
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-primary" onClick={() => handleCapture(msg.content)}>
+                              <BookmarkPlus className="w-3.5 h-3.5" />
+                              Send to Notes
+                            </Button>
+                          </div>
+                          {msg.followUps && msg.followUps.length > 0 && i === messages.length - 1 && (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {msg.followUps.map((q, j) => (
+                                <button
+                                  key={j}
+                                  type="button"
+                                  onClick={() => handleFollowUp(q)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-muted/50 hover:bg-muted text-foreground/70 hover:text-foreground transition-colors border border-border/50 hover:border-border"
+                                >
+                                  <ArrowRight className="w-3 h-3 text-primary/60 shrink-0" />
+                                  <span className="text-left">{q}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Streaming response */}
+                {streamingContent && (
+                  <div className="flex justify-start">
+                    <div className="w-full">
+                      <div className="bg-muted/30 rounded-2xl px-6 py-5">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Bot className="w-3.5 h-3.5 text-blue-500" />
+                          <span className="text-[11px] text-muted-foreground">Research</span>
+                          <span className="text-[10px] text-muted-foreground/50 ml-auto">streaming...</span>
+                        </div>
+                        <div className="prose dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:bg-muted/30 [&_pre]:rounded-md [&_pre]:p-4 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:text-xs">
+                          <ReactMarkdown components={researchMarkdownComponents}>{streamingContent}</ReactMarkdown>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex justify-start">
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-destructive border-muted" onClick={handleStop}>
+                          <Square className="w-3 h-3 fill-current" />
+                          Stop generating
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Loading */}
+                {isLoading && !streamingContent && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted/20 rounded-2xl px-6 py-4 flex items-center gap-3">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      <span className="text-sm text-muted-foreground">Researching...</span>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-destructive ml-2" onClick={handleStop}>
+                        <Square className="w-2.5 h-2.5 fill-current" />
+                        Stop
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={fsBottomRef} />
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+
+        {/* Deep Research plan */}
+        {isGeneratingPlan && (
+          <div className="border-t px-6 py-3 shrink-0 bg-card/50 backdrop-blur-sm">
+            <div className="max-w-4xl mx-auto flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">Generating research plan...</span>
+            </div>
+          </div>
+        )}
+
+        {pendingPlan && (
+          <div className="border-t shrink-0 bg-card/50 backdrop-blur-sm">
+            <div className="max-w-4xl mx-auto px-6 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">{pendingPlan.title}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">{pendingPlan.estimatedTime}</span>
+              </div>
+              <div className="space-y-1.5 mb-3 max-h-[200px] overflow-y-auto">
+                {pendingPlan.steps.map((step, i) => (
+                  <div key={i} className="text-xs">
+                    <div className="font-medium text-foreground/80">{i + 1}. {step.area}</div>
+                    <div className="pl-4 text-muted-foreground">
+                      {step.questions.map((q, j) => (
+                        <div key={j} className="flex items-start gap-1">
+                          <span className="text-muted-foreground/50 shrink-0">-</span>
+                          <span>{q}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => executeResearch(planQuery, pendingPlan)}>
+                  <Play className="w-3 h-3" />
+                  Execute Plan
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground" onClick={handleDismissPlan}>
+                  <X className="w-3 h-3" />
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Bottom Input Bar ── */}
+        <div className="border-t bg-card/80 backdrop-blur-sm shrink-0">
+          <div className="max-w-3xl mx-auto px-6 py-3">
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <ProvokeText
+                  chrome="bare"
+                  variant="textarea"
+                  value={input}
+                  onChange={setInput}
+                  placeholder="Ask anything..."
+                  className="text-sm"
+                  minRows={2}
+                  maxRows={8}
+                  showCopy={false}
+                  showClear={false}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                />
+              </div>
+              <VoiceRecorder
+                onTranscript={(text) => setInput(text)}
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+              />
+              <ResearchSendButton
+                input={input}
+                isLoading={isLoading}
+                objective={objective}
+                messages={messages}
+                focusMode={focusMode}
+                responseConfig={responseConfig}
+                onSend={handleSend}
+              />
+            </div>
+            <div className="flex justify-between mt-2">
+              <span className="text-[10px] text-muted-foreground/40">Enter to send · Shift+Enter for new line</span>
+              <span className="text-[10px] text-muted-foreground/40">Esc to exit full screen</span>
+            </div>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
 
