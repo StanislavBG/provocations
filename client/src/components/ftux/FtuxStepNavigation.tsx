@@ -14,10 +14,14 @@ export function FtuxStepNavigation() {
   const isLast = currentStep === 2;
 
   return (
-    <div className="flex items-center justify-center gap-3 py-3 px-4 border-t border-border/30 bg-card/50 backdrop-blur-sm shrink-0">
+    <nav
+      className="relative z-50 flex items-center justify-center gap-3 py-3 px-4 border-t border-border/30 bg-card/50 backdrop-blur-sm shrink-0"
+      aria-label="Step navigation"
+    >
       <Button
         variant="outline"
         size="sm"
+        aria-label={`Back to ${STEP_LABELS[currentStep - 1] ?? "previous"} step`}
         className="text-xs gap-1.5"
         onClick={prevStep}
         disabled={isFirst}
@@ -26,10 +30,12 @@ export function FtuxStepNavigation() {
         Back
       </Button>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5" role="group" aria-label={`Step ${currentStep + 1} of ${STEP_LABELS.length}`}>
         {STEP_LABELS.map((label, i) => (
           <div
             key={label}
+            role="img"
+            aria-label={`${label}${i === currentStep ? " (current)" : i < currentStep ? " (completed)" : ""}`}
             className={`w-2 h-2 rounded-full transition-colors ${
               i === currentStep
                 ? "bg-primary"
@@ -45,6 +51,7 @@ export function FtuxStepNavigation() {
         <Button
           variant="default"
           size="sm"
+          aria-label="Finish workflow"
           className="text-xs gap-1.5"
           onClick={exitWorkflow}
         >
@@ -55,6 +62,7 @@ export function FtuxStepNavigation() {
         <Button
           variant="default"
           size="sm"
+          aria-label={`Next: ${STEP_LABELS[currentStep + 1] ?? "next"} step`}
           className="text-xs gap-1.5"
           onClick={nextStep}
         >
@@ -62,6 +70,6 @@ export function FtuxStepNavigation() {
           <ArrowRight className="w-3.5 h-3.5" />
         </Button>
       )}
-    </div>
+    </nav>
   );
 }
