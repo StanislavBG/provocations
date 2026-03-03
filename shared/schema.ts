@@ -825,6 +825,7 @@ export const trackingEventType = [
 
   // ── Mobile capture ──
   "mobile_note_captured",     // User captured a note from mobile
+  "note_imported_from_store", // User imported a saved note into workspace context
 
   // ── Podcast ──
   "podcast_generated",        // User generated a podcast from interview Q&A
