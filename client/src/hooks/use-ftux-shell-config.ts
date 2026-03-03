@@ -14,6 +14,8 @@ function parseFtuxShellConfig(raw: string | null): FtuxShellConfig {
   try {
     const parsed = JSON.parse(raw) as Partial<FtuxShellConfig>;
     return {
+      ...DEFAULT_SHELL_CONFIG,
+      ...parsed,
       dockPosition: parsed.dockPosition ?? DEFAULT_SHELL_CONFIG.dockPosition,
       dockItems: Array.isArray(parsed.dockItems) ? parsed.dockItems : DEFAULT_SHELL_CONFIG.dockItems,
       dockTranslucency: typeof parsed.dockTranslucency === "number" ? parsed.dockTranslucency : DEFAULT_SHELL_CONFIG.dockTranslucency,

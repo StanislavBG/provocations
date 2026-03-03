@@ -8,6 +8,7 @@ import { FtuxDock } from "@/components/ftux/FtuxDock";
 import { FtuxContentArea } from "@/components/ftux/FtuxContentArea";
 import { FtuxHamburgerMenu } from "@/components/ftux/FtuxHamburgerMenu";
 import { FtuxDidYouKnow } from "@/components/ftux/FtuxDidYouKnow";
+import { FtuxTourModal } from "@/components/ftux/FtuxTourModal";
 
 export default function FtuxWorkspace() {
   const [, routeParams] = useRoute("/ftux/:templateId");
@@ -33,6 +34,8 @@ export default function FtuxWorkspace() {
           <FtuxDidYouKnow />
         </div>
       </FtuxShell>
+
+      <FtuxTourModal />
     </FtuxShellProvider>
   );
 }
