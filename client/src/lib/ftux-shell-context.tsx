@@ -21,7 +21,7 @@ export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";
 export type DockGroup = "gather" | "workshop" | "build";
 
-export type OutputType = "blog-post" | "infographic" | "prd" | "timeline" | "research-paper";
+export type OutputType = "blog-post" | "infographic" | "prd" | "timeline" | "research-paper" | "slide-deck";
 
 export interface ActiveWorkflow {
   outputType: OutputType;
