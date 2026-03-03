@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useFtuxShell, type ToolId, type DockItem } from "@/lib/ftux-shell-context";
-import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -15,7 +14,6 @@ import {
   Sparkles,
   FileText,
   Users,
-  ClipboardList,
   Wand2,
   Paintbrush,
   BookOpen,
@@ -24,57 +22,59 @@ import {
   Clock,
   Pin,
   PanelTop,
+  Library,
+  FlaskConical,
+  Hammer,
   type LucideIcon,
 } from "lucide-react";
-import { useLocation } from "wouter";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Sparkles,
   FileText,
   Users,
-  ClipboardList,
   Wand2,
   Paintbrush,
   BookOpen,
   MessageCircleQuestion,
   BarChart3,
   Clock,
+  Library,
+  FlaskConical,
+  Hammer,
 };
 
-interface ToolGroup {
+interface MenuCategory {
   label: string;
+  icon: LucideIcon;
   items: { toolId: ToolId; label: string; icon: string; description: string }[];
 }
 
-const TOOL_GROUPS: ToolGroup[] = [
+const MENU_CATEGORIES: MenuCategory[] = [
   {
-    label: "Research",
+    label: "Gather",
+    icon: Library,
+    items: [
+      { toolId: "context", label: "Context Store", icon: "BookOpen", description: "Browse, pin, and manage documents" },
+      { toolId: "document", label: "Document Editor", icon: "FileText", description: "Write and edit with staged changes" },
+    ],
+  },
+  {
+    label: "Workshop",
+    icon: FlaskConical,
     items: [
       { toolId: "research", label: "Research", icon: "Sparkles", description: "AI-powered research chat" },
       { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", description: "Guided interview questions" },
+      { toolId: "provo", label: "Provocations", icon: "Users", description: "Persona discussion threads" },
     ],
   },
   {
-    label: "Document",
+    label: "Build",
+    icon: Hammer,
     items: [
-      { toolId: "document", label: "Document Editor", icon: "FileText", description: "Multi-tab document editor" },
       { toolId: "writer", label: "Writer", icon: "Wand2", description: "Evolve and refine documents" },
-      { toolId: "notes", label: "Notes", icon: "ClipboardList", description: "Capture and manage notes" },
-    ],
-  },
-  {
-    label: "Creative",
-    items: [
       { toolId: "painter", label: "Painter", icon: "Paintbrush", description: "AI image generation" },
       { toolId: "chart", label: "Chart", icon: "BarChart3", description: "Visual diagram designer" },
       { toolId: "timeline", label: "Timeline", icon: "Clock", description: "Timeline visualization" },
-    ],
-  },
-  {
-    label: "Context",
-    items: [
-      { toolId: "context", label: "Context Store", icon: "BookOpen", description: "Document library and pinning" },
-      { toolId: "provo", label: "Provocations", icon: "Users", description: "Persona discussion threads" },
     ],
   },
 ];
@@ -86,7 +86,6 @@ interface FtuxHamburgerMenuProps {
 
 export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxHamburgerMenuProps) {
   const [open, setOpen] = useState(false);
-  const [, navigate] = useLocation();
   const shell = useFtuxShell();
 
   const handleToolClick = (toolId: ToolId) => {
@@ -94,14 +93,8 @@ export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxH
     setOpen(false);
   };
 
-  const handleTemplateSelect = (templateId: string) => {
-    onSelectTemplate(templateId);
-    navigate(`/ftux/${templateId}`);
-    setOpen(false);
-  };
-
-  const handlePinToDock = (toolId: ToolId, label: string, icon: string) => {
-    const item: DockItem = { toolId, label, icon };
+  const handlePinToDock = (toolId: ToolId, label: string, icon: string, group?: string) => {
+    const item: DockItem = { toolId, label, icon, group: group as DockItem["group"] };
     shell.addDockItem(item);
   };
 
@@ -109,23 +102,13 @@ export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxH
     shell.addStatusBarPinnedItem(toolId);
   };
 
-  // Group templates by category
-  const categories = ["build", "write", "analyze", "capture"] as const;
-  const templatesByCategory = categories.reduce(
-    (acc, cat) => {
-      acc[cat] = prebuiltTemplates.filter((t) => t.category === cat);
-      return acc;
-    },
-    {} as Record<string, typeof prebuiltTemplates>,
-  );
-
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
-          className="fixed top-[calc(var(--ftux-status-bar-height,36px)+12px)] left-4 z-30 w-9 h-9 rounded-xl bg-card/75 backdrop-blur-md border border-border/30 shadow-sm hover:bg-card"
+          className="fixed top-[calc(var(--ftux-status-bar-height,36px)+4px)] left-3 z-30 w-9 h-9 rounded-xl bg-card/75 backdrop-blur-md border border-border/30 shadow-sm hover:bg-card"
         >
           <Menu className="w-4 h-4" />
         </Button>
@@ -133,20 +116,25 @@ export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxH
 
       <SheetContent side="left" className="w-80 p-0 flex flex-col">
         <SheetHeader className="p-4 pb-2 border-b">
-          <SheetTitle className="text-sm font-serif">Tools & Applications</SheetTitle>
+          <SheetTitle className="text-sm font-serif">Workspace Tools</SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-4">
-          {/* Tools section */}
-          <div className="space-y-3">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-1">Tools</p>
-            {TOOL_GROUPS.map((group) => (
-              <div key={group.label} className="space-y-0.5">
-                <p className="text-xs text-muted-foreground/70 px-2 py-1">{group.label}</p>
-                {group.items.map((item) => {
+          {MENU_CATEGORIES.map((category) => {
+            const CategoryIcon = category.icon;
+            return (
+              <div key={category.label} className="space-y-1">
+                <div className="flex items-center gap-2 px-2 py-1.5">
+                  <CategoryIcon className="w-3.5 h-3.5 text-primary" />
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                    {category.label}
+                  </p>
+                </div>
+                {category.items.map((item) => {
                   const Icon = ICON_MAP[item.icon] || Sparkles;
                   const isActive = shell.activeTool === item.toolId;
                   const isInDock = shell.dockItems.some((d) => d.toolId === item.toolId);
+                  const groupKey = category.label.toLowerCase() as DockItem["group"];
 
                   return (
                     <div
@@ -174,7 +162,7 @@ export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxH
                             className="w-5 h-5 rounded"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handlePinToDock(item.toolId, item.label, item.icon);
+                              handlePinToDock(item.toolId, item.label, item.icon, groupKey);
                             }}
                             title="Pin to Dock"
                           >
@@ -198,40 +186,8 @@ export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxH
                   );
                 })}
               </div>
-            ))}
-          </div>
-
-          {/* Applications section */}
-          <div className="space-y-3 pt-2 border-t">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-1">Applications</p>
-            {categories.map((cat) => {
-              const templates = templatesByCategory[cat];
-              if (!templates || templates.length === 0) return null;
-              return (
-                <div key={cat} className="space-y-0.5">
-                  <p className="text-xs text-muted-foreground/70 px-2 py-1 capitalize">{cat}</p>
-                  {templates.map((template) => {
-                    const isCurrent = currentTemplateId === template.id;
-                    return (
-                      <div
-                        key={template.id}
-                        className={cn(
-                          "flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                          isCurrent
-                            ? "bg-primary/10 text-primary"
-                            : "hover:bg-muted/50 text-foreground",
-                        )}
-                        onClick={() => handleTemplateSelect(template.id)}
-                      >
-                        <template.icon className="w-4 h-4 shrink-0" />
-                        <span className="text-xs font-medium truncate">{template.title}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
+            );
+          })}
         </div>
       </SheetContent>
     </Sheet>

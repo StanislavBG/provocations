@@ -1,4 +1,4 @@
-import { useFtuxShell, type DockPosition, type StatusBarPosition } from "@/lib/ftux-shell-context";
+import { useFtuxShell, type DockPosition } from "@/lib/ftux-shell-context";
 import {
   Dialog,
   DialogContent,
@@ -22,8 +22,18 @@ import {
   ArrowRight,
   X,
   RotateCcw,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const COLOR_PRESETS = [
+  { label: "Default", value: null },
+  { label: "Dark", value: "#1a1a2e" },
+  { label: "Warm", value: "#2d1b0e" },
+  { label: "Cool", value: "#0e1b2d" },
+  { label: "Forest", value: "#0e2d1b" },
+  { label: "Plum", value: "#2d0e2a" },
+];
 
 interface FtuxSettingsDialogProps {
   open: boolean;
@@ -108,9 +118,50 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
               <div
                 className="h-8 rounded-lg border"
                 style={{
-                  background: `hsl(var(--card) / ${shell.dockTranslucency / 100})`,
+                  background: shell.dockColor
+                    ? hexToRgba(shell.dockColor, shell.dockTranslucency / 100)
+                    : `hsl(var(--card) / ${shell.dockTranslucency / 100})`,
                   backdropFilter: `blur(${Math.round((shell.dockTranslucency / 100) * 24)}px)`,
                 }}
+              />
+            </div>
+
+            {/* Color presets */}
+            <div className="space-y-2">
+              <Label className="text-xs">Color</Label>
+              <div className="flex items-center gap-2">
+                {COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => shell.setDockColor(preset.value)}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-all",
+                      shell.dockColor === preset.value
+                        ? "border-primary scale-110"
+                        : "border-border/50 hover:border-border",
+                    )}
+                    style={{
+                      background: preset.value ?? "hsl(var(--card))",
+                    }}
+                    title={preset.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Labels */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Show Item Labels</Label>
+              <Switch
+                checked={shell.dockShowLabels}
+                onCheckedChange={shell.setDockShowLabels}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Show Group Labels</Label>
+              <Switch
+                checked={shell.dockShowGroupLabels}
+                onCheckedChange={shell.setDockShowGroupLabels}
               />
             </div>
 
@@ -162,6 +213,56 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
               </div>
             </div>
 
+            {/* Translucency */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Translucency</Label>
+                <span className="text-[10px] text-muted-foreground">{shell.statusBarTranslucency ?? 85}%</span>
+              </div>
+              <Slider
+                value={[shell.statusBarTranslucency ?? 85]}
+                onValueChange={([val]) => shell.setStatusBarTranslucency(val)}
+                min={0}
+                max={100}
+                step={5}
+                className="w-full"
+              />
+              <div
+                className="h-6 rounded-lg border"
+                style={{
+                  background: shell.statusBarColor
+                    ? hexToRgba(shell.statusBarColor, (shell.statusBarTranslucency ?? 85) / 100)
+                    : `hsl(var(--card) / ${(shell.statusBarTranslucency ?? 85) / 100})`,
+                  backdropFilter: `blur(${Math.round(((shell.statusBarTranslucency ?? 85) / 100) * 24)}px)`,
+                }}
+              />
+            </div>
+
+            {/* Color presets */}
+            <div className="space-y-2">
+              <Label className="text-xs">Color</Label>
+              <div className="flex items-center gap-2">
+                {COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => shell.setStatusBarColor(preset.value)}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-all",
+                      shell.statusBarColor === preset.value
+                        ? "border-primary scale-110"
+                        : "border-border/50 hover:border-border",
+                    )}
+                    style={{
+                      background: preset.value ?? "hsl(var(--card))",
+                    }}
+                    title={preset.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
             <div className="space-y-2">
               <Label className="text-xs">Pinned Items</Label>
               {shell.statusBarPinnedItems.length === 0 ? (
@@ -201,6 +302,47 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
               />
             </div>
 
+            {/* Translucency */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Translucency</Label>
+                <span className="text-[10px] text-muted-foreground">{shell.tipsTranslucency ?? 90}%</span>
+              </div>
+              <Slider
+                value={[shell.tipsTranslucency ?? 90]}
+                onValueChange={([val]) => shell.setTipsTranslucency(val)}
+                min={0}
+                max={100}
+                step={5}
+                className="w-full"
+              />
+            </div>
+
+            {/* Color presets */}
+            <div className="space-y-2">
+              <Label className="text-xs">Color</Label>
+              <div className="flex items-center gap-2">
+                {COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => shell.setTipsColor(preset.value)}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-all",
+                      shell.tipsColor === preset.value
+                        ? "border-primary scale-110"
+                        : "border-border/50 hover:border-border",
+                    )}
+                    style={{
+                      background: preset.value ?? "hsl(var(--card))",
+                    }}
+                    title={preset.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs">Dismissed Tips</p>
@@ -225,6 +367,18 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
                 {FTUX_TIPS.length - shell.tipsDismissed.length} remaining
               </Badge>
             </div>
+
+            <Separator />
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => shell.setTourCompleted(false)}
+            >
+              <Play className="w-3 h-3 mr-1.5" />
+              Replay Tour
+            </Button>
           </TabsContent>
 
           {/* Appearance settings */}
@@ -268,4 +422,11 @@ function PositionButton({
       {icon}
     </button>
   );
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
