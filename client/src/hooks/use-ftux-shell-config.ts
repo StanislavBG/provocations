@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { DEFAULT_SHELL_CONFIG, type FtuxShellConfig } from "@/lib/ftux-shell-context";
+import { readThemeFromLS, readPaletteFromLS, PALETTES, type ThemePreference, type PaletteId } from "@/lib/theme-utils";
 
 interface Preferences {
   autoDictate: boolean;
@@ -9,8 +10,22 @@ interface Preferences {
   ftuxShellConfig: string | null;
 }
 
+function isValidTheme(v: unknown): v is ThemePreference {
+  return v === "dark" || v === "light" || v === "system";
+}
+
+function isValidPalette(v: unknown): v is PaletteId {
+  return typeof v === "string" && PALETTES.some((p) => p.id === v);
+}
+
 function parseFtuxShellConfig(raw: string | null): FtuxShellConfig {
-  if (!raw) return DEFAULT_SHELL_CONFIG;
+  if (!raw) {
+    return {
+      ...DEFAULT_SHELL_CONFIG,
+      theme: readThemeFromLS(),
+      palette: readPaletteFromLS(),
+    };
+  }
   try {
     const parsed = JSON.parse(raw) as Partial<FtuxShellConfig>;
     return {
@@ -24,9 +39,16 @@ function parseFtuxShellConfig(raw: string | null): FtuxShellConfig {
       statusBarPinnedItems: Array.isArray(parsed.statusBarPinnedItems) ? parsed.statusBarPinnedItems : DEFAULT_SHELL_CONFIG.statusBarPinnedItems,
       tipsEnabled: typeof parsed.tipsEnabled === "boolean" ? parsed.tipsEnabled : DEFAULT_SHELL_CONFIG.tipsEnabled,
       tipsDismissed: Array.isArray(parsed.tipsDismissed) ? parsed.tipsDismissed : DEFAULT_SHELL_CONFIG.tipsDismissed,
+      // Fall back to localStorage when server JSON lacks theme/palette (migration)
+      theme: isValidTheme(parsed.theme) ? parsed.theme : readThemeFromLS(),
+      palette: isValidPalette(parsed.palette) ? parsed.palette : readPaletteFromLS(),
     };
   } catch {
-    return DEFAULT_SHELL_CONFIG;
+    return {
+      ...DEFAULT_SHELL_CONFIG,
+      theme: readThemeFromLS(),
+      palette: readPaletteFromLS(),
+    };
   }
 }
 

@@ -70,8 +70,8 @@ export function FtuxDidYouKnow() {
   return (
     <div
       className={cn(
-        "fixed bottom-20 right-4 z-30 w-72 animate-in slide-in-from-bottom-2 fade-in duration-300",
-        isTransitioning && "opacity-0 transition-opacity duration-200",
+        "fixed bottom-[68px] right-4 z-30 w-72 animate-in slide-in-from-bottom-2 fade-in duration-300",
+        isTransitioning && "opacity-0 translate-y-2 transition-all duration-200",
       )}
     >
       <div

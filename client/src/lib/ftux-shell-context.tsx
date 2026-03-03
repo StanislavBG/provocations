@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { type ThemePreference, type PaletteId, applyThemeToDOM, applyPaletteToDOM } from "./theme-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,7 +22,7 @@ export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";
 export type DockGroup = "gather" | "workshop" | "build";
 
-export type OutputType = "blog-post" | "infographic" | "prd" | "timeline" | "research-paper";
+export type OutputType = "blog-post" | "infographic" | "prd" | "timeline" | "research-paper" | "slide-deck";
 
 export interface ActiveWorkflow {
   outputType: OutputType;
@@ -61,6 +62,8 @@ export interface FtuxShellConfig {
   tipsTranslucency: number;        // 0-100
   tipsColor: string | null;
   tourCompleted: boolean;
+  theme: ThemePreference;
+  palette: PaletteId;
 }
 
 export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
@@ -80,6 +83,8 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
   tipsTranslucency: 90,
   tipsColor: null,
   tourCompleted: false,
+  theme: "system",
+  palette: "ember",
 };
 
 // ---------------------------------------------------------------------------
@@ -120,6 +125,8 @@ export interface FtuxShellContextValue extends FtuxShellConfig {
   resetTips: () => void;
   resetDock: () => void;
   setTourCompleted: (val: boolean) => void;
+  setTheme: (val: ThemePreference) => void;
+  setPalette: (val: PaletteId) => void;
 
   // Workflow actions
   startWorkflow: (outputType: OutputType, buildTool: ToolId) => void;
@@ -332,6 +339,34 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     [updateConfig],
   );
 
+  const setTheme = useCallback(
+    (val: ThemePreference) => updateConfig((c) => ({ ...c, theme: val })),
+    [updateConfig],
+  );
+
+  const setPalette = useCallback(
+    (val: PaletteId) => updateConfig((c) => ({ ...c, palette: val })),
+    [updateConfig],
+  );
+
+  // Apply theme/palette to DOM whenever config changes
+  useEffect(() => {
+    applyThemeToDOM(config.theme);
+  }, [config.theme]);
+
+  useEffect(() => {
+    applyPaletteToDOM(config.palette);
+  }, [config.palette]);
+
+  // Sync initialConfig prop into state when API data arrives after mount
+  const initialConfigRef = useRef(initialConfig);
+  useEffect(() => {
+    if (initialConfig && initialConfig !== initialConfigRef.current) {
+      initialConfigRef.current = initialConfig;
+      setConfig(initialConfig);
+    }
+  }, [initialConfig]);
+
   // Workflow actions
   const startWorkflow = useCallback(
     (outputType: OutputType, buildTool: ToolId) => {
@@ -396,6 +431,8 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     resetTips,
     resetDock,
     setTourCompleted,
+    setTheme,
+    setPalette,
     startWorkflow,
     nextStep,
     prevStep,

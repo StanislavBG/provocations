@@ -108,36 +108,44 @@ export function FtuxStatusBar({ templateName, templateId, headerActions }: FtuxS
 
         {/* Pinned items */}
         {statusBarPinnedItems.length > 0 && (
-          <div className="hidden md:flex items-center gap-0.5 ml-2 border-l border-border/30 pl-2">
-            {statusBarPinnedItems.map((toolId) => {
-              const iconName = TOOL_ICONS[toolId];
-              const Icon = iconName ? ICON_MAP[iconName] : Sparkles;
-              const label = TOOL_LABELS[toolId] ?? toolId;
+          <>
+            {/* Mobile: compact count badge */}
+            <Badge variant="secondary" className="md:hidden text-[9px] px-1.5 py-0 h-4 font-normal ml-1">
+              {statusBarPinnedItems.length} pinned
+            </Badge>
+            {/* Desktop: full pinned item buttons */}
+            <div className="hidden md:flex items-center gap-0.5 ml-2 border-l border-border/30 pl-2">
+              {statusBarPinnedItems.map((toolId) => {
+                const iconName = TOOL_ICONS[toolId];
+                const Icon = iconName ? ICON_MAP[iconName] : Sparkles;
+                const label = TOOL_LABELS[toolId] ?? toolId;
 
-              return (
-                <Tooltip key={toolId}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="w-6 h-6 rounded text-muted-foreground hover:text-foreground"
-                      onClick={() => setActiveTool(toolId as ToolId)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        removeStatusBarPinnedItem(toolId);
-                      }}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">
-                    {label}
-                    <span className="text-muted-foreground ml-1">(right-click to unpin)</span>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </div>
+                return (
+                  <Tooltip key={toolId}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`${label} (right-click to unpin)`}
+                        className="w-6 h-6 rounded text-muted-foreground hover:text-foreground"
+                        onClick={() => setActiveTool(toolId as ToolId)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          removeStatusBarPinnedItem(toolId);
+                        }}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      {label}
+                      <span className="text-muted-foreground ml-1">(right-click to unpin)</span>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -149,8 +157,8 @@ export function FtuxStatusBar({ templateName, templateId, headerActions }: FtuxS
       {/* Right: Controls */}
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
-        <ThemeToggle />
-        <PaletteToggle />
+        <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
+        <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
         <UserButton
           appearance={{
             elements: {
