@@ -16,6 +16,7 @@ import { LogIn, Quote, Brain, MessageCircleQuestion, Mic } from "lucide-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
 import NotebookWorkspace from "@/pages/NotebookWorkspace";
 import FtuxWorkspace from "@/pages/FtuxWorkspace";
+import MobilePreview from "@/pages/MobilePreview";
 import Admin from "@/pages/Admin";
 import ContextStore from "@/pages/ContextStore";
 import Pricing from "@/pages/Pricing";
@@ -34,6 +35,7 @@ function LoginTracker() {
 function Router() {
   return (
     <Switch>
+      <Route path="/mobile" component={MobilePreview} />
       <Route path="/store" component={ContextStore} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/admin" component={Admin} />
