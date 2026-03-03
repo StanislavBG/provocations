@@ -385,11 +385,11 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
           <TabsContent value="appearance" className="space-y-4 mt-4">
             <div className="flex items-center justify-between">
               <Label className="text-xs">Theme</Label>
-              <ThemeToggle />
+              <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
             </div>
             <div className="flex items-center justify-between">
               <Label className="text-xs">Color Palette</Label>
-              <PaletteToggle />
+              <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
             </div>
           </TabsContent>
         </Tabs>
