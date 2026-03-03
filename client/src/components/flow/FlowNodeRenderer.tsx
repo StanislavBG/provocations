@@ -1,5 +1,5 @@
 import React from "react";
-import { FileText, Sparkles, StickyNote, Brain, BookOpen, Paintbrush, MessageCircleQuestion, X } from "lucide-react";
+import { FileText, Sparkles, StickyNote, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 
@@ -77,6 +77,16 @@ const NODE_STYLES: Record<
     badgeText: "text-cyan-600 dark:text-cyan-400",
     badge: "Interview",
   },
+  timeline: {
+    border: "border-orange-500/30",
+    bg: "bg-card",
+    headerBg: "bg-orange-500/10",
+    headerBorder: "border-orange-500/20",
+    iconClass: "text-orange-500",
+    badgeBg: "bg-orange-500/20",
+    badgeText: "text-orange-600 dark:text-orange-400",
+    badge: "Timeline",
+  },
 };
 
 const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
@@ -87,6 +97,7 @@ const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   store: BookOpen,
   painter: Paintbrush,
   interview: MessageCircleQuestion,
+  timeline: Clock,
 };
 
 interface FlowNodeRendererProps {
