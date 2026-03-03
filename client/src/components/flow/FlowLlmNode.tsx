@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { LLM_PRESETS, getPreset, type LlmPreset } from "./llm-presets";
 import type { FlowNode } from "./useFlowCanvas";
+import { FlowPortDots } from "./FlowPortDots";
 
 interface FlowLlmNodeProps {
   node: FlowNode;
@@ -15,6 +16,7 @@ interface FlowLlmNodeProps {
   onDelete: (nodeId: string) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onCreateNote: (content: string, label: string) => void;
+  onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
 }
 
 const PRESET_COLORS: Record<string, { chip: string; active: string }> = {
@@ -33,6 +35,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
   onDelete,
   onUpdateNode,
   onCreateNote,
+  onPortMouseDown,
 }: FlowLlmNodeProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
@@ -266,6 +269,14 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
           ) : null}
         </div>
       </div>
+
+      {/* Port dots */}
+      <FlowPortDots
+        node={node}
+        isSelected={isSelected}
+        onPortMouseDown={onPortMouseDown}
+        accentColor="violet"
+      />
 
       {/* Delete button */}
       <button

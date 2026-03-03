@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { clerkMiddleware, requireAuth } from "@clerk/express";
 import { ensureTables } from "./db";
 import { discoverModels } from "./llm";
+import { setupCanvasWebSocket, setSaveCanvasCallback } from "./canvas-collab";
 
 const app = express();
 const httpServer = createServer(app);
@@ -87,6 +88,29 @@ app.use((req, res, next) => {
   });
 
   await registerRoutes(httpServer, app);
+
+  // Set up canvas collaboration WebSocket
+  setupCanvasWebSocket(httpServer);
+
+  // Wire the save callback so collab rooms can persist state
+  setSaveCanvasCallback(async (canvasId: number, content: string) => {
+    // Import storage + crypto dynamically to avoid circular deps
+    const { storage } = await import("./storage");
+    const { encrypt } = await import("./crypto");
+    const secret = process.env.ENCRYPTION_SECRET || "provocations-dev-key-change-in-production";
+    const encryptedContent = encrypt(content, secret);
+    // Keep existing title — just update the content
+    const encryptedTitle = encrypt("Flow Canvas (auto-saved)", secret);
+    await storage.updateDocument(canvasId, {
+      title: "[encrypted]",
+      titleCiphertext: encryptedTitle.ciphertext,
+      titleSalt: encryptedTitle.salt,
+      titleIv: encryptedTitle.iv,
+      ciphertext: encryptedContent.ciphertext,
+      salt: encryptedContent.salt,
+      iv: encryptedContent.iv,
+    });
+  });
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

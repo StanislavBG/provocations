@@ -5,32 +5,77 @@ const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1;
 
-interface DragState {
-  type: "pan" | "move-node";
+interface PanDrag {
+  type: "pan";
   startX: number;
   startY: number;
-  nodeId?: string;
-  offsetX?: number;
-  offsetY?: number;
+}
+
+interface MoveNodeDrag {
+  type: "move-node";
+  startX: number;
+  startY: number;
+  nodeId: string;
+  offsetX: number;
+  offsetY: number;
+  /** Extra node IDs dragged together (zone children) */
+  groupIds?: string[];
+  /** Last canvas position for computing delta in group drag */
+  lastCanvasX?: number;
+  lastCanvasY?: number;
+}
+
+interface DrawEdgeDrag {
+  type: "draw-edge";
+  sourceNodeId: string;
+  sourcePortType: "input" | "output";
+  /** Current cursor position in canvas coords */
+  cursorX: number;
+  cursorY: number;
+}
+
+type DragState = PanDrag | MoveNodeDrag | DrawEdgeDrag;
+
+/** Preview edge data exposed to canvas for rendering */
+export interface PreviewEdge {
+  sourceNodeId: string;
+  cursorX: number;
+  cursorY: number;
 }
 
 interface UseFlowInteractionProps {
   viewport: FlowViewport;
   onViewportChange: (x: number, y: number, zoom: number) => void;
   onNodeMove: (nodeId: string, x: number, y: number) => void;
+  onNodesMove?: (nodeIds: string[], dx: number, dy: number) => void;
   onSelectNode: (nodeId: string | null) => void;
   onToggleSelectNode: (nodeId: string) => void;
   onNodeDoubleClick: (nodeId: string) => void;
+  onEdgeCreate?: (fromNodeId: string, toNodeId: string) => void;
   nodes: FlowNode[];
+}
+
+/** Check if a node's center is inside a zone's bounds */
+function isNodeInsideZone(node: FlowNode, zone: FlowNode): boolean {
+  const cx = node.x + node.width / 2;
+  const cy = node.y + node.height / 2;
+  return (
+    cx >= zone.x &&
+    cx <= zone.x + zone.width &&
+    cy >= zone.y &&
+    cy <= zone.y + zone.height
+  );
 }
 
 export function useFlowInteraction({
   viewport,
   onViewportChange,
   onNodeMove,
+  onNodesMove,
   onSelectNode,
   onToggleSelectNode,
   onNodeDoubleClick,
+  onEdgeCreate,
   nodes,
 }: UseFlowInteractionProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -95,21 +140,62 @@ export function useFlowInteraction({
         return;
       }
 
-      if (dragState.type === "move-node" && dragState.nodeId) {
+      if (dragState.type === "move-node") {
         const pos = screenToCanvas(e.clientX, e.clientY);
-        onNodeMove(
-          dragState.nodeId,
-          pos.x - (dragState.offsetX || 0),
-          pos.y - (dragState.offsetY || 0),
-        );
+        const newX = pos.x - dragState.offsetX;
+        const newY = pos.y - dragState.offsetY;
+        onNodeMove(dragState.nodeId, newX, newY);
+
+        // Move group children (zone drag)
+        if (dragState.groupIds && dragState.groupIds.length > 0 && onNodesMove) {
+          const dx = pos.x - (dragState.lastCanvasX ?? dragState.startX);
+          const dy = pos.y - (dragState.lastCanvasY ?? dragState.startY);
+          if (dx !== 0 || dy !== 0) {
+            onNodesMove(dragState.groupIds, dx, dy);
+          }
+        }
+
+        // Update last position for next delta
+        setDragState((prev) => {
+          if (!prev || prev.type !== "move-node") return prev;
+          return { ...prev, lastCanvasX: pos.x, lastCanvasY: pos.y };
+        });
+        return;
+      }
+
+      if (dragState.type === "draw-edge") {
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        setDragState((prev) => {
+          if (!prev || prev.type !== "draw-edge") return prev;
+          return { ...prev, cursorX: pos.x, cursorY: pos.y };
+        });
       }
     },
-    [dragState, viewport.zoom, screenToCanvas, onViewportChange, onNodeMove],
+    [dragState, viewport.zoom, screenToCanvas, onViewportChange, onNodeMove, onNodesMove],
   );
 
-  const handleMouseUp = useCallback(() => {
-    setDragState(null);
-  }, []);
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent) => {
+      if (dragState?.type === "draw-edge" && onEdgeCreate) {
+        // Find target node under cursor
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        const target = nodes.find((n) => {
+          if (n.id === dragState.sourceNodeId) return false;
+          return (
+            pos.x >= n.x &&
+            pos.x <= n.x + n.width &&
+            pos.y >= n.y &&
+            pos.y <= n.y + n.height
+          );
+        });
+        if (target) {
+          onEdgeCreate(dragState.sourceNodeId, target.id);
+        }
+      }
+      setDragState(null);
+    },
+    [dragState, nodes, screenToCanvas, onEdgeCreate],
+  );
 
   // Called from node components
   const handleNodeMouseDown = useCallback(
@@ -126,6 +212,15 @@ export function useFlowInteraction({
       if (!node) return;
 
       const pos = screenToCanvas(e.clientX, e.clientY);
+
+      // If dragging a zone, find contained nodes to move together
+      let groupIds: string[] | undefined;
+      if (node.type === "zone") {
+        groupIds = nodes
+          .filter((n) => n.id !== nodeId && n.type !== "zone" && isNodeInsideZone(n, node))
+          .map((n) => n.id);
+      }
+
       setDragState({
         type: "move-node",
         startX: pos.x,
@@ -133,6 +228,9 @@ export function useFlowInteraction({
         nodeId,
         offsetX: pos.x - node.x,
         offsetY: pos.y - node.y,
+        groupIds: groupIds && groupIds.length > 0 ? groupIds : undefined,
+        lastCanvasX: pos.x,
+        lastCanvasY: pos.y,
       });
     },
     [nodes, screenToCanvas, onSelectNode, onToggleSelectNode],
@@ -146,6 +244,32 @@ export function useFlowInteraction({
     [onNodeDoubleClick],
   );
 
+  /** Start drawing an edge from a port */
+  const handlePortMouseDown = useCallback(
+    (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => {
+      e.stopPropagation();
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      setDragState({
+        type: "draw-edge",
+        sourceNodeId: nodeId,
+        sourcePortType: portType,
+        cursorX: pos.x,
+        cursorY: pos.y,
+      });
+    },
+    [screenToCanvas],
+  );
+
+  // Build preview edge for rendering
+  const previewEdge: PreviewEdge | null =
+    dragState?.type === "draw-edge"
+      ? {
+          sourceNodeId: dragState.sourceNodeId,
+          cursorX: dragState.cursorX,
+          cursorY: dragState.cursorY,
+        }
+      : null;
+
   return {
     canvasRef,
     handleWheel,
@@ -154,7 +278,10 @@ export function useFlowInteraction({
     handleMouseUp,
     handleNodeMouseDown,
     handleNodeDoubleClick,
+    handlePortMouseDown,
     screenToCanvas,
     isDragging: !!dragState,
+    isDrawingEdge: dragState?.type === "draw-edge",
+    previewEdge,
   };
 }

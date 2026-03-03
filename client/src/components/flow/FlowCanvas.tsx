@@ -4,6 +4,9 @@ import type { FlowCanvasState, FlowNode, FlowEdge } from "./useFlowCanvas";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
 import { FlowStoreNode } from "./FlowStoreNode";
 import { FlowLlmNode } from "./FlowLlmNode";
+import { FlowDocumentNode } from "./FlowDocumentNode";
+import { FlowZoneNode } from "./FlowZoneNode";
+import { FlowAudioNode } from "./FlowAudioNode";
 import { FlowEdgeLayer } from "./FlowEdgeLayer";
 import { useFlowInteraction } from "./useFlowInteraction";
 
@@ -11,6 +14,7 @@ interface FlowCanvasProps {
   state: FlowCanvasState;
   frozen?: boolean;
   onMoveNode: (nodeId: string, x: number, y: number) => void;
+  onMoveNodes?: (nodeIds: string[], dx: number, dy: number) => void;
   onDeleteNode: (nodeId: string) => void;
   onSelectNode: (nodeId: string | null) => void;
   onToggleSelectNode: (nodeId: string) => void;
@@ -19,6 +23,9 @@ interface FlowCanvasProps {
   onPickDocument: (doc: { id: number; title: string; content: string }) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onCreateNote: (content: string, label: string) => void;
+  onCreateEdge?: (fromNodeId: string, toNodeId: string) => void;
+  onDeleteEdge?: (edgeId: string) => void;
+  onPlayNode?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
 }
 
@@ -28,6 +35,7 @@ export function FlowCanvas({
   state,
   frozen,
   onMoveNode,
+  onMoveNodes,
   onDeleteNode,
   onSelectNode,
   onToggleSelectNode,
@@ -36,6 +44,9 @@ export function FlowCanvas({
   onPickDocument,
   onUpdateNode,
   onCreateNote,
+  onCreateEdge,
+  onDeleteEdge,
+  onPlayNode,
   onDropTool,
 }: FlowCanvasProps) {
   const {
@@ -46,22 +57,32 @@ export function FlowCanvas({
     handleMouseUp,
     handleNodeMouseDown,
     handleNodeDoubleClick,
+    handlePortMouseDown,
     screenToCanvas,
     isDragging,
+    isDrawingEdge,
+    previewEdge,
   } = useFlowInteraction({
     viewport: state.viewport,
     onViewportChange,
     onNodeMove: onMoveNode,
+    onNodesMove: onMoveNodes,
     onSelectNode,
     onToggleSelectNode,
     onNodeDoubleClick,
+    onEdgeCreate: onCreateEdge,
     nodes: state.nodes,
   });
 
-  const sortedNodes = useMemo(
-    () => [...state.nodes].sort((a, b) => a.zIndex - b.zIndex),
-    [state.nodes],
-  );
+  // Sort nodes: zones first (below), then regular nodes by zIndex
+  const sortedNodes = useMemo(() => {
+    const zones = state.nodes.filter((n) => n.type === "zone");
+    const others = state.nodes.filter((n) => n.type !== "zone");
+    return [
+      ...zones.sort((a, b) => a.zIndex - b.zIndex),
+      ...others.sort((a, b) => a.zIndex - b.zIndex),
+    ];
+  }, [state.nodes]);
 
   const gridSize = GRID_SIZE * state.viewport.zoom;
 
@@ -84,10 +105,18 @@ export function FlowCanvas({
     [screenToCanvas, onDropTool],
   );
 
+  const cursorClass = frozen
+    ? "cursor-not-allowed"
+    : isDrawingEdge
+      ? "cursor-crosshair"
+      : isDragging
+        ? "cursor-grabbing"
+        : "cursor-default";
+
   return (
     <div
       ref={canvasRef}
-      className={`absolute inset-0 overflow-hidden bg-background ${frozen ? "cursor-not-allowed" : isDragging ? "cursor-grabbing" : "cursor-default"}`}
+      className={`absolute inset-0 overflow-hidden bg-background ${cursorClass}`}
       onWheel={frozen ? undefined : handleWheel}
       onMouseDown={frozen ? undefined : handleMouseDown}
       onMouseMove={frozen ? undefined : handleMouseMove}
@@ -129,10 +158,24 @@ export function FlowCanvas({
         }}
       >
         {/* Edges behind nodes */}
-        <FlowEdgeLayer nodes={state.nodes} edges={state.edges} />
+        <FlowEdgeLayer
+          nodes={state.nodes}
+          edges={state.edges}
+          previewEdge={previewEdge}
+          onDeleteEdge={onDeleteEdge}
+        />
 
         {sortedNodes.map((node) =>
-          node.type === "store" ? (
+          node.type === "zone" ? (
+            <FlowZoneNode
+              key={node.id}
+              node={node}
+              isSelected={state.selectedNodeIds.has(node.id)}
+              onMouseDown={handleNodeMouseDown}
+              onDelete={onDeleteNode}
+              onUpdateNode={onUpdateNode}
+            />
+          ) : node.type === "store" ? (
             <FlowStoreNode
               key={node.id}
               node={node}
@@ -140,6 +183,26 @@ export function FlowCanvas({
               onMouseDown={handleNodeMouseDown}
               onDelete={onDeleteNode}
               onPickDocument={onPickDocument}
+            />
+          ) : node.type === "document" ? (
+            <FlowDocumentNode
+              key={node.id}
+              node={node}
+              isSelected={state.selectedNodeIds.has(node.id)}
+              onMouseDown={handleNodeMouseDown}
+              onDoubleClick={handleNodeDoubleClick}
+              onDelete={onDeleteNode}
+              onPortMouseDown={handlePortMouseDown}
+            />
+          ) : node.type === "audio" ? (
+            <FlowAudioNode
+              key={node.id}
+              node={node}
+              isSelected={state.selectedNodeIds.has(node.id)}
+              onMouseDown={handleNodeMouseDown}
+              onDelete={onDeleteNode}
+              onUpdateNode={onUpdateNode}
+              onPortMouseDown={handlePortMouseDown}
             />
           ) : node.type === "llm" ? (
             <FlowLlmNode
@@ -152,6 +215,7 @@ export function FlowCanvas({
               onDelete={onDeleteNode}
               onUpdateNode={onUpdateNode}
               onCreateNote={onCreateNote}
+              onPortMouseDown={handlePortMouseDown}
             />
           ) : (
             <FlowNodeRenderer
@@ -161,6 +225,8 @@ export function FlowCanvas({
               onMouseDown={handleNodeMouseDown}
               onDoubleClick={handleNodeDoubleClick}
               onDelete={onDeleteNode}
+              onPortMouseDown={handlePortMouseDown}
+              onPlayNode={onPlayNode}
             />
           ),
         )}

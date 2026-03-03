@@ -1,9 +1,12 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import type { FlowEdge, FlowNode } from "./useFlowCanvas";
+import type { PreviewEdge } from "./useFlowInteraction";
 
 interface FlowEdgeLayerProps {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  previewEdge?: PreviewEdge | null;
+  onDeleteEdge?: (edgeId: string) => void;
 }
 
 function computeEndpoints(from: FlowNode, to: FlowNode) {
@@ -29,18 +32,23 @@ function computeEndpoints(from: FlowNode, to: FlowNode) {
 export const FlowEdgeLayer = memo(function FlowEdgeLayer({
   nodes,
   edges,
+  previewEdge,
+  onDeleteEdge,
 }: FlowEdgeLayerProps) {
   const nodeMap = useMemo(
     () => new Map(nodes.map((n) => [n.id, n])),
     [nodes],
   );
 
-  if (edges.length === 0) return null;
+  const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
+
+  const hasContent = edges.length > 0 || previewEdge;
+  if (!hasContent) return null;
 
   return (
     <svg
-      className="absolute pointer-events-none overflow-visible"
-      style={{ left: 0, top: 0, width: 1, height: 1 }}
+      className="absolute overflow-visible"
+      style={{ left: 0, top: 0, width: 1, height: 1, pointerEvents: "none" }}
     >
       <defs>
         <marker
@@ -77,18 +85,89 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         const cy = isVertical ? my : my - offset;
 
         const path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`;
+        const isHovered = hoveredEdge === edge.id;
+
+        return (
+          <g key={edge.id}>
+            {/* Visible edge line */}
+            <path
+              d={path}
+              fill="none"
+              className={isHovered ? "stroke-destructive/60" : "stroke-muted-foreground/35"}
+              strokeWidth={isHovered ? 2.5 : 1.5}
+              markerEnd="url(#flow-arrow)"
+            />
+
+            {/* Invisible wide hit area for hover/click */}
+            <path
+              d={path}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={14}
+              style={{ pointerEvents: "stroke", cursor: "pointer" }}
+              onMouseEnter={() => setHoveredEdge(edge.id)}
+              onMouseLeave={() => setHoveredEdge(null)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteEdge?.(edge.id);
+              }}
+            />
+
+            {/* Delete X button at midpoint on hover */}
+            {isHovered && onDeleteEdge && (
+              <g
+                style={{ pointerEvents: "auto", cursor: "pointer" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteEdge(edge.id);
+                }}
+              >
+                <circle
+                  cx={mx}
+                  cy={my}
+                  r={8}
+                  className="fill-destructive"
+                />
+                <line
+                  x1={mx - 3} y1={my - 3}
+                  x2={mx + 3} y2={my + 3}
+                  stroke="white" strokeWidth={1.5} strokeLinecap="round"
+                />
+                <line
+                  x1={mx + 3} y1={my - 3}
+                  x2={mx - 3} y2={my + 3}
+                  stroke="white" strokeWidth={1.5} strokeLinecap="round"
+                />
+              </g>
+            )}
+          </g>
+        );
+      })}
+
+      {/* Preview edge while drawing a connection */}
+      {previewEdge && (() => {
+        const sourceNode = nodeMap.get(previewEdge.sourceNodeId);
+        if (!sourceNode) return null;
+
+        // Start from the right side of the source node (output port)
+        const x1 = sourceNode.x + sourceNode.width;
+        const y1 = sourceNode.y + sourceNode.height / 2;
+        const x2 = previewEdge.cursorX;
+        const y2 = previewEdge.cursorY;
+        const mx = (x1 + x2) / 2;
+
+        const path = `M ${x1},${y1} Q ${mx},${y1} ${x2},${y2}`;
 
         return (
           <path
-            key={edge.id}
             d={path}
             fill="none"
-            className="stroke-muted-foreground/35"
+            className="stroke-muted-foreground/50"
             strokeWidth={1.5}
-            markerEnd="url(#flow-arrow)"
+            strokeDasharray="6 3"
           />
         );
-      })}
+      })()}
     </svg>
   );
 });

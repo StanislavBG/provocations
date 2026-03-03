@@ -21,9 +21,14 @@ import {
   ListCollapse,
   Brain,
   Settings,
+  FileEdit,
+  SquareDashedBottom,
+  Mic,
   type LucideIcon,
 } from "lucide-react";
 import { FtuxSettingsDialog } from "./FtuxSettingsDialog";
+import { AleComponentGateway } from "./AleComponentGateway";
+import { Layers } from "lucide-react";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Sparkles,
@@ -38,6 +43,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Clock,
   ListCollapse,
   Brain,
+  FileEdit,
+  SquareDashedBottom,
+  Mic,
 };
 
 const GROUP_LABELS: Record<DockGroup, string> = {
@@ -70,6 +78,7 @@ export function FtuxDock() {
 
   const [isVisible, setIsVisible] = useState(!dockAutoHide);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [gatewayOpen, setGatewayOpen] = useState(false);
   const hideTimeout = useRef<ReturnType<typeof setTimeout>>();
   const dragSourceIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -291,8 +300,27 @@ export function FtuxDock() {
           </div>
         ))}
 
-        {/* Settings gear at dock edge */}
-        <div className={cn(isHorizontal ? "ml-1 border-l border-border/30 pl-1" : "mt-1 border-t border-border/30 pt-1")}>
+        {/* System buttons at dock edge */}
+        <div className={cn(
+          "flex items-center gap-0.5",
+          isHorizontal ? "ml-1 border-l border-border/30 pl-1 flex-row" : "mt-1 border-t border-border/30 pt-1 flex-col",
+        )}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Workspace Tools"
+                className="w-8 h-8 rounded-lg text-muted-foreground/50 hover:text-muted-foreground"
+                onClick={() => setGatewayOpen(true)}
+              >
+                <Layers className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
+              Workspace Tools
+            </TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -312,6 +340,7 @@ export function FtuxDock() {
         </div>
       </div>
 
+      <AleComponentGateway open={gatewayOpen} onOpenChange={setGatewayOpen} />
       <FtuxSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </>
   );
