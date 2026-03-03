@@ -266,14 +266,22 @@ interface NotebookResearchChatProps {
   onCaptureToContext: (text: string, label: string) => void;
   /** Reports message count changes to parent */
   onMessageCountChange?: (count: number) => void;
+  /** Externally provided initial messages (for restoring conversation) */
+  initialMessages?: ChatMessageWithMeta[];
+  /** Called whenever messages change, so parent can persist them */
+  onMessagesChange?: (messages: ChatMessageWithMeta[]) => void;
 }
 
 export function NotebookResearchChat({
   objective,
   onCaptureToContext,
   onMessageCountChange,
+  initialMessages,
+  onMessagesChange,
 }: NotebookResearchChatProps) {
-  const [messages, setMessages] = useState<ChatMessageWithMeta[]>([]);
+  const [messages, setMessages] = useState<ChatMessageWithMeta[]>(
+    () => initialMessages ?? [],
+  );
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -338,6 +346,13 @@ export function NotebookResearchChat({
   useEffect(() => {
     onMessageCountChange?.(messages.length);
   }, [messages.length, onMessageCountChange]);
+
+  // Persist messages to parent (for per-node conversation storage)
+  useEffect(() => {
+    if (messages.length > 0) {
+      onMessagesChange?.(messages);
+    }
+  }, [messages, onMessagesChange]);
 
   const handleClear = useCallback(() => {
     setMessages([]);

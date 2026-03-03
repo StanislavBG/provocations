@@ -33,11 +33,6 @@ function LoginTracker() {
   return null;
 }
 
-/** Home route: FlowWorkspace with beta banner */
-function FlowHome() {
-  return <FlowWorkspace showBetaBanner />;
-}
-
 function Router() {
   return (
     <Switch>
@@ -51,7 +46,7 @@ function Router() {
       <Route path="/ftux/:templateId" component={FtuxWorkspace} />
       <Route path="/ftux" component={FtuxWorkspace} />
       <Route path="/app/:templateId" component={NotebookWorkspace} />
-      <Route path="/" component={FlowHome} />
+      <Route path="/">{() => <FlowWorkspace />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

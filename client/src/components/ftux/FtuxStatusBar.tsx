@@ -66,9 +66,11 @@ function hexToRgba(hex: string, alpha: number): string {
 interface FtuxStatusBarProps {
   templateName: string | null;
   templateId: string | null;
+  /** Extra actions rendered before the right-side controls */
+  headerActions?: React.ReactNode;
 }
 
-export function FtuxStatusBar({ templateName, templateId }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions }: FtuxStatusBarProps) {
   const shell = useFtuxShell();
   const {
     statusBarPinnedItems,
@@ -146,6 +148,7 @@ export function FtuxStatusBar({ templateName, templateId }: FtuxStatusBarProps) 
 
       {/* Right: Controls */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {headerActions}
         <ThemeToggle />
         <PaletteToggle />
         <UserButton

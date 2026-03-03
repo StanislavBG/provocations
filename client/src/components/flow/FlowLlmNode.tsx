@@ -150,7 +150,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
         onMouseDown={(e) => onMouseDown(e, node.id)}
       >
         <Brain className="w-3 h-3 text-violet-500 shrink-0" />
-        <span className="text-[10px] font-medium truncate flex-1">{node.label}</span>
+        <span className="text-[10px] font-medium truncate flex-1">{node.label || "Text Modifications"}</span>
         <span className={cn(
           "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
           presetColors.active,
