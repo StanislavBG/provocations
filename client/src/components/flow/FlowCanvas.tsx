@@ -1,9 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { BookOpen, Sparkles } from "lucide-react";
-import type { FlowCanvasState, FlowNode } from "./useFlowCanvas";
+import type { FlowCanvasState, FlowNode, FlowEdge } from "./useFlowCanvas";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
 import { FlowStoreNode } from "./FlowStoreNode";
 import { FlowLlmNode } from "./FlowLlmNode";
+import { FlowEdgeLayer } from "./FlowEdgeLayer";
 import { useFlowInteraction } from "./useFlowInteraction";
 
 interface FlowCanvasProps {
@@ -125,6 +126,9 @@ export function FlowCanvas({
           transformOrigin: "0 0",
         }}
       >
+        {/* Edges behind nodes */}
+        <FlowEdgeLayer nodes={state.nodes} edges={state.edges} />
+
         {sortedNodes.map((node) =>
           node.type === "store" ? (
             <FlowStoreNode

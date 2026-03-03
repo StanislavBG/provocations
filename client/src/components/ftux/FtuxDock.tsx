@@ -249,13 +249,13 @@ export function FtuxDock() {
                         variant="ghost"
                         size="icon"
                         className={cn(
-                          "w-10 h-10 rounded-xl transition-transform duration-150 hover:scale-110",
+                          "w-12 h-12 rounded-lg transition-transform duration-150 hover:scale-110",
                           isActive && "bg-primary/15 text-primary",
                           !isActive && "text-muted-foreground hover:text-foreground",
                         )}
                         onClick={() => setActiveTool(item.toolId)}
                       >
-                        <IconComponent className="w-5 h-5" />
+                        <IconComponent className="w-6 h-6" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
@@ -266,7 +266,7 @@ export function FtuxDock() {
                   {/* Label below icon */}
                   {dockShowLabels && (
                     <span className={cn(
-                      "text-[8px] text-muted-foreground/70 leading-none max-w-[48px] truncate text-center",
+                      "text-[9px] text-muted-foreground/70 leading-none max-w-[56px] truncate text-center",
                       isHorizontal ? "mt-0.5" : "ml-1",
                     )}>
                       {item.label}

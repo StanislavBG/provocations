@@ -3,7 +3,14 @@ import { generateId } from "@/lib/utils";
 
 // ── Types ──
 
-export type FlowNodeType = "context-doc" | "research" | "note" | "llm" | "store";
+export type FlowNodeType =
+  | "context-doc"
+  | "research"
+  | "note"
+  | "llm"
+  | "store"
+  | "painter"
+  | "interview";
 
 export interface FlowNode {
   id: string;
@@ -30,6 +37,16 @@ export interface FlowNode {
   llmOutput?: string;
   /** LLM node: error message if execution failed */
   llmError?: string;
+  /** Research node: persisted conversation messages */
+  researchMessages?: Array<{ role: string; content: string }>;
+  /** Research node: the initial query for display on the card */
+  researchQuery?: string;
+}
+
+export interface FlowEdge {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
 }
 
 export interface FlowViewport {
@@ -40,6 +57,7 @@ export interface FlowViewport {
 
 export interface FlowCanvasState {
   nodes: FlowNode[];
+  edges: FlowEdge[];
   viewport: FlowViewport;
   selectedNodeIds: Set<string>;
 }
@@ -52,6 +70,8 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   note: { width: 180, height: 100 },
   llm: { width: 260, height: 240 },
   store: { width: 260, height: 320 },
+  painter: { width: 260, height: 200 },
+  interview: { width: 220, height: 140 },
 };
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
@@ -61,6 +81,7 @@ const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
 export function useFlowCanvas() {
   const [state, setState] = useState<FlowCanvasState>({
     nodes: [],
+    edges: [],
     viewport: INITIAL_VIEWPORT,
     selectedNodeIds: new Set(),
   });
@@ -110,6 +131,18 @@ export function useFlowCanvas() {
     }));
   }, []);
 
+  const addEdge = useCallback(
+    (fromNodeId: string, toNodeId: string): string => {
+      const id = generateId("edge");
+      setState((s) => ({
+        ...s,
+        edges: [...s.edges, { id, fromNodeId, toNodeId }],
+      }));
+      return id;
+    },
+    [],
+  );
+
   const deleteNode = useCallback((nodeId: string) => {
     setState((s) => {
       const next = new Set(s.selectedNodeIds);
@@ -117,6 +150,7 @@ export function useFlowCanvas() {
       return {
         ...s,
         nodes: s.nodes.filter((n) => n.id !== nodeId),
+        edges: s.edges.filter((e) => e.fromNodeId !== nodeId && e.toNodeId !== nodeId),
         selectedNodeIds: next,
       };
     });
@@ -148,6 +182,7 @@ export function useFlowCanvas() {
   return {
     state,
     addNode,
+    addEdge,
     updateNode,
     moveNode,
     deleteNode,
