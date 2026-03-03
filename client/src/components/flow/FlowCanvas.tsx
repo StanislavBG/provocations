@@ -9,6 +9,7 @@ import { useFlowInteraction } from "./useFlowInteraction";
 
 interface FlowCanvasProps {
   state: FlowCanvasState;
+  frozen?: boolean;
   onMoveNode: (nodeId: string, x: number, y: number) => void;
   onDeleteNode: (nodeId: string) => void;
   onSelectNode: (nodeId: string | null) => void;
@@ -25,6 +26,7 @@ const GRID_SIZE = 20;
 
 export function FlowCanvas({
   state,
+  frozen,
   onMoveNode,
   onDeleteNode,
   onSelectNode,
@@ -85,14 +87,14 @@ export function FlowCanvas({
   return (
     <div
       ref={canvasRef}
-      className={`absolute inset-0 overflow-hidden bg-background ${isDragging ? "cursor-grabbing" : "cursor-default"}`}
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      className={`absolute inset-0 overflow-hidden bg-background ${frozen ? "cursor-not-allowed" : isDragging ? "cursor-grabbing" : "cursor-default"}`}
+      onWheel={frozen ? undefined : handleWheel}
+      onMouseDown={frozen ? undefined : handleMouseDown}
+      onMouseMove={frozen ? undefined : handleMouseMove}
+      onMouseUp={frozen ? undefined : handleMouseUp}
+      onMouseLeave={frozen ? undefined : handleMouseUp}
+      onDragOver={frozen ? undefined : handleDragOver}
+      onDrop={frozen ? undefined : handleDrop}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Dot grid */}
@@ -179,10 +181,6 @@ export function FlowCanvas({
         </div>
       )}
 
-      {/* Zoom indicator */}
-      <div className="absolute bottom-3 right-3 bg-card/80 border rounded px-2 py-0.5 text-[10px] text-muted-foreground backdrop-blur-sm">
-        {Math.round(state.viewport.zoom * 100)}%
-      </div>
     </div>
   );
 }
