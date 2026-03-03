@@ -1,45 +1,70 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Monitor } from "lucide-react";
+import {
+  type ThemePreference,
+  applyThemeToDOM,
+  readThemeFromLS,
+  resolveTheme,
+} from "@/lib/theme-utils";
 
-export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== "undefined") {
-      return document.documentElement.classList.contains("dark");
-    }
-    return false;
-  });
+interface ThemeToggleProps {
+  /** Controlled value. When provided, the component is controlled by the parent. */
+  value?: ThemePreference;
+  /** Called when the user cycles the theme. Only used in controlled mode. */
+  onChange?: (theme: ThemePreference) => void;
+}
 
+const CYCLE: ThemePreference[] = ["light", "dark", "system"];
+
+function nextTheme(current: ThemePreference): ThemePreference {
+  const idx = CYCLE.indexOf(current);
+  return CYCLE[(idx + 1) % CYCLE.length];
+}
+
+export function ThemeToggle({ value, onChange }: ThemeToggleProps) {
+  const controlled = value !== undefined && onChange !== undefined;
+
+  // Uncontrolled internal state (used outside FTUX)
+  const [internal, setInternal] = useState<ThemePreference>(readThemeFromLS);
+
+  const current = controlled ? value : internal;
+
+  // Uncontrolled mode: apply to DOM when internal state changes
   useEffect(() => {
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
+    if (!controlled) {
+      applyThemeToDOM(internal);
+    }
+  }, [internal, controlled]);
+
+  function handleClick() {
+    const next = nextTheme(current);
+    if (controlled) {
+      onChange(next);
     } else {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
+      setInternal(next);
     }
-  }, [isDark]);
+  }
 
-  useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved === "dark") {
-      setIsDark(true);
-    } else if (saved === "light") {
-      setIsDark(false);
-    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      setIsDark(true);
-    }
-  }, []);
+  const resolved = resolveTheme(current);
+  const icon =
+    current === "system" ? (
+      <Monitor className="w-4 h-4" />
+    ) : resolved === "dark" ? (
+      <Sun className="w-4 h-4" />
+    ) : (
+      <Moon className="w-4 h-4" />
+    );
 
   return (
     <Button
       data-testid="button-theme-toggle"
       size="icon"
       variant="ghost"
-      onClick={() => setIsDark(!isDark)}
+      onClick={handleClick}
+      title={`Theme: ${current}`}
     >
-      {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      {icon}
     </Button>
   );
 }

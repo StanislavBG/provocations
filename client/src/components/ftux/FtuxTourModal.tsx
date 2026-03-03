@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useFtuxShell } from "@/lib/ftux-shell-context";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, X, Sparkles } from "lucide-react";
@@ -46,10 +46,8 @@ const TOUR_STEPS: TourStep[] = [
 export function FtuxTourModal() {
   const { tourCompleted, setTourCompleted } = useFtuxShell();
   const [currentStep, setCurrentStep] = useState(0);
+  const modalRef = useRef<HTMLDivElement>(null);
 
-  if (tourCompleted) return null;
-
-  const step = TOUR_STEPS[currentStep];
   const isFirst = currentStep === 0;
   const isLast = currentStep === TOUR_STEPS.length - 1;
 
@@ -69,8 +67,40 @@ export function FtuxTourModal() {
     setTourCompleted(true);
   };
 
+  // Keyboard: Escape to skip, Left/Right to navigate
+  useEffect(() => {
+    if (tourCompleted) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleSkip();
+      } else if (e.key === "ArrowRight" || e.key === "Enter") {
+        handleNext();
+      } else if (e.key === "ArrowLeft") {
+        handleBack();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
+
+  // Auto-focus the modal for screen readers
+  useEffect(() => {
+    if (!tourCompleted) {
+      modalRef.current?.focus();
+    }
+  }, [tourCompleted]);
+
+  if (tourCompleted) return null;
+
+  const step = TOUR_STEPS[currentStep];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Tour step ${currentStep + 1} of ${TOUR_STEPS.length}: ${step.title}`}
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-background/80 backdrop-blur-md"
@@ -78,7 +108,11 @@ export function FtuxTourModal() {
       />
 
       {/* Modal card */}
-      <div className="relative z-10 w-full max-w-md mx-4 animate-in zoom-in-95 fade-in duration-200">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-md mx-4 animate-in zoom-in-95 fade-in duration-200 focus:outline-none"
+      >
         <div
           className="rounded-2xl p-6 space-y-5"
           style={{

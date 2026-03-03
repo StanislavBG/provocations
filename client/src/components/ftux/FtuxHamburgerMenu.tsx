@@ -108,6 +108,7 @@ export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxH
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Open workspace tools menu"
           className="fixed top-[calc(var(--ftux-status-bar-height,36px)+4px)] left-3 z-30 w-9 h-9 rounded-xl bg-card/75 backdrop-blur-md border border-border/30 shadow-sm hover:bg-card"
         >
           <Menu className="w-4 h-4" />
