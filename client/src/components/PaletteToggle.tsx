@@ -2,46 +2,36 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Palette } from "lucide-react";
+import {
+  PALETTES,
+  type PaletteId,
+  applyPaletteToDOM,
+  readPaletteFromLS,
+} from "@/lib/theme-utils";
 
-const PALETTES = [
-  { id: "ember",  label: "Ember",  swatch: "#B35C1E", cls: "" },
-  { id: "ocean",  label: "Ocean",  swatch: "#2E7DA8", cls: "palette-ocean" },
-  { id: "forest", label: "Forest", swatch: "#2D8A56", cls: "palette-forest" },
-  { id: "dusk",   label: "Dusk",   swatch: "#7C4DCC", cls: "palette-dusk" },
-  { id: "slate",  label: "Slate",  swatch: "#4D5B6E", cls: "palette-slate" },
-] as const;
-
-type PaletteId = (typeof PALETTES)[number]["id"];
-
-const STORAGE_KEY = "provocations-palette";
-
-function applyPalette(id: PaletteId) {
-  const root = document.documentElement;
-  // Remove all palette classes
-  for (const p of PALETTES) {
-    if (p.cls) root.classList.remove(p.cls);
-  }
-  // Apply new one (ember has no class — it's the :root default)
-  const match = PALETTES.find((p) => p.id === id);
-  if (match?.cls) root.classList.add(match.cls);
-  localStorage.setItem(STORAGE_KEY, id);
+interface PaletteToggleProps {
+  /** Controlled value. When provided, the component is controlled by the parent. */
+  value?: PaletteId;
+  /** Called when the user picks a palette. Only used in controlled mode. */
+  onChange?: (palette: PaletteId) => void;
 }
 
-function loadPalette(): PaletteId {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved && PALETTES.some((p) => p.id === saved)) return saved as PaletteId;
-  return "ember";
-}
+export function PaletteToggle({ value, onChange }: PaletteToggleProps) {
+  const controlled = value !== undefined && onChange !== undefined;
 
-export function PaletteToggle() {
-  const [active, setActive] = useState<PaletteId>(loadPalette);
+  // Uncontrolled internal state (used outside FTUX)
+  const [internal, setInternal] = useState<PaletteId>(readPaletteFromLS);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Apply on mount + change
+  const active = controlled ? value : internal;
+
+  // Uncontrolled mode: apply to DOM when internal state changes
   useEffect(() => {
-    applyPalette(active);
-  }, [active]);
+    if (!controlled) {
+      applyPaletteToDOM(internal);
+    }
+  }, [internal, controlled]);
 
   // Close on outside click
   useEffect(() => {
@@ -55,7 +45,14 @@ export function PaletteToggle() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
-  // Cycle to next palette on direct click
+  function setActive(id: PaletteId) {
+    if (controlled) {
+      onChange(id);
+    } else {
+      setInternal(id);
+    }
+  }
+
   function cycleNext() {
     const idx = PALETTES.findIndex((p) => p.id === active);
     const next = PALETTES[(idx + 1) % PALETTES.length];

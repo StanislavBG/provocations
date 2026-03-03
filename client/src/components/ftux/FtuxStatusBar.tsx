@@ -157,8 +157,8 @@ export function FtuxStatusBar({ templateName, templateId, headerActions }: FtuxS
       {/* Right: Controls */}
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
-        <ThemeToggle />
-        <PaletteToggle />
+        <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
+        <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
         <UserButton
           appearance={{
             elements: {
