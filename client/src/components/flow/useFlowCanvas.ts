@@ -11,7 +11,10 @@ export type FlowNodeType =
   | "store"
   | "painter"
   | "interview"
-  | "timeline";
+  | "timeline"
+  | "document"
+  | "zone"
+  | "audio";
 
 export interface FlowNode {
   id: string;
@@ -42,6 +45,18 @@ export interface FlowNode {
   researchMessages?: Array<{ role: string; content: string }>;
   /** Research node: the initial query for display on the card */
   researchQuery?: string;
+  /** Document node: markdown text content */
+  documentContent?: string;
+  /** Document node: objective/purpose */
+  documentObjective?: string;
+  /** Zone node: ambient background color key */
+  zoneColor?: string;
+  /** Zone node: user-assigned label */
+  zoneLabel?: string;
+  /** Audio node: whether currently recording */
+  audioRecording?: boolean;
+  /** Audio node: transcript text */
+  audioTranscript?: string;
 }
 
 export interface FlowEdge {
@@ -63,6 +78,25 @@ export interface FlowCanvasState {
   selectedNodeIds: Set<string>;
 }
 
+// ── Port Configuration ──
+
+export interface PortDef {
+  side: "left" | "right";
+  type: "input" | "output";
+}
+
+/** Which ports each node type exposes */
+export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
+  document: [{ side: "right", type: "output" }],
+  "context-doc": [{ side: "right", type: "output" }],
+  note: [{ side: "right", type: "output" }],
+  llm: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  painter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  timeline: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  audio: [{ side: "right", type: "output" }],
+  // research, interview, store, zone — no ports
+};
+
 // ── Defaults ──
 
 const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }> = {
@@ -74,6 +108,9 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   painter: { width: 260, height: 200 },
   interview: { width: 220, height: 140 },
   timeline: { width: 260, height: 160 },
+  document: { width: 200, height: 130 },
+  zone: { width: 400, height: 300 },
+  audio: { width: 200, height: 140 },
 };
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
@@ -181,15 +218,60 @@ export function useFlowCanvas() {
     setState((s) => ({ ...s, viewport: { x, y, zoom } }));
   }, []);
 
+  /** Move multiple nodes by a delta (used for zone group drag) */
+  const moveNodes = useCallback((nodeIds: string[], dx: number, dy: number) => {
+    setState((s) => ({
+      ...s,
+      nodes: s.nodes.map((n) =>
+        nodeIds.includes(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n,
+      ),
+    }));
+  }, []);
+
+  /** Delete an edge by id */
+  const deleteEdge = useCallback((edgeId: string) => {
+    setState((s) => ({
+      ...s,
+      edges: s.edges.filter((e) => e.id !== edgeId),
+    }));
+  }, []);
+
+  /** Load a full canvas state from saved JSON */
+  const loadCanvas = useCallback(
+    (data: { nodes: FlowNode[]; edges: FlowEdge[]; viewport: FlowViewport }) => {
+      setState({
+        nodes: data.nodes || [],
+        edges: data.edges || [],
+        viewport: data.viewport || INITIAL_VIEWPORT,
+        selectedNodeIds: new Set(),
+      });
+    },
+    [],
+  );
+
+  /** Reset canvas to empty state */
+  const resetCanvas = useCallback(() => {
+    setState({
+      nodes: [],
+      edges: [],
+      viewport: INITIAL_VIEWPORT,
+      selectedNodeIds: new Set(),
+    });
+  }, []);
+
   return {
     state,
     addNode,
     addEdge,
     updateNode,
     moveNode,
+    moveNodes,
     deleteNode,
+    deleteEdge,
     selectNode,
     toggleSelectNode,
     setViewport,
+    loadCanvas,
+    resetCanvas,
   };
 }
