@@ -31,6 +31,7 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", group: "workshop" },
   { toolId: "llm", label: "Text Mods", icon: "Brain", group: "build" },
   { toolId: "painter", label: "Painter", icon: "Paintbrush", group: "build" },
+  { toolId: "timeline", label: "Timeline", icon: "Clock", group: "build" },
 ];
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -135,6 +136,14 @@ function FlowWorkspaceInner() {
       addNode("interview", pos.x, pos.y, {
         label: "Interview",
         snippet: "Double-click to start interview",
+      });
+    }
+    if (activeTool === "timeline") {
+      setActiveTool(null);
+      const pos = getCenter();
+      addNode("timeline", pos.x, pos.y, {
+        label: "Timeline",
+        snippet: "Double-click to build a timeline",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,6 +299,13 @@ function FlowWorkspaceInner() {
         addNode("interview", canvasX, canvasY, {
           label: "Interview",
           snippet: "Double-click to start interview",
+        });
+        return;
+      }
+      if (toolId === "timeline") {
+        addNode("timeline", canvasX, canvasY, {
+          label: "Timeline",
+          snippet: "Double-click to build a timeline",
         });
         return;
       }

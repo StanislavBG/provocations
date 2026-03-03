@@ -10,7 +10,8 @@ export type FlowNodeType =
   | "llm"
   | "store"
   | "painter"
-  | "interview";
+  | "interview"
+  | "timeline";
 
 export interface FlowNode {
   id: string;
@@ -72,6 +73,7 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   store: { width: 260, height: 320 },
   painter: { width: 260, height: 200 },
   interview: { width: 220, height: 140 },
+  timeline: { width: 260, height: 160 },
 };
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
