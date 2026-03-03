@@ -20,7 +20,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { X, Loader2, Save, Maximize, FileText, FolderOpen, FolderInput } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { X, Loader2, Save, Maximize, FileText, FolderOpen, FolderInput, ZoomIn, ZoomOut, Lock, Unlock, ChevronDown, ScanLine } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
 // ── Dock config ──
@@ -61,6 +68,7 @@ function FlowWorkspaceInner() {
 
   const [activeResearchNodeId, setActiveResearchNodeId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [frozen, setFrozen] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
 
   // ── Document list for picker ──
@@ -386,28 +394,59 @@ function FlowWorkspaceInner() {
     setViewport(W / 2 - cx * zoom, H / 2 - cy * zoom, zoom);
   }, [setViewport]);
 
+  // ── Zoom controls ──
+
+  const handleZoomIn = useCallback(() => {
+    const s = stateRef.current;
+    const el = canvasContainerRef.current;
+    const W = el?.clientWidth ?? 800;
+    const H = el?.clientHeight ?? 600;
+    const newZoom = Math.min(s.viewport.zoom * 1.25, 4);
+    const cx = W / 2;
+    const cy = H / 2;
+    setViewport(
+      cx - (cx - s.viewport.x) * (newZoom / s.viewport.zoom),
+      cy - (cy - s.viewport.y) * (newZoom / s.viewport.zoom),
+      newZoom,
+    );
+  }, [setViewport]);
+
+  const handleZoomOut = useCallback(() => {
+    const s = stateRef.current;
+    const el = canvasContainerRef.current;
+    const W = el?.clientWidth ?? 800;
+    const H = el?.clientHeight ?? 600;
+    const newZoom = Math.max(s.viewport.zoom / 1.25, 0.1);
+    const cx = W / 2;
+    const cy = H / 2;
+    setViewport(
+      cx - (cx - s.viewport.x) * (newZoom / s.viewport.zoom),
+      cy - (cy - s.viewport.y) * (newZoom / s.viewport.zoom),
+      newZoom,
+    );
+  }, [setViewport]);
+
+  const handleResetZoom = useCallback(() => {
+    const s = stateRef.current;
+    const el = canvasContainerRef.current;
+    const W = el?.clientWidth ?? 800;
+    const H = el?.clientHeight ?? 600;
+    const newZoom = 1;
+    const cx = W / 2;
+    const cy = H / 2;
+    setViewport(
+      cx - (cx - s.viewport.x) * (newZoom / s.viewport.zoom),
+      cy - (cy - s.viewport.y) * (newZoom / s.viewport.zoom),
+      newZoom,
+    );
+  }, [setViewport]);
+
   // ── Header actions for status bar ──
+
+  const zoomPercent = Math.round(state.viewport.zoom * 100);
 
   const headerActions = (
     <div className="flex items-center gap-1 mr-2 border-r border-border/30 pr-2">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-6 gap-1 text-[10px] px-2"
-        onClick={() => window.location.href = "/old"}
-      >
-        Classic
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-6 gap-1 text-[10px] px-2"
-        onClick={handleFitToScreen}
-        disabled={state.nodes.length === 0}
-      >
-        <Maximize className="w-3 h-3" />
-        Fit
-      </Button>
       <Button
         variant="ghost"
         size="sm"
@@ -418,6 +457,53 @@ function FlowWorkspaceInner() {
         {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
         Save
       </Button>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
+            <ScanLine className="w-3 h-3" />
+            {zoomPercent}%
+            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuItem onClick={handleZoomIn} className="text-xs gap-2">
+            <ZoomIn className="w-3.5 h-3.5" />
+            Zoom In
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleZoomOut} className="text-xs gap-2">
+            <ZoomOut className="w-3.5 h-3.5" />
+            Zoom Out
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleResetZoom} className="text-xs gap-2">
+            <ScanLine className="w-3.5 h-3.5" />
+            Reset to 100%
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={handleFitToScreen}
+            disabled={state.nodes.length === 0}
+            className="text-xs gap-2"
+          >
+            <Maximize className="w-3.5 h-3.5" />
+            Fit to Screen
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => setFrozen((f) => !f)}
+            className="text-xs gap-2"
+          >
+            {frozen ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            {frozen ? "Unlock Canvas" : "Freeze Canvas"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => window.location.href = "/old"}
+            className="text-xs gap-2"
+          >
+            Classic View
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 
@@ -434,6 +520,7 @@ function FlowWorkspaceInner() {
       <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden">
         <FlowCanvas
           state={state}
+          frozen={frozen}
           onMoveNode={moveNode}
           onDeleteNode={deleteNode}
           onSelectNode={selectNode}
