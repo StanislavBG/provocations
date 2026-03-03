@@ -47,11 +47,11 @@ export interface FlowCanvasState {
 // ── Defaults ──
 
 const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }> = {
-  "context-doc": { width: 280, height: 160 },
-  research: { width: 320, height: 200 },
-  note: { width: 260, height: 140 },
-  llm: { width: 360, height: 320 },
-  store: { width: 340, height: 420 },
+  "context-doc": { width: 200, height: 120 },
+  research: { width: 220, height: 140 },
+  note: { width: 180, height: 100 },
+  llm: { width: 260, height: 240 },
+  store: { width: 260, height: 320 },
 };
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };

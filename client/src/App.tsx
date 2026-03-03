@@ -33,36 +33,9 @@ function LoginTracker() {
   return null;
 }
 
-/** Beta banner shown on the new Flow canvas home page */
-function BetaBanner() {
-  return (
-    <div className="bg-primary/10 border-b border-primary/20 px-4 py-1.5 flex items-center justify-center gap-3 text-xs shrink-0 z-50 relative">
-      <span className="bg-primary/20 text-primary font-bold px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider">
-        Beta
-      </span>
-      <span className="text-muted-foreground">
-        You&apos;re using the new Flow Canvas.
-      </span>
-      <a
-        href="/old"
-        className="text-primary hover:underline font-medium"
-      >
-        Switch to Classic
-      </a>
-    </div>
-  );
-}
-
-/** Wraps FlowWorkspace with the beta banner */
-function FlowWithBanner() {
-  return (
-    <div className="h-screen flex flex-col">
-      <BetaBanner />
-      <div className="flex-1 overflow-hidden">
-        <FlowWorkspace />
-      </div>
-    </div>
-  );
+/** Home route: FlowWorkspace with beta banner */
+function FlowHome() {
+  return <FlowWorkspace showBetaBanner />;
 }
 
 function Router() {
@@ -72,13 +45,13 @@ function Router() {
       <Route path="/store" component={ContextStore} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/admin" component={Admin} />
-      <Route path="/flow" component={FlowWorkspace} />
+      <Route path="/flow">{() => <FlowWorkspace />}</Route>
       <Route path="/old" component={NotebookWorkspace} />
       <Route path="/old/:templateId" component={NotebookWorkspace} />
       <Route path="/ftux/:templateId" component={FtuxWorkspace} />
       <Route path="/ftux" component={FtuxWorkspace} />
       <Route path="/app/:templateId" component={NotebookWorkspace} />
-      <Route path="/" component={FlowWithBanner} />
+      <Route path="/" component={FlowHome} />
       <Route component={NotFound} />
     </Switch>
   );

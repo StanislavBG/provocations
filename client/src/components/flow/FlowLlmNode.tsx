@@ -146,13 +146,13 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
     >
       {/* Draggable header */}
       <div
-        className="flex items-center gap-2 px-3 py-2 border-b bg-violet-500/10 border-violet-500/20 rounded-t-lg cursor-grab shrink-0"
+        className="flex items-center gap-1.5 px-2 py-1 border-b bg-violet-500/10 border-violet-500/20 rounded-t-lg cursor-grab shrink-0"
         onMouseDown={(e) => onMouseDown(e, node.id)}
       >
-        <Brain className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-        <span className="text-xs font-medium truncate flex-1">{node.label}</span>
+        <Brain className="w-3 h-3 text-violet-500 shrink-0" />
+        <span className="text-[10px] font-medium truncate flex-1">{node.label}</span>
         <span className={cn(
-          "text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded",
+          "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
           presetColors.active,
         )}>
           {currentPreset.label}
@@ -165,7 +165,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Preset chips */}
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/50 flex-wrap">
+        <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/50 flex-wrap">
           {LLM_PRESETS.map((preset) => {
             const colors = PRESET_COLORS[preset.color] ?? PRESET_COLORS.purple;
             const isActive = currentPreset.id === preset.id;
@@ -173,7 +173,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
               <button
                 key={preset.id}
                 className={cn(
-                  "text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors",
+                  "text-[8px] font-medium px-1.5 py-0.5 rounded-full border transition-colors",
                   isActive ? colors.active : colors.chip,
                   !isActive && "hover:bg-muted/50",
                 )}
@@ -187,26 +187,26 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
         </div>
 
         {/* Objective */}
-        <div className="px-3 py-1.5 border-b border-border/50">
-          <label className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Objective</label>
+        <div className="px-2 py-1 border-b border-border/50">
+          <label className="text-[8px] uppercase tracking-wider text-muted-foreground font-semibold">Objective</label>
           {currentPreset.id === "custom" ? (
             <textarea
-              className="w-full mt-0.5 text-[11px] bg-transparent border border-border/50 rounded px-1.5 py-1 resize-none leading-relaxed focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+              className="w-full mt-0.5 text-[9px] bg-transparent border border-border/50 rounded px-1 py-0.5 resize-none leading-relaxed focus:outline-none focus:ring-1 focus:ring-violet-500/50"
               rows={2}
               placeholder="Describe what the LLM should do..."
               value={node.llmObjective || ""}
               onChange={handleObjectiveChange}
             />
           ) : (
-            <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5 line-clamp-2">
+            <p className="text-[9px] text-muted-foreground leading-relaxed mt-0.5 line-clamp-2">
               {node.llmObjective || currentPreset.defaultObjective}
             </p>
           )}
         </div>
 
         {/* Input count + Run */}
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50">
-          <span className="text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between px-2 py-1 border-b border-border/50">
+          <span className="text-[8px] text-muted-foreground">
             {inputNodes.length} input{inputNodes.length !== 1 ? "s" : ""}
           </span>
           <div className="flex items-center gap-1.5">
@@ -218,7 +218,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
             )}
             <button
               className={cn(
-                "flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded",
+                "flex items-center gap-0.5 text-[8px] font-medium px-1.5 py-0.5 rounded",
                 "bg-violet-500/20 text-violet-600 dark:text-violet-400 hover:bg-violet-500/30 transition-colors",
                 status === "running" && "opacity-60 pointer-events-none",
               )}
@@ -226,9 +226,9 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
               disabled={status === "running"}
             >
               {status === "running" ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
               ) : (
-                <Play className="w-3 h-3" />
+                <Play className="w-2.5 h-2.5" />
               )}
               {status === "running" ? "Running..." : "Run"}
             </button>
@@ -236,31 +236,31 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
         </div>
 
         {/* Output */}
-        <div className="flex-1 overflow-auto min-h-0 px-3 py-1.5">
+        <div className="flex-1 overflow-auto min-h-0 px-2 py-1">
           {node.llmOutput ? (
             <>
-              <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
+              <p className="text-[9px] text-foreground leading-relaxed whitespace-pre-wrap">
                 {node.llmOutput}
               </p>
-              <div className="flex items-center gap-1 mt-1.5 pt-1 border-t border-border/30">
+              <div className="flex items-center gap-1 mt-1 pt-0.5 border-t border-border/30">
                 <button
-                  className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="flex items-center gap-0.5 text-[8px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={handleCopy}
                 >
-                  {copied ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+                  {copied ? <Check className="w-2 h-2" /> : <Copy className="w-2 h-2" />}
                   {copied ? "Copied" : "Copy"}
                 </button>
                 <button
-                  className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="flex items-center gap-0.5 text-[8px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={handleSaveToNote}
                 >
-                  <StickyNote className="w-2.5 h-2.5" />
-                  Save to Note
+                  <StickyNote className="w-2 h-2" />
+                  Note
                 </button>
               </div>
             </>
           ) : status === "idle" ? (
-            <p className="text-[10px] text-muted-foreground/60 italic">
+            <p className="text-[8px] text-muted-foreground/60 italic">
               Click Run to process inputs
             </p>
           ) : null}

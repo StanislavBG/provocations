@@ -234,7 +234,11 @@ export function FtuxDock() {
                     showDropIndicator && !isHorizontal && "border-t-2 border-primary pt-0.5",
                   )}
                   draggable
-                  onDragStart={() => handleDragStart(originalIndex)}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/x-flow-tool", item.toolId);
+                    e.dataTransfer.effectAllowed = "copyMove";
+                    handleDragStart(originalIndex);
+                  }}
                   onDragOver={(e) => handleDragOver(e, originalIndex)}
                   onDrop={(e) => handleDrop(e, originalIndex)}
                   onDragEnd={handleDragEnd}

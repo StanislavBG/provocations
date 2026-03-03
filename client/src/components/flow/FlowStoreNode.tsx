@@ -56,13 +56,13 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
     >
       {/* Draggable header */}
       <div
-        className="flex items-center gap-2 px-3 py-2 border-b bg-primary/10 border-primary/20 rounded-t-lg cursor-grab shrink-0"
+        className="flex items-center gap-1.5 px-2 py-1 border-b bg-primary/10 border-primary/20 rounded-t-lg cursor-grab shrink-0"
         onMouseDown={(e) => onMouseDown(e, node.id)}
       >
-        <BookOpen className="w-3.5 h-3.5 text-primary shrink-0" />
-        <span className="text-xs font-medium truncate flex-1">Context Store</span>
-        {isLoading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-        <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/20 text-primary">
+        <BookOpen className="w-3 h-3 text-primary shrink-0" />
+        <span className="text-[10px] font-medium truncate flex-1">Context Store</span>
+        {isLoading && <Loader2 className="w-2.5 h-2.5 animate-spin text-primary" />}
+        <span className="text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded bg-primary/20 text-primary">
           Store
         </span>
       </div>
