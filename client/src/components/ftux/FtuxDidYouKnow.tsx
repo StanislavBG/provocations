@@ -3,11 +3,19 @@ import { cn } from "@/lib/utils";
 import { useFtuxShell } from "@/lib/ftux-shell-context";
 import { FTUX_TIPS, type FtuxTip } from "@/lib/ftux-tips";
 import { Button } from "@/components/ui/button";
-import { Lightbulb, X, ArrowRight } from "lucide-react";
+import { Lightbulb, X, ArrowRight, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function FtuxDidYouKnow() {
-  const { tipsEnabled, tipsDismissed, dismissTip, setActiveTool } = useFtuxShell();
+  const { tipsEnabled, tipsDismissed, tipsTranslucency, tipsColor, dismissTip, setActiveTool } = useFtuxShell();
+  const [hiddenThisVisit, setHiddenThisVisit] = useState(false);
 
   const availableTips = FTUX_TIPS.filter((t) => !tipsDismissed.includes(t.id));
   const [currentIndex, setCurrentIndex] = useState(() =>
@@ -51,7 +59,13 @@ export function FtuxDidYouKnow() {
     setActiveTool(currentTip.toolId);
   }, [currentTip, setActiveTool]);
 
-  if (!tipsEnabled || !currentTip || availableTips.length === 0) return null;
+  if (!tipsEnabled || hiddenThisVisit || !currentTip || availableTips.length === 0) return null;
+
+  const opacity = (tipsTranslucency ?? 90) / 100;
+  const blur = Math.round(opacity * 16);
+  const bgColor = tipsColor
+    ? hexToRgba(tipsColor, opacity)
+    : `hsl(var(--card) / ${opacity})`;
 
   return (
     <div
@@ -63,8 +77,8 @@ export function FtuxDidYouKnow() {
       <div
         className="rounded-2xl p-4 space-y-2.5"
         style={{
-          background: "hsl(var(--card) / 0.9)",
-          backdropFilter: "blur(16px)",
+          background: bgColor,
+          backdropFilter: `blur(${blur}px)`,
           border: "1px solid hsl(var(--border) / 0.3)",
           boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
         }}
@@ -110,6 +124,15 @@ export function FtuxDidYouKnow() {
             </Button>
           )}
         </div>
+
+        {/* Hide this visit link */}
+        <button
+          className="flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors pt-1"
+          onClick={() => setHiddenThisVisit(true)}
+        >
+          <EyeOff className="w-3 h-3" />
+          <span>Hide tips this visit</span>
+        </button>
       </div>
     </div>
   );
