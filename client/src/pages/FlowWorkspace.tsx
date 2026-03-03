@@ -108,6 +108,11 @@ function FlowWorkspaceInner() {
   const [collabEnabled, setCollabEnabled] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
 
+  // ── Refs for accessing latest state in callbacks ──
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   // ── Real-time collaboration ──
 
   const collabStateRef = useRef(state);
@@ -190,6 +195,270 @@ function FlowWorkspaceInner() {
     return () => window.removeEventListener("keydown", handler);
   }, [dockItems, setActiveTool]);
 
+  // ── Copy-paste nodes (Ctrl+C / Ctrl+V) ──
+
+  const clipboardRef = useRef<{ nodes: FlowNode[]; edges: FlowEdge[] } | null>(null);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+
+      // Ctrl+C — copy selected nodes
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        const selected = stateRef.current.nodes.filter((n) => stateRef.current.selectedNodeIds.has(n.id));
+        if (selected.length === 0) return;
+        const selectedIds = new Set(selected.map((n) => n.id));
+        const internalEdges = stateRef.current.edges.filter(
+          (e) => selectedIds.has(e.fromNodeId) && selectedIds.has(e.toNodeId),
+        );
+        clipboardRef.current = { nodes: selected, edges: internalEdges };
+        toast({ title: `Copied ${selected.length} node${selected.length > 1 ? "s" : ""}` });
+        e.preventDefault();
+      }
+
+      // Ctrl+V — paste copied nodes
+      if ((e.ctrlKey || e.metaKey) && e.key === "v" && clipboardRef.current) {
+        const { nodes: srcNodes, edges: srcEdges } = clipboardRef.current;
+        const idMap = new Map<string, string>();
+        const OFFSET = 40;
+
+        // Create new nodes offset from originals
+        for (const src of srcNodes) {
+          const newId = addNode(src.type, src.x + OFFSET, src.y + OFFSET, {
+            label: src.label,
+            snippet: src.snippet,
+            content: src.content,
+            documentContent: src.documentContent,
+            documentObjective: src.documentObjective,
+            zoneLabel: src.zoneLabel,
+            zoneColor: src.zoneColor,
+            llmPresetId: src.llmPresetId,
+            llmObjective: src.llmObjective,
+            llmStatus: "idle",
+            audioTranscript: src.audioTranscript,
+          });
+          idMap.set(src.id, newId);
+        }
+
+        // Recreate internal edges
+        for (const edge of srcEdges) {
+          const newFrom = idMap.get(edge.fromNodeId);
+          const newTo = idMap.get(edge.toNodeId);
+          if (newFrom && newTo) {
+            addEdge(newFrom, newTo);
+          }
+        }
+
+        toast({ title: `Pasted ${srcNodes.length} node${srcNodes.length > 1 ? "s" : ""}` });
+        e.preventDefault();
+      }
+
+      // Delete key — remove selected nodes
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const selected = Array.from(stateRef.current.selectedNodeIds);
+        for (const id of selected) {
+          deleteNode(id);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [addNode, addEdge, deleteNode, toast]);
+
+  // ── Helper: compute canvas center for placing new nodes ──
+
+  const getCenter = useCallback(() => {
+    const s = stateRef.current;
+    const el = canvasContainerRef.current;
+    const w = el?.clientWidth ?? 800;
+    const h = el?.clientHeight ?? 600;
+    const offset = s.nodes.length * 30;
+    return {
+      x: (-s.viewport.x + w / 2) / s.viewport.zoom + offset,
+      y: (-s.viewport.y + h / 2) / s.viewport.zoom + offset,
+    };
+  }, []);
+
+  // ── Blueprint save/load (localStorage) ──
+
+  const handleSaveBlueprint = useCallback(() => {
+    const selected = state.nodes.filter((n) => state.selectedNodeIds.has(n.id));
+    if (selected.length === 0) {
+      toast({ title: "Select nodes first", description: "Select nodes to save as a blueprint" });
+      return;
+    }
+    const selectedIds = new Set(selected.map((n) => n.id));
+    const internalEdges = state.edges.filter(
+      (e) => selectedIds.has(e.fromNodeId) && selectedIds.has(e.toNodeId),
+    );
+    const name = prompt("Blueprint name:");
+    if (!name) return;
+
+    // Normalize positions relative to top-left of selection
+    const minX = Math.min(...selected.map((n) => n.x));
+    const minY = Math.min(...selected.map((n) => n.y));
+    const normalizedNodes = selected.map((n) => ({ ...n, x: n.x - minX, y: n.y - minY }));
+
+    const blueprints = JSON.parse(localStorage.getItem("flow-blueprints") || "{}");
+    blueprints[name] = { nodes: normalizedNodes, edges: internalEdges };
+    localStorage.setItem("flow-blueprints", JSON.stringify(blueprints));
+    toast({ title: "Blueprint saved", description: `"${name}" — ${selected.length} nodes` });
+  }, [state.nodes, state.edges, state.selectedNodeIds, toast]);
+
+  const handleLoadBlueprint = useCallback(() => {
+    const blueprints = JSON.parse(localStorage.getItem("flow-blueprints") || "{}");
+    const names = Object.keys(blueprints);
+    if (names.length === 0) {
+      toast({ title: "No blueprints", description: "Save a selection as a blueprint first" });
+      return;
+    }
+    const name = prompt(`Load blueprint:\n${names.map((n, i) => `${i + 1}. ${n}`).join("\n")}\n\nEnter name:`);
+    if (!name || !blueprints[name]) return;
+
+    const { nodes: srcNodes, edges: srcEdges } = blueprints[name];
+    const pos = getCenter();
+    const idMap = new Map<string, string>();
+
+    for (const src of srcNodes as FlowNode[]) {
+      const newId = addNode(src.type, pos.x + src.x, pos.y + src.y, {
+        label: src.label,
+        snippet: src.snippet,
+        content: src.content,
+        documentContent: src.documentContent,
+        zoneLabel: src.zoneLabel,
+        zoneColor: src.zoneColor,
+        llmPresetId: src.llmPresetId,
+        llmObjective: src.llmObjective,
+        llmStatus: "idle",
+      });
+      idMap.set(src.id, newId);
+    }
+
+    for (const edge of srcEdges as FlowEdge[]) {
+      const newFrom = idMap.get(edge.fromNodeId);
+      const newTo = idMap.get(edge.toNodeId);
+      if (newFrom && newTo) addEdge(newFrom, newTo);
+    }
+
+    toast({ title: "Blueprint loaded", description: `"${name}" placed on canvas` });
+  }, [addNode, addEdge, getCenter, toast]);
+
+  // ── Auto-save every 5 minutes ──
+  // Saves canvas to a "Canvas Auto-saves" system folder in the Context Store.
+  // Hourly saves are kept permanently; 5-min saves are purged after 1 hour.
+
+  const autoSaveTimerRef = useRef<ReturnType<typeof setInterval>>();
+  const lastHourlySaveRef = useRef(0);
+  const autoSaveFolderIdRef = useRef<number | null>(null);
+  const latest5MinDocIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Ensure the system folder exists (create once, cache the ID)
+    const ensureFolder = async () => {
+      if (autoSaveFolderIdRef.current) return autoSaveFolderIdRef.current;
+      try {
+        const res = await apiRequest("GET", "/api/folders?parentFolderId=null");
+        const folders = await res.json();
+        const existing = folders.find((f: { name: string }) => f.name === "Canvas Auto-saves");
+        if (existing) {
+          autoSaveFolderIdRef.current = existing.id;
+          return existing.id;
+        }
+        const createRes = await apiRequest("POST", "/api/folders", {
+          name: "Canvas Auto-saves",
+          parentFolderId: null,
+        });
+        const created = await createRes.json();
+        autoSaveFolderIdRef.current = created.id;
+        return created.id;
+      } catch {
+        return null;
+      }
+    };
+
+    autoSaveTimerRef.current = setInterval(async () => {
+      const s = stateRef.current;
+      if (s.nodes.length === 0) return;
+
+      const folderId = await ensureFolder();
+      if (!folderId) return;
+
+      const now = Date.now();
+      const contentNodes = s.nodes.filter((n) => n.type !== "store");
+      const canvasData = { nodes: contentNodes, edges: s.edges, viewport: s.viewport };
+      const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const date = new Date().toLocaleDateString();
+      const isHourlySave = now - lastHourlySaveRef.current >= 3600_000;
+      const label = canvasTitle || "Untitled Canvas";
+
+      try {
+        if (isHourlySave) {
+          // Hourly save: always create a new document (kept permanently)
+          await apiRequest("POST", "/api/documents", {
+            title: `[Hourly] ${label} — ${date} ${time}`,
+            content: JSON.stringify(canvasData),
+            folderId,
+            docType: "chart",
+          });
+          lastHourlySaveRef.current = now;
+
+          // Purge 5-min saves older than 1 hour from the folder
+          try {
+            const docsRes = await apiRequest("GET", "/api/documents");
+            const allDocs = await docsRes.json();
+            const oneHourAgo = now - 3600_000;
+            const old5Min = allDocs.filter(
+              (d: { title: string; folderId: number | null; updatedAt: string }) =>
+                d.folderId === folderId &&
+                d.title?.startsWith("[5min]") &&
+                new Date(d.updatedAt).getTime() < oneHourAgo,
+            );
+            for (const doc of old5Min) {
+              await apiRequest("DELETE", `/api/documents/${doc.id}`).catch(() => {});
+            }
+          } catch {
+            // Silent — purge failure is non-critical
+          }
+
+          // Reset the 5-min doc so next cycle creates a fresh one
+          latest5MinDocIdRef.current = null;
+        } else {
+          // 5-min save: overwrite the current 5-min document, or create a new one
+          if (latest5MinDocIdRef.current) {
+            await apiRequest("PUT", `/api/documents/${latest5MinDocIdRef.current}`, {
+              title: `[5min] ${label} — ${date} ${time}`,
+              content: JSON.stringify(canvasData),
+            });
+          } else {
+            const res = await apiRequest("POST", "/api/documents", {
+              title: `[5min] ${label} — ${date} ${time}`,
+              content: JSON.stringify(canvasData),
+              folderId,
+              docType: "chart",
+            });
+            const created = await res.json();
+            latest5MinDocIdRef.current = created.id;
+          }
+        }
+
+        // Also update the main canvas document if we have one
+        if (canvasDocumentId) {
+          await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, {
+            title: canvasTitle || "Flow Canvas",
+            content: JSON.stringify(canvasData),
+          }).catch(() => {});
+        }
+      } catch {
+        // Silent fail — auto-save should never break the UI
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => {
+      if (autoSaveTimerRef.current) clearInterval(autoSaveTimerRef.current);
+    };
+  }, [canvasDocumentId, canvasTitle]);
+
   // ── Document list for picker ──
 
   const { data: docsData } = useQuery<{ documents: DocumentListItem[] }>({
@@ -206,21 +475,6 @@ function FlowWorkspaceInner() {
   const canvasDocs = docs.filter((d) => d.docType === "chart");
 
   // ── Intercept dock clicks ──
-
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
-  const getCenter = useCallback(() => {
-    const s = stateRef.current;
-    const el = canvasContainerRef.current;
-    const w = el?.clientWidth ?? 800;
-    const h = el?.clientHeight ?? 600;
-    const offset = s.nodes.length * 30;
-    return {
-      x: (-s.viewport.x + w / 2) / s.viewport.zoom + offset,
-      y: (-s.viewport.y + h / 2) / s.viewport.zoom + offset,
-    };
-  }, []);
 
   useEffect(() => {
     if (activeTool === "context") {
@@ -558,6 +812,17 @@ function FlowWorkspaceInner() {
         addEdge(nodeId, outputDocId);
 
         toast({ title: "Execution complete", description: `Output document created` });
+
+        // ── Chain propagation: auto-trigger downstream playable nodes ──
+        // Find nodes that receive input from this node (edges from nodeId → downstream)
+        const downstreamEdges = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
+        for (const edge of downstreamEdges) {
+          const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
+          if (downstream && ["research", "interview", "painter", "timeline", "llm"].includes(downstream.type)) {
+            // Delay slightly to let state update propagate
+            setTimeout(() => handlePlayNode(edge.toNodeId), 500);
+          }
+        }
       } catch {
         updateNode(nodeId, { llmStatus: "error", snippet: "Execution failed" });
         toast({ title: "Execution failed", variant: "destructive" });
@@ -948,6 +1213,22 @@ function FlowWorkspaceInner() {
             className="text-xs gap-2"
           >
             Classic View
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={handleSaveBlueprint}
+            disabled={state.selectedNodeIds.size === 0}
+            className="text-xs gap-2"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Save Blueprint
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={handleLoadBlueprint}
+            className="text-xs gap-2"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            Load Blueprint
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
