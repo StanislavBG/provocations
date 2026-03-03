@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { BookOpen, Sparkles } from "lucide-react";
-import type { FlowCanvasState } from "./useFlowCanvas";
+import type { FlowCanvasState, FlowNode } from "./useFlowCanvas";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
 import { FlowStoreNode } from "./FlowStoreNode";
+import { FlowLlmNode } from "./FlowLlmNode";
 import { useFlowInteraction } from "./useFlowInteraction";
 
 interface FlowCanvasProps {
@@ -14,6 +15,8 @@ interface FlowCanvasProps {
   onNodeDoubleClick: (nodeId: string) => void;
   onViewportChange: (x: number, y: number, zoom: number) => void;
   onPickDocument: (doc: { id: number; title: string; content: string }) => void;
+  onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
+  onCreateNote: (content: string, label: string) => void;
 }
 
 const GRID_SIZE = 20;
@@ -27,6 +30,8 @@ export function FlowCanvas({
   onNodeDoubleClick,
   onViewportChange,
   onPickDocument,
+  onUpdateNode,
+  onCreateNote,
 }: FlowCanvasProps) {
   const {
     canvasRef,
@@ -105,6 +110,18 @@ export function FlowCanvas({
               onMouseDown={handleNodeMouseDown}
               onDelete={onDeleteNode}
               onPickDocument={onPickDocument}
+            />
+          ) : node.type === "llm" ? (
+            <FlowLlmNode
+              key={node.id}
+              node={node}
+              isSelected={state.selectedNodeIds.has(node.id)}
+              allNodes={state.nodes}
+              selectedNodeIds={state.selectedNodeIds}
+              onMouseDown={handleNodeMouseDown}
+              onDelete={onDeleteNode}
+              onUpdateNode={onUpdateNode}
+              onCreateNote={onCreateNote}
             />
           ) : (
             <FlowNodeRenderer

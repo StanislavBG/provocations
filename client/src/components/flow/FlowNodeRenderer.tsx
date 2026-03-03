@@ -1,5 +1,5 @@
 import React from "react";
-import { FileText, Sparkles, StickyNote, FileStack, BookOpen, X } from "lucide-react";
+import { FileText, Sparkles, StickyNote, Brain, BookOpen, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 
@@ -37,15 +37,15 @@ const NODE_STYLES: Record<
     badgeText: "text-emerald-600 dark:text-emerald-400",
     badge: "Note",
   },
-  summary: {
-    border: "border-purple-500/30",
+  llm: {
+    border: "border-violet-500/30",
     bg: "bg-card",
-    headerBg: "bg-purple-500/10",
-    headerBorder: "border-purple-500/20",
-    iconClass: "text-purple-500",
-    badgeBg: "bg-purple-500/20",
-    badgeText: "text-purple-600 dark:text-purple-400",
-    badge: "Summary",
+    headerBg: "bg-violet-500/10",
+    headerBorder: "border-violet-500/20",
+    iconClass: "text-violet-500",
+    badgeBg: "bg-violet-500/20",
+    badgeText: "text-violet-600 dark:text-violet-400",
+    badge: "LLM",
   },
   store: {
     border: "border-primary/30",
@@ -63,7 +63,7 @@ const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   "context-doc": FileText,
   research: Sparkles,
   note: StickyNote,
-  summary: FileStack,
+  llm: Brain,
   store: BookOpen,
 };
 
