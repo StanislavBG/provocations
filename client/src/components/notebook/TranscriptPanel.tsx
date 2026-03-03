@@ -1,8 +1,9 @@
 import { useState, useCallback, useMemo, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { errorLogStore } from "@/lib/errorLog";
+import { generateId } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
@@ -22,6 +23,8 @@ import {
   StickyNote,
   FileOutput,
   Clock,
+  Download,
+  X,
 } from "lucide-react";
 import { trackEvent } from "@/lib/tracking";
 import type { ContextItem } from "@shared/schema";
@@ -53,6 +56,8 @@ export function TranscriptPanel({
   const [noteText, setNoteText] = useState("");
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
   const [savedNoteIds, setSavedNoteIds] = useState<Set<string>>(new Set());
+  const [showStorePicker, setShowStorePicker] = useState(false);
+  const [loadingDocIds, setLoadingDocIds] = useState<Set<number>>(new Set());
   // Snapshot of noteText when recording starts — used to preserve existing
   // content while showing interim transcription text.
   const preRecordNoteRef = useRef("");
@@ -81,6 +86,45 @@ export function TranscriptPanel({
     onCaptureToContext(text, "Note");
     setNoteText("");
   }, [noteText, onCaptureToContext]);
+
+  // ── Load notes from Store (mobile captures, interview sessions) ──
+  const { data: storeNotes, isLoading: isLoadingStore } = useQuery<{ id: number; title: string; createdAt: string; docType?: string | null }[]>({
+    queryKey: ["/api/documents", "store-notes-picker"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/documents");
+      const data = await res.json();
+      return (data.documents || [])
+        .filter((d: { docType?: string | null }) => d.docType === "note")
+        .sort((a: { createdAt: string }, b: { createdAt: string }) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+        .slice(0, 30);
+    },
+    enabled: showStorePicker,
+    staleTime: 15_000,
+  });
+
+  const handleImportFromStore = useCallback(async (docId: number, title: string) => {
+    setLoadingDocIds((prev) => new Set(prev).add(docId));
+    try {
+      const res = await apiRequest("GET", `/api/documents/${docId}`);
+      const data = await res.json();
+      if (data.content) {
+        const label = title.startsWith("[Interview") ? "Interview" : "Mobile Note";
+        onCaptureToContext(data.content, label);
+        trackEvent("note_imported_from_store");
+        toast({ title: "Imported", description: `"${title.slice(0, 60)}" added to notes.` });
+      }
+    } catch {
+      toast({ title: "Import failed", variant: "destructive" });
+    } finally {
+      setLoadingDocIds((prev) => {
+        const next = new Set(prev);
+        next.delete(docId);
+        return next;
+      });
+    }
+  }, [onCaptureToContext, toast]);
 
   // ── Summarize all notes ──
   const summarizeMutation = useMutation({
@@ -151,6 +195,15 @@ export function TranscriptPanel({
               Add Notes
             </span>
             <div className="flex items-center gap-0.5">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 shrink-0 text-muted-foreground hover:text-primary"
+                onClick={() => setShowStorePicker(!showStorePicker)}
+                title="Import notes from Store"
+              >
+                <Download className="w-3 h-3" />
+              </Button>
               <VoiceRecorder
                 onTranscript={(t) =>
                   setNoteText((prev) => (prev ? `${prev} ${t}` : t))
@@ -199,6 +252,55 @@ export function TranscriptPanel({
             />
           </div>
         </div>
+
+        {/* ─── Store picker (import mobile notes) ─── */}
+        {showStorePicker && (
+          <div className="border-t bg-muted/20">
+            <div className="flex items-center justify-between px-3 py-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground">Import from Store</span>
+              <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setShowStorePicker(false)}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+            <ScrollArea className="max-h-[200px]">
+              <div className="px-3 pb-2 space-y-1">
+                {isLoadingStore ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : !storeNotes?.length ? (
+                  <p className="text-[10px] text-muted-foreground/60 text-center py-3">No saved notes found.</p>
+                ) : (
+                  storeNotes.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => handleImportFromStore(doc.id, doc.title)}
+                      disabled={loadingDocIds.has(doc.id)}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md border bg-card hover:bg-accent/50 transition-colors flex items-center gap-2"
+                    >
+                      {doc.title.startsWith("[Interview") ? (
+                        <FileText className="w-3 h-3 text-primary shrink-0" />
+                      ) : (
+                        <StickyNote className="w-3 h-3 text-amber-500 shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium truncate">{doc.title}</p>
+                        <p className="text-[9px] text-muted-foreground">
+                          {new Date(doc.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      {loadingDocIds.has(doc.id) ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />
+                      ) : (
+                        <Download className="w-3 h-3 text-muted-foreground shrink-0" />
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
       </div>
 
       {/* ─── Notes list or empty state ─── */}
@@ -209,8 +311,7 @@ export function TranscriptPanel({
             Your operational notes will appear here.
           </p>
           <p className="text-xs text-center">
-            Add notes above, or use "Send to Notes" from Research and Provo
-            tabs.
+            Add notes above, import from Store, or use "Send to Notes" from Research and Provo tabs.
           </p>
         </div>
       ) : (

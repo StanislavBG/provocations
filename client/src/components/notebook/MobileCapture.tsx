@@ -314,7 +314,7 @@ function QuickCaptureView({
         )}
       </div>
 
-      <MobileFooter />
+      <MobileFooter noteCount={noteCount} />
     </>
   );
 }
@@ -352,6 +352,8 @@ function InterviewView({
   const [answerText, setAnswerText] = useState("");
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
   const [savingEntryId, setSavingEntryId] = useState<string | null>(null);
+  // ── Session persistence: tracks the document ID for the full interview session ──
+  const sessionDocIdRef = useRef<number | null>(null);
 
   // ── Stance & focus state ──
   const [stance, setStance] = useState<InterviewStance>("balanced");
@@ -512,6 +514,38 @@ function InterviewView({
     }
   }, [queryClient, toast]);
 
+  // ── Save / update the full interview session as a single structured document ──
+  const saveInterviewSession = useCallback(async (allEntries: InterviewEntry[], isFinal = false) => {
+    if (allEntries.length === 0 && !isFinal) return;
+    const title = `[Interview Session] ${objective.trim().slice(0, 120)}`;
+    const entryLines = allEntries.map((e, i) =>
+      `### Q${i + 1}: ${e.topic}\n\n**Q:** ${e.question}\n\n**A:** ${e.answer}`
+    ).join("\n\n---\n\n");
+    const content = `# Interview Session\n\n**Objective:** ${objective.trim()}\n**Stance:** ${stance}\n**Entries:** ${allEntries.length}\n**Status:** ${isFinal ? "Complete" : "In Progress"}\n**Last Updated:** ${new Date().toLocaleString()}\n\n---\n\n${entryLines}`;
+
+    try {
+      if (sessionDocIdRef.current) {
+        // Update existing session document
+        await apiRequest("PUT", `/api/documents/${sessionDocIdRef.current}`, {
+          title: title.slice(0, 200),
+          content,
+        });
+      } else {
+        // Create new session document
+        const res = await apiRequest("POST", "/api/documents", {
+          title: title.slice(0, 200),
+          content,
+          docType: "note",
+        });
+        const data = await res.json();
+        sessionDocIdRef.current = data.id;
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/documents", "mobile-notes"] });
+    } catch {
+      // Non-fatal — individual Q&A entries are already saved separately
+    }
+  }, [objective, stance, queryClient]);
+
   // ── Start interview ──
   const handleStart = useCallback(() => {
     if (!objective.trim()) {
@@ -530,8 +564,10 @@ function InterviewView({
     setIsActive(false);
     setCurrentQuestion(null);
     setCurrentTopic(null);
+    // Save the final session state
+    saveInterviewSession(entries, true);
     trackEvent("interview_ended", { metadata: { entryCount: String(entries.length) } });
-  }, [entries.length]);
+  }, [entries, saveInterviewSession]);
 
   // ── Submit answer (text or voice) ──
   const handleAnswer = useCallback(
@@ -559,10 +595,13 @@ function InterviewView({
       // Auto-save this Q&A to the store as a separate document
       saveEntryToStore(entry);
 
+      // Auto-save the full interview session (upsert)
+      saveInterviewSession(nextEntries);
+
       // Pass the up-to-date entries so the LLM sees ALL previous Q&A
       questionMutation.mutate(nextEntries);
     },
-    [currentQuestion, currentTopic, questionMutation, saveEntryToStore, entries],
+    [currentQuestion, currentTopic, questionMutation, saveEntryToStore, saveInterviewSession, entries],
   );
 
   const handleSubmitAnswer = useCallback(() => {
@@ -800,8 +839,9 @@ function InterviewView({
               <><Scale className="w-3 h-3" /> Balanced</>
             )}
           </button>
-          <span className="shrink-0 text-[10px] text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+          <span className="shrink-0 text-[10px] text-muted-foreground bg-muted rounded-full px-2 py-0.5 flex items-center gap-1">
             {entries.length} Q&A
+            {sessionDocIdRef.current && <span className="w-1 h-1 rounded-full bg-green-500 inline-block" title="Synced" />}
           </span>
         </div>
         {isActive ? (
@@ -1036,11 +1076,14 @@ function NoteCard({
   );
 }
 
-function MobileFooter() {
+function MobileFooter({ noteCount }: { noteCount?: number }) {
   return (
-    <div className="shrink-0 px-4 py-3 border-t bg-muted/20 text-center">
-      <p className="text-[10px] text-muted-foreground/60">
-        Open Provocations on desktop to work with your captured notes
+    <div className="shrink-0 px-4 py-3 border-t bg-muted/20 flex items-center justify-center gap-2">
+      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+      <p className="text-[10px] text-muted-foreground">
+        {noteCount && noteCount > 0
+          ? `${noteCount} note${noteCount !== 1 ? "s" : ""} synced — available on desktop`
+          : "Notes sync automatically to desktop"}
       </p>
     </div>
   );
