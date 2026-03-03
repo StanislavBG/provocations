@@ -18,6 +18,7 @@ import {
   MessageCircleQuestion,
   BarChart3,
   Clock,
+  ListCollapse,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   MessageCircleQuestion,
   BarChart3,
   Clock,
+  ListCollapse,
 };
 
 const GROUP_LABELS: Record<DockGroup, string> = {

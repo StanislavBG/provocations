@@ -18,7 +18,10 @@ export default function NotebookWorkspace() {
   const isMobile = useIsMobile();
   const { isAdmin } = useRole();
   const { panelLayout, setPanelLayout } = usePanelLayout();
-  const [routeMatch, routeParams] = useRoute("/app/:templateId");
+  const [appMatch, appParams] = useRoute("/app/:templateId");
+  const [oldMatch, oldParams] = useRoute("/old/:templateId");
+  const routeMatch = appMatch || oldMatch;
+  const routeParams = appMatch ? appParams : oldParams;
 
   const ws = useWorkspaceState(routeMatch ? routeParams?.templateId ?? null : null);
 
