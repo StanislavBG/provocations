@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { BookOpen, Sparkles } from "lucide-react";
 import type { FlowCanvasState, FlowNode } from "./useFlowCanvas";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
@@ -17,6 +17,7 @@ interface FlowCanvasProps {
   onPickDocument: (doc: { id: number; title: string; content: string }) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onCreateNote: (content: string, label: string) => void;
+  onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
 }
 
 const GRID_SIZE = 20;
@@ -32,6 +33,7 @@ export function FlowCanvas({
   onPickDocument,
   onUpdateNode,
   onCreateNote,
+  onDropTool,
 }: FlowCanvasProps) {
   const {
     canvasRef,
@@ -41,6 +43,7 @@ export function FlowCanvas({
     handleMouseUp,
     handleNodeMouseDown,
     handleNodeDoubleClick,
+    screenToCanvas,
     isDragging,
   } = useFlowInteraction({
     viewport: state.viewport,
@@ -59,6 +62,25 @@ export function FlowCanvas({
 
   const gridSize = GRID_SIZE * state.viewport.zoom;
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-flow-tool")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      const toolId = e.dataTransfer.getData("application/x-flow-tool");
+      if (toolId && onDropTool) {
+        e.preventDefault();
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        onDropTool(toolId, pos.x, pos.y);
+      }
+    },
+    [screenToCanvas, onDropTool],
+  );
+
   return (
     <div
       ref={canvasRef}
@@ -68,6 +90,8 @@ export function FlowCanvas({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Dot grid */}
@@ -145,8 +169,7 @@ export function FlowCanvas({
               <Sparkles className="w-8 h-8" />
             </div>
             <p className="text-sm text-muted-foreground/60 font-serif">
-              Click <strong>Research</strong> to start researching, or pick documents from{" "}
-              <strong>Context Store</strong>
+              Drag items from the dock to the canvas, or click to add
             </p>
           </div>
         </div>

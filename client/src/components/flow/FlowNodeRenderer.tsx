@@ -107,16 +107,16 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       {/* Header */}
       <div
         className={cn(
-          "flex items-center gap-2 px-3 py-2 border-b rounded-t-lg",
+          "flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg",
           style.headerBg,
           style.headerBorder,
         )}
       >
-        <Icon className={cn("w-3.5 h-3.5 shrink-0", style.iconClass)} />
-        <span className="text-xs font-medium truncate flex-1">{node.label}</span>
+        <Icon className={cn("w-3 h-3 shrink-0", style.iconClass)} />
+        <span className="text-[10px] font-medium truncate flex-1">{node.label}</span>
         <span
           className={cn(
-            "text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded",
+            "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
             style.badgeBg,
             style.badgeText,
           )}
@@ -126,8 +126,8 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       </div>
 
       {/* Content snippet */}
-      <div className="px-3 py-2 overflow-hidden flex-1">
-        <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-5">
+      <div className="px-2 py-1.5 overflow-hidden flex-1">
+        <p className="text-[9px] text-muted-foreground leading-relaxed line-clamp-4">
           {node.snippet || "No preview available"}
         </p>
       </div>
