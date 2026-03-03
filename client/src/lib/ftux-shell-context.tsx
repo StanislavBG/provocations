@@ -15,7 +15,7 @@ export type ToolId =
   | "interview"
   | "chart"
   | "timeline"
-  | "summarize";
+  | "llm";
 
 export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";

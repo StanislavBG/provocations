@@ -3,7 +3,7 @@ import { generateId } from "@/lib/utils";
 
 // ── Types ──
 
-export type FlowNodeType = "context-doc" | "research" | "note" | "summary" | "store";
+export type FlowNodeType = "context-doc" | "research" | "note" | "llm" | "store";
 
 export interface FlowNode {
   id: string;
@@ -20,6 +20,16 @@ export interface FlowNode {
   snippet?: string;
   /** Full text content (used as input for operations like Summarize) */
   content?: string;
+  /** LLM node: which preset is selected */
+  llmPresetId?: string;
+  /** LLM node: the objective/instruction text */
+  llmObjective?: string;
+  /** LLM node: execution status */
+  llmStatus?: "idle" | "running" | "done" | "error";
+  /** LLM node: output content after execution */
+  llmOutput?: string;
+  /** LLM node: error message if execution failed */
+  llmError?: string;
 }
 
 export interface FlowViewport {
@@ -40,7 +50,7 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   "context-doc": { width: 280, height: 160 },
   research: { width: 320, height: 200 },
   note: { width: 260, height: 140 },
-  summary: { width: 300, height: 180 },
+  llm: { width: 360, height: 320 },
   store: { width: 340, height: 420 },
 };
 
@@ -60,7 +70,7 @@ export function useFlowCanvas() {
       type: FlowNodeType,
       x: number,
       y: number,
-      data: { label: string; documentId?: number; snippet?: string; content?: string },
+      data: Partial<Omit<FlowNode, "id" | "type" | "x" | "y" | "width" | "height" | "zIndex">> & { label: string },
     ) => {
       const dims = DEFAULT_DIMENSIONS[type];
       const node: FlowNode = {
@@ -70,11 +80,8 @@ export function useFlowCanvas() {
         y: y - dims.height / 2,
         width: dims.width,
         height: dims.height,
-        label: data.label,
         zIndex: 0,
-        documentId: data.documentId,
-        snippet: data.snippet,
-        content: data.content,
+        ...data,
       };
       setState((s) => ({
         ...s,
@@ -82,6 +89,16 @@ export function useFlowCanvas() {
         selectedNodeIds: new Set([node.id]),
       }));
       return node.id;
+    },
+    [],
+  );
+
+  const updateNode = useCallback(
+    (nodeId: string, patch: Partial<FlowNode>) => {
+      setState((s) => ({
+        ...s,
+        nodes: s.nodes.map((n) => (n.id === nodeId ? { ...n, ...patch } : n)),
+      }));
     },
     [],
   );
@@ -131,6 +148,7 @@ export function useFlowCanvas() {
   return {
     state,
     addNode,
+    updateNode,
     moveNode,
     deleteNode,
     selectNode,

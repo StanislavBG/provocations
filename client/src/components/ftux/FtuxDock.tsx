@@ -19,6 +19,7 @@ import {
   BarChart3,
   Clock,
   ListCollapse,
+  Brain,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -36,6 +37,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   BarChart3,
   Clock,
   ListCollapse,
+  Brain,
 };
 
 const GROUP_LABELS: Record<DockGroup, string> = {

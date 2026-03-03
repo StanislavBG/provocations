@@ -9,6 +9,7 @@ import { FlowCanvas } from "@/components/flow/FlowCanvas";
 import { useFlowCanvas } from "@/components/flow/useFlowCanvas";
 import { NotebookResearchChat } from "@/components/notebook/NotebookResearchChat";
 import { DEFAULT_SHELL_CONFIG } from "@/lib/ftux-shell-context";
+import { getPreset } from "@/components/flow/llm-presets";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { X, Loader2, Save } from "lucide-react";
 const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "context", label: "Context Store", icon: "BookOpen", group: "gather" },
   { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop" },
-  { toolId: "summarize", label: "Summarize", icon: "ListCollapse", group: "build" },
+  { toolId: "llm", label: "LLM", icon: "Brain", group: "build" },
 ];
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -34,13 +35,12 @@ const FLOW_SHELL_CONFIG: FtuxShellConfig = {
 
 function FlowWorkspaceInner() {
   const { activeTool, setActiveTool } = useFtuxShell();
-  const { state, addNode, moveNode, deleteNode, selectNode, toggleSelectNode, setViewport } =
+  const { state, addNode, updateNode, moveNode, deleteNode, selectNode, toggleSelectNode, setViewport } =
     useFlowCanvas();
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const [researchOverlayOpen, setResearchOverlayOpen] = useState(false);
-  const [isSummarizing, setIsSummarizing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // ── Intercept dock clicks ──
@@ -80,9 +80,16 @@ function FlowWorkspaceInner() {
       });
       setResearchOverlayOpen(true);
     }
-    if (activeTool === "summarize") {
+    if (activeTool === "llm") {
       setActiveTool(null);
-      handleSummarizeRef.current();
+      const pos = getCenter();
+      const defaultPreset = getPreset("summarize");
+      addNode("llm", pos.x, pos.y, {
+        label: "LLM",
+        llmPresetId: defaultPreset.id,
+        llmObjective: defaultPreset.defaultObjective,
+        llmStatus: "idle",
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool]);
@@ -141,50 +148,19 @@ function FlowWorkspaceInner() {
     [state.nodes],
   );
 
-  // ── Summarize operation ──
+  // ── Create note from LLM output ──
 
-  const handleSummarize = useCallback(async () => {
-    const selected = state.nodes.filter((n) => state.selectedNodeIds.has(n.id));
-    const targets =
-      selected.length > 0
-        ? selected
-        : state.nodes.filter((n) => n.type === "note" || n.type === "context-doc");
-
-    if (targets.length === 0) {
-      toast({ title: "Nothing to summarize", description: "Add some notes or documents first" });
-      return;
-    }
-
-    setIsSummarizing(true);
-    try {
-      const combined = targets
-        .map((n) => `## ${n.label}\n${n.content || n.snippet || ""}`)
-        .join("\n\n---\n\n");
-
-      const res = await apiRequest("POST", "/api/summarize-intent", {
-        transcript: combined,
-        mode: "summarize",
-      });
-      const data = (await res.json()) as { summary: string };
-
+  const handleCreateNote = useCallback(
+    (content: string, label: string) => {
       const pos = getPlacementCenter();
-      addNode("summary", pos.x, pos.y, {
-        label: `Summary (${targets.length} sources)`,
-        snippet: data.summary.slice(0, 200),
-        content: data.summary,
+      addNode("note", pos.x, pos.y, {
+        label,
+        snippet: content.slice(0, 200),
+        content,
       });
-
-      toast({ title: "Summary created", description: `Summarized ${targets.length} items` });
-    } catch {
-      toast({ title: "Summarize failed", description: "Could not generate summary", variant: "destructive" });
-    } finally {
-      setIsSummarizing(false);
-    }
-  }, [state.nodes, state.selectedNodeIds, addNode, getPlacementCenter, toast]);
-
-  // Stable ref for the effect
-  const handleSummarizeRef = useRef(handleSummarize);
-  handleSummarizeRef.current = handleSummarize;
+    },
+    [addNode, getPlacementCenter],
+  );
 
   // ── Save canvas to Context Store ──
 
@@ -240,17 +216,9 @@ function FlowWorkspaceInner() {
           onNodeDoubleClick={handleNodeDoubleClick}
           onViewportChange={setViewport}
           onPickDocument={handlePickDocument}
+          onUpdateNode={updateNode}
+          onCreateNote={handleCreateNote}
         />
-
-        {/* Summarizing indicator */}
-        {isSummarizing && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/50 backdrop-blur-sm">
-            <div className="flex items-center gap-3 bg-card border rounded-lg px-6 py-4 shadow-lg">
-              <Loader2 className="w-5 h-5 animate-spin text-purple-500" />
-              <span className="text-sm font-medium">Summarizing...</span>
-            </div>
-          </div>
-        )}
 
         <FtuxDock />
       </div>
