@@ -1546,6 +1546,7 @@ function FlowWorkspaceInner() {
           onCreateEdge={handleCreateEdge}
           onDeleteEdge={deleteEdge}
           onPlayNode={handlePlayNode}
+          onToggleLock={(nodeId) => updateNode(nodeId, { locked: !state.nodes.find((n) => n.id === nodeId)?.locked })}
           onDropTool={handleDropTool}
           onDragStart={pushUndoSnapshot}
         />
@@ -1919,6 +1920,7 @@ function FlowWorkspaceInner() {
       {/* Connections dialog */}
       <Dialog open={connectionsDialogOpen} onOpenChange={setConnectionsDialogOpen}>
         <DialogContent className="max-w-md max-h-[70vh] flex flex-col p-0">
+          <DialogTitle className="sr-only">Connections</DialogTitle>
           <ConnectionsManager onBack={() => setConnectionsDialogOpen(false)} />
         </DialogContent>
       </Dialog>

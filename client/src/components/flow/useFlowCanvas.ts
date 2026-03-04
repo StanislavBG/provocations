@@ -88,6 +88,8 @@ export interface FlowNode {
   routerOutputs?: string[];
   /** Pause flag: when true, automation stops at this node and waits */
   paused?: boolean;
+  /** Lock flag: when true, node cannot be moved or deleted */
+  locked?: boolean;
 }
 
 export interface FlowEdge {

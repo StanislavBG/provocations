@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useEffect, useState } from "react";
-import { Timer, Play, Square, X } from "lucide-react";
+import { Timer, Play, Square, Trash2, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
@@ -152,18 +152,39 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
       {/* Port dots */}
       <FlowPortDots node={node} isSelected={isSelected} onPortMouseDown={onPortMouseDown} accentColor="emerald" />
 
-      {/* Delete button */}
-      <button
-        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (isRunning) stopTimer();
-          onDelete(node.id);
-        }}
-      >
-        <X className="w-3 h-3" />
-      </button>
+      {/* Lock + Delete buttons */}
+      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          className={cn(
+            "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
+            node.locked
+              ? "bg-yellow-500 text-white"
+              : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+          )}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onUpdateNode(node.id, { locked: !node.locked });
+          }}
+          title={node.locked ? "Unlock node" : "Lock node"}
+        >
+          {node.locked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+        </button>
+        {!node.locked && (
+          <button
+            className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isRunning) stopTimer();
+              onDelete(node.id);
+            }}
+            title="Delete node"
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+          </button>
+        )}
+      </div>
 
       {/* Running pulse indicator */}
       {isRunning && (

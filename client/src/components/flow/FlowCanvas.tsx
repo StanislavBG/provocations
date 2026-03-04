@@ -29,6 +29,7 @@ interface FlowCanvasProps {
   onCreateEdge?: (fromNodeId: string, toNodeId: string) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onPlayNode?: (nodeId: string) => void;
+  onToggleLock?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
 }
@@ -77,6 +78,7 @@ export function FlowCanvas({
   onCreateEdge,
   onDeleteEdge,
   onPlayNode,
+  onToggleLock,
   onDropTool,
   onDragStart,
 }: FlowCanvasProps) {
@@ -255,6 +257,7 @@ export function FlowCanvas({
               isSelected={state.selectedNodeIds.has(node.id)}
               onMouseDown={handleNodeMouseDown}
               onDelete={onDeleteNode}
+              onUpdateNode={onUpdateNode}
               onPickDocument={onPickDocument}
             />
           ) : node.type === "document" ? (
@@ -318,6 +321,7 @@ export function FlowCanvas({
               onMouseDown={handleNodeMouseDown}
               onDoubleClick={handleNodeDoubleClick}
               onDelete={onDeleteNode}
+              onToggleLock={onToggleLock}
               onPortMouseDown={handlePortMouseDown}
               onPlayNode={onPlayNode}
             />

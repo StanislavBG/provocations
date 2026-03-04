@@ -1,5 +1,5 @@
 import React from "react";
-import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, Youtube, Timer, Filter, ToggleRight, GitBranch, Merge, Pause, X, Play, Loader2 } from "lucide-react";
+import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, Youtube, Timer, Filter, ToggleRight, GitBranch, Merge, Pause, Trash2, Lock, Unlock, Play, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
@@ -214,6 +214,7 @@ interface FlowNodeRendererProps {
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
   onDoubleClick: (e: React.MouseEvent, nodeId: string) => void;
   onDelete: (nodeId: string) => void;
+  onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
   onPlayNode?: (nodeId: string) => void;
 }
@@ -224,6 +225,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
   onMouseDown,
   onDoubleClick,
   onDelete,
+  onToggleLock,
   onPortMouseDown,
   onPlayNode,
 }: FlowNodeRendererProps) {
@@ -259,14 +261,14 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
           style.headerBorder,
         )}
       >
-        <Icon className={cn("w-3 h-3 shrink-0", style.iconClass)} />
-        <span className="text-[10px] font-medium truncate flex-1">{node.label}</span>
+        <Icon className={cn("w-3.5 h-3.5 shrink-0", style.iconClass)} />
+        <span className="text-[11px] font-medium truncate flex-1">{node.label}</span>
 
         {/* Play button for executable nodes */}
         {isPlayable && onPlayNode && (
           <button
             className={cn(
-              "flex items-center gap-0.5 text-[8px] font-medium px-1.5 py-0.5 rounded transition-colors",
+              "flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded transition-colors",
               style.badgeBg, style.badgeText,
               "hover:opacity-80",
               isRunning && "opacity-60 pointer-events-none",
@@ -290,7 +292,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
         {!isPlayable && (
           <span
             className={cn(
-              "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
+              "text-[9px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
               style.badgeBg,
               style.badgeText,
             )}
@@ -302,7 +304,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
 
       {/* Content snippet */}
       <div className="px-2 py-1.5 overflow-hidden flex-1">
-        <p className="text-[9px] text-muted-foreground leading-relaxed line-clamp-4">
+        <p className="text-[10px] text-muted-foreground/80 leading-relaxed line-clamp-4">
           {node.snippet || "No preview available"}
         </p>
       </div>
@@ -323,17 +325,47 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
         </div>
       )}
 
-      {/* Delete button — visible on hover */}
-      <button
-        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(node.id);
-        }}
-      >
-        <X className="w-3 h-3" />
-      </button>
+      {/* Lock + Delete buttons — visible on hover */}
+      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onToggleLock && (
+          <button
+            className={cn(
+              "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
+              node.locked
+                ? "bg-yellow-500 text-white"
+                : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+            )}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLock(node.id);
+            }}
+            title={node.locked ? "Unlock node" : "Lock node"}
+          >
+            {node.locked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+          </button>
+        )}
+        {!node.locked && (
+          <button
+            className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(node.id);
+            }}
+            title="Delete node"
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Lock indicator */}
+      {node.locked && (
+        <div className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-yellow-500/90 text-white flex items-center justify-center shadow-sm">
+          <Lock className="w-2.5 h-2.5" />
+        </div>
+      )}
     </div>
   );
 });
