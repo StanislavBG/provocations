@@ -115,6 +115,16 @@ export interface FlowNode {
   labelItalic?: boolean;
   /** Label node: text color (tailwind class or hex) */
   labelColor?: string;
+  /** Output configuration: format, detail, count, etc. (abstract — any node can use this) */
+  outputConfig?: {
+    format?: "prose" | "structured" | "outline" | "academic";
+    detail?: "brief" | "standard" | "detailed" | "exhaustive";
+    audience?: "non-technical" | "general" | "technical" | "expert";
+    tone?: "neutral" | "conversational" | "assertive" | "critical";
+    focusMode?: "explore" | "verify" | "gather" | "analyze" | "synthesize" | "reason" | "deep-research";
+    outputCount?: number;
+    customInstruction?: string;
+  };
   /** Interview node: persisted Q&A entries */
   interviewEntries?: Array<{ id: string; question: string; answer: string; topic: string; timestamp: number }>;
   /** Interview node: objective text */

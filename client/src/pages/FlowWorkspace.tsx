@@ -1227,14 +1227,27 @@ function FlowWorkspaceInner() {
         let outputText = "";
 
         if (node.type === "research") {
+          // Build output-aware research prompt from outputConfig
+          const oc = node.outputConfig;
+          const countHint = oc?.outputCount ? `Provide exactly ${oc.outputCount} items/results.` : "";
+          const customHint = oc?.customInstruction ? `\nAdditional instructions: ${oc.customInstruction}` : "";
+          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${combinedContent}${countHint ? `\n\n${countHint}` : ""}${customHint}`;
+
           // Stream research using SSE
           const res = await fetch("/api/chat/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              message: `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${combinedContent}`,
+              message: researchPrompt,
               objective: combinedContent.slice(0, 200),
               history: [],
+              researchFocus: oc?.focusMode || undefined,
+              responseConfig: (oc?.format || oc?.detail || oc?.audience || oc?.tone) ? {
+                format: oc?.format,
+                detail: oc?.detail,
+                audience: oc?.audience,
+                tone: oc?.tone,
+              } : undefined,
             }),
           });
 
@@ -1398,6 +1411,13 @@ function FlowWorkspaceInner() {
         addNode("research", canvasX, canvasY, {
           label: "Research",
           snippet: "Double-click to start researching",
+          outputConfig: {
+            format: "structured",
+            detail: "standard",
+            focusMode: "explore",
+            audience: "general",
+            tone: "neutral",
+          },
         });
         return;
       }
