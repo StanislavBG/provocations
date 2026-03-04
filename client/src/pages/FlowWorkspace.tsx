@@ -778,6 +778,15 @@ function FlowWorkspaceInner() {
             }
           }
         } else if (node.type === "painter") {
+          // Create empty output image node immediately so the conveyor animation is visible
+          const imgNodeId = addNode("document", node.x + node.width + 60, node.y, {
+            label: "Painting...",
+            snippet: "Generating image...",
+            content: "",
+            documentContent: "",
+          });
+          addEdge(nodeId, imgNodeId);
+
           // Painter: summarize for visual prompt, then generate image via Gemini
           const summaryRes = await apiRequest("POST", "/api/summarize-intent", {
             transcript: combinedContent.slice(0, 8000),
@@ -801,18 +810,21 @@ function FlowWorkspaceInner() {
               snippet: `Generated: ${imagePrompt.slice(0, 80)}...`,
             });
 
-            // Create image document node
-            const imgNodeId = addNode("document", node.x + node.width + 60, node.y, {
-              label: `Image: ${imagePrompt.slice(0, 30)}...`,
+            // Fill the output image node with the generated image
+            updateNode(imgNodeId, {
+              label: `Image: ${imagePrompt.slice(0, 30)}${imagePrompt.length > 30 ? "..." : ""}`,
               snippet: "Generated image",
               imageUrl: imgData.images[0],
               content: imagePrompt,
               documentContent: imagePrompt,
             });
-            addEdge(nodeId, imgNodeId);
             toast({ title: "Image generated" });
           } else {
             updateNode(nodeId, { llmStatus: "error", snippet: imgData.error || "Image generation failed" });
+            updateNode(imgNodeId, {
+              label: "Generation failed",
+              snippet: imgData.error || "Image generation failed",
+            });
             toast({ title: "Image generation failed", variant: "destructive" });
           }
 
