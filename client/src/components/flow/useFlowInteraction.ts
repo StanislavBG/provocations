@@ -5,6 +5,12 @@ const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1;
 
+// ── WASD glide-camera constants (game-style smooth panning) ──
+const WASD_ACCEL = 1.8;       // px/frame² acceleration while key held
+const WASD_MAX_SPEED = 18;    // px/frame max velocity
+const WASD_FRICTION = 0.88;   // velocity multiplier per frame when released
+const WASD_STOP_THRESHOLD = 0.3; // velocity below this → snap to zero
+
 interface PanDrag {
   type: "pan";
   startX: number;
@@ -121,6 +127,90 @@ export function useFlowInteraction({
       window.removeEventListener("keyup", up);
     };
   }, []);
+
+  // ── WASD glide-camera (game-style smooth panning) ──
+  const wasdKeys = useRef<Set<string>>(new Set());
+  const wasdVel = useRef({ x: 0, y: 0 });
+  const wasdRaf = useRef<number>(0);
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+  const onViewportChangeRef = useRef(onViewportChange);
+  onViewportChangeRef.current = onViewportChange;
+
+  useEffect(() => {
+    const isInput = (e: KeyboardEvent) =>
+      !!(e.target as HTMLElement)?.closest("input, textarea, [contenteditable]");
+
+    const down = (e: KeyboardEvent) => {
+      if (isInput(e)) return;
+      const k = e.key.toLowerCase();
+      if (k === "w" || k === "a" || k === "s" || k === "d") {
+        e.preventDefault();
+        wasdKeys.current.add(k);
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      wasdKeys.current.delete(e.key.toLowerCase());
+    };
+    const blur = () => wasdKeys.current.clear();
+
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+
+    let lastTime = 0;
+    const tick = (time: number) => {
+      wasdRaf.current = requestAnimationFrame(tick);
+
+      // Compute delta for frame-rate independence (target 60fps)
+      const dt = lastTime ? Math.min((time - lastTime) / 16.67, 3) : 1;
+      lastTime = time;
+
+      const keys = wasdKeys.current;
+      const vel = wasdVel.current;
+
+      // Acceleration: apply while keys held
+      let ax = 0, ay = 0;
+      if (keys.has("a")) ax += 1;
+      if (keys.has("d")) ax -= 1;
+      if (keys.has("w")) ay += 1;
+      if (keys.has("s")) ay -= 1;
+
+      if (ax !== 0 || ay !== 0) {
+        // Normalize diagonal so it doesn't move faster
+        const len = Math.sqrt(ax * ax + ay * ay);
+        ax = (ax / len) * WASD_ACCEL * dt;
+        ay = (ay / len) * WASD_ACCEL * dt;
+        vel.x = Math.max(-WASD_MAX_SPEED, Math.min(WASD_MAX_SPEED, vel.x + ax));
+        vel.y = Math.max(-WASD_MAX_SPEED, Math.min(WASD_MAX_SPEED, vel.y + ay));
+      } else {
+        // Friction decay when no keys held
+        vel.x *= Math.pow(WASD_FRICTION, dt);
+        vel.y *= Math.pow(WASD_FRICTION, dt);
+        if (Math.abs(vel.x) < WASD_STOP_THRESHOLD) vel.x = 0;
+        if (Math.abs(vel.y) < WASD_STOP_THRESHOLD) vel.y = 0;
+      }
+
+      // Apply velocity to viewport
+      if (vel.x !== 0 || vel.y !== 0) {
+        const vp = viewportRef.current;
+        onViewportChangeRef.current(
+          vp.x + vel.x * dt,
+          vp.y + vel.y * dt,
+          vp.zoom,
+        );
+      }
+    };
+
+    wasdRaf.current = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(wasdRaf.current);
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, []); // stable — uses refs for all mutable state
 
   const screenToCanvas = useCallback(
     (screenX: number, screenY: number) => {
