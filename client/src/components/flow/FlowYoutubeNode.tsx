@@ -1,9 +1,10 @@
-import React, { useCallback, useState } from "react";
-import { Youtube, Loader2, Trash2, Lock, Unlock } from "lucide-react";
+import React, { useCallback, useState, useEffect } from "react";
+import { Youtube, Loader2, Trash2, Lock, Unlock, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { FlowNode } from "./useFlowCanvas";
+import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
 
 interface FlowYoutubeNodeProps {
@@ -12,6 +13,7 @@ interface FlowYoutubeNodeProps {
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
   onDelete: (nodeId: string) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
+  onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
 }
 
@@ -27,11 +29,19 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
   onMouseDown,
   onDelete,
   onUpdateNode,
+  onToggleLock,
   onPortMouseDown,
 }: FlowYoutubeNodeProps) {
   const { toast } = useToast();
   const status = node.youtubeFetchStatus ?? "idle";
   const [localUrl, setLocalUrl] = useState(node.youtubeUrl || "");
+
+  // Sync externally-injected URLs (e.g. from Research node)
+  useEffect(() => {
+    if (node.youtubeUrl && node.youtubeUrl !== localUrl) {
+      setLocalUrl(node.youtubeUrl);
+    }
+  }, [node.youtubeUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleUrlChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,37 +159,40 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
       <FlowPortDots node={node} isSelected={isSelected} onPortMouseDown={onPortMouseDown} accentColor="red" />
 
       {/* Lock + Delete buttons */}
-      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          className={cn(
-            "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-            node.locked
-              ? "bg-yellow-500 text-white"
-              : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-          )}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onUpdateNode(node.id, { locked: !node.locked });
-          }}
-          title={node.locked ? "Unlock node" : "Lock node"}
-        >
-          {node.locked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
-        </button>
-        {!node.locked && (
-          <button
-            className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(node.id);
-            }}
-            title="Delete node"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        )}
-      </div>
+      {(() => {
+        const lm = getEffectiveLockMode(node);
+        return (
+          <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onToggleLock && (
+              <button
+                className={cn(
+                  "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
+                  lm === "canvas" ? "bg-yellow-500 text-white"
+                    : lm === "screen" ? "bg-blue-500 text-white"
+                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+                )}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
+                title={lm === "none" ? "Lock to canvas" : lm === "canvas" ? "Lock to screen" : "Unlock"}
+              >
+                {lm === "none" && <Unlock className="w-2.5 h-2.5" />}
+                {lm === "canvas" && <Lock className="w-2.5 h-2.5" />}
+                {lm === "screen" && <Monitor className="w-2.5 h-2.5" />}
+              </button>
+            )}
+            {lm === "none" && (
+              <button
+                className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+                title="Delete node"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 });

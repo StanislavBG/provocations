@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect, type ReactNode } from "react";
+import { useCallback, useRef, useState, useEffect, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -43,7 +43,7 @@ import {
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
   Lightbulb, Paintbrush2, PenLine, Users, Wifi, WifiOff,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
-  Plus,
+  Plus, Type, Target, BookOpenCheck,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
@@ -51,12 +51,12 @@ import type { ChatMessageWithMeta } from "@shared/schema";
 
 const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "context", label: "Context", icon: "BookOpen", group: "gather" },
+  { toolId: "label", label: "Label", icon: "Type", group: "gather" },
   { toolId: "zone", label: "Zone", icon: "SquareDashedBottom", group: "gather" },
   { toolId: "audio", label: "Voice Capture", icon: "AudioLines", group: "gather" },
   { toolId: "youtube", label: "YouTube", icon: "Youtube", group: "gather" },
   { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop" },
   { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", group: "workshop" },
-  { toolId: "document", label: "Document", icon: "FileEdit", group: "build" },
   { toolId: "llm", label: "Text Mods", icon: "Brain", group: "build" },
   { toolId: "painter", label: "Painter", icon: "Paintbrush", group: "build" },
   { toolId: "timeline", label: "Timeline", icon: "Clock", group: "build" },
@@ -68,6 +68,9 @@ const FLOW_SHELL_CONFIG: FtuxShellConfig = {
   ...DEFAULT_SHELL_CONFIG,
   dockItems: FLOW_DOCK_ITEMS,
   dockShowLabels: true,
+  dockSnapped: true,
+  dockButtonSize: "large",
+  dockPosition: "bottom",
   tourCompleted: true,
   tipsEnabled: false,
 };
@@ -170,7 +173,9 @@ function FlowWorkspaceInner() {
   const [activePainterNodeId, setActivePainterNodeId] = useState<string | null>(null);
   const [activeImageNodeId, setActiveImageNodeId] = useState<string | null>(null);
   const [activeFullscreenNodeId, setActiveFullscreenNodeId] = useState<string | null>(null);
+  const [activeLabelNodeId, setActiveLabelNodeId] = useState<string | null>(null);
   const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number; screenX: number; screenY: number } | null>(null);
+  const [pendingEdgeRole, setPendingEdgeRole] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -823,6 +828,34 @@ function FlowWorkspaceInner() {
     [activeResearchNodeId, updateNode],
   );
 
+  // ── Research → YouTube: inject URL into downstream YouTube node ──
+
+  const handleResearchOutput = useCallback(
+    (data: { type: "youtube-url"; url: string; title?: string }) => {
+      if (!activeResearchNodeId) return;
+      const outputEdges = stateRef.current.edges.filter(
+        (e) => e.fromNodeId === activeResearchNodeId,
+      );
+      const youtubeNodes = outputEdges
+        .map((e) => stateRef.current.nodes.find((n) => n.id === e.toNodeId))
+        .filter((n) => n && n.type === "youtube") as FlowNode[];
+
+      if (youtubeNodes.length === 0) return;
+
+      const target = youtubeNodes[0];
+      updateNode(target.id, {
+        youtubeUrl: data.url,
+        youtubeTitle: data.title,
+      });
+
+      toast({
+        title: "URL sent to YouTube node",
+        description: `${data.url.slice(0, 60)}${data.url.length > 60 ? "..." : ""} — click "Get Transcript" to fetch.`,
+      });
+    },
+    [activeResearchNodeId, updateNode, toast],
+  );
+
   // ── Double-click node ──
 
   const handleNodeDoubleClick = useCallback(
@@ -846,6 +879,9 @@ function FlowWorkspaceInner() {
           break;
         case "store":
           setStoreFolderPickerNodeId(nodeId);
+          break;
+        case "label":
+          setActiveLabelNodeId(nodeId);
           break;
         default:
           // All other node types open in the generic fullscreen overlay
@@ -897,9 +933,24 @@ function FlowWorkspaceInner() {
         (e) => e.fromNodeId === fromNodeId && e.toNodeId === toNodeId,
       );
       if (exists) return;
+
+      // Check if this is a doc/context-doc → research connection that needs role assignment
+      const fromNode = state.nodes.find((n) => n.id === fromNodeId);
+      const toNode = state.nodes.find((n) => n.id === toNodeId);
+      if (
+        fromNode &&
+        toNode &&
+        (fromNode.type === "document" || fromNode.type === "context-doc") &&
+        toNode.type === "research"
+      ) {
+        // Show role picker dialog
+        setPendingEdgeRole({ fromNodeId, toNodeId });
+        return;
+      }
+
       addEdge(fromNodeId, toNodeId);
     },
-    [addEdge, state.edges],
+    [addEdge, state.edges, state.nodes],
   );
 
   // ── Play node: auto-execute a node using its inputs ──
@@ -1180,6 +1231,16 @@ function FlowWorkspaceInner() {
           snippet: "Paste a YouTube URL to fetch transcript",
           youtubeUrl: "",
           youtubeFetchStatus: "idle",
+        });
+        return;
+      }
+      if (toolId === "label") {
+        addNode("label", canvasX, canvasY, {
+          label: "Label",
+          labelFontSize: 16,
+          labelBold: false,
+          labelItalic: false,
+          labelColor: "text-foreground",
         });
         return;
       }
@@ -1655,6 +1716,36 @@ function FlowWorkspaceInner() {
     ? state.nodes.find((n) => n.id === activeResearchNodeId)
     : null;
 
+  // Connection context for the active research node
+  const researchConnectionCtx = useMemo(() => {
+    if (!activeResearchNodeId) return null;
+    const inputEdges = state.edges.filter((e) => e.toNodeId === activeResearchNodeId);
+    const outputEdges = state.edges.filter((e) => e.fromNodeId === activeResearchNodeId);
+    const inputNodes = inputEdges
+      .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
+      .filter(Boolean) as FlowNode[];
+    const outputNodes = outputEdges
+      .map((e) => state.nodes.find((n) => n.id === e.toNodeId))
+      .filter(Boolean) as FlowNode[];
+    // Build role map: nodeId → edge role
+    const roleMap = new Map(inputEdges.map((e) => [e.fromNodeId, e.role]));
+    return {
+      inputNodes: inputNodes.map((n) => ({
+        type: n.type,
+        label: n.label,
+        content: n.content,
+        documentContent: n.documentContent,
+        snippet: n.snippet,
+        role: roleMap.get(n.id) as "context" | "objective" | undefined,
+      })),
+      outputNodes: outputNodes.map((n) => ({
+        id: n.id,
+        type: n.type,
+        label: n.label,
+      })),
+    };
+  }, [activeResearchNodeId, state.edges, state.nodes]);
+
   const activeDocumentNode = activeDocumentNodeId
     ? state.nodes.find((n) => n.id === activeDocumentNodeId)
     : null;
@@ -1800,7 +1891,26 @@ function FlowWorkspaceInner() {
           onCreateEdge={handleCreateEdge}
           onDeleteEdge={deleteEdge}
           onPlayNode={handlePlayNode}
-          onToggleLock={(nodeId) => updateNode(nodeId, { locked: !state.nodes.find((n) => n.id === nodeId)?.locked })}
+          onToggleLock={(nodeId) => {
+            const node = state.nodes.find((n) => n.id === nodeId);
+            if (!node) return;
+            const current = node.lockMode || (node.locked ? "canvas" : "none");
+            if (current === "none") {
+              updateNode(nodeId, { lockMode: "canvas", locked: true });
+            } else if (current === "canvas") {
+              // Canvas → Screen: convert canvas position to screen position
+              const vp = state.viewport;
+              const screenX = node.x * vp.zoom + vp.x;
+              const screenY = node.y * vp.zoom + vp.y;
+              updateNode(nodeId, { lockMode: "screen", locked: true, screenX, screenY });
+            } else {
+              // Screen → Unlock: convert screen position back to canvas
+              const vp = state.viewport;
+              const canvasX = ((node.screenX ?? 100) - vp.x) / vp.zoom;
+              const canvasY = ((node.screenY ?? 100) - vp.y) / vp.zoom;
+              updateNode(nodeId, { lockMode: "none", locked: false, x: canvasX, y: canvasY });
+            }
+          }}
           onDropTool={handleDropTool}
           onDragStart={pushUndoSnapshot}
         />
@@ -2039,6 +2149,48 @@ function FlowWorkspaceInner() {
       </Dialog>
 
       {/* Logic node type picker — lightweight popover, no overlay dimming */}
+      {/* Edge role picker dialog: Context or Objective */}
+      {pendingEdgeRole && (
+        <Dialog open onOpenChange={() => setPendingEdgeRole(null)}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader>
+              <DialogTitle className="text-sm">Connection Role</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground mb-3">
+              How should the Research node use this document?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-left"
+                onClick={() => {
+                  addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, "context");
+                  setPendingEdgeRole(null);
+                }}
+              >
+                <BookOpenCheck className="w-4 h-4 text-amber-500 shrink-0" />
+                <div>
+                  <div className="text-xs font-medium">Context</div>
+                  <div className="text-[10px] text-muted-foreground">Background information for the research</div>
+                </div>
+              </button>
+              <button
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-left"
+                onClick={() => {
+                  addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, "objective");
+                  setPendingEdgeRole(null);
+                }}
+              >
+                <Target className="w-4 h-4 text-blue-500 shrink-0" />
+                <div>
+                  <div className="text-xs font-medium">Objective / Starting Prompt</div>
+                  <div className="text-[10px] text-muted-foreground">Sets the research topic and direction</div>
+                </div>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {pendingLogicAction && (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setPendingLogicAction(null)} />
@@ -2076,6 +2228,129 @@ function FlowWorkspaceInner() {
         </>
       )}
 
+      {/* Label formatting dialog */}
+      {activeLabelNodeId && (() => {
+        const labelNode = state.nodes.find((n) => n.id === activeLabelNodeId);
+        if (!labelNode) return null;
+        const FONT_SIZES = [12, 14, 16, 20, 24, 32, 48];
+        const COLOR_PRESETS = [
+          { label: "Default", value: "text-foreground" },
+          { label: "Amber", value: "text-amber-500" },
+          { label: "Blue", value: "text-blue-500" },
+          { label: "Red", value: "text-red-500" },
+          { label: "Green", value: "text-emerald-500" },
+          { label: "Stone", value: "text-stone-400" },
+          { label: "White", value: "text-white" },
+        ];
+        return (
+          <Dialog open onOpenChange={(open) => !open && setActiveLabelNodeId(null)}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="text-sm flex items-center gap-2">
+                  <Type className="w-4 h-4" /> Edit Label
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {/* Text input */}
+                <textarea
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                  rows={3}
+                  value={labelNode.label}
+                  onChange={(e) => updateNode(activeLabelNodeId, { label: e.target.value })}
+                  placeholder="Enter label text..."
+                  autoFocus
+                />
+
+                {/* Font size */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-12">Size</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {FONT_SIZES.map((size) => (
+                      <button
+                        key={size}
+                        className={cn(
+                          "px-2 py-0.5 text-xs rounded border transition-colors",
+                          (labelNode.labelFontSize || 16) === size
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/50 border-border hover:bg-muted",
+                        )}
+                        onClick={() => updateNode(activeLabelNodeId, { labelFontSize: size })}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bold / Italic toggles */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-12">Style</span>
+                  <button
+                    className={cn(
+                      "px-3 py-1 text-sm font-bold rounded border transition-colors",
+                      labelNode.labelBold
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-muted/50 border-border hover:bg-muted",
+                    )}
+                    onClick={() => updateNode(activeLabelNodeId, { labelBold: !labelNode.labelBold })}
+                  >
+                    B
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1 text-sm italic rounded border transition-colors",
+                      labelNode.labelItalic
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-muted/50 border-border hover:bg-muted",
+                    )}
+                    onClick={() => updateNode(activeLabelNodeId, { labelItalic: !labelNode.labelItalic })}
+                  >
+                    I
+                  </button>
+                </div>
+
+                {/* Color presets */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-12">Color</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {COLOR_PRESETS.map((c) => (
+                      <button
+                        key={c.value}
+                        className={cn(
+                          "px-2 py-0.5 text-xs rounded border transition-colors",
+                          c.value,
+                          (labelNode.labelColor || "text-foreground") === c.value
+                            ? "ring-2 ring-primary border-primary"
+                            : "border-border hover:bg-muted/50",
+                        )}
+                        onClick={() => updateNode(activeLabelNodeId, { labelColor: c.value })}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div className="border rounded-md p-3 bg-muted/20">
+                  <span className="text-[10px] text-muted-foreground block mb-1">Preview</span>
+                  <p
+                    style={{ fontSize: labelNode.labelFontSize || 16 }}
+                    className={cn(
+                      labelNode.labelBold && "font-bold",
+                      labelNode.labelItalic && "italic",
+                      labelNode.labelColor || "text-foreground",
+                    )}
+                  >
+                    {labelNode.label || "Label"}
+                  </p>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
       {/* Full-screen Research overlay (tied to specific node) */}
       {activeResearchNodeId &&
         createPortal(
@@ -2105,6 +2380,8 @@ function FlowWorkspaceInner() {
                 onCaptureToContext={handleResearchCapture}
                 initialMessages={activeResearchNode?.researchMessages as ChatMessageWithMeta[] | undefined}
                 onMessagesChange={handleResearchMessagesChange}
+                connectionContext={researchConnectionCtx}
+                onEmitOutput={handleResearchOutput}
               />
             </div>
           </div>,

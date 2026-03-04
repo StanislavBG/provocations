@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical } from "lucide-react";
+import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical, Monitor } from "lucide-react";
 import type { FlowCanvasState, FlowNode, FlowEdge, FlowViewport } from "./useFlowCanvas";
+import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
 import { FlowStoreNode } from "./FlowStoreNode";
 import { FlowLlmNode } from "./FlowLlmNode";
@@ -140,12 +141,28 @@ export function FlowCanvas({
   }, [state.nodes]);
 
   // Viewport virtualization: only render nodes within the visible area + buffer
+  // Screen-locked nodes are never culled
   const visibleNodes = useMemo(() => {
-    if (state.nodes.length < 30) return sortedNodes; // Skip culling for small canvases
+    if (state.nodes.length < 30) return sortedNodes;
     return sortedNodes.filter((node) =>
+      getEffectiveLockMode(node) === "screen" ||
       isNodeVisible(node, state.viewport, canvasDims.width, canvasDims.height),
     );
   }, [sortedNodes, state.viewport, canvasDims, state.nodes.length]);
+
+  // Partition nodes into canvas-space and screen-space groups
+  const { canvasNodes, screenNodes } = useMemo(() => {
+    const canvas: FlowNode[] = [];
+    const screen: FlowNode[] = [];
+    for (const node of visibleNodes) {
+      if (getEffectiveLockMode(node) === "screen") {
+        screen.push(node);
+      } else {
+        canvas.push(node);
+      }
+    }
+    return { canvasNodes: canvas, screenNodes: screen };
+  }, [visibleNodes]);
 
   // Also cull edges: only render edges where at least one endpoint is visible
   const visibleEdges = useMemo(() => {
@@ -176,6 +193,34 @@ export function FlowCanvas({
     },
     [screenToCanvas, onDropTool],
   );
+
+  // ── Render a single node by type ──
+  const renderNode = useCallback((node: FlowNode) => {
+    if (node.type === "zone") return (
+      <FlowZoneNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} />
+    );
+    if (node.type === "store") return (
+      <FlowStoreNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+    );
+    if (node.type === "document") return (
+      <FlowDocumentNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onPortMouseDown={handlePortMouseDown} />
+    );
+    if (node.type === "audio") return (
+      <FlowAudioNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+    );
+    if (node.type === "youtube") return (
+      <FlowYoutubeNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+    );
+    if (node.type === "timer-event") return (
+      <FlowTimerEventNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+    );
+    if (node.type === "llm") return (
+      <FlowLlmNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} allNodes={state.nodes} selectedNodeIds={state.selectedNodeIds} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onCreateNote={onCreateNote} onPortMouseDown={handlePortMouseDown} />
+    );
+    return (
+      <FlowNodeRenderer key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onPlayNode={onPlayNode} />
+    );
+  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote]);
 
   const cursorClass = frozen
     ? "cursor-not-allowed"
@@ -239,95 +284,7 @@ export function FlowCanvas({
           onDeleteEdge={onDeleteEdge}
         />
 
-        {visibleNodes.map((node) =>
-          node.type === "zone" ? (
-            <FlowZoneNode
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              zoom={state.viewport.zoom}
-              onMouseDown={handleNodeMouseDown}
-              onDelete={onDeleteNode}
-              onUpdateNode={onUpdateNode}
-            />
-          ) : node.type === "store" ? (
-            <FlowStoreNode
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              onMouseDown={handleNodeMouseDown}
-              onDoubleClick={handleNodeDoubleClick}
-              onDelete={onDeleteNode}
-              onToggleLock={onToggleLock}
-              onPortMouseDown={handlePortMouseDown}
-            />
-          ) : node.type === "document" ? (
-            <FlowDocumentNode
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              onMouseDown={handleNodeMouseDown}
-              onDoubleClick={handleNodeDoubleClick}
-              onDelete={onDeleteNode}
-              onPortMouseDown={handlePortMouseDown}
-            />
-          ) : node.type === "audio" ? (
-            <FlowAudioNode
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              onMouseDown={handleNodeMouseDown}
-              onDelete={onDeleteNode}
-              onUpdateNode={onUpdateNode}
-              onPortMouseDown={handlePortMouseDown}
-            />
-          ) : node.type === "youtube" ? (
-            <FlowYoutubeNode
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              onMouseDown={handleNodeMouseDown}
-              onDelete={onDeleteNode}
-              onUpdateNode={onUpdateNode}
-              onPortMouseDown={handlePortMouseDown}
-            />
-          ) : node.type === "timer-event" ? (
-            <FlowTimerEventNode
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              onMouseDown={handleNodeMouseDown}
-              onDelete={onDeleteNode}
-              onUpdateNode={onUpdateNode}
-              onPortMouseDown={handlePortMouseDown}
-            />
-          ) : node.type === "llm" ? (
-            <FlowLlmNode
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              allNodes={state.nodes}
-              selectedNodeIds={state.selectedNodeIds}
-              onMouseDown={handleNodeMouseDown}
-              onDelete={onDeleteNode}
-              onUpdateNode={onUpdateNode}
-              onCreateNote={onCreateNote}
-              onPortMouseDown={handlePortMouseDown}
-            />
-          ) : (
-            <FlowNodeRenderer
-              key={node.id}
-              node={node}
-              isSelected={state.selectedNodeIds.has(node.id)}
-              onMouseDown={handleNodeMouseDown}
-              onDoubleClick={handleNodeDoubleClick}
-              onDelete={onDeleteNode}
-              onToggleLock={onToggleLock}
-              onPortMouseDown={handlePortMouseDown}
-              onPlayNode={onPlayNode}
-            />
-          ),
-        )}
+        {canvasNodes.map((node) => renderNode(node))}
 
         {/* Marquee selection rectangle */}
         {marqueeRect && marqueeRect.width > 2 && marqueeRect.height > 2 && (
@@ -342,6 +299,30 @@ export function FlowCanvas({
           />
         )}
       </div>
+
+      {/* Screen-locked HUD layer — outside viewport transform */}
+      {screenNodes.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none z-20">
+          {screenNodes.map((node) => (
+            <div
+              key={`screen-${node.id}`}
+              className="pointer-events-auto absolute"
+              style={{
+                left: node.screenX ?? 100,
+                top: node.screenY ?? 100,
+                zIndex: node.zIndex + 1000,
+                filter: "drop-shadow(0 0 6px rgba(59, 130, 246, 0.25))",
+              }}
+            >
+              {/* HUD badge */}
+              <div className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-blue-500/90 text-white flex items-center justify-center shadow-sm z-50">
+                <Monitor className="w-2.5 h-2.5" />
+              </div>
+              {renderNode({ ...node, x: 0, y: 0 })}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Align/Distribute toolbar for multi-selection */}
       {state.selectedNodeIds.size >= 2 && (() => {

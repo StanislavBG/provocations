@@ -4481,7 +4481,7 @@ Rules:
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan } = parsed.data;
+      const { message, objective, researchTopic, notes, history, chatModel, researchFocus, responseConfig, researchPlan, additionalContext } = parsed.data;
       const selectedModel = chatModel || "gemini-2.5-flash";
       const streamStartMs = Date.now();
 
@@ -4494,7 +4494,8 @@ Rules:
       const topicContext = researchTopic ? `\nRESEARCH TOPIC: ${researchTopic}` : "";
       const notesContext = notes ? `\n\nUSER'S RESEARCH NOTES SO FAR:\n${notes}` : "";
       const planContext = researchPlan ? `\n\nAPPROVED RESEARCH PLAN — Follow this plan systematically:\n${researchPlan}` : "";
-      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext, objective, notesContext, researchFocus, responseConfig);
+      const additionalCtx = additionalContext ? `\n\nADDITIONAL CONTEXT (from connected documents):\n${additionalContext}` : "";
+      const systemPrompt = buildResearchAssistantPrompt(topicContext + planContext + additionalCtx, objective, notesContext, researchFocus, responseConfig);
 
       const messages: { role: "user" | "assistant"; content: string }[] = [];
 

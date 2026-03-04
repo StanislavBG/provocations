@@ -1195,6 +1195,8 @@ export const chatRequestSchema = z.object({
   researchFocus: z.enum(researchFocusModes).optional(),
   responseConfig: responseConfigSchema.optional(),
   researchPlan: z.string().optional(),
+  /** Additional context injected from connected document nodes with role="context" */
+  additionalContext: z.string().optional(),
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
