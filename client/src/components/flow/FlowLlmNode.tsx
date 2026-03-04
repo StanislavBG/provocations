@@ -17,7 +17,7 @@ interface FlowLlmNodeProps {
   onDelete: (nodeId: string) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onToggleLock?: (nodeId: string) => void;
-  onCreateNote: (content: string, label: string) => void;
+  onCreateNote: (content: string, label: string, sourceNodeId?: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
 }
 
@@ -145,15 +145,17 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
       const data = await res.json();
       const output = currentPreset.extractOutput(data as Record<string, unknown>);
 
+      // Mark LLM node as done (keep output for display but primary result goes to new document node)
       onUpdateNode(node.id, {
         llmStatus: "done",
         llmOutput: output,
-        content: output,
-        snippet: output.slice(0, 200),
         label: `${currentPreset.label} (${inputNodes.length} sources)`,
       });
 
-      toast({ title: `${currentPreset.label} complete`, description: `Processed ${inputNodes.length} inputs` });
+      // Create output document node downstream (positioned by FlowWorkspace)
+      onCreateNote(output, `${currentPreset.label} output`, node.id);
+
+      toast({ title: `${currentPreset.label} complete`, description: `Output created as document node` });
     } catch {
       onUpdateNode(node.id, {
         llmStatus: "error",
@@ -174,9 +176,9 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
   // ── Save to note ──
   const handleSaveToNote = useCallback(() => {
     if (!node.llmOutput) return;
-    onCreateNote(node.llmOutput, `${currentPreset.label} output`);
-    toast({ title: "Note created", description: "Output saved as a note on canvas" });
-  }, [node.llmOutput, currentPreset.label, onCreateNote, toast]);
+    onCreateNote(node.llmOutput, `${currentPreset.label} output`, node.id);
+    toast({ title: "Note created", description: "Output saved as document node" });
+  }, [node.id, node.llmOutput, currentPreset.label, onCreateNote, toast]);
 
   const presetColors = PRESET_COLORS[currentPreset.color] ?? PRESET_COLORS.purple;
 

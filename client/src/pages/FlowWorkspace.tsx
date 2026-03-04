@@ -1071,16 +1071,29 @@ function FlowWorkspaceInner() {
   // ── Create document from LLM output ──
 
   const handleCreateNote = useCallback(
-    (content: string, label: string) => {
-      const pos = getPlacementCenter();
-      addNode("document", pos.x, pos.y, {
+    (content: string, label: string, sourceNodeId?: string) => {
+      // If source node provided, place to its right and create edge
+      const sourceNode = sourceNodeId
+        ? stateRef.current.nodes.find((n) => n.id === sourceNodeId)
+        : undefined;
+
+      const pos = sourceNode
+        ? { x: sourceNode.x + sourceNode.width + 40, y: sourceNode.y }
+        : getPlacementCenter();
+
+      const newId = addNode("document", pos.x + 100, pos.y + 65, {
         label,
         snippet: content.slice(0, 200),
         content,
         documentContent: content,
       });
+
+      // Create edge from source → output document
+      if (sourceNodeId && newId) {
+        addEdge(sourceNodeId, newId);
+      }
     },
-    [addNode, getPlacementCenter],
+    [addNode, addEdge, getPlacementCenter],
   );
 
   // ── Create edge from port drag ──

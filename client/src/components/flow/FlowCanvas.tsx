@@ -27,7 +27,7 @@ interface FlowCanvasProps {
   onNodeDoubleClick: (nodeId: string) => void;
   onViewportChange: (x: number, y: number, zoom: number) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
-  onCreateNote: (content: string, label: string) => void;
+  onCreateNote: (content: string, label: string, sourceNodeId?: string) => void;
   onCreateEdge?: (fromNodeId: string, toNodeId: string) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onPlayNode?: (nodeId: string) => void;
