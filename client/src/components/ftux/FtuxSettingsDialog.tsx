@@ -80,6 +80,40 @@ const BG_COLOR_PRESETS: { label: string; value: string | null }[] = [
   { label: "Forest", value: "#0d1a12" },
 ];
 
+const BG_TEXTURE_PRESETS: { key: string | null; label: string; css: string }[] = [
+  { key: null, label: "None", css: "" },
+  {
+    key: "void",
+    label: "Void",
+    css: "radial-gradient(ellipse at 50% 50%, #16161e 0%, #0a0a0f 70%, #050508 100%)",
+  },
+  {
+    key: "cosmos",
+    label: "Cosmos",
+    css: `radial-gradient(ellipse at 50% 50%, #0d0d18 0%, #06060c 100%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Ccircle cx='23' cy='67' r='0.5' fill='%23ffffff18'/%3E%3Ccircle cx='187' cy='23' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='321' cy='89' r='0.6' fill='%23ffffff15'/%3E%3Ccircle cx='67' cy='234' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='289' cy='178' r='0.5' fill='%23ffffff14'/%3E%3Ccircle cx='134' cy='312' r='0.4' fill='%23ffffff11'/%3E%3Ccircle cx='356' cy='267' r='0.5' fill='%23ffffff13'/%3E%3Ccircle cx='78' cy='378' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='234' cy='345' r='0.6' fill='%23ffffff16'/%3E%3Ccircle cx='167' cy='145' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='390' cy='390' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='45' cy='156' r='0.5' fill='%23ffffff14'/%3E%3C/svg%3E")`,
+  },
+  {
+    key: "blueprint",
+    label: "Blueprint",
+    css: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%230a1628'/%3E%3Cpath d='M80 0L0 0 0 80' fill='none' stroke='%23ffffff06' stroke-width='0.5'/%3E%3C/svg%3E")`,
+  },
+  {
+    key: "parchment",
+    label: "Parchment",
+    css: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' fill='%23140f0a'/%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`,
+  },
+  {
+    key: "mist",
+    label: "Mist",
+    css: "radial-gradient(ellipse at 0% 0%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 100% 100%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, #0e1117 0%, #080a0f 100%)",
+  },
+  {
+    key: "graphite",
+    label: "Graphite",
+    css: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100' height='100' fill='%23121215'/%3E%3Crect width='100' height='100' filter='url(%23g)' opacity='0.04'/%3E%3C/svg%3E")`,
+  },
+];
+
 interface FtuxSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -545,6 +579,30 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
                     )}
                     style={{
                       background: preset.value ?? "hsl(var(--background))",
+                    }}
+                    title={preset.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Canvas Texture */}
+            <div className="space-y-2">
+              <Label className="text-xs">Canvas Texture</Label>
+              <div className="flex items-center gap-2">
+                {BG_TEXTURE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => shell.setCanvasBgTexture(preset.key)}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-all overflow-hidden",
+                      shell.canvasBgTexture === preset.key
+                        ? "border-primary scale-110"
+                        : "border-border/50 hover:border-border",
+                    )}
+                    style={{
+                      background: preset.css || "hsl(var(--background))",
+                      backgroundSize: preset.key === "cosmos" ? "cover, 400px 400px" : undefined,
                     }}
                     title={preset.label}
                   />
