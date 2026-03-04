@@ -5650,67 +5650,131 @@ Output ONLY the JSON — no markdown, no explanation.`,
   // Extract transcript from a YouTube video (Step 1 only — transcript extraction)
   // The client then calls /api/pipeline/summarize and /api/pipeline/infographic
   // to complete the shared pipeline (same as text-to-infographic).
+  // Helper: format seconds to [HH:MM:SS] or [MM:SS]
+  function formatTimestamp(offsetSeconds: number): string {
+    const totalSec = Math.floor(offsetSeconds);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+    return h > 0 ? `[${h}:${mm}:${ss}]` : `[${mm}:${ss}]`;
+  }
+
+  // SSE streaming endpoint — streams transcript segments with timestamps as they're processed
   app.post("/api/youtube/process-video", async (req, res) => {
-    try {
-      const parsed = processVideoRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+    const parsed = processVideoRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+    }
+
+    const { videoId, videoUrl, videoTitle, thumbnailUrl } = parsed.data;
+    const wantStream = req.headers.accept === "text/event-stream";
+
+    // ── SSE streaming mode ──
+    if (wantStream) {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      const send = (type: string, data: Record<string, unknown>) =>
+        res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+
+      try {
+        send("status", { message: "Fetching transcript…" });
+        console.log(`[YouTube/SSE] Fetching transcript for video: ${videoId}`);
+
+        let segments: { text: string; offset: number; duration: number }[] = [];
+        try {
+          segments = await YoutubeTranscript.fetchTranscript(videoId);
+        } catch (ytErr) {
+          console.warn(`[YouTube/SSE] Real transcript unavailable:`, ytErr instanceof Error ? ytErr.message : ytErr);
+        }
+
+        if (segments && segments.length > 0) {
+          send("status", { message: `Found ${segments.length} segments — streaming…` });
+          console.log(`[YouTube/SSE] Streaming ${segments.length} segments`);
+
+          // Stream in batches of 50 segments for responsiveness
+          const BATCH = 50;
+          let fullText = "";
+          for (let i = 0; i < segments.length; i += BATCH) {
+            const batch = segments.slice(i, i + BATCH);
+            const batchText = batch
+              .map((s) => `${formatTimestamp(s.offset)} ${s.text}`)
+              .join("\n");
+            fullText += (fullText ? "\n" : "") + batchText;
+            send("chunk", {
+              text: batchText,
+              progress: Math.min(100, Math.round(((i + batch.length) / segments.length) * 100)),
+              segmentsProcessed: i + batch.length,
+              totalSegments: segments.length,
+            });
+          }
+
+          send("done", {
+            videoTitle: videoTitle || "Untitled Video",
+            totalSegments: segments.length,
+            totalChars: fullText.length,
+            transcript: fullText,
+          });
+        } else {
+          // Fallback: LLM-generated transcript
+          send("status", { message: "No captions found — generating with AI…" });
+          const transcriptResponse = await llm.generate({
+            maxTokens: 4096,
+            temperature: 0.4,
+            system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript. Include estimated timestamps in [MM:SS] format every few paragraphs. Output ONLY the transcript text with timestamps.`,
+            messages: [
+              { role: "user", content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})\nGenerate a detailed transcript.` },
+            ],
+          });
+          const transcript = transcriptResponse.text.trim();
+          send("chunk", { text: transcript, progress: 100, segmentsProcessed: 0, totalSegments: 0 });
+          send("done", { videoTitle: videoTitle || "Untitled Video", totalSegments: 0, totalChars: transcript.length, transcript });
+        }
+      } catch (error) {
+        console.error("YouTube SSE transcript error:", error);
+        send("error", { message: error instanceof Error ? error.message : "Unknown error" });
+      } finally {
+        res.end();
       }
+      return;
+    }
 
-      const { videoId, videoUrl, videoTitle, thumbnailUrl } = parsed.data;
-
+    // ── Legacy JSON mode (non-streaming) ──
+    try {
       let transcript = "";
-
-      // Attempt real transcript extraction first
       try {
         console.log(`[YouTube] Fetching real transcript for video: ${videoId}`);
         const segments = await YoutubeTranscript.fetchTranscript(videoId);
         if (segments && segments.length > 0) {
-          transcript = segments.map((s: { text: string }) => s.text).join(" ");
+          transcript = segments.map((s) => `${formatTimestamp(s.offset)} ${s.text}`).join("\n");
           console.log(`[YouTube] Got real transcript: ${transcript.length} chars, ${segments.length} segments`);
         }
       } catch (ytErr) {
         console.warn(`[YouTube] Real transcript unavailable for ${videoId}:`, ytErr instanceof Error ? ytErr.message : ytErr);
       }
 
-      // Fallback: use LLM to generate a synthetic transcript if real one is unavailable
       if (!transcript) {
         console.log(`[YouTube] Falling back to LLM-generated transcript for: ${videoTitle}`);
         const transcriptResponse = await llm.generate({
           maxTokens: 4096,
           temperature: 0.4,
-          system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript of what the speaker might say in this video.
-
-The transcript should:
-- Be 800-1500 words
-- Include natural speech patterns
-- Cover the topic thoroughly with actionable advice
-- Include specific tips, data points, and examples
-- Feel like a real video transcript
-
-Output ONLY the transcript text. No timestamps, no speaker labels, no markdown.`,
+          system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript. Include estimated timestamps in [MM:SS] format. Output ONLY the transcript text with timestamps.`,
           messages: [
-            {
-              role: "user",
-              content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})
-Generate a detailed transcript of this video's content.`,
-            },
+            { role: "user", content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})\nGenerate a detailed transcript.` },
           ],
         });
         transcript = transcriptResponse.text.trim();
       }
 
-      // Return transcript — client uses shared pipeline for summarize + infographic
-      res.json({
-        videoId,
-        videoTitle: videoTitle || "Untitled Video",
-        thumbnailUrl,
-        transcript,
-      });
+      res.json({ videoId, videoTitle: videoTitle || "Untitled Video", thumbnailUrl, transcript });
     } catch (error) {
       console.error("Video transcript extraction error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ error: "Failed to extract transcript", details: errorMessage });
+      res.status(500).json({ error: "Failed to extract transcript", details: error instanceof Error ? error.message : "Unknown error" });
     }
   });
 
