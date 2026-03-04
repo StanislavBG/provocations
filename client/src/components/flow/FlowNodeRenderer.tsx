@@ -1,5 +1,5 @@
 import React from "react";
-import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, X, Play, Loader2 } from "lucide-react";
+import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, Youtube, Timer, X, Play, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
@@ -121,6 +121,28 @@ const NODE_STYLES: Record<
     badge: "Audio",
     accent: "red",
   },
+  youtube: {
+    border: "border-red-600/60",
+    bg: "bg-card",
+    headerBg: "bg-red-600/15",
+    headerBorder: "border-red-600/40",
+    iconClass: "text-red-600",
+    badgeBg: "bg-red-600/25",
+    badgeText: "text-red-700 dark:text-red-400",
+    badge: "YouTube",
+    accent: "red",
+  },
+  "timer-event": {
+    border: "border-emerald-500/60",
+    bg: "bg-card",
+    headerBg: "bg-emerald-500/15",
+    headerBorder: "border-emerald-500/40",
+    iconClass: "text-emerald-500",
+    badgeBg: "bg-emerald-500/25",
+    badgeText: "text-emerald-600 dark:text-emerald-400",
+    badge: "Timer",
+    accent: "emerald",
+  },
 };
 
 const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
@@ -134,6 +156,8 @@ const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   document: FileEdit,
   zone: SquareDashedBottom,
   audio: Mic,
+  youtube: Youtube,
+  "timer-event": Timer,
 };
 
 interface FlowNodeRendererProps {

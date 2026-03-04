@@ -48,12 +48,14 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "context", label: "Context", icon: "BookOpen", group: "gather" },
   { toolId: "zone", label: "Zone", icon: "SquareDashedBottom", group: "gather" },
   { toolId: "audio", label: "Capture Audio", icon: "Mic", group: "gather" },
+  { toolId: "youtube", label: "YouTube", icon: "Youtube", group: "gather" },
   { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop" },
   { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", group: "workshop" },
   { toolId: "document", label: "Document", icon: "FileEdit", group: "build" },
   { toolId: "llm", label: "Text Mods", icon: "Brain", group: "build" },
   { toolId: "painter", label: "Painter", icon: "Paintbrush", group: "build" },
   { toolId: "timeline", label: "Timeline", icon: "Clock", group: "build" },
+  { toolId: "timer-event", label: "Timer Event", icon: "Timer", group: "build" },
 ];
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -999,12 +1001,98 @@ function FlowWorkspaceInner() {
         });
         return;
       }
+      if (toolId === "youtube") {
+        addNode("youtube", canvasX, canvasY, {
+          label: "YouTube",
+          snippet: "Paste a YouTube URL to fetch transcript",
+          youtubeUrl: "",
+          youtubeFetchStatus: "idle",
+        });
+        return;
+      }
+      if (toolId === "timer-event") {
+        addNode("timer-event", canvasX, canvasY, {
+          label: "Timer Event",
+          snippet: "Click start to begin pulsing",
+          timerRunning: false,
+          timerPulseCount: 0,
+          timerInterval: 5000,
+        });
+        return;
+      }
     },
     [addNode],
   );
 
   // Keep ref in sync for keyboard shortcuts
   handleDropToolRef.current = handleDropTool;
+
+  // ── YouTube: auto-create document node when transcript is fetched ──
+
+  const youtubeDocCreatedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    for (const node of state.nodes) {
+      if (
+        node.type === "youtube" &&
+        node.youtubeFetchStatus === "done" &&
+        node.content &&
+        !youtubeDocCreatedRef.current.has(node.id)
+      ) {
+        youtubeDocCreatedRef.current.add(node.id);
+        const docX = node.x + node.width + 60;
+        const docY = node.y;
+        const docId = addNode("document", docX, docY, {
+          label: node.youtubeTitle
+            ? `Transcript: ${node.youtubeTitle.slice(0, 25)}${node.youtubeTitle.length > 25 ? "..." : ""}`
+            : "YouTube Transcript",
+          snippet: node.content.slice(0, 200),
+          content: node.content,
+          documentContent: node.content,
+        });
+        addEdge(node.id, docId);
+      }
+    }
+  }, [state.nodes, addNode, addEdge]);
+
+  // ── Timer-Event: auto-create/append to document node on each pulse ──
+
+  const timerDocMapRef = useRef<Map<string, string>>(new Map());
+  const timerLastPulseRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    for (const node of state.nodes) {
+      if (node.type !== "timer-event" || !node.timerRunning) continue;
+      const pulseCount = node.timerPulseCount || 0;
+      const lastKnown = timerLastPulseRef.current.get(node.id) || 0;
+      if (pulseCount <= lastKnown) continue;
+      timerLastPulseRef.current.set(node.id, pulseCount);
+
+      const existingDocId = timerDocMapRef.current.get(node.id);
+      const existingDocNode = existingDocId ? state.nodes.find((n) => n.id === existingDocId) : null;
+
+      if (existingDocNode) {
+        const lastEntry = node.content?.split("\n").pop() || `Pulse #${pulseCount}`;
+        const updatedContent = (existingDocNode.documentContent || "") + "\n" + lastEntry;
+        updateNode(existingDocId!, {
+          documentContent: updatedContent,
+          content: updatedContent,
+          snippet: updatedContent.slice(-200),
+        });
+      } else {
+        const docX = node.x + node.width + 60;
+        const docY = node.y;
+        const docId = addNode("document", docX, docY, {
+          label: `Timer Log — ${new Date().toLocaleDateString()}`,
+          snippet: node.content?.slice(-200) || "Timer events",
+          content: node.content || "",
+          documentContent: node.content || "",
+        });
+        addEdge(node.id, docId);
+        timerDocMapRef.current.set(node.id, docId);
+      }
+    }
+  }, [state.nodes, addNode, addEdge, updateNode]);
 
   // ── Context Store: Load File from dialog ──
 

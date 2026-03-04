@@ -18,7 +18,9 @@ export type ToolId =
   | "timeline"
   | "llm"
   | "zone"
-  | "audio";
+  | "audio"
+  | "youtube"
+  | "timer-event";
 
 export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";

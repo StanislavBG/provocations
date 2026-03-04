@@ -7,6 +7,8 @@ import { FlowLlmNode } from "./FlowLlmNode";
 import { FlowDocumentNode } from "./FlowDocumentNode";
 import { FlowZoneNode } from "./FlowZoneNode";
 import { FlowAudioNode } from "./FlowAudioNode";
+import { FlowYoutubeNode } from "./FlowYoutubeNode";
+import { FlowTimerEventNode } from "./FlowTimerEventNode";
 import { FlowEdgeLayer } from "./FlowEdgeLayer";
 import { useFlowInteraction } from "./useFlowInteraction";
 
@@ -275,6 +277,26 @@ export function FlowCanvas({
               onUpdateNode={onUpdateNode}
               onPortMouseDown={handlePortMouseDown}
             />
+          ) : node.type === "youtube" ? (
+            <FlowYoutubeNode
+              key={node.id}
+              node={node}
+              isSelected={state.selectedNodeIds.has(node.id)}
+              onMouseDown={handleNodeMouseDown}
+              onDelete={onDeleteNode}
+              onUpdateNode={onUpdateNode}
+              onPortMouseDown={handlePortMouseDown}
+            />
+          ) : node.type === "timer-event" ? (
+            <FlowTimerEventNode
+              key={node.id}
+              node={node}
+              isSelected={state.selectedNodeIds.has(node.id)}
+              onMouseDown={handleNodeMouseDown}
+              onDelete={onDeleteNode}
+              onUpdateNode={onUpdateNode}
+              onPortMouseDown={handlePortMouseDown}
+            />
           ) : node.type === "llm" ? (
             <FlowLlmNode
               key={node.id}
@@ -373,6 +395,8 @@ const NODE_TYPE_COLORS: Record<string, string> = {
   document: "#6366f1",
   zone: "#6b7280",
   audio: "#ef4444",
+  youtube: "#dc2626",
+  "timer-event": "#10b981",
 };
 
 function Minimap({

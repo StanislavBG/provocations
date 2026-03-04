@@ -24,6 +24,8 @@ import {
   FileEdit,
   SquareDashedBottom,
   Mic,
+  Youtube,
+  Timer,
   Layers,
   type LucideIcon,
 } from "lucide-react";
@@ -46,10 +48,12 @@ const ICON_MAP: Record<string, LucideIcon> = {
   FileEdit,
   SquareDashedBottom,
   Mic,
+  Youtube,
+  Timer,
 };
 
 /** Grid: 2 rows x COLS columns. Items fill slots, remaining are empty. */
-const COLS = 5;
+const COLS = 6;
 const ROWS = 2;
 const TOTAL_SLOTS = COLS * ROWS;
 
