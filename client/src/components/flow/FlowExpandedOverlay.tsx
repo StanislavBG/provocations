@@ -10,6 +10,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useFtuxShell } from "@/lib/ftux-shell-context";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { FLOW_NODE_REGISTRY, ACCENT_BG } from "./FlowNodeRegistry";
 import { FlowChainNavBar } from "./FlowChainNavBar";
@@ -62,6 +63,8 @@ export function FlowExpandedOverlay({
   const style = def.style;
   const Icon = def.icon;
   const accentBg = ACCENT_BG[style.accent] || "bg-primary";
+  const { statusBarPosition } = useFtuxShell();
+  const sbHeight = "var(--ftux-status-bar-height, 36px)";
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<AnimationPhase>(
@@ -91,22 +94,19 @@ export function FlowExpandedOverlay({
     // Force layout
     el.getBoundingClientRect();
 
-    // Animate to full viewport
-    el.style.transition = `left ${EXPAND_DURATION}ms ${EXPAND_EASING}, top ${EXPAND_DURATION}ms ${EXPAND_EASING}, width ${EXPAND_DURATION}ms ${EXPAND_EASING}, height ${EXPAND_DURATION}ms ${EXPAND_EASING}, border-radius ${EXPAND_DURATION}ms ${EXPAND_EASING}, opacity ${EXPAND_DURATION * 0.5}ms ease-out`;
+    // Animate to full viewport (respecting status bar)
+    el.style.transition = `left ${EXPAND_DURATION}ms ${EXPAND_EASING}, top ${EXPAND_DURATION}ms ${EXPAND_EASING}, width ${EXPAND_DURATION}ms ${EXPAND_EASING}, height ${EXPAND_DURATION}ms ${EXPAND_EASING}, bottom ${EXPAND_DURATION}ms ${EXPAND_EASING}, border-radius ${EXPAND_DURATION}ms ${EXPAND_EASING}, opacity ${EXPAND_DURATION * 0.5}ms ease-out`;
     el.style.left = "0px";
-    el.style.top = "0px";
     el.style.width = "100%";
-    el.style.height = "100%";
     el.style.borderRadius = "0px";
     el.style.opacity = "1";
+    // Let CSS handle top/bottom via the style prop (status bar aware)
 
     const timer = setTimeout(() => {
-      // Clear inline styles, switch to CSS classes
+      // Clear inline animation styles, let CSS classes take over
       el.style.transition = "";
       el.style.left = "";
-      el.style.top = "";
       el.style.width = "";
-      el.style.height = "";
       el.style.borderRadius = "";
       el.style.opacity = "";
       setPhase("open");
@@ -172,14 +172,14 @@ export function FlowExpandedOverlay({
       <div
         ref={overlayRef}
         className={cn(
-          "fixed inset-0 z-50 flex flex-col bg-background overflow-hidden",
+          "fixed left-0 right-0 z-[45] flex flex-col bg-background overflow-hidden",
           phase === "expanding" && "will-change-[left,top,width,height,opacity]",
         )}
-        style={
-          phase === "expanding"
-            ? { position: "fixed" }
-            : undefined
-        }
+        style={{
+          ...(phase === "expanding" ? { position: "fixed" as const } : {}),
+          top: statusBarPosition === "top" ? sbHeight : "0px",
+          bottom: statusBarPosition === "bottom" ? sbHeight : "0px",
+        }}
       >
         {/* Accent header bar */}
         <div

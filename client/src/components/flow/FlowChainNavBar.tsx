@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useEffect, useCallback } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFtuxShell } from "@/lib/ftux-shell-context";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { NODE_STYLES, NODE_ICONS, ACCENT_BG } from "./FlowNodeRenderer";
 
@@ -92,6 +93,7 @@ export function FlowChainNavBar({
   edges,
   onNavigate,
 }: FlowChainNavBarProps) {
+  const { statusBarPosition } = useFtuxShell();
   const chain = useMemo(
     () => computeChain(activeNodeId, nodes, edges),
     [activeNodeId, nodes, edges],
@@ -130,8 +132,9 @@ export function FlowChainNavBar({
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-[51] flex items-center gap-1 px-4 py-2
+      className="fixed left-0 right-0 z-[46] flex items-center gap-1 px-4 py-2
                  bg-card/90 backdrop-blur-sm border-t border-border/50 overflow-x-auto"
+      style={{ bottom: statusBarPosition === "bottom" ? "var(--ftux-status-bar-height, 36px)" : 0 }}
     >
       <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mr-2 shrink-0">
         Chain

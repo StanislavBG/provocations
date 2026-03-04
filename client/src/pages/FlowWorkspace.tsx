@@ -943,12 +943,11 @@ function FlowWorkspaceInner() {
     const el = canvasContainerRef.current;
     const w = el?.clientWidth ?? 800;
     const h = el?.clientHeight ?? 600;
-    const offset = state.nodes.length * 30;
     return {
-      x: (-state.viewport.x + w / 2) / state.viewport.zoom + offset,
-      y: (-state.viewport.y + h / 2) / state.viewport.zoom + offset,
+      x: (-state.viewport.x + w / 2) / state.viewport.zoom,
+      y: (-state.viewport.y + h / 2) / state.viewport.zoom,
     };
-  }, [state.viewport, state.nodes.length]);
+  }, [state.viewport]);
 
   // ── Helper: get the active research node ID (if the currently expanded node is research) ──
   const activeResearchNodeId = useMemo(() => {
