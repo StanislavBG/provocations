@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
@@ -153,10 +153,32 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
     sw: "cursor-nesw-resize",
   };
 
+  // ── Zoom-aware level of detail ──
+  // Label font scales with zone size; details progressively fade at lower zoom
+  const lod = useMemo(() => {
+    // Label font proportional to the smaller dimension, clamped
+    const baseFontSize = Math.max(10, Math.min(32, Math.min(node.width, node.height) * 0.06));
+    // Effective pixel size on screen — determines what's legible
+    const effectiveSize = baseFontSize * zoom;
+
+    // Opacity tiers for smooth progressive reveal
+    // labelOpacity:   visible when text is at least ~6px on screen
+    // controlsOpacity: visible when zone is large enough to interact with comfortably
+    // borderOpacity:  always somewhat visible, fades at extreme zoom-out
+    const labelOpacity = Math.max(0, Math.min(1, (effectiveSize - 4) / 6));
+    const controlsOpacity = Math.max(0, Math.min(1, (zoom - 0.25) / 0.25));
+    const borderOpacity = Math.max(0.15, Math.min(1, (zoom - 0.05) / 0.2));
+
+    return { baseFontSize, labelOpacity, controlsOpacity, borderOpacity };
+  }, [node.width, node.height, zoom]);
+
+  const showLabel = lod.labelOpacity > 0.01;
+  const showControls = lod.controlsOpacity > 0.05;
+
   return (
     <div
       className={cn(
-        "absolute select-none rounded-xl border-2 border-dashed transition-shadow cursor-grab group",
+        "absolute select-none rounded-xl border-2 border-dashed cursor-grab group",
         colors.border,
         colors.bg,
         isSelected && "ring-2 ring-primary/50 shadow-lg",
@@ -167,103 +189,125 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
         width: node.width,
         height: node.height,
         zIndex: node.zIndex,
+        transition: "box-shadow 0.2s",
       }}
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onDoubleClick={(e) => {
+        if (!showControls) return; // no editing at extreme zoom-out
         e.stopPropagation();
         setEditLabel(node.zoneLabel || "");
         setEditing(true);
       }}
     >
-      {/* Zone label + color picker */}
-      <div className="absolute top-2 left-3 flex items-center gap-2">
-        {editing ? (
-          <div
-            className="flex items-center gap-2 bg-card/90 backdrop-blur-sm rounded-lg px-2 py-1.5 border border-border/50 shadow-sm"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <input
-              ref={inputRef}
-              className="bg-transparent border border-muted-foreground/30 rounded px-1.5 py-0.5 text-xs font-medium outline-none focus:border-primary w-28"
-              value={editLabel}
-              onChange={(e) => setEditLabel(e.target.value)}
-              onBlur={commitLabel}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitLabel();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              placeholder="Zone label..."
-            />
-            <div className="flex gap-1">
-              {COLOR_KEYS.map((ck) => (
-                <button
-                  key={ck}
-                  className={cn(
-                    "w-5 h-5 rounded-full border-2 transition-transform hover:scale-125",
-                    ck === colorKey
-                      ? "border-foreground scale-110"
-                      : "border-transparent",
-                    ZONE_COLORS[ck].swatch,
-                  )}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => handleColorClick(e, ck)}
-                  title={ck}
-                />
-              ))}
+      {/* Zone label + color picker — scales with zone size, fades with zoom */}
+      {showLabel && (
+        <div
+          className="absolute top-2 left-3 flex items-center gap-2"
+          style={{
+            opacity: lod.labelOpacity,
+            transition: "opacity 0.3s ease",
+          }}
+        >
+          {editing && showControls ? (
+            <div
+              className="flex items-center gap-2 bg-card/90 backdrop-blur-sm rounded-lg px-2 py-1.5 border border-border/50 shadow-sm"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <input
+                ref={inputRef}
+                className="bg-transparent border border-muted-foreground/30 rounded px-1.5 py-0.5 text-xs font-medium outline-none focus:border-primary w-28"
+                value={editLabel}
+                onChange={(e) => setEditLabel(e.target.value)}
+                onBlur={commitLabel}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitLabel();
+                  if (e.key === "Escape") setEditing(false);
+                }}
+                placeholder="Zone label..."
+              />
+              <div className="flex gap-1">
+                {COLOR_KEYS.map((ck) => (
+                  <button
+                    key={ck}
+                    className={cn(
+                      "w-5 h-5 rounded-full border-2 transition-transform hover:scale-125",
+                      ck === colorKey
+                        ? "border-foreground scale-110"
+                        : "border-transparent",
+                      ZONE_COLORS[ck].swatch,
+                    )}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => handleColorClick(e, ck)}
+                    title={ck}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ) : (
-          <span className={cn("text-xs font-medium opacity-60", colors.text)}>
-            {node.zoneLabel || "Zone"}
-          </span>
-        )}
-      </div>
-
-      {/* Resize handles — visible on hover or when selected */}
-      {/* Corner handles */}
-      {(["nw", "ne", "sw", "se"] as ResizeDir[]).map((dir) => (
-        <div
-          key={dir}
-          className={cn(
-            "absolute w-3 h-3 rounded-full border-2 border-primary bg-background opacity-0 group-hover:opacity-100 transition-opacity z-10",
-            isSelected && "opacity-100",
-            cursorMap[dir],
-            dir === "nw" && "-top-1.5 -left-1.5",
-            dir === "ne" && "-top-1.5 -right-1.5",
-            dir === "sw" && "-bottom-1.5 -left-1.5",
-            dir === "se" && "-bottom-1.5 -right-1.5",
+          ) : (
+            <span
+              className={cn("font-medium", colors.text)}
+              style={{
+                fontSize: lod.baseFontSize,
+                opacity: 0.6,
+                transition: "font-size 0.2s ease, opacity 0.3s ease",
+              }}
+            >
+              {node.zoneLabel || "Zone"}
+            </span>
           )}
-          onMouseDown={(e) => handleResizeMouseDown(e, dir)}
-        />
-      ))}
-      {/* Edge handles */}
-      {(["n", "s", "e", "w"] as ResizeDir[]).map((dir) => (
-        <div
-          key={dir}
-          className={cn(
-            "absolute opacity-0 group-hover:opacity-100 transition-opacity z-10",
-            isSelected && "opacity-100",
-            cursorMap[dir],
-            dir === "n" && "top-0 left-3 right-3 h-1.5 -translate-y-1/2",
-            dir === "s" && "bottom-0 left-3 right-3 h-1.5 translate-y-1/2",
-            dir === "e" && "right-0 top-3 bottom-3 w-1.5 translate-x-1/2",
-            dir === "w" && "left-0 top-3 bottom-3 w-1.5 -translate-x-1/2",
-          )}
-          onMouseDown={(e) => handleResizeMouseDown(e, dir)}
-        />
-      ))}
+        </div>
+      )}
 
-      {/* Delete button */}
-      <button
-        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(node.id);
-        }}
-      >
-        <X className="w-3 h-3" />
-      </button>
+      {/* Resize handles — only shown when zoom allows comfortable interaction */}
+      {showControls && (
+        <>
+          {/* Corner handles */}
+          {(["nw", "ne", "sw", "se"] as ResizeDir[]).map((dir) => (
+            <div
+              key={dir}
+              className={cn(
+                "absolute w-3 h-3 rounded-full border-2 border-primary bg-background opacity-0 group-hover:opacity-100 transition-opacity z-10",
+                isSelected && "opacity-100",
+                cursorMap[dir],
+                dir === "nw" && "-top-1.5 -left-1.5",
+                dir === "ne" && "-top-1.5 -right-1.5",
+                dir === "sw" && "-bottom-1.5 -left-1.5",
+                dir === "se" && "-bottom-1.5 -right-1.5",
+              )}
+              style={{ opacity: undefined }} // let className control, but scale down
+              onMouseDown={(e) => handleResizeMouseDown(e, dir)}
+            />
+          ))}
+          {/* Edge handles */}
+          {(["n", "s", "e", "w"] as ResizeDir[]).map((dir) => (
+            <div
+              key={dir}
+              className={cn(
+                "absolute opacity-0 group-hover:opacity-100 transition-opacity z-10",
+                isSelected && "opacity-100",
+                cursorMap[dir],
+                dir === "n" && "top-0 left-3 right-3 h-1.5 -translate-y-1/2",
+                dir === "s" && "bottom-0 left-3 right-3 h-1.5 translate-y-1/2",
+                dir === "e" && "right-0 top-3 bottom-3 w-1.5 translate-x-1/2",
+                dir === "w" && "left-0 top-3 bottom-3 w-1.5 -translate-x-1/2",
+              )}
+              onMouseDown={(e) => handleResizeMouseDown(e, dir)}
+            />
+          ))}
+
+          {/* Delete button */}
+          <button
+            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(node.id);
+            }}
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </>
+      )}
     </div>
   );
 });
