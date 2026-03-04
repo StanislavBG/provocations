@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical, Monitor } from "lucide-react";
 import type { FlowCanvasState, FlowNode, FlowEdge, FlowViewport } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
+import { FlowNodeContainer } from "./FlowNodeContainer";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
 import { FlowStoreNode } from "./FlowStoreNode";
 import { FlowLlmNode } from "./FlowLlmNode";
@@ -201,30 +202,50 @@ export function FlowCanvas({
   );
 
   // ── Render a single node by type ──
+  // Zone = special renderer, specialized nodes = dedicated components,
+  // generic types (context-doc, research, painter, interview, timeline,
+  // filter, gate, router, merge, label) = FlowNodeContainer with default snippet body.
   const renderNode = useCallback((node: FlowNode) => {
+    const sel = state.selectedNodeIds.has(node.id);
+
+    // Zone: background group — no card chrome
     if (node.type === "zone") return (
-      <FlowZoneNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} />
+      <FlowZoneNode key={node.id} node={node} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} />
     );
-    if (node.type === "store") return (
-      <FlowStoreNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
-    );
-    if (node.type === "document") return (
-      <FlowDocumentNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onPortMouseDown={handlePortMouseDown} />
+
+    // Specialized nodes with complex interactive bodies (keep dedicated components)
+    if (node.type === "llm") return (
+      <FlowLlmNode key={node.id} node={node} isSelected={sel} allNodes={state.nodes} selectedNodeIds={state.selectedNodeIds} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onCreateNote={onCreateNote} onPortMouseDown={handlePortMouseDown} />
     );
     if (node.type === "audio") return (
-      <FlowAudioNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+      <FlowAudioNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
     );
     if (node.type === "youtube") return (
-      <FlowYoutubeNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+      <FlowYoutubeNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
     );
     if (node.type === "timer-event") return (
-      <FlowTimerEventNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+      <FlowTimerEventNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
     );
-    if (node.type === "llm") return (
-      <FlowLlmNode key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} allNodes={state.nodes} selectedNodeIds={state.selectedNodeIds} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onCreateNote={onCreateNote} onPortMouseDown={handlePortMouseDown} />
+    if (node.type === "store") return (
+      <FlowStoreNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
     );
+    if (node.type === "document") return (
+      <FlowDocumentNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onPortMouseDown={handlePortMouseDown} />
+    );
+
+    // All other types: unified FlowNodeContainer with default snippet body
     return (
-      <FlowNodeRenderer key={node.id} node={node} isSelected={state.selectedNodeIds.has(node.id)} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onPlayNode={onPlayNode} />
+      <FlowNodeContainer
+        key={node.id}
+        node={node}
+        isSelected={sel}
+        onMouseDown={handleNodeMouseDown}
+        onDoubleClick={handleNodeDoubleClick}
+        onDelete={onDeleteNode}
+        onToggleLock={onToggleLock}
+        onPortMouseDown={handlePortMouseDown}
+        onPlayNode={onPlayNode}
+      />
     );
   }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote]);
 

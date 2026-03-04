@@ -82,6 +82,8 @@ interface FlowInterviewOverlayProps {
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onExportTranscript: (text: string, label: string) => void;
   connectionContext: { inputContent: string; objectiveText: string } | null;
+  /** When true, renders content-only (no portal, no fixed positioning, no header) for embedding inside FlowExpandedOverlay */
+  embedded?: boolean;
 }
 
 // ── Component ──
@@ -92,6 +94,7 @@ export function FlowInterviewOverlay({
   onUpdateNode,
   onExportTranscript,
   connectionContext,
+  embedded,
 }: FlowInterviewOverlayProps) {
   const { toast } = useToast();
 
@@ -411,53 +414,49 @@ export function FlowInterviewOverlay({
   const effectiveObjective = objective.trim() || connectionContext?.objectiveText || "";
 
   // ── Render ──
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b bg-cyan-500/5 shrink-0">
-        <div className="flex items-center gap-3">
-          <MessageCircleQuestion className="w-5 h-5 text-cyan-500" />
-          <h2 className="text-sm font-semibold">{node.label || "Interview"}</h2>
-          {entries.length > 0 && (
-            <Badge variant="outline" className="text-[10px] h-5">{entries.length} Q&A</Badge>
-          )}
-          {isActive && (
-            <Badge className="text-[10px] h-5 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40">
-              Live
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {/* TTS toggle */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={ttsEnabled ? "default" : "ghost"}
-                size="sm"
-                className={`h-7 w-7 p-0 ${ttsEnabled ? "text-primary-foreground" : "text-muted-foreground"}`}
-                onClick={() => {
-                  const next = !ttsEnabled;
-                  setTtsEnabled(next);
-                  if (next) unlockMobileAudio();
-                  if (!next && ttsAudioRef.current) {
-                    ttsAudioRef.current.pause();
-                    setIsSpeaking(false);
-                  }
-                }}
-              >
-                {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{ttsEnabled ? "Disable voice" : "Enable voice (read questions aloud)"}</TooltipContent>
-          </Tooltip>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
 
-      {/* Body: two-column layout */}
-      <div className="flex-1 flex overflow-hidden pb-12">
+  // Shared controls bar (status badges + TTS toggle)
+  const controlsBar = (
+    <div className="flex items-center justify-between px-4 py-1.5 border-b bg-cyan-500/5 shrink-0">
+      <div className="flex items-center gap-2">
+        {entries.length > 0 && (
+          <Badge variant="outline" className="text-[10px] h-5">{entries.length} Q&A</Badge>
+        )}
+        {isActive && (
+          <Badge className="text-[10px] h-5 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40">
+            Live
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={ttsEnabled ? "default" : "ghost"}
+              size="sm"
+              className={`h-7 w-7 p-0 ${ttsEnabled ? "text-primary-foreground" : "text-muted-foreground"}`}
+              onClick={() => {
+                const next = !ttsEnabled;
+                setTtsEnabled(next);
+                if (next) unlockMobileAudio();
+                if (!next && ttsAudioRef.current) {
+                  ttsAudioRef.current.pause();
+                  setIsSpeaking(false);
+                }
+              }}
+            >
+              {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{ttsEnabled ? "Disable voice" : "Enable voice"}</TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+
+  // Shared body: two-column layout (config panel + Q&A thread)
+  const interviewBody = (
+    <div className="flex-1 flex overflow-hidden">
         {/* Left panel: config */}
         <div className="w-80 border-r flex flex-col shrink-0">
           <ScrollArea className="flex-1">
@@ -851,6 +850,63 @@ export function FlowInterviewOverlay({
           )}
         </div>
       </div>
+  );
+
+  // Embedded mode: content-only (no portal, no fixed wrapper, no header)
+  // FlowExpandedOverlay provides the outer shell, header, and close button
+  if (embedded) {
+    return (
+      <div className="flex flex-col h-full bg-background">
+        {controlsBar}
+        {interviewBody}
+      </div>
+    );
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b bg-cyan-500/5 shrink-0">
+        <div className="flex items-center gap-3">
+          <MessageCircleQuestion className="w-5 h-5 text-cyan-500" />
+          <h2 className="text-sm font-semibold">{node.label || "Interview"}</h2>
+          {entries.length > 0 && (
+            <Badge variant="outline" className="text-[10px] h-5">{entries.length} Q&A</Badge>
+          )}
+          {isActive && (
+            <Badge className="text-[10px] h-5 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40">
+              Live
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={ttsEnabled ? "default" : "ghost"}
+                size="sm"
+                className={`h-7 w-7 p-0 ${ttsEnabled ? "text-primary-foreground" : "text-muted-foreground"}`}
+                onClick={() => {
+                  const next = !ttsEnabled;
+                  setTtsEnabled(next);
+                  if (next) unlockMobileAudio();
+                  if (!next && ttsAudioRef.current) {
+                    ttsAudioRef.current.pause();
+                    setIsSpeaking(false);
+                  }
+                }}
+              >
+                {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{ttsEnabled ? "Disable voice" : "Enable voice (read questions aloud)"}</TooltipContent>
+          </Tooltip>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+      {interviewBody}
     </div>,
     document.body,
   );

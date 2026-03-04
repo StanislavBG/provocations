@@ -26,7 +26,14 @@ import { ConnectionsManager } from "@/components/ConnectionsManager";
 import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
 import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
+import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
+import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
+import { LlmExpandedView } from "@/components/flow/expanded/LlmExpandedView";
+import { AudioExpandedView } from "@/components/flow/expanded/AudioExpandedView";
+import { YoutubeExpandedView } from "@/components/flow/expanded/YoutubeExpandedView";
+import { TimerExpandedView } from "@/components/flow/expanded/TimerExpandedView";
+import { LogicExpandedView } from "@/components/flow/expanded/LogicExpandedView";
 import {
   Dialog,
   DialogContent,
@@ -195,13 +202,11 @@ function FlowWorkspaceInner() {
     };
   }, []);
 
-  const [activeResearchNodeId, setActiveResearchNodeId] = useState<string | null>(null);
-  const [activeDocumentNodeId, setActiveDocumentNodeId] = useState<string | null>(null);
-  const [activePainterNodeId, setActivePainterNodeId] = useState<string | null>(null);
-  const [activeImageNodeId, setActiveImageNodeId] = useState<string | null>(null);
-  const [activeFullscreenNodeId, setActiveFullscreenNodeId] = useState<string | null>(null);
+  // ── Unified overlay state (replaces 7 individual overlay state variables) ──
+  const [activeExpandedNodeId, setActiveExpandedNodeId] = useState<string | null>(null);
+  const [expandSourceRect, setExpandSourceRect] = useState<DOMRect | null>(null);
+  // Legacy overlay states kept for dialog-based overlays (not full-screen)
   const [activeLabelNodeId, setActiveLabelNodeId] = useState<string | null>(null);
-  const [activeInterviewNodeId, setActiveInterviewNodeId] = useState<string | null>(null);
   const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number; screenX: number; screenY: number } | null>(null);
   const [pendingEdgeRole, setPendingEdgeRole] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
@@ -929,6 +934,13 @@ function FlowWorkspaceInner() {
     };
   }, [state.viewport, state.nodes.length]);
 
+  // ── Helper: get the active research node ID (if the currently expanded node is research) ──
+  const activeResearchNodeId = useMemo(() => {
+    if (!activeExpandedNodeId) return null;
+    const n = state.nodes.find((nd) => nd.id === activeExpandedNodeId);
+    return n?.type === "research" ? activeExpandedNodeId : null;
+  }, [activeExpandedNodeId, state.nodes]);
+
   // ── Research overlay: "Send to Notes" → creates document + edge ──
 
   const handleResearchCapture = useCallback(
@@ -1021,55 +1033,46 @@ function FlowWorkspaceInner() {
     (nodeId: string) => {
       const node = state.nodes.find((n) => n.id === nodeId);
       if (!node) return;
-      switch (node.type) {
-        case "research":
-          setActiveResearchNodeId(nodeId);
-          break;
-        case "document":
-          if (node.imageUrl) {
-            setActiveImageNodeId(nodeId);
-          } else {
-            setActiveDocumentNodeId(nodeId);
-            setDocEditorContent(node.documentContent || "");
-          }
-          break;
-        case "painter":
-          setActivePainterNodeId(nodeId);
-          break;
-        case "store":
-          setStoreFolderPickerNodeId(nodeId);
-          break;
-        case "label":
-          setActiveLabelNodeId(nodeId);
-          break;
-        case "interview":
-          setActiveInterviewNodeId(nodeId);
-          break;
-        default:
-          // All other node types open in the generic fullscreen overlay
-          setActiveFullscreenNodeId(nodeId);
-          break;
+      const def = FLOW_NODE_REGISTRY[node.type];
+
+      // Dialog-based overlays (not full-screen)
+      if (node.type === "store") {
+        setStoreFolderPickerNodeId(nodeId);
+        return;
       }
+      if (node.type === "label") {
+        setActiveLabelNodeId(nodeId);
+        return;
+      }
+
+      // Non-expandable types
+      if (def.expandMode === "none") return;
+
+      // Seed document editor content if opening a document node
+      if (node.type === "document" && !node.imageUrl) {
+        setDocEditorContent(node.documentContent || "");
+      }
+
+      // Open unified overlay (sourceRect = null for now — FLIP animation
+      // requires DOM refs which will be wired in FlowNodeContainer)
+      setExpandSourceRect(null);
+      setActiveExpandedNodeId(nodeId);
     },
     [state.nodes],
   );
 
   // ── Chain navigation: navigate between connected nodes in overlay ──
 
-  const activeOverlayNodeId =
-    activeResearchNodeId ||
-    activeDocumentNodeId ||
-    activePainterNodeId ||
-    activeImageNodeId ||
-    activeInterviewNodeId ||
-    activeFullscreenNodeId ||
-    null;
+  const activeOverlayNodeId = activeExpandedNodeId;
 
   const navigateToNode = useCallback(
     (nodeId: string) => {
-      // Save document editor state if open
-      if (activeDocumentNodeId) {
-        updateNode(activeDocumentNodeId, {
+      // Save document editor state if currently showing a document
+      const currentNode = activeExpandedNodeId
+        ? state.nodes.find((n) => n.id === activeExpandedNodeId)
+        : null;
+      if (currentNode?.type === "document" && !currentNode.imageUrl) {
+        updateNode(activeExpandedNodeId!, {
           documentContent: docEditorContent,
           snippet: docEditorContent.slice(0, 200) || "Double-click to edit",
           label: docEditorContent
@@ -1077,48 +1080,21 @@ function FlowWorkspaceInner() {
             : "New Document",
         });
       }
-      // Clear all overlays
-      setActiveResearchNodeId(null);
-      setActiveDocumentNodeId(null);
-      setDocEditorContent("");
-      setActivePainterNodeId(null);
-      setActiveImageNodeId(null);
-      setActiveLabelNodeId(null);
-      setActiveInterviewNodeId(null);
-      setActiveFullscreenNodeId(null);
-      // Open the target node's overlay (same logic as handleNodeDoubleClick)
-      const node = state.nodes.find((n) => n.id === nodeId);
-      if (!node) return;
-      switch (node.type) {
-        case "research":
-          setActiveResearchNodeId(nodeId);
-          break;
-        case "document":
-          if (node.imageUrl) {
-            setActiveImageNodeId(nodeId);
-          } else {
-            setActiveDocumentNodeId(nodeId);
-            setDocEditorContent(node.documentContent || "");
-          }
-          break;
-        case "painter":
-          setActivePainterNodeId(nodeId);
-          break;
-        case "store":
-          setStoreFolderPickerNodeId(nodeId);
-          break;
-        case "label":
-          setActiveLabelNodeId(nodeId);
-          break;
-        case "interview":
-          setActiveInterviewNodeId(nodeId);
-          break;
-        default:
-          setActiveFullscreenNodeId(nodeId);
-          break;
+
+      // Navigate to the target node
+      const targetNode = state.nodes.find((n) => n.id === nodeId);
+      if (!targetNode) return;
+
+      // Seed document editor content for document nodes
+      if (targetNode.type === "document" && !targetNode.imageUrl) {
+        setDocEditorContent(targetNode.documentContent || "");
       }
+
+      // Switch overlay (no FLIP animation for chain nav)
+      setExpandSourceRect(null);
+      setActiveExpandedNodeId(nodeId);
     },
-    [activeDocumentNodeId, docEditorContent, updateNode, state.nodes],
+    [activeExpandedNodeId, docEditorContent, updateNode, state.nodes],
   );
 
   // ── Store node: select save folder ──
@@ -1789,18 +1765,20 @@ function FlowWorkspaceInner() {
   // ── Close document editor overlay ──
 
   const handleCloseDocumentEditor = useCallback(() => {
-    if (activeDocumentNodeId) {
-      updateNode(activeDocumentNodeId, {
-        documentContent: docEditorContent,
-        snippet: docEditorContent.slice(0, 200) || "Double-click to edit",
-        label: docEditorContent
-          ? docEditorContent.split("\n")[0]?.slice(0, 40) || "Document"
-          : "New Document",
-      });
+    if (activeExpandedNodeId) {
+      const n = stateRef.current.nodes.find((nd) => nd.id === activeExpandedNodeId);
+      if (n?.type === "document" && !n.imageUrl) {
+        updateNode(activeExpandedNodeId, {
+          documentContent: docEditorContent,
+          snippet: docEditorContent.slice(0, 200) || "Double-click to edit",
+          label: docEditorContent
+            ? docEditorContent.split("\n")[0]?.slice(0, 40) || "Document"
+            : "New Document",
+        });
+      }
     }
-    setActiveDocumentNodeId(null);
     setDocEditorContent("");
-  }, [activeDocumentNodeId, docEditorContent, updateNode]);
+  }, [activeExpandedNodeId, docEditorContent, updateNode]);
 
   // ── Header actions for status bar ──
 
@@ -1952,7 +1930,11 @@ function FlowWorkspaceInner() {
     </div>
   );
 
-  // ── Get active research node for overlay ──
+  // ── Derive overlay node references from unified state ──
+
+  const activeExpandedNode = activeExpandedNodeId
+    ? state.nodes.find((n) => n.id === activeExpandedNodeId)
+    : null;
 
   const activeResearchNode = activeResearchNodeId
     ? state.nodes.find((n) => n.id === activeResearchNodeId)
@@ -1969,7 +1951,6 @@ function FlowWorkspaceInner() {
     const outputNodes = outputEdges
       .map((e) => state.nodes.find((n) => n.id === e.toNodeId))
       .filter(Boolean) as FlowNode[];
-    // Build role map: nodeId → edge role
     const roleMap = new Map(inputEdges.map((e) => [e.fromNodeId, e.role]));
     return {
       inputNodes: inputNodes.map((n) => ({
@@ -1988,15 +1969,13 @@ function FlowWorkspaceInner() {
     };
   }, [activeResearchNodeId, state.edges, state.nodes]);
 
-  const activeDocumentNode = activeDocumentNodeId
-    ? state.nodes.find((n) => n.id === activeDocumentNodeId)
-    : null;
+  // Derive painter-specific context from unified state
+  const activePainterNodeId = useMemo(() => {
+    if (!activeExpandedNodeId) return null;
+    const n = state.nodes.find((nd) => nd.id === activeExpandedNodeId);
+    return n?.type === "painter" ? activeExpandedNodeId : null;
+  }, [activeExpandedNodeId, state.nodes]);
 
-  const activePainterNode = activePainterNodeId
-    ? state.nodes.find((n) => n.id === activePainterNodeId)
-    : null;
-
-  // Gather input text for the painter from connected nodes
   const painterSourceText = activePainterNodeId
     ? (() => {
         const inputEdges = state.edges.filter((e) => e.toNodeId === activePainterNodeId);
@@ -2015,13 +1994,11 @@ function FlowWorkspaceInner() {
       if (!activePainterNodeId) return;
       const painterNode = stateRef.current.nodes.find((n) => n.id === activePainterNodeId);
 
-      // Update the painter node to show it produced output
       updateNode(activePainterNodeId, {
         llmStatus: "done",
         snippet: `Generated: ${prompt.slice(0, 80)}...`,
       });
 
-      // Create an image document node positioned to the right of the painter
       const imgX = (painterNode?.x ?? 0) + (painterNode?.width ?? 260) + 60;
       const imgY = painterNode?.y ?? 0;
       const imgNodeId = addNode("document", imgX, imgY, {
@@ -2032,13 +2009,18 @@ function FlowWorkspaceInner() {
         documentContent: prompt,
       });
 
-      // Connect painter → image document
       addEdge(activePainterNodeId, imgNodeId);
     },
     [activePainterNodeId, addNode, addEdge, updateNode],
   );
 
   // ── Interview overlay: connection context + export handler ──
+
+  const activeInterviewNodeId = useMemo(() => {
+    if (!activeExpandedNodeId) return null;
+    const n = state.nodes.find((nd) => nd.id === activeExpandedNodeId);
+    return n?.type === "interview" ? activeExpandedNodeId : null;
+  }, [activeExpandedNodeId, state.nodes]);
 
   const interviewConnectionCtx = useMemo(() => {
     if (!activeInterviewNodeId) return null;
@@ -2641,249 +2623,251 @@ function FlowWorkspaceInner() {
         );
       })()}
 
-      {/* Full-screen Research overlay (tied to specific node) */}
-      {activeResearchNodeId &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
-            <div className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-sm shrink-0">
-              <h2 className="text-sm font-semibold">
-                {activeResearchNode?.researchQuery
-                  ? `Research: ${activeResearchNode.researchQuery.slice(0, 50)}${activeResearchNode.researchQuery.length > 50 ? "..." : ""}`
-                  : "Research"}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Use &quot;Send to Notes&quot; to add findings to your canvas
-              </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setActiveResearchNodeId(null)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="flex-1 overflow-hidden pb-12">
-              <NotebookResearchChat
-                key={activeResearchNodeId}
-                objective=""
-                onCaptureToContext={handleResearchCapture}
-                initialMessages={activeResearchNode?.researchMessages as ChatMessageWithMeta[] | undefined}
-                onMessagesChange={handleResearchMessagesChange}
-                connectionContext={researchConnectionCtx}
-                onEmitOutput={handleResearchOutput}
-              />
-            </div>
-          </div>,
-          document.body,
-        )}
+      {/* ── Unified expanded overlay (replaces 6 individual overlay blocks + chain nav) ── */}
+      {activeExpandedNodeId && activeExpandedNode && (() => {
+        const handleOverlayClose = () => {
+          // Save document editor content before closing if needed
+          if (activeExpandedNode.type === "document" && !activeExpandedNode.imageUrl) {
+            handleCloseDocumentEditor();
+          }
+          setActiveExpandedNodeId(null);
+        };
 
-      {/* Full-screen Document editor overlay */}
-      {activeDocumentNodeId &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-sm shrink-0">
-              <h2 className="text-sm font-semibold">
-                {activeDocumentNode?.label || "Document"}
-              </h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleCloseDocumentEditor}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
+        // Render type-specific expanded content
+        const renderExpandedContent = () => {
+          switch (activeExpandedNode.type) {
+            case "research":
+              return (
+                <NotebookResearchChat
+                  key={activeExpandedNodeId}
+                  objective=""
+                  onCaptureToContext={handleResearchCapture}
+                  initialMessages={activeExpandedNode.researchMessages as ChatMessageWithMeta[] | undefined}
+                  onMessagesChange={handleResearchMessagesChange}
+                  connectionContext={researchConnectionCtx}
+                  onEmitOutput={handleResearchOutput}
+                />
+              );
 
-            {/* Body: 1/3 tools + 2/3 editor */}
-            <div className="flex-1 flex overflow-hidden pb-12">
-              {/* Left panel — tools */}
-              <div className="w-1/3 max-w-[320px] border-r bg-card/50 flex flex-col overflow-auto">
-                <div className="p-3 border-b">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Tools
-                  </h3>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {DOC_TOOLS.map((tool) => (
-                      <button
-                        key={tool.id}
-                        className="flex items-center gap-1.5 px-2.5 py-2 rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
-                        disabled={docToolRunning !== null}
-                        onClick={() => handleDocTool(tool.instruction, tool.id)}
-                      >
-                        {docToolRunning === tool.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
-                        ) : (
-                          <tool.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        )}
-                        <span className="text-[11px] font-medium">{tool.label}</span>
-                      </button>
-                    ))}
+            case "document":
+              if (activeExpandedNode.imageUrl) {
+                // Image viewer
+                return (
+                  <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+                    <img
+                      src={activeExpandedNode.imageUrl}
+                      alt={activeExpandedNode.label || "Image"}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+                      draggable={false}
+                    />
                   </div>
-                </div>
-
-                {/* Connected inputs */}
-                <div className="p-3 flex-1">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Connected Inputs
-                  </h3>
-                  {(() => {
-                    const inputEdges = state.edges.filter((e) => e.toNodeId === activeDocumentNodeId);
-                    const inputNodes = inputEdges
-                      .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
-                      .filter(Boolean);
-                    if (inputNodes.length === 0) {
-                      return (
-                        <p className="text-[10px] text-muted-foreground/60 italic">
-                          No connected inputs. Drag edges from other nodes to this document.
-                        </p>
-                      );
-                    }
-                    return (
-                      <div className="space-y-1.5">
-                        {inputNodes.map((n) => n && (
-                          <div key={n.id} className="px-2 py-1.5 rounded border border-border/50 bg-muted/30">
-                            <p className="text-[10px] font-medium">{n.label}</p>
-                            <p className="text-[9px] text-muted-foreground line-clamp-2 mt-0.5">
-                              {n.content || n.snippet || "No content"}
-                            </p>
-                          </div>
+                );
+              }
+              // Document editor with tools panel
+              return (
+                <div className="flex-1 flex overflow-hidden">
+                  <div className="w-1/3 max-w-[320px] border-r bg-card/50 flex flex-col overflow-auto">
+                    <div className="p-3 border-b">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                        Tools
+                      </h3>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {DOC_TOOLS.map((tool) => (
+                          <button
+                            key={tool.id}
+                            className="flex items-center gap-1.5 px-2.5 py-2 rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
+                            disabled={docToolRunning !== null}
+                            onClick={() => handleDocTool(tool.instruction, tool.id)}
+                          >
+                            {docToolRunning === tool.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+                            ) : (
+                              <tool.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            )}
+                            <span className="text-[11px] font-medium">{tool.label}</span>
+                          </button>
                         ))}
                       </div>
-                    );
-                  })()}
+                    </div>
+                    <div className="p-3 flex-1">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                        Connected Inputs
+                      </h3>
+                      {(() => {
+                        const inputEdges = state.edges.filter((e) => e.toNodeId === activeExpandedNodeId);
+                        const inputNodes = inputEdges
+                          .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
+                          .filter(Boolean);
+                        if (inputNodes.length === 0) {
+                          return (
+                            <p className="text-[10px] text-muted-foreground/60 italic">
+                              No connected inputs. Drag edges from other nodes to this document.
+                            </p>
+                          );
+                        }
+                        return (
+                          <div className="space-y-1.5">
+                            {inputNodes.map((n) => n && (
+                              <div key={n.id} className="px-2 py-1.5 rounded border border-border/50 bg-muted/30">
+                                <p className="text-[10px] font-medium">{n.label}</p>
+                                <p className="text-[9px] text-muted-foreground line-clamp-2 mt-0.5">
+                                  {n.content || n.snippet || "No content"}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-auto p-4">
+                      <ProvokeText
+                        value={docEditorContent}
+                        onChange={setDocEditorContent}
+                        chrome="container"
+                        variant="editor"
+                        label="Document"
+                        showCopy
+                        showClear
+                        placeholder="Start writing your document..."
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              );
 
-              {/* Right panel — editor */}
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-auto p-4">
-                  <ProvokeText
-                    value={docEditorContent}
-                    onChange={setDocEditorContent}
-                    chrome="container"
-                    variant="editor"
-                    label="Document"
-                    showCopy
-                    showClear
-                    placeholder="Start writing your document..."
-                  />
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
-
-      {/* Full-screen Painter overlay */}
-      {activePainterNodeId &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
-            <div className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-sm shrink-0">
-              <h2 className="text-sm font-semibold">
-                {activePainterNode?.label || "Painter"}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Generate images from connected document content or a custom prompt
-              </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setActivePainterNodeId(null)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="flex-1 overflow-hidden pb-12">
-              <ArtifyPanel
-                sourceText={painterSourceText}
-                sourceLabel={painterSourceText ? "Connected nodes" : "No inputs"}
-                onClose={() => setActivePainterNodeId(null)}
-                onImageGenerated={handlePainterImageGenerated}
-              />
-            </div>
-          </div>,
-          document.body,
-        )}
-
-      {/* Full-screen Image viewer overlay */}
-      {activeImageNodeId &&
-        (() => {
-          const imgNode = state.nodes.find((n) => n.id === activeImageNodeId);
-          if (!imgNode?.imageUrl) return null;
-          return createPortal(
-            <div
-              className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm animate-in fade-in duration-200"
-              onClick={() => setActiveImageNodeId(null)}
-            >
-              <div className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-sm shrink-0">
-                <h2 className="text-sm font-semibold truncate">{imgNode.label || "Image"}</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setActiveImageNodeId(null)}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="flex-1 flex items-center justify-center p-4 pb-14 overflow-auto" onClick={(e) => e.stopPropagation()}>
-                <img
-                  src={imgNode.imageUrl}
-                  alt={imgNode.label || "Image"}
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
-                  draggable={false}
+            case "painter":
+              return (
+                <ArtifyPanel
+                  sourceText={painterSourceText}
+                  sourceLabel={painterSourceText ? "Connected nodes" : "No inputs"}
+                  onClose={handleOverlayClose}
+                  onImageGenerated={handlePainterImageGenerated}
                 />
-              </div>
-            </div>,
-            document.body,
-          );
-        })()}
+              );
 
-      {/* Interview overlay */}
-      {activeInterviewNodeId &&
-        (() => {
-          const interviewNode = state.nodes.find((n) => n.id === activeInterviewNodeId);
-          if (!interviewNode) return null;
-          return (
-            <FlowInterviewOverlay
-              node={interviewNode}
-              onClose={() => setActiveInterviewNodeId(null)}
-              onUpdateNode={updateNode}
-              onExportTranscript={handleInterviewExport}
-              connectionContext={interviewConnectionCtx}
-            />
-          );
-        })()}
+            case "interview":
+              return (
+                <FlowInterviewOverlay
+                  node={activeExpandedNode}
+                  onClose={handleOverlayClose}
+                  onUpdateNode={updateNode}
+                  onExportTranscript={handleInterviewExport}
+                  connectionContext={interviewConnectionCtx}
+                  embedded
+                />
+              );
 
-      {/* Generic fullscreen node overlay (for types without a dedicated overlay) */}
-      {activeFullscreenNodeId &&
-        (() => {
-          const fsNode = state.nodes.find((n) => n.id === activeFullscreenNodeId);
-          if (!fsNode) return null;
-          return (
-            <FlowNodeFullscreen
-              node={fsNode}
-              onClose={() => setActiveFullscreenNodeId(null)}
-              onUpdateNode={updateNode}
-            />
-          );
-        })()}
+            case "llm":
+              return (
+                <LlmExpandedView
+                  node={activeExpandedNode}
+                  nodes={state.nodes}
+                  edges={state.edges}
+                  onUpdateNode={updateNode}
+                />
+              );
 
-      {/* Chain navigation bar (rendered once, above all overlays) */}
-      {activeOverlayNodeId &&
-        createPortal(
-          <FlowChainNavBar
-            activeNodeId={activeOverlayNodeId}
+            case "audio":
+              return (
+                <AudioExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                />
+              );
+
+            case "youtube":
+              return (
+                <YoutubeExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                />
+              );
+
+            case "timer-event":
+              return (
+                <TimerExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
+                />
+              );
+
+            case "filter":
+            case "gate":
+            case "router":
+            case "merge":
+              return (
+                <LogicExpandedView
+                  node={activeExpandedNode}
+                  nodes={state.nodes}
+                  edges={state.edges}
+                  onUpdateNode={updateNode}
+                />
+              );
+
+            default:
+              // Generic fullscreen: editable label + content
+              return (
+                <div className="flex-1 overflow-auto p-6">
+                  <div className="mb-4">
+                    <label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                      Label
+                    </label>
+                    <input
+                      className="w-full text-lg font-semibold bg-transparent border-b border-border/50 pb-1 focus:outline-none focus:border-primary"
+                      value={activeExpandedNode.label || ""}
+                      onChange={(e) => updateNode(activeExpandedNode.id, { label: e.target.value })}
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                      Content
+                    </label>
+                    <textarea
+                      className="w-full min-h-[300px] text-sm bg-muted/30 border border-border/50 rounded-lg p-3 resize-y focus:outline-none focus:ring-1 focus:ring-primary/50 leading-relaxed"
+                      value={activeExpandedNode.content || activeExpandedNode.documentContent || ""}
+                      onChange={(e) => updateNode(activeExpandedNode.id, {
+                        content: e.target.value,
+                        documentContent: e.target.value,
+                        snippet: e.target.value.slice(0, 200),
+                      })}
+                      placeholder="No content yet..."
+                    />
+                  </div>
+                  {activeExpandedNode.imageUrl && (
+                    <div className="mb-4">
+                      <label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                        Image
+                      </label>
+                      <img
+                        src={activeExpandedNode.imageUrl}
+                        alt={activeExpandedNode.label || "Image"}
+                        className="max-w-full max-h-[400px] object-contain rounded-lg border border-border/30"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+          }
+        };
+
+        return (
+          <FlowExpandedOverlay
+            nodeId={activeExpandedNodeId}
+            node={activeExpandedNode}
+            sourceRect={expandSourceRect}
             nodes={state.nodes}
             edges={state.edges}
+            onClose={handleOverlayClose}
             onNavigate={navigateToNode}
-          />,
-          document.body,
-        )}
+            onUpdateNode={updateNode}
+          >
+            {renderExpandedContent()}
+          </FlowExpandedOverlay>
+        );
+      })()}
 
       {/* Connections dialog */}
       <Dialog open={connectionsDialogOpen} onOpenChange={setConnectionsDialogOpen}>
