@@ -22,6 +22,10 @@ export type FlowNodeType =
   | "merge"
   | "label";
 
+// Import from registry for local use and re-export for backward compatibility
+import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
+export { _NODE_PORTS as NODE_PORTS, _DEFAULT_DIMENSIONS as DEFAULT_DIMENSIONS };
+
 export interface FlowNode {
   id: string;
   type: FlowNodeType;
@@ -158,47 +162,8 @@ export interface PortDef {
   type: "input" | "output";
 }
 
-/** Which ports each node type exposes */
-export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
-  document: [{ side: "right", type: "output" }],
-  "context-doc": [{ side: "right", type: "output" }],
-  llm: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  painter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  timeline: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  audio: [{ side: "right", type: "output" }],
-  youtube: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  "timer-event": [{ side: "right", type: "output" }],
-  filter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  gate: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  router: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  merge: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  store: [{ side: "left", type: "input" }],
-  research: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  interview: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  // zone, label — no ports
-};
-
-// ── Defaults ──
-
-const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }> = {
-  "context-doc": { width: 200, height: 120 },
-  research: { width: 220, height: 140 },
-  llm: { width: 260, height: 240 },
-  store: { width: 200, height: 100 },
-  painter: { width: 260, height: 200 },
-  interview: { width: 220, height: 140 },
-  timeline: { width: 260, height: 160 },
-  document: { width: 200, height: 130 },
-  zone: { width: 400, height: 300 },
-  audio: { width: 200, height: 140 },
-  youtube: { width: 240, height: 170 },
-  "timer-event": { width: 200, height: 160 },
-  filter: { width: 220, height: 130 },
-  gate: { width: 180, height: 120 },
-  router: { width: 220, height: 140 },
-  merge: { width: 200, height: 120 },
-  label: { width: 200, height: 60 },
-};
+// NODE_PORTS and DEFAULT_DIMENSIONS are now defined in FlowNodeRegistry.ts
+// and re-exported at the top of this file for backward compatibility.
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
 
@@ -258,7 +223,7 @@ export function useFlowCanvas() {
       data: Partial<Omit<FlowNode, "id" | "type" | "x" | "y" | "width" | "height" | "zIndex">> & { label: string },
     ) => {
       pushHistory();
-      const dims = DEFAULT_DIMENSIONS[type];
+      const dims = _DEFAULT_DIMENSIONS[type];
       const node: FlowNode = {
         id: generateId("flow"),
         type,

@@ -1,0 +1,231 @@
+/**
+ * FlowExpandedOverlay — Animated FLIP expansion from compact card to full view.
+ *
+ * Replaces the 7 individual overlay states in FlowWorkspace with a single
+ * unified overlay system. Provides consistent chrome (header, close button,
+ * chain nav) and animated expand/collapse transitions.
+ */
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import type { FlowNode, FlowEdge } from "./useFlowCanvas";
+import { FLOW_NODE_REGISTRY, ACCENT_BG } from "./FlowNodeRegistry";
+import { FlowChainNavBar } from "./FlowChainNavBar";
+
+// ── Types ──
+
+type AnimationPhase = "expanding" | "open" | "collapsing" | "closed";
+
+export interface FlowExpandedOverlayProps {
+  nodeId: string;
+  node: FlowNode;
+
+  /** Source rect for FLIP animation. null = instant open (e.g., chain nav). */
+  sourceRect: DOMRect | null;
+
+  /** All canvas state for chain nav */
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+
+  /** Callbacks */
+  onClose: () => void;
+  onNavigate: (nodeId: string) => void;
+  onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
+
+  /** The expanded view content */
+  children: React.ReactNode;
+}
+
+// ── Animation config ──
+
+const EXPAND_DURATION = 300;
+const COLLAPSE_DURATION = 250;
+const EXPAND_EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
+const COLLAPSE_EASING = "cubic-bezier(0.7, 0, 0.84, 0)";
+
+// ── Component ──
+
+export function FlowExpandedOverlay({
+  nodeId,
+  node,
+  sourceRect,
+  nodes,
+  edges,
+  onClose,
+  onNavigate,
+  onUpdateNode,
+  children,
+}: FlowExpandedOverlayProps) {
+  const def = FLOW_NODE_REGISTRY[node.type];
+  const style = def.style;
+  const Icon = def.icon;
+  const accentBg = ACCENT_BG[style.accent] || "bg-primary";
+
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState<AnimationPhase>(
+    sourceRect ? "expanding" : "open",
+  );
+  const [contentVisible, setContentVisible] = useState(!sourceRect);
+
+  // ── Expand animation ──
+  useEffect(() => {
+    if (phase !== "expanding" || !sourceRect) return;
+
+    const el = overlayRef.current;
+    if (!el) {
+      setPhase("open");
+      setContentVisible(true);
+      return;
+    }
+
+    // Start from source rect position
+    el.style.left = `${sourceRect.left}px`;
+    el.style.top = `${sourceRect.top}px`;
+    el.style.width = `${sourceRect.width}px`;
+    el.style.height = `${sourceRect.height}px`;
+    el.style.borderRadius = "8px";
+    el.style.opacity = "0.9";
+
+    // Force layout
+    el.getBoundingClientRect();
+
+    // Animate to full viewport
+    el.style.transition = `left ${EXPAND_DURATION}ms ${EXPAND_EASING}, top ${EXPAND_DURATION}ms ${EXPAND_EASING}, width ${EXPAND_DURATION}ms ${EXPAND_EASING}, height ${EXPAND_DURATION}ms ${EXPAND_EASING}, border-radius ${EXPAND_DURATION}ms ${EXPAND_EASING}, opacity ${EXPAND_DURATION * 0.5}ms ease-out`;
+    el.style.left = "0px";
+    el.style.top = "0px";
+    el.style.width = "100%";
+    el.style.height = "100%";
+    el.style.borderRadius = "0px";
+    el.style.opacity = "1";
+
+    const timer = setTimeout(() => {
+      // Clear inline styles, switch to CSS classes
+      el.style.transition = "";
+      el.style.left = "";
+      el.style.top = "";
+      el.style.width = "";
+      el.style.height = "";
+      el.style.borderRadius = "";
+      el.style.opacity = "";
+      setPhase("open");
+      setContentVisible(true);
+    }, EXPAND_DURATION);
+
+    return () => clearTimeout(timer);
+  }, [phase, sourceRect]);
+
+  // ── Collapse animation ──
+  const handleClose = useCallback(() => {
+    if (phase === "collapsing" || phase === "closed") return;
+
+    if (!sourceRect) {
+      // No source rect → instant close
+      setPhase("closed");
+      onClose();
+      return;
+    }
+
+    const el = overlayRef.current;
+    if (!el) {
+      setPhase("closed");
+      onClose();
+      return;
+    }
+
+    setPhase("collapsing");
+    setContentVisible(false);
+
+    // Animate back to source rect
+    el.style.transition = `left ${COLLAPSE_DURATION}ms ${COLLAPSE_EASING}, top ${COLLAPSE_DURATION}ms ${COLLAPSE_EASING}, width ${COLLAPSE_DURATION}ms ${COLLAPSE_EASING}, height ${COLLAPSE_DURATION}ms ${COLLAPSE_EASING}, border-radius ${COLLAPSE_DURATION}ms ${COLLAPSE_EASING}, opacity ${COLLAPSE_DURATION}ms ${COLLAPSE_EASING}`;
+    el.style.left = `${sourceRect.left}px`;
+    el.style.top = `${sourceRect.top}px`;
+    el.style.width = `${sourceRect.width}px`;
+    el.style.height = `${sourceRect.height}px`;
+    el.style.borderRadius = "8px";
+    el.style.opacity = "0";
+
+    setTimeout(() => {
+      setPhase("closed");
+      onClose();
+    }, COLLAPSE_DURATION);
+  }, [phase, sourceRect, onClose]);
+
+  // ── Escape key to close ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleClose();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [handleClose]);
+
+  if (phase === "closed") return null;
+
+  return (
+    <>
+      {/* Full-screen overlay */}
+      <div
+        ref={overlayRef}
+        className={cn(
+          "fixed inset-0 z-50 flex flex-col bg-background overflow-hidden",
+          phase === "expanding" && "will-change-[left,top,width,height,opacity]",
+        )}
+        style={
+          phase === "expanding"
+            ? { position: "fixed" }
+            : undefined
+        }
+      >
+        {/* Accent header bar */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 text-white shrink-0 transition-opacity",
+            accentBg,
+            contentVisible ? "opacity-100" : "opacity-0",
+          )}
+        >
+          <Icon className="w-4 h-4" />
+          <h2 className="text-sm font-semibold truncate flex-1">
+            {node.label || style.badge}
+          </h2>
+          <span className="text-[10px] uppercase tracking-wider opacity-75 font-semibold">
+            {style.badge}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20"
+            onClick={handleClose}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Content area */}
+        <div
+          className={cn(
+            "flex-1 overflow-hidden transition-opacity pb-12",
+            contentVisible ? "opacity-100" : "opacity-0",
+          )}
+        >
+          {contentVisible && children}
+        </div>
+      </div>
+
+      {/* Chain nav bar — rendered above the overlay */}
+      {contentVisible && (
+        <FlowChainNavBar
+          activeNodeId={nodeId}
+          nodes={nodes}
+          edges={edges}
+          onNavigate={onNavigate}
+        />
+      )}
+    </>
+  );
+}
