@@ -418,7 +418,7 @@ export function FlowInterviewOverlay({
       </div>
 
       {/* Body: two-column layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden pb-12">
         {/* Left panel: config */}
         <div className="w-80 border-r flex flex-col shrink-0">
           <ScrollArea className="flex-1">

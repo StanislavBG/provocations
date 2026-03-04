@@ -201,6 +201,25 @@ export const NODE_STYLES: Record<
   },
 };
 
+/** Accent color → Tailwind bg class (shared by overlays and chain nav bar) */
+export const ACCENT_BG: Record<string, string> = {
+  amber: "bg-amber-500",
+  blue: "bg-blue-500",
+  violet: "bg-violet-500",
+  primary: "bg-primary",
+  rose: "bg-rose-500",
+  cyan: "bg-cyan-500",
+  orange: "bg-orange-500",
+  indigo: "bg-indigo-500",
+  red: "bg-red-500",
+  emerald: "bg-emerald-500",
+  teal: "bg-teal-500",
+  yellow: "bg-yellow-500",
+  purple: "bg-purple-500",
+  sky: "bg-sky-500",
+  stone: "bg-stone-500",
+};
+
 export const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   "context-doc": FileText,
   research: Sparkles,
