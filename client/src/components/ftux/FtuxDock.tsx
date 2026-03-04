@@ -26,6 +26,7 @@ import {
   Mic,
   Youtube,
   Timer,
+  CircuitBoard,
   Layers,
   type LucideIcon,
 } from "lucide-react";
@@ -50,6 +51,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Mic,
   Youtube,
   Timer,
+  CircuitBoard,
 };
 
 /** Grid: 2 rows x COLS columns. Items fill slots, remaining are empty. */
