@@ -41,14 +41,24 @@ interface EdgeAnimation {
   glow: boolean;
 }
 
-/** Determine edge animation style based on the source node's state */
-function getEdgeAnimation(from: FlowNode): EdgeAnimation | null {
+/** Determine edge animation style based on the source node's state.
+ *  For "one-at-a-time" producers (painter, youtube) only the latest edge
+ *  from that node is animated — previous outputs stay static. */
+function getEdgeAnimation(
+  from: FlowNode,
+  edgeId: string,
+  latestEdgeFromNode: Map<string, string>,
+): EdgeAnimation | null {
+  // Painter and YouTube produce one output at a time — only animate the newest edge
   if (from.type === "painter" && from.llmStatus === "running") {
+    if (latestEdgeFromNode.get(from.id) !== edgeId) return null;
     return { color: "#f43f5e", markerSuffix: "painter", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.2", blobShape: "circle", blobCount: 3, glow: true };
   }
   if (from.type === "youtube" && from.youtubeFetchStatus === "fetching") {
+    if (latestEdgeFromNode.get(from.id) !== edgeId) return null;
     return { color: "#dc2626", markerSuffix: "youtube", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.0", blobShape: "rect", blobCount: 3, glow: true };
   }
+  // Timer-Event is a continuous broadcaster — all edges animate
   if (from.type === "timer-event" && from.timerRunning) {
     return { color: "#10b981", markerSuffix: "timer", dashArray: "4 4", animClass: "kafka-edge", speed: "0.6", blobShape: "rect", blobCount: 4, glow: false };
   }
@@ -67,6 +77,16 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
   );
 
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
+
+  // For one-at-a-time producers, track the latest (last) edge from each node.
+  // Edges are appended in order, so the last edge in the array is the newest.
+  const latestEdgeFromNode = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const edge of edges) {
+      map.set(edge.fromNodeId, edge.id);
+    }
+    return map;
+  }, [edges]);
 
   const hasContent = edges.length > 0 || previewEdge;
   if (!hasContent) return null;
@@ -150,7 +170,7 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
 
         const path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`;
         const isHovered = hoveredEdge === edge.id;
-        const animation = getEdgeAnimation(from);
+        const animation = getEdgeAnimation(from, edge.id, latestEdgeFromNode);
 
         return (
           <g key={edge.id}>
