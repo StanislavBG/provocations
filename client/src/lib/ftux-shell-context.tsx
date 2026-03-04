@@ -58,11 +58,15 @@ export interface FtuxShellConfig {
   dockItems: DockItem[];
   dockTranslucency: number; // 0-100
   dockAutoHide: boolean;
+  dockHidden: boolean;              // completely hide dock
   dockColor: string | null;        // null = theme default, or hex color
   dockShowLabels: boolean;
   dockShowGroupLabels: boolean;
   dockButtonSize: DockButtonSize;
   dockSnapped: boolean;            // snap to edge, full-width bar
+  canvasFontSize: number;          // px (default 14)
+  canvasFontColor: string | null;  // hex override or null for theme default
+  canvasBgColor: string | null;    // hex override or null for theme default
   statusBarPosition: StatusBarPosition;
   statusBarPinnedItems: string[];
   statusBarTranslucency: number;   // 0-100
@@ -81,11 +85,15 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
   dockItems: DEFAULT_DOCK_ITEMS,
   dockTranslucency: 75,
   dockAutoHide: false,
+  dockHidden: false,
   dockColor: null,
   dockShowLabels: false,
   dockShowGroupLabels: false,
   dockButtonSize: "medium",
   dockSnapped: false,
+  canvasFontSize: 14,
+  canvasFontColor: null,
+  canvasBgColor: null,
   statusBarPosition: "top",
   statusBarPinnedItems: [],
   statusBarTranslucency: 85,
@@ -120,11 +128,15 @@ export interface FtuxShellContextValue extends FtuxShellConfig {
   reorderDockItems: (fromIndex: number, toIndex: number) => void;
   setDockTranslucency: (val: number) => void;
   setDockAutoHide: (val: boolean) => void;
+  setDockHidden: (val: boolean) => void;
   setDockColor: (val: string | null) => void;
   setDockShowLabels: (val: boolean) => void;
   setDockShowGroupLabels: (val: boolean) => void;
   setDockButtonSize: (val: DockButtonSize) => void;
   setDockSnapped: (val: boolean) => void;
+  setCanvasFontSize: (val: number) => void;
+  setCanvasFontColor: (val: string | null) => void;
+  setCanvasBgColor: (val: string | null) => void;
   setStatusBarPosition: (pos: StatusBarPosition) => void;
   setStatusBarTranslucency: (val: number) => void;
   setStatusBarColor: (val: string | null) => void;
@@ -232,6 +244,11 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     [updateConfig],
   );
 
+  const setDockHidden = useCallback(
+    (val: boolean) => updateConfig((c) => ({ ...c, dockHidden: val })),
+    [updateConfig],
+  );
+
   const setDockColor = useCallback(
     (val: string | null) => updateConfig((c) => ({ ...c, dockColor: val })),
     [updateConfig],
@@ -254,6 +271,21 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
 
   const setDockSnapped = useCallback(
     (val: boolean) => updateConfig((c) => ({ ...c, dockSnapped: val })),
+    [updateConfig],
+  );
+
+  const setCanvasFontSize = useCallback(
+    (val: number) => updateConfig((c) => ({ ...c, canvasFontSize: val })),
+    [updateConfig],
+  );
+
+  const setCanvasFontColor = useCallback(
+    (val: string | null) => updateConfig((c) => ({ ...c, canvasFontColor: val })),
+    [updateConfig],
+  );
+
+  const setCanvasBgColor = useCallback(
+    (val: string | null) => updateConfig((c) => ({ ...c, canvasBgColor: val })),
     [updateConfig],
   );
 
@@ -351,6 +383,7 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
         dockItems: DEFAULT_SHELL_CONFIG.dockItems,
         dockTranslucency: DEFAULT_SHELL_CONFIG.dockTranslucency,
         dockAutoHide: DEFAULT_SHELL_CONFIG.dockAutoHide,
+        dockHidden: DEFAULT_SHELL_CONFIG.dockHidden,
         dockColor: DEFAULT_SHELL_CONFIG.dockColor,
         dockShowLabels: DEFAULT_SHELL_CONFIG.dockShowLabels,
         dockShowGroupLabels: DEFAULT_SHELL_CONFIG.dockShowGroupLabels,
@@ -438,11 +471,15 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     reorderDockItems,
     setDockTranslucency,
     setDockAutoHide,
+    setDockHidden,
     setDockColor,
     setDockShowLabels,
     setDockShowGroupLabels,
     setDockButtonSize,
     setDockSnapped,
+    setCanvasFontSize,
+    setCanvasFontColor,
+    setCanvasBgColor,
     setStatusBarPosition,
     setStatusBarTranslucency,
     setStatusBarColor,

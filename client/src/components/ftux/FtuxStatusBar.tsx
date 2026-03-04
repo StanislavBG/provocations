@@ -4,6 +4,7 @@ import { ProvoIcon } from "@/components/ProvoIcon";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PaletteToggle } from "@/components/PaletteToggle";
 import { FtuxBreadcrumbStepper } from "./FtuxBreadcrumbStepper";
+import { FtuxSettingsDialog } from "./FtuxSettingsDialog";
 import { useFtuxShell, type ToolId } from "@/lib/ftux-shell-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
   Wallpaper,
   ChevronDown,
   FolderOpen,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -99,6 +101,7 @@ interface FtuxStatusBarProps {
 export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, bgAnimationOn, onToggleBgAnimation, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, canvasLoading }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const shell = useFtuxShell();
@@ -284,6 +287,19 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
             </TooltipContent>
           </Tooltip>
         )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-7 h-7 rounded text-muted-foreground hover:text-foreground"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">Settings</TooltipContent>
+        </Tooltip>
         <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
         <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
         <UserButton
@@ -294,6 +310,8 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
           }}
         />
       </div>
+
+      <FtuxSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

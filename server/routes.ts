@@ -6126,7 +6126,7 @@ Output ONLY the JSON — no markdown, no explanation.`,
         console.log(`[YouTube] Fetching real transcript for video: ${videoId}`);
         const segments = await YoutubeTranscript.fetchTranscript(videoId);
         if (segments && segments.length > 0) {
-          transcript = segments.map((s) => `${formatTimestamp(s.offset)} ${s.text}`).join("\n");
+          transcript = segments.map((s: any) => `${formatTimestamp(s.offset)} ${s.text}`).join("\n");
           console.log(`[YouTube] Got real transcript: ${transcript.length} chars, ${segments.length} segments`);
         }
       } catch (ytErr) {
