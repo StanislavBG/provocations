@@ -221,10 +221,16 @@ export function ConnectionsManager({ onBack }: ConnectionsManagerProps) {
                         <p className="text-sm font-medium truncate">{conn.displayName}</p>
                         <p className="text-[11px] text-muted-foreground truncate">{conn.email}</p>
                       </div>
-                      <Badge variant="outline" className="text-[10px] gap-1">
-                        <Clock className="w-3 h-3" />
-                        Pending
-                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] gap-1 text-destructive hover:text-destructive"
+                        onClick={() => deleteMutation.mutate(conn.id)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <X className="w-3 h-3" />
+                        Cancel
+                      </Button>
                     </div>
                   ))}
                 </div>

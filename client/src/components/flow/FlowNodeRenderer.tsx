@@ -1,5 +1,5 @@
 import React from "react";
-import { FileText, Sparkles, StickyNote, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, X, Play, Loader2 } from "lucide-react";
+import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, X, Play, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
@@ -32,17 +32,6 @@ const NODE_STYLES: Record<
     badgeText: "text-blue-600 dark:text-blue-400",
     badge: "Research",
     accent: "blue",
-  },
-  note: {
-    border: "border-emerald-500/30",
-    bg: "bg-card",
-    headerBg: "bg-emerald-500/10",
-    headerBorder: "border-emerald-500/20",
-    iconClass: "text-emerald-500",
-    badgeBg: "bg-emerald-500/20",
-    badgeText: "text-emerald-600 dark:text-emerald-400",
-    badge: "Note",
-    accent: "emerald",
   },
   llm: {
     border: "border-violet-500/30",
@@ -137,7 +126,6 @@ const NODE_STYLES: Record<
 const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   "context-doc": FileText,
   research: Sparkles,
-  note: StickyNote,
   llm: Brain,
   store: BookOpen,
   painter: Paintbrush,

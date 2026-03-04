@@ -19,6 +19,7 @@ import { useCanvasCollab } from "@/hooks/use-canvas-collab";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ShareDialog } from "@/components/ShareDialog";
+import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
 import {
   Dialog,
@@ -96,6 +97,7 @@ function FlowWorkspaceInner() {
 
   const [activeResearchNodeId, setActiveResearchNodeId] = useState<string | null>(null);
   const [activeDocumentNodeId, setActiveDocumentNodeId] = useState<string | null>(null);
+  const [activePainterNodeId, setActivePainterNodeId] = useState<string | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -479,11 +481,8 @@ function FlowWorkspaceInner() {
   useEffect(() => {
     if (activeTool === "context") {
       setActiveTool(null);
-      const hasStore = stateRef.current.nodes.some((n) => n.type === "store");
-      if (!hasStore) {
-        const pos = getCenter();
-        addNode("store", pos.x, pos.y, { label: "Context Store" });
-      }
+      const pos = getCenter();
+      setPendingContextAction({ x: pos.x, y: pos.y });
     }
     if (activeTool === "research") {
       setActiveTool(null);
@@ -587,35 +586,36 @@ function FlowWorkspaceInner() {
     [addNode, getPlacementCenter],
   );
 
-  // ── Research overlay: "Send to Notes" → creates note + edge ──
+  // ── Research overlay: "Send to Notes" → creates document + edge ──
 
   const handleResearchCapture = useCallback(
     (text: string, label: string) => {
-      let noteX: number, noteY: number;
+      let docX: number, docY: number;
       if (activeResearchNodeId) {
         const researchNode = stateRef.current.nodes.find((n) => n.id === activeResearchNodeId);
         if (researchNode) {
-          noteX = researchNode.x + researchNode.width / 2 + 40;
-          noteY = researchNode.y + researchNode.height + 60;
+          docX = researchNode.x + researchNode.width / 2 + 40;
+          docY = researchNode.y + researchNode.height + 60;
         } else {
           const pos = getPlacementCenter();
-          noteX = pos.x;
-          noteY = pos.y;
+          docX = pos.x;
+          docY = pos.y;
         }
       } else {
         const pos = getPlacementCenter();
-        noteX = pos.x;
-        noteY = pos.y;
+        docX = pos.x;
+        docY = pos.y;
       }
 
-      const noteId = addNode("note", noteX, noteY, {
+      const docId = addNode("document", docX, docY, {
         label: label || "Research finding",
         snippet: text.slice(0, 200),
         content: text,
+        documentContent: text,
       });
 
       if (activeResearchNodeId) {
-        addEdge(activeResearchNodeId, noteId);
+        addEdge(activeResearchNodeId, docId);
       }
     },
     [addNode, addEdge, getPlacementCenter, activeResearchNodeId],
@@ -652,23 +652,27 @@ function FlowWorkspaceInner() {
       if (node?.type === "research") {
         setActiveResearchNodeId(nodeId);
       }
-      if (node?.type === "document") {
+      if (node?.type === "document" && !node.imageUrl) {
         setActiveDocumentNodeId(nodeId);
         setDocEditorContent(node.documentContent || "");
+      }
+      if (node?.type === "painter") {
+        setActivePainterNodeId(nodeId);
       }
     },
     [state.nodes],
   );
 
-  // ── Create note from LLM output ──
+  // ── Create document from LLM output ──
 
   const handleCreateNote = useCallback(
     (content: string, label: string) => {
       const pos = getPlacementCenter();
-      addNode("note", pos.x, pos.y, {
+      addNode("document", pos.x, pos.y, {
         label,
         snippet: content.slice(0, 200),
         content,
+        documentContent: content,
       });
     },
     [addNode, getPlacementCenter],
@@ -704,13 +708,13 @@ function FlowWorkspaceInner() {
         .filter(Boolean) as FlowNode[];
 
       // Document nodes: no-op (they're static sources)
-      if (node.type === "document" || node.type === "context-doc" || node.type === "note") {
+      if (node.type === "document" || node.type === "context-doc") {
         toast({ title: "Already complete", description: "Document nodes are static sources" });
         return;
       }
 
       if (inputNodes.length === 0) {
-        toast({ title: "No inputs connected", description: "Connect document or note nodes first" });
+        toast({ title: "No inputs connected", description: "Connect document nodes first" });
         return;
       }
 
@@ -773,6 +777,54 @@ function FlowWorkspaceInner() {
               }
             }
           }
+        } else if (node.type === "painter") {
+          // Painter: summarize for visual prompt, then generate image via Gemini
+          const summaryRes = await apiRequest("POST", "/api/summarize-intent", {
+            transcript: combinedContent.slice(0, 8000),
+            context: "visual",
+            mode: "clean",
+          });
+          const summaryData = (await summaryRes.json()) as { summary?: string };
+          const imagePrompt = summaryData.summary || combinedContent.slice(0, 500);
+
+          const imgRes = await apiRequest("POST", "/api/generate-imagen", {
+            prompt: imagePrompt,
+            style: "Illustration, Vibrant mood",
+            aspectRatio: "16:9",
+            numberOfImages: 1,
+          });
+          const imgData = (await imgRes.json()) as { images?: string[]; error?: string };
+
+          if (imgData.images && imgData.images.length > 0) {
+            updateNode(nodeId, {
+              llmStatus: "done",
+              snippet: `Generated: ${imagePrompt.slice(0, 80)}...`,
+            });
+
+            // Create image document node
+            const imgNodeId = addNode("document", node.x + node.width + 60, node.y, {
+              label: `Image: ${imagePrompt.slice(0, 30)}...`,
+              snippet: "Generated image",
+              imageUrl: imgData.images[0],
+              content: imagePrompt,
+              documentContent: imagePrompt,
+            });
+            addEdge(nodeId, imgNodeId);
+            toast({ title: "Image generated" });
+          } else {
+            updateNode(nodeId, { llmStatus: "error", snippet: imgData.error || "Image generation failed" });
+            toast({ title: "Image generation failed", variant: "destructive" });
+          }
+
+          // Chain propagation for painter
+          const downstreamEdges2 = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
+          for (const edge of downstreamEdges2) {
+            const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
+            if (downstream && ["research", "interview", "painter", "timeline", "llm"].includes(downstream.type)) {
+              setTimeout(() => handlePlayNode(edge.toNodeId), 500);
+            }
+          }
+          return;
         } else if (node.type === "llm") {
           // LLM nodes already have their own Run button — delegate there
           toast({ title: "Use Run", description: "LLM nodes have their own Run button" });
@@ -1257,6 +1309,52 @@ function FlowWorkspaceInner() {
     ? state.nodes.find((n) => n.id === activeDocumentNodeId)
     : null;
 
+  const activePainterNode = activePainterNodeId
+    ? state.nodes.find((n) => n.id === activePainterNodeId)
+    : null;
+
+  // Gather input text for the painter from connected nodes
+  const painterSourceText = activePainterNodeId
+    ? (() => {
+        const inputEdges = state.edges.filter((e) => e.toNodeId === activePainterNodeId);
+        const inputNodes = inputEdges
+          .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
+          .filter(Boolean);
+        return inputNodes
+          .map((n) => n?.documentContent || n?.content || n?.snippet || "")
+          .filter(Boolean)
+          .join("\n\n");
+      })()
+    : "";
+
+  const handlePainterImageGenerated = useCallback(
+    (imageUrl: string, prompt: string) => {
+      if (!activePainterNodeId) return;
+      const painterNode = stateRef.current.nodes.find((n) => n.id === activePainterNodeId);
+
+      // Update the painter node to show it produced output
+      updateNode(activePainterNodeId, {
+        llmStatus: "done",
+        snippet: `Generated: ${prompt.slice(0, 80)}...`,
+      });
+
+      // Create an image document node positioned to the right of the painter
+      const imgX = (painterNode?.x ?? 0) + (painterNode?.width ?? 260) + 60;
+      const imgY = painterNode?.y ?? 0;
+      const imgNodeId = addNode("document", imgX, imgY, {
+        label: `Image: ${prompt.slice(0, 30)}${prompt.length > 30 ? "..." : ""}`,
+        snippet: "Generated image",
+        imageUrl,
+        content: prompt,
+        documentContent: prompt,
+      });
+
+      // Connect painter → image document
+      addEdge(activePainterNodeId, imgNodeId);
+    },
+    [activePainterNodeId, addNode, addEdge, updateNode],
+  );
+
   return (
     <FtuxShell>
       <FtuxStatusBar templateName="Flow" templateId={null} headerActions={headerActions} />
@@ -1531,6 +1629,38 @@ function FlowWorkspaceInner() {
                   />
                 </div>
               </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Full-screen Painter overlay */}
+      {activePainterNodeId &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200">
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-sm shrink-0">
+              <h2 className="text-sm font-semibold">
+                {activePainterNode?.label || "Painter"}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Generate images from connected document content or a custom prompt
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setActivePainterNodeId(null)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ArtifyPanel
+                sourceText={painterSourceText}
+                sourceLabel={painterSourceText ? "Connected nodes" : "No inputs"}
+                onClose={() => setActivePainterNodeId(null)}
+                onImageGenerated={handlePainterImageGenerated}
+              />
             </div>
           </div>,
           document.body,

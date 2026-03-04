@@ -1,8 +1,7 @@
 import React from "react";
-import { FileEdit, X } from "lucide-react";
+import { FileEdit, Image as ImageIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
-import { NODE_PORTS } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
 
 interface FlowDocumentNodeProps {
@@ -22,6 +21,7 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
   onDelete,
   onPortMouseDown,
 }: FlowDocumentNodeProps) {
+  const isImage = !!node.imageUrl;
   const preview = node.documentContent
     ? node.documentContent.slice(0, 200)
     : node.snippet || "Double-click to edit document";
@@ -31,7 +31,7 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
       className={cn(
         "absolute select-none rounded-lg border shadow-sm transition-shadow cursor-grab group",
         "hover:shadow-md",
-        "bg-card border-indigo-500/30",
+        isImage ? "bg-card border-rose-500/30" : "bg-card border-indigo-500/30",
         isSelected && "ring-2 ring-primary shadow-md",
       )}
       style={{
@@ -45,21 +45,42 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
       onDoubleClick={(e) => onDoubleClick(e, node.id)}
     >
       {/* Header */}
-      <div className="flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg bg-indigo-500/10 border-indigo-500/20">
-        <FileEdit className="w-3 h-3 shrink-0 text-indigo-500" />
+      <div className={cn(
+        "flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg",
+        isImage ? "bg-rose-500/10 border-rose-500/20" : "bg-indigo-500/10 border-indigo-500/20",
+      )}>
+        {isImage ? (
+          <ImageIcon className="w-3 h-3 shrink-0 text-rose-500" />
+        ) : (
+          <FileEdit className="w-3 h-3 shrink-0 text-indigo-500" />
+        )}
         <span className="text-[10px] font-medium truncate flex-1">
           {node.label}
         </span>
-        <span className="text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">
-          Document
+        <span className={cn(
+          "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
+          isImage
+            ? "bg-rose-500/20 text-rose-600 dark:text-rose-400"
+            : "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400",
+        )}>
+          {isImage ? "Image" : "Document"}
         </span>
       </div>
 
       {/* Content preview */}
       <div className="px-2 py-1.5 overflow-hidden flex-1">
-        <p className="text-[9px] text-muted-foreground leading-relaxed line-clamp-4">
-          {preview}
-        </p>
+        {isImage ? (
+          <img
+            src={node.imageUrl}
+            alt={node.label}
+            className="w-full h-full object-cover rounded"
+            draggable={false}
+          />
+        ) : (
+          <p className="text-[9px] text-muted-foreground leading-relaxed line-clamp-4">
+            {preview}
+          </p>
+        )}
       </div>
 
       {/* Port dots */}
@@ -67,7 +88,7 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
         node={node}
         isSelected={isSelected}
         onPortMouseDown={onPortMouseDown}
-        accentColor="indigo"
+        accentColor={isImage ? "rose" : "indigo"}
       />
 
       {/* Delete button */}
