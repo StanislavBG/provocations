@@ -6,6 +6,7 @@ import { generateId } from "@/lib/utils";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
 import { useToast } from "@/hooks/use-toast";
+import { useConversationTurn, type ConversationState } from "@/hooks/use-conversation-turn";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +119,21 @@ export function FlowInterviewOverlay({
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const mobileAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Ref to hold the latest handleAnswer for conversation turn callback
+  const handleAnswerRef = useRef<(answer: string) => void>(() => {});
+
+  // ── Conversation turn (True Interview mode) ──
+  const conversationTurn = useConversationTurn({
+    onTranscript: useCallback((text: string, isFinal: boolean) => {
+      if (isFinal && text.trim()) {
+        handleAnswerRef.current(text.trim());
+      } else {
+        setAnswerText(text);
+      }
+    }, []),
+    silenceTimeout: 1500,
+  });
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll on new entries
@@ -188,9 +204,14 @@ export function FlowInterviewOverlay({
     if (!ttsEnabled || !text.trim()) return;
     try {
       setIsSpeaking(true);
+      if (trueInterview) conversationTurn.startSpeaking();
       const res = await apiRequest("POST", "/api/tts", { text, voice: "nova" });
       const data = (await res.json()) as { audio: string; mimeType: string };
-      if (!data.audio) { setIsSpeaking(false); return; }
+      if (!data.audio) {
+        setIsSpeaking(false);
+        if (trueInterview) conversationTurn.finishSpeaking();
+        return;
+      }
       const byteChars = atob(data.audio);
       const byteArray = new Uint8Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) {
@@ -208,13 +229,20 @@ export function FlowInterviewOverlay({
       if (prevSrc && prevSrc.startsWith("blob:")) URL.revokeObjectURL(prevSrc);
       audio.src = url;
       ttsAudioRef.current = audio;
-      audio.onended = () => setIsSpeaking(false);
-      audio.onerror = () => setIsSpeaking(false);
+      audio.onended = () => {
+        setIsSpeaking(false);
+        if (trueInterview) conversationTurn.finishSpeaking();
+      };
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        if (trueInterview) conversationTurn.finishSpeaking();
+      };
       await audio.play();
     } catch {
       setIsSpeaking(false);
+      if (trueInterview) conversationTurn.finishSpeaking();
     }
-  }, [ttsEnabled]);
+  }, [ttsEnabled, trueInterview, conversationTurn]);
 
   // ── Input content from connected nodes ──
   const documentText = connectionContext?.inputContent ?? "";
@@ -276,16 +304,18 @@ export function FlowInterviewOverlay({
     }
     if (ttsEnabled) unlockMobileAudio();
     setIsActive(true);
+    if (trueInterview) conversationTurn.startProcessing();
     questionMutation.mutate(undefined);
     trackEvent("interview_started");
-  }, [objective, stance, questionMutation, toast, ttsEnabled, unlockMobileAudio]);
+  }, [objective, stance, questionMutation, toast, ttsEnabled, unlockMobileAudio, trueInterview, conversationTurn]);
 
   const handleStop = useCallback(() => {
     setIsActive(false);
     setCurrentQuestion(null);
     setCurrentTopic(null);
+    if (trueInterview) conversationTurn.reset();
     trackEvent("interview_ended", { metadata: { entryCount: String(entries.length) } });
-  }, [entries.length]);
+  }, [entries.length, trueInterview, conversationTurn]);
 
   const handleAnswer = useCallback(
     (answer: string) => {
@@ -303,10 +333,19 @@ export function FlowInterviewOverlay({
       setCurrentTopic(null);
       setAnswerText("");
       trackEvent("interview_answer");
+      // In true interview mode, transition back to PROCESSING for next question
+      if (trueInterview && conversationTurn.state === "LISTENING") {
+        conversationTurn.submitAnswer();
+      }
       questionMutation.mutate(nextEntries);
     },
-    [currentQuestion, currentTopic, questionMutation, entries],
+    [currentQuestion, currentTopic, questionMutation, entries, trueInterview, conversationTurn],
   );
+
+  // Keep handleAnswerRef in sync for conversation turn callback
+  useEffect(() => {
+    handleAnswerRef.current = handleAnswer;
+  }, [handleAnswer]);
 
   const handleSubmitAnswer = useCallback(() => {
     handleAnswer(answerText);
@@ -612,7 +651,9 @@ export function FlowInterviewOverlay({
                 <p className="text-sm text-muted-foreground/50 leading-relaxed">
                   Set your objective, choose an interview style, and click Start.
                   The journalist will ask probing questions — answer with voice or text.
-                  Say &quot;Provo Message&quot; to submit your answer.
+                  {trueInterview
+                    ? " In True Interview mode, answers auto-submit after a pause."
+                    : ' Say "Provo Message" to submit your answer.'}
                 </p>
               </div>
             </div>
@@ -677,65 +718,117 @@ export function FlowInterviewOverlay({
                     </div>
 
                     {/* Answer input area */}
-                    <div className="pl-6 space-y-1.5">
-                      <div className="flex items-end gap-2">
-                        <VoiceRecorder
-                          onTranscript={handleVoiceAnswer}
-                          onInterimTranscript={(t) => setAnswerText(t)}
-                          onRecordingChange={setIsRecordingAnswer}
-                          size="sm"
-                          variant={isRecordingAnswer ? "destructive" : "ghost"}
-                          className={`h-9 w-9 shrink-0 rounded-full ${isRecordingAnswer ? "animate-pulse" : "text-muted-foreground"}`}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <textarea
-                            value={answerText}
-                            onChange={(e) => setAnswerText(e.target.value)}
-                            placeholder={isRecordingAnswer ? "Listening..." : "Type your answer..."}
-                            className="w-full bg-muted/30 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground/50 resize-none outline-none px-3 py-2 min-h-[40px] max-h-[160px] leading-relaxed focus:ring-1 focus:ring-cyan-500/50"
-                            rows={2}
-                            onInput={(e) => {
-                              const target = e.target as HTMLTextAreaElement;
-                              target.style.height = "auto";
-                              target.style.height = Math.min(target.scrollHeight, 160) + "px";
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSubmitAnswer();
-                              }
-                            }}
-                          />
+                    {trueInterview && isActive ? (
+                      /* True Interview: hands-free conversation state indicator */
+                      <div className="pl-6 space-y-2">
+                        {/* Show live transcript when listening */}
+                        {conversationTurn.state === "LISTENING" && conversationTurn.currentTranscript && (
+                          <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-3">
+                            <p className="text-sm leading-relaxed text-muted-foreground italic">
+                              {conversationTurn.currentTranscript}
+                            </p>
+                          </div>
+                        )}
+                        {/* State indicators */}
+                        <div className="flex items-center justify-center gap-2 py-3">
+                          {conversationTurn.state === "PROCESSING" && (
+                            <div className="flex items-center gap-2 text-xs text-cyan-500">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Thinking...
+                            </div>
+                          )}
+                          {conversationTurn.state === "AI_SPEAKING" && (
+                            <div className="flex items-center gap-2 text-xs text-violet-500 animate-pulse">
+                              <Volume2 className="w-4 h-4" />
+                              Speaking...
+                              {/* Waveform bars */}
+                              <div className="flex items-end gap-0.5 h-4">
+                                {[1, 2, 3, 4, 5].map((i) => (
+                                  <div
+                                    key={i}
+                                    className="w-0.5 bg-violet-500 rounded-full animate-pulse"
+                                    style={{
+                                      height: `${8 + Math.random() * 8}px`,
+                                      animationDelay: `${i * 0.1}s`,
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {conversationTurn.state === "LISTENING" && (
+                            <div className="flex items-center gap-2 text-xs text-emerald-500 animate-pulse">
+                              <Mic className="w-4 h-4" />
+                              Listening...
+                              <span className="text-[10px] text-muted-foreground/60 font-normal">
+                                auto-submits after silence
+                              </span>
+                            </div>
+                          )}
+                          {conversationTurn.state === "IDLE" && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Radio className="w-4 h-4" />
+                              Ready
+                            </div>
+                          )}
                         </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={handleSubmitAnswer}
-                          disabled={!answerText.trim()}
-                          className="h-9 w-9 shrink-0"
-                        >
-                          <Send className="w-4 h-4" />
-                        </Button>
                       </div>
-                      {isRecordingAnswer && (
-                        <div className="flex items-center gap-1.5 text-xs text-cyan-500 animate-pulse">
-                          <Mic className="w-3 h-3" />
-                          Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo Message&quot; to submit</span>
+                    ) : (
+                      /* Standard mode: manual answer input */
+                      <div className="pl-6 space-y-1.5">
+                        <div className="flex items-end gap-2">
+                          <VoiceRecorder
+                            onTranscript={handleVoiceAnswer}
+                            onInterimTranscript={(t) => setAnswerText(t)}
+                            onRecordingChange={setIsRecordingAnswer}
+                            size="sm"
+                            variant={isRecordingAnswer ? "destructive" : "ghost"}
+                            className={`h-9 w-9 shrink-0 rounded-full ${isRecordingAnswer ? "animate-pulse" : "text-muted-foreground"}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <textarea
+                              value={answerText}
+                              onChange={(e) => setAnswerText(e.target.value)}
+                              placeholder={isRecordingAnswer ? "Listening..." : "Type your answer..."}
+                              className="w-full bg-muted/30 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground/50 resize-none outline-none px-3 py-2 min-h-[40px] max-h-[160px] leading-relaxed focus:ring-1 focus:ring-cyan-500/50"
+                              rows={2}
+                              onInput={(e) => {
+                                const target = e.target as HTMLTextAreaElement;
+                                target.style.height = "auto";
+                                target.style.height = Math.min(target.scrollHeight, 160) + "px";
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSubmitAnswer();
+                                }
+                              }}
+                            />
+                          </div>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={handleSubmitAnswer}
+                            disabled={!answerText.trim()}
+                            className="h-9 w-9 shrink-0"
+                          >
+                            <Send className="w-4 h-4" />
+                          </Button>
                         </div>
-                      )}
-                      {isSpeaking && (
-                        <div className="flex items-center gap-1.5 text-xs text-violet-500 animate-pulse">
-                          <Volume2 className="w-3 h-3" />
-                          Speaking question...
-                        </div>
-                      )}
-                      {trueInterview && !isSpeaking && !isRecordingAnswer && currentQuestion && (
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-500">
-                          <Mic className="w-3 h-3" />
-                          Your turn — tap mic to answer
-                        </div>
-                      )}
-                    </div>
+                        {isRecordingAnswer && (
+                          <div className="flex items-center gap-1.5 text-xs text-cyan-500 animate-pulse">
+                            <Mic className="w-3 h-3" />
+                            Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo Message&quot; to submit</span>
+                          </div>
+                        )}
+                        {isSpeaking && (
+                          <div className="flex items-center gap-1.5 text-xs text-violet-500 animate-pulse">
+                            <Volume2 className="w-3 h-3" />
+                            Speaking question...
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

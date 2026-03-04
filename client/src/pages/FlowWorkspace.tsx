@@ -118,7 +118,7 @@ const DOC_TOOLS = [
 // ── Inner workspace (needs shell context) ──
 
 function FlowWorkspaceInner() {
-  const { activeTool, setActiveTool, dockItems } = useFtuxShell();
+  const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasFontColor, canvasBgColor } = useFtuxShell();
   const {
     state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteEdge,
     selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
@@ -2153,7 +2153,15 @@ function FlowWorkspaceInner() {
         </div>
       )}
 
-      <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden">
+      <div
+        ref={canvasContainerRef}
+        className="flex-1 relative overflow-hidden"
+        style={{
+          ...(canvasBgColor && !bgAnimationOn ? { background: canvasBgColor } : {}),
+          ...(canvasFontSize && canvasFontSize !== 14 ? { fontSize: `${canvasFontSize}px` } : {}),
+          ...(canvasFontColor ? { color: canvasFontColor } : {}),
+        }}
+      >
         <FlowCanvas
           state={state}
           frozen={frozen}
@@ -2197,7 +2205,7 @@ function FlowWorkspaceInner() {
           onFitToView={fitToView}
         />
 
-        <FtuxDock />
+        {!dockHidden && <FtuxDock />}
         <FlowLoadingBar active={canvasLoading || isSaving} progress={canvasLoading ? loadProgress : undefined} />
       </div>
 

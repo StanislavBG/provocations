@@ -24,8 +24,32 @@ import {
   RotateCcw,
   Play,
   Keyboard,
+  Sparkles,
+  FileText,
+  Users,
+  ClipboardList,
+  Wand2,
+  Paintbrush,
+  BookOpen,
+  MessageCircleQuestion,
+  BarChart3,
+  Clock,
+  Brain,
+  AudioLines,
+  Youtube,
+  Timer,
+  CircuitBoard,
+  SquareDashedBottom,
+  Type as TypeIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  Sparkles, FileText, Users, ClipboardList, Wand2,
+  Paintbrush, BookOpen, MessageCircleQuestion, BarChart3, Clock,
+  Brain, AudioLines, Youtube, Timer, CircuitBoard, SquareDashedBottom, Type: TypeIcon,
+};
 
 const COLOR_PRESETS = [
   { label: "Default", value: null },
@@ -34,6 +58,26 @@ const COLOR_PRESETS = [
   { label: "Cool", value: "#0e1b2d" },
   { label: "Forest", value: "#0e2d1b" },
   { label: "Plum", value: "#2d0e2a" },
+];
+
+const FONT_SIZE_PRESETS = [12, 14, 16, 18, 20];
+
+const FONT_COLOR_PRESETS: { label: string; value: string | null }[] = [
+  { label: "Default", value: null },
+  { label: "White", value: "#ffffff" },
+  { label: "Light Gray", value: "#c8c8c8" },
+  { label: "Warm", value: "#e8d5b7" },
+  { label: "Cool", value: "#b7d5e8" },
+  { label: "Dark", value: "#3a3a3a" },
+];
+
+const BG_COLOR_PRESETS: { label: string; value: string | null }[] = [
+  { label: "Default", value: null },
+  { label: "Dark", value: "#111118" },
+  { label: "Warm Dark", value: "#1a1510" },
+  { label: "Cool Dark", value: "#10151a" },
+  { label: "Midnight", value: "#0d0d1a" },
+  { label: "Forest", value: "#0d1a12" },
 ];
 
 interface FtuxSettingsDialogProps {
@@ -62,6 +106,17 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
 
           {/* Dock settings */}
           <TabsContent value="dock" className="space-y-4 mt-4">
+            {/* Show/hide dock */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Show Dock</Label>
+              <Switch
+                checked={!shell.dockHidden}
+                onCheckedChange={(val) => shell.setDockHidden(!val)}
+              />
+            </div>
+
+            <Separator />
+
             {/* Position */}
             <div className="space-y-2">
               <Label className="text-xs">Position</Label>
@@ -296,30 +351,36 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
 
             <div className="space-y-2">
               <Label className="text-xs">Pinned Items</Label>
-              {shell.statusBarPinnedItems.length === 0 ? (
-                <p className="text-[10px] text-muted-foreground/60">
-                  No pinned items. Use the hamburger menu to pin tools to the status bar.
-                </p>
-              ) : (
-                <div className="space-y-1">
-                  {shell.statusBarPinnedItems.map((itemId) => (
+              <p className="text-[10px] text-muted-foreground/60">
+                Toggle tools to pin/unpin them from the status bar.
+              </p>
+              <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                {shell.dockItems.map((item) => {
+                  const isPinned = shell.statusBarPinnedItems.includes(item.toolId);
+                  const IconComp = ICON_MAP[item.icon] ?? Sparkles;
+                  return (
                     <div
-                      key={itemId}
+                      key={item.toolId}
                       className="flex items-center justify-between rounded-lg border px-3 py-1.5"
                     >
-                      <span className="text-xs capitalize">{itemId}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-5 h-5 rounded text-muted-foreground hover:text-destructive"
-                        onClick={() => shell.removeStatusBarPinnedItem(itemId)}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <IconComp className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-xs">{item.label}</span>
+                      </div>
+                      <Switch
+                        checked={isPinned}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            shell.addStatusBarPinnedItem(item.toolId);
+                          } else {
+                            shell.removeStatusBarPinnedItem(item.toolId);
+                          }
+                        }}
+                      />
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           </TabsContent>
 
@@ -413,7 +474,7 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
           </TabsContent>
 
           {/* Appearance settings */}
-          <TabsContent value="appearance" className="space-y-4 mt-4">
+          <TabsContent value="appearance" className="space-y-4 mt-4 max-h-[400px] overflow-y-auto pr-1">
             <div className="flex items-center justify-between">
               <Label className="text-xs">Theme</Label>
               <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
@@ -421,6 +482,74 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
             <div className="flex items-center justify-between">
               <Label className="text-xs">Color Palette</Label>
               <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
+            </div>
+
+            <Separator />
+
+            {/* Canvas Font Size */}
+            <div className="space-y-1">
+              <Label className="text-xs">Canvas Font Size</Label>
+              <div className="flex gap-1">
+                {FONT_SIZE_PRESETS.map((size) => (
+                  <button
+                    key={size}
+                    className={`flex-1 text-[10px] py-1 rounded border transition-colors ${
+                      (shell.canvasFontSize ?? 14) === size
+                        ? "bg-primary/15 border-primary/40 text-primary font-medium"
+                        : "border-border/40 text-muted-foreground hover:bg-muted/50"
+                    }`}
+                    onClick={() => shell.setCanvasFontSize(size)}
+                  >
+                    {size}px
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Canvas Font Color */}
+            <div className="space-y-2">
+              <Label className="text-xs">Canvas Font Color</Label>
+              <div className="flex items-center gap-2">
+                {FONT_COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => shell.setCanvasFontColor(preset.value)}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-all",
+                      shell.canvasFontColor === preset.value
+                        ? "border-primary scale-110"
+                        : "border-border/50 hover:border-border",
+                    )}
+                    style={{
+                      background: preset.value ?? "hsl(var(--foreground))",
+                    }}
+                    title={preset.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Canvas Background Color */}
+            <div className="space-y-2">
+              <Label className="text-xs">Canvas Background</Label>
+              <div className="flex items-center gap-2">
+                {BG_COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => shell.setCanvasBgColor(preset.value)}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-all",
+                      shell.canvasBgColor === preset.value
+                        ? "border-primary scale-110"
+                        : "border-border/50 hover:border-border",
+                    )}
+                    style={{
+                      background: preset.value ?? "hsl(var(--background))",
+                    }}
+                    title={preset.label}
+                  />
+                ))}
+              </div>
             </div>
           </TabsContent>
 
