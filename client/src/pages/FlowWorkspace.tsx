@@ -88,12 +88,44 @@ const DOC_TOOLS = [
 function FlowWorkspaceInner() {
   const { activeTool, setActiveTool, dockItems } = useFtuxShell();
   const {
-    state, addNode, addEdge, updateNode, moveNode, moveNodes, deleteNode, deleteEdge,
-    selectNode, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
+    state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteEdge,
+    selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
+    undo, redo,
   } = useFlowCanvas();
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { user } = useUser();
+
+  // Track mouse position over canvas for dock-shortcut placement
+  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      mousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("mousemove", handler);
+    return () => window.removeEventListener("mousemove", handler);
+  }, []);
+
+  /** Convert current mouse screen position to canvas coordinates */
+  const getCanvasPosAtMouse = useCallback(() => {
+    const el = canvasContainerRef.current;
+    const rect = el?.getBoundingClientRect();
+    const s = stateRef.current;
+    if (!rect) {
+      // Fallback to center
+      const w = el?.clientWidth ?? 800;
+      const h = el?.clientHeight ?? 600;
+      return {
+        x: (-s.viewport.x + w / 2) / s.viewport.zoom,
+        y: (-s.viewport.y + h / 2) / s.viewport.zoom,
+      };
+    }
+    return {
+      x: (mousePosRef.current.x - rect.left - s.viewport.x) / s.viewport.zoom,
+      y: (mousePosRef.current.y - rect.top - s.viewport.y) / s.viewport.zoom,
+    };
+  }, []);
 
   const [activeResearchNodeId, setActiveResearchNodeId] = useState<string | null>(null);
   const [activeDocumentNodeId, setActiveDocumentNodeId] = useState<string | null>(null);
@@ -110,10 +142,13 @@ function FlowWorkspaceInner() {
   const [collabEnabled, setCollabEnabled] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
 
-  // ── Refs for accessing latest state in callbacks ──
+  // ── Refs for accessing latest state/callbacks in keyboard handlers ──
 
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // Ref to handleDropTool so keyboard shortcuts can call it (declared later)
+  const handleDropToolRef = useRef<(toolId: string, cx: number, cy: number) => void>(() => {});
 
   // ── Real-time collaboration ──
 
@@ -175,29 +210,57 @@ function FlowWorkspaceInner() {
     }
   }, [collabConnected, state.nodes, state.edges, state.viewport, sendFullSync]);
 
-  // ── Keyboard shortcuts: 1-6 → dock items ──
+  // ── Keyboard shortcuts: 1-9 → dock items (placed at mouse cursor) ──
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Don't trigger if user is typing in an input/textarea/contenteditable
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
-      // Don't trigger with modifier keys (except shift for future use)
+      // Don't trigger with modifier keys
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      // If context action menu is open, 1/2/3 pick from it
+      if (pendingContextAction && !pendingContextAction.mode) {
+        if (e.key === "1") {
+          setPendingContextAction({ ...pendingContextAction, mode: "load" });
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "2") {
+          const pos = pendingContextAction;
+          addNode("document", pos.x, pos.y, {
+            label: "New Document",
+            snippet: "Double-click to edit",
+            documentContent: "",
+          });
+          setPendingContextAction(null);
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "3") {
+          setPendingContextAction({ ...pendingContextAction, mode: "save" });
+          e.preventDefault();
+          return;
+        }
+      }
 
       const num = parseInt(e.key, 10);
       if (num >= 1 && num <= 9) {
         const index = num - 1;
         if (index < dockItems.length) {
-          setActiveTool(dockItems[index].toolId);
+          // Place at mouse cursor position instead of center
+          const pos = getCanvasPosAtMouse();
+          const toolId = dockItems[index].toolId;
+          handleDropToolRef.current(toolId, pos.x, pos.y);
         }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [dockItems, setActiveTool]);
+  }, [dockItems, pendingContextAction, addNode, getCanvasPosAtMouse]);
 
-  // ── Copy-paste nodes (Ctrl+C / Ctrl+V) ──
+  // ── Copy-paste, undo/redo, select all, escape ──
 
   const clipboardRef = useRef<{ nodes: FlowNode[]; edges: FlowEdge[] } | null>(null);
 
@@ -205,6 +268,33 @@ function FlowWorkspaceInner() {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+
+      // Ctrl+Z — undo
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        undo();
+        e.preventDefault();
+        return;
+      }
+
+      // Ctrl+Shift+Z or Ctrl+Y — redo
+      if ((e.ctrlKey || e.metaKey) && ((e.key === "z" && e.shiftKey) || e.key === "y")) {
+        redo();
+        e.preventDefault();
+        return;
+      }
+
+      // Ctrl+A — select all
+      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+        selectAll();
+        e.preventDefault();
+        return;
+      }
+
+      // Escape — deselect all
+      if (e.key === "Escape") {
+        selectNode(null);
+        return;
+      }
 
       // Ctrl+C — copy selected nodes
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
@@ -219,15 +309,27 @@ function FlowWorkspaceInner() {
         e.preventDefault();
       }
 
-      // Ctrl+V — paste copied nodes
+      // Ctrl+V — paste at mouse position
       if ((e.ctrlKey || e.metaKey) && e.key === "v" && clipboardRef.current) {
         const { nodes: srcNodes, edges: srcEdges } = clipboardRef.current;
         const idMap = new Map<string, string>();
-        const OFFSET = 40;
 
-        // Create new nodes offset from originals
+        // Compute bounding box center of source nodes
+        const minX = Math.min(...srcNodes.map((n) => n.x));
+        const minY = Math.min(...srcNodes.map((n) => n.y));
+        const maxX = Math.max(...srcNodes.map((n) => n.x + n.width));
+        const maxY = Math.max(...srcNodes.map((n) => n.y + n.height));
+        const srcCenterX = (minX + maxX) / 2;
+        const srcCenterY = (minY + maxY) / 2;
+
+        // Paste at mouse position (canvas coords)
+        const target = getCanvasPosAtMouse();
+        const offsetX = target.x - srcCenterX;
+        const offsetY = target.y - srcCenterY;
+
+        // Create new nodes offset to mouse position
         for (const src of srcNodes) {
-          const newId = addNode(src.type, src.x + OFFSET, src.y + OFFSET, {
+          const newId = addNode(src.type, src.x + src.width / 2 + offsetX, src.y + src.height / 2 + offsetY, {
             label: src.label,
             snippet: src.snippet,
             content: src.content,
@@ -239,6 +341,7 @@ function FlowWorkspaceInner() {
             llmObjective: src.llmObjective,
             llmStatus: "idle",
             audioTranscript: src.audioTranscript,
+            imageUrl: src.imageUrl,
           });
           idMap.set(src.id, newId);
         }
@@ -252,6 +355,8 @@ function FlowWorkspaceInner() {
           }
         }
 
+        // Select the pasted nodes
+        selectNodes(Array.from(idMap.values()));
         toast({ title: `Pasted ${srcNodes.length} node${srcNodes.length > 1 ? "s" : ""}` });
         e.preventDefault();
       }
@@ -266,7 +371,7 @@ function FlowWorkspaceInner() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [addNode, addEdge, deleteNode, toast]);
+  }, [addNode, addEdge, deleteNode, selectNode, selectNodes, selectAll, undo, redo, toast]);
 
   // ── Helper: compute canvas center for placing new nodes ──
 
@@ -476,85 +581,13 @@ function FlowWorkspaceInner() {
   const docs = docsData?.documents ?? [];
   const canvasDocs = docs.filter((d) => d.docType === "chart");
 
-  // ── Intercept dock clicks ──
+  // ── Intercept dock clicks — place at mouse cursor ──
 
   useEffect(() => {
-    if (activeTool === "context") {
-      setActiveTool(null);
-      const pos = getCenter();
-      setPendingContextAction({ x: pos.x, y: pos.y });
-    }
-    if (activeTool === "research") {
-      setActiveTool(null);
-      const pos = getCenter();
-      addNode("research", pos.x, pos.y, {
-        label: "Research",
-        snippet: "Double-click to start researching",
-      });
-    }
-    if (activeTool === "llm") {
-      setActiveTool(null);
-      const pos = getCenter();
-      const defaultPreset = getPreset("summarize");
-      addNode("llm", pos.x, pos.y, {
-        label: "Text Modifications",
-        llmPresetId: defaultPreset.id,
-        llmObjective: defaultPreset.defaultObjective,
-        llmStatus: "idle",
-      });
-    }
-    if (activeTool === "painter") {
-      setActiveTool(null);
-      const pos = getCenter();
-      addNode("painter", pos.x, pos.y, {
-        label: "Painter",
-        snippet: "Double-click to generate images",
-      });
-    }
-    if (activeTool === "interview") {
-      setActiveTool(null);
-      const pos = getCenter();
-      addNode("interview", pos.x, pos.y, {
-        label: "Interview",
-        snippet: "Double-click to start interview",
-      });
-    }
-    if (activeTool === "timeline") {
-      setActiveTool(null);
-      const pos = getCenter();
-      addNode("timeline", pos.x, pos.y, {
-        label: "Timeline",
-        snippet: "Double-click to build a timeline",
-      });
-    }
-    if (activeTool === "document") {
-      setActiveTool(null);
-      const pos = getCenter();
-      addNode("document", pos.x, pos.y, {
-        label: "New Document",
-        snippet: "Double-click to edit",
-        documentContent: "",
-      });
-    }
-    if (activeTool === "zone") {
-      setActiveTool(null);
-      const pos = getCenter();
-      addNode("zone", pos.x, pos.y, {
-        label: "Zone",
-        zoneLabel: "Zone",
-        zoneColor: "gray",
-      });
-    }
-    if (activeTool === "audio") {
-      setActiveTool(null);
-      const pos = getCenter();
-      addNode("audio", pos.x, pos.y, {
-        label: "Capture Audio",
-        snippet: "Click mic to start recording",
-        audioRecording: false,
-        audioTranscript: "",
-      });
-    }
+    if (!activeTool) return;
+    setActiveTool(null);
+    const pos = getCanvasPosAtMouse();
+    handleDropToolRef.current(activeTool, pos.x, pos.y);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool]);
 
@@ -970,6 +1003,9 @@ function FlowWorkspaceInner() {
     [addNode],
   );
 
+  // Keep ref in sync for keyboard shortcuts
+  handleDropToolRef.current = handleDropTool;
+
   // ── Context Store: Load File from dialog ──
 
   const handleDocPickFromDialog = useCallback(
@@ -1379,6 +1415,7 @@ function FlowWorkspaceInner() {
           onMoveNodes={moveNodes}
           onDeleteNode={deleteNode}
           onSelectNode={selectNode}
+          onSelectNodes={selectNodes}
           onToggleSelectNode={toggleSelectNode}
           onNodeDoubleClick={handleNodeDoubleClick}
           onViewportChange={setViewport}
@@ -1389,6 +1426,7 @@ function FlowWorkspaceInner() {
           onDeleteEdge={deleteEdge}
           onPlayNode={handlePlayNode}
           onDropTool={handleDropTool}
+          onDragStart={pushUndoSnapshot}
         />
 
         <FtuxDock />
@@ -1409,6 +1447,7 @@ function FlowWorkspaceInner() {
               className="justify-start gap-2 h-12"
               onClick={() => setPendingContextAction((prev) => prev ? { ...prev, mode: "load" } : null)}
             >
+              <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">1</span>
               <FolderOpen className="w-4 h-4 text-primary" />
               <div className="text-left">
                 <div className="text-xs font-medium">Load File</div>
@@ -1428,6 +1467,7 @@ function FlowWorkspaceInner() {
                 setPendingContextAction(null);
               }}
             >
+              <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">2</span>
               <FilePlus2 className="w-4 h-4 text-indigo-500" />
               <div className="text-left">
                 <div className="text-xs font-medium">New Document</div>
@@ -1445,6 +1485,7 @@ function FlowWorkspaceInner() {
                 setPendingContextAction(null);
               }}
             >
+              <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">3</span>
               <FolderInput className="w-4 h-4 text-primary" />
               <div className="text-left">
                 <div className="text-xs font-medium">Save File</div>

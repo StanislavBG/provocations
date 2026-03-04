@@ -126,10 +126,10 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
   return (
     <div
       className={cn(
-        "absolute select-none rounded-lg border shadow-sm transition-shadow group flex flex-col",
-        "bg-card hover:shadow-md",
-        isRecording ? "border-red-500/60 ring-1 ring-red-500/30" : "border-red-500/30",
-        isSelected && "ring-2 ring-primary shadow-md",
+        "absolute select-none rounded-lg border-2 shadow-md transition-shadow group flex flex-col",
+        "bg-card hover:shadow-lg",
+        isRecording ? "border-red-500/80 ring-1 ring-red-500/40" : "border-red-500/60",
+        isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{
         left: node.x,

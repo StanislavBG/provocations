@@ -4,13 +4,13 @@ import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 
 const ZONE_COLORS: Record<string, { border: string; bg: string; text: string; swatch: string }> = {
-  blue: { border: "border-blue-400/40", bg: "bg-blue-400/5", text: "text-blue-400", swatch: "bg-blue-400" },
-  green: { border: "border-emerald-400/40", bg: "bg-emerald-400/5", text: "text-emerald-400", swatch: "bg-emerald-400" },
-  amber: { border: "border-amber-400/40", bg: "bg-amber-400/5", text: "text-amber-400", swatch: "bg-amber-400" },
-  rose: { border: "border-rose-400/40", bg: "bg-rose-400/5", text: "text-rose-400", swatch: "bg-rose-400" },
-  violet: { border: "border-violet-400/40", bg: "bg-violet-400/5", text: "text-violet-400", swatch: "bg-violet-400" },
-  cyan: { border: "border-cyan-400/40", bg: "bg-cyan-400/5", text: "text-cyan-400", swatch: "bg-cyan-400" },
-  gray: { border: "border-muted-foreground/30", bg: "bg-muted/5", text: "text-muted-foreground", swatch: "bg-muted-foreground" },
+  blue: { border: "border-blue-400/50", bg: "bg-blue-400/8", text: "text-blue-400", swatch: "bg-blue-400" },
+  green: { border: "border-emerald-400/50", bg: "bg-emerald-400/8", text: "text-emerald-400", swatch: "bg-emerald-400" },
+  amber: { border: "border-amber-400/50", bg: "bg-amber-400/8", text: "text-amber-400", swatch: "bg-amber-400" },
+  rose: { border: "border-rose-400/50", bg: "bg-rose-400/8", text: "text-rose-400", swatch: "bg-rose-400" },
+  violet: { border: "border-violet-400/50", bg: "bg-violet-400/8", text: "text-violet-400", swatch: "bg-violet-400" },
+  cyan: { border: "border-cyan-400/50", bg: "bg-cyan-400/8", text: "text-cyan-400", swatch: "bg-cyan-400" },
+  gray: { border: "border-muted-foreground/40", bg: "bg-muted/8", text: "text-muted-foreground", swatch: "bg-muted-foreground" },
 };
 
 const COLOR_KEYS = Object.keys(ZONE_COLORS);

@@ -17,6 +17,7 @@ interface FlowCanvasProps {
   onMoveNodes?: (nodeIds: string[], dx: number, dy: number) => void;
   onDeleteNode: (nodeId: string) => void;
   onSelectNode: (nodeId: string | null) => void;
+  onSelectNodes?: (nodeIds: string[]) => void;
   onToggleSelectNode: (nodeId: string) => void;
   onNodeDoubleClick: (nodeId: string) => void;
   onViewportChange: (x: number, y: number, zoom: number) => void;
@@ -27,6 +28,7 @@ interface FlowCanvasProps {
   onDeleteEdge?: (edgeId: string) => void;
   onPlayNode?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
+  onDragStart?: () => void;
 }
 
 const GRID_SIZE = 20;
@@ -63,6 +65,7 @@ export function FlowCanvas({
   onMoveNodes,
   onDeleteNode,
   onSelectNode,
+  onSelectNodes,
   onToggleSelectNode,
   onNodeDoubleClick,
   onViewportChange,
@@ -73,6 +76,7 @@ export function FlowCanvas({
   onDeleteEdge,
   onPlayNode,
   onDropTool,
+  onDragStart,
 }: FlowCanvasProps) {
   const {
     canvasRef,
@@ -85,17 +89,22 @@ export function FlowCanvas({
     handlePortMouseDown,
     screenToCanvas,
     isDragging,
+    isPanning,
     isDrawingEdge,
+    isMarquee,
     previewEdge,
+    marqueeRect,
   } = useFlowInteraction({
     viewport: state.viewport,
     onViewportChange,
     onNodeMove: onMoveNode,
     onNodesMove: onMoveNodes,
     onSelectNode,
+    onSelectNodes,
     onToggleSelectNode,
     onNodeDoubleClick,
     onEdgeCreate: onCreateEdge,
+    onDragStart,
     nodes: state.nodes,
   });
 
@@ -168,9 +177,11 @@ export function FlowCanvas({
     ? "cursor-not-allowed"
     : isDrawingEdge
       ? "cursor-crosshair"
-      : isDragging
+      : isPanning
         ? "cursor-grabbing"
-        : "cursor-default";
+        : isMarquee
+          ? "cursor-crosshair"
+          : "cursor-default";
 
   return (
     <div
@@ -289,6 +300,19 @@ export function FlowCanvas({
               onPlayNode={onPlayNode}
             />
           ),
+        )}
+
+        {/* Marquee selection rectangle */}
+        {marqueeRect && marqueeRect.width > 2 && marqueeRect.height > 2 && (
+          <div
+            className="absolute border-2 border-primary/60 bg-primary/10 rounded-sm pointer-events-none"
+            style={{
+              left: marqueeRect.x,
+              top: marqueeRect.y,
+              width: marqueeRect.width,
+              height: marqueeRect.height,
+            }}
+          />
         )}
       </div>
 

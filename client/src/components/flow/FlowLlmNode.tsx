@@ -135,9 +135,9 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
   return (
     <div
       className={cn(
-        "absolute select-none rounded-lg border shadow-sm transition-shadow group flex flex-col",
-        "bg-card border-violet-500/30 hover:shadow-md",
-        isSelected && "ring-2 ring-primary shadow-md",
+        "absolute select-none rounded-lg border-2 shadow-md transition-shadow group flex flex-col",
+        "bg-card border-violet-500/60 hover:shadow-lg",
+        isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{
         left: node.x,
@@ -149,7 +149,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
     >
       {/* Draggable header */}
       <div
-        className="flex items-center gap-1.5 px-2 py-1 border-b bg-violet-500/10 border-violet-500/20 rounded-t-lg cursor-grab shrink-0"
+        className="flex items-center gap-1.5 px-2 py-1 border-b bg-violet-500/15 border-violet-500/40 rounded-t-lg cursor-grab shrink-0"
         onMouseDown={(e) => onMouseDown(e, node.id)}
       >
         <Brain className="w-3 h-3 text-violet-500 shrink-0" />

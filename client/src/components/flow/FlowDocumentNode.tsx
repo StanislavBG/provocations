@@ -29,10 +29,10 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
   return (
     <div
       className={cn(
-        "absolute select-none rounded-lg border shadow-sm transition-shadow cursor-grab group",
-        "hover:shadow-md",
-        isImage ? "bg-card border-rose-500/30" : "bg-card border-indigo-500/30",
-        isSelected && "ring-2 ring-primary shadow-md",
+        "absolute select-none rounded-lg border-2 shadow-md transition-shadow cursor-grab group",
+        "hover:shadow-lg",
+        isImage ? "bg-card border-rose-500/60" : "bg-card border-indigo-500/60",
+        isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{
         left: node.x,
@@ -47,7 +47,7 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
       {/* Header */}
       <div className={cn(
         "flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg",
-        isImage ? "bg-rose-500/10 border-rose-500/20" : "bg-indigo-500/10 border-indigo-500/20",
+        isImage ? "bg-rose-500/15 border-rose-500/40" : "bg-indigo-500/15 border-indigo-500/40",
       )}>
         {isImage ? (
           <ImageIcon className="w-3 h-3 shrink-0 text-rose-500" />
