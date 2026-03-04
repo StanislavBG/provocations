@@ -9,11 +9,26 @@ interface FlowEdgeLayerProps {
   onDeleteEdge?: (edgeId: string) => void;
 }
 
-function computeEndpoints(from: FlowNode, to: FlowNode) {
+/**
+ * Research node zone offsets (fraction of node height from top).
+ * objective → top 25%, context → middle 50%, output → bottom 75%
+ */
+const RESEARCH_ZONE_Y: Record<string, number> = {
+  objective: 0.2,
+  context: 0.5,
+};
+
+function computeEndpoints(from: FlowNode, to: FlowNode, role?: string) {
   const fromCx = from.x + from.width / 2;
   const fromCy = from.y + from.height / 2;
+
+  // For research nodes with a known role, target a specific vertical zone
+  let toCy = to.y + to.height / 2;
+  if (to.type === "research" && role && RESEARCH_ZONE_Y[role] !== undefined) {
+    toCy = to.y + to.height * RESEARCH_ZONE_Y[role];
+  }
   const toCx = to.x + to.width / 2;
-  const toCy = to.y + to.height / 2;
+
   const dx = toCx - fromCx;
   const dy = toCy - fromCy;
 
@@ -154,7 +169,7 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         const to = nodeMap.get(edge.toNodeId);
         if (!from || !to) return null;
 
-        const { x1, y1, x2, y2 } = computeEndpoints(from, to);
+        const { x1, y1, x2, y2 } = computeEndpoints(from, to, edge.role);
         const mx = (x1 + x2) / 2;
         const my = (y1 + y2) / 2;
 

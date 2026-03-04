@@ -8,6 +8,8 @@ import { FlowStoreNode } from "./FlowStoreNode";
 import { FlowLlmNode } from "./FlowLlmNode";
 import { FlowDocumentNode } from "./FlowDocumentNode";
 import { FlowZoneNode } from "./FlowZoneNode";
+import { FlowLabelNode } from "./FlowLabelNode";
+import { FlowResearchNode } from "./FlowResearchNode";
 import { FlowAudioNode } from "./FlowAudioNode";
 import { FlowYoutubeNode } from "./FlowYoutubeNode";
 import { FlowTimerEventNode } from "./FlowTimerEventNode";
@@ -217,6 +219,9 @@ export function FlowCanvas({
     if (node.type === "llm") return (
       <FlowLlmNode key={node.id} node={node} isSelected={sel} allNodes={state.nodes} selectedNodeIds={state.selectedNodeIds} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onCreateNote={onCreateNote} onPortMouseDown={handlePortMouseDown} />
     );
+    if (node.type === "research") return (
+      <FlowResearchNode key={node.id} node={node} edges={state.edges} isSelected={sel} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onPlayNode={onPlayNode} />
+    );
     if (node.type === "audio") return (
       <FlowAudioNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
     );
@@ -231,6 +236,9 @@ export function FlowCanvas({
     );
     if (node.type === "document") return (
       <FlowDocumentNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onPortMouseDown={handlePortMouseDown} />
+    );
+    if (node.type === "label") return (
+      <FlowLabelNode key={node.id} node={node} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} />
     );
 
     // All other types: unified FlowNodeContainer with default snippet body
@@ -247,7 +255,7 @@ export function FlowCanvas({
         onPlayNode={onPlayNode}
       />
     );
-  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote]);
+  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote]);
 
   const cursorClass = frozen
     ? "cursor-not-allowed"
