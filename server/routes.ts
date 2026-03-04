@@ -71,6 +71,7 @@ import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
+import { YoutubeTranscript } from "youtube-transcript";
 import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable } from "../shared/models/chat";
 
 function getEncryptionKey(): string {
@@ -5657,11 +5658,27 @@ Output ONLY the JSON — no markdown, no explanation.`,
 
       const { videoId, videoUrl, videoTitle, thumbnailUrl } = parsed.data;
 
-      // Extract transcript from the video
-      const transcriptResponse = await llm.generate({
-        maxTokens: 4096,
-        temperature: 0.4,
-        system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript of what the speaker might say in this video.
+      let transcript = "";
+
+      // Attempt real transcript extraction first
+      try {
+        console.log(`[YouTube] Fetching real transcript for video: ${videoId}`);
+        const segments = await YoutubeTranscript.fetchTranscript(videoId);
+        if (segments && segments.length > 0) {
+          transcript = segments.map((s: { text: string }) => s.text).join(" ");
+          console.log(`[YouTube] Got real transcript: ${transcript.length} chars, ${segments.length} segments`);
+        }
+      } catch (ytErr) {
+        console.warn(`[YouTube] Real transcript unavailable for ${videoId}:`, ytErr instanceof Error ? ytErr.message : ytErr);
+      }
+
+      // Fallback: use LLM to generate a synthetic transcript if real one is unavailable
+      if (!transcript) {
+        console.log(`[YouTube] Falling back to LLM-generated transcript for: ${videoTitle}`);
+        const transcriptResponse = await llm.generate({
+          maxTokens: 4096,
+          temperature: 0.4,
+          system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript of what the speaker might say in this video.
 
 The transcript should:
 - Be 800-1500 words
@@ -5671,18 +5688,18 @@ The transcript should:
 - Feel like a real video transcript
 
 Output ONLY the transcript text. No timestamps, no speaker labels, no markdown.`,
-        messages: [
-          {
-            role: "user",
-            content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})
+          messages: [
+            {
+              role: "user",
+              content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})
 Generate a detailed transcript of this video's content.`,
-          },
-        ],
-      });
+            },
+          ],
+        });
+        transcript = transcriptResponse.text.trim();
+      }
 
-      const transcript = transcriptResponse.text.trim();
-
-      // Return transcript only — client uses shared pipeline for summarize + infographic
+      // Return transcript — client uses shared pipeline for summarize + infographic
       res.json({
         videoId,
         videoTitle: videoTitle || "Untitled Video",
