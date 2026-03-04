@@ -85,11 +85,12 @@ export function FtuxDock() {
     removeStatusBarPinnedItem,
   } = shell;
 
-  // Button size dimensions
+  // Button size dimensions — "large" expands when snapped
+  const isLargeSnapped = dockButtonSize === "large" && dockSnapped;
   const sizeMap = {
-    small: { slot: "w-11", slotH: dockShowLabels ? "h-13" : "h-10", btn: "w-8 h-8", icon: "w-4 h-4", label: "text-[7px]" },
-    medium: { slot: "w-14", slotH: dockShowLabels ? "h-16" : "h-12", btn: "w-10 h-10", icon: "w-5 h-5", label: "text-[8px]" },
-    large: { slot: "w-18", slotH: dockShowLabels ? "h-20" : "h-16", btn: "w-14 h-14", icon: "w-6 h-6", label: "text-[9px]" },
+    small: { slot: "w-11", slotH: dockShowLabels ? "h-13" : "h-10", btn: "w-8 h-8", icon: "w-4 h-4", label: "text-[7px]", labelMax: "max-w-[52px]" },
+    medium: { slot: "w-14", slotH: dockShowLabels ? "h-16" : "h-12", btn: "w-10 h-10", icon: "w-5 h-5", label: "text-[8px]", labelMax: "max-w-[52px]" },
+    large: { slot: isLargeSnapped ? "min-w-[72px]" : "w-18", slotH: dockShowLabels ? "h-20" : "h-16", btn: isLargeSnapped ? "w-14 h-14" : "w-14 h-14", icon: isLargeSnapped ? "w-8 h-8" : "w-6 h-6", label: isLargeSnapped ? "text-[11px] font-medium" : "text-[9px]", labelMax: isLargeSnapped ? "max-w-[80px]" : "max-w-[52px]" },
   };
   const sz = sizeMap[dockButtonSize ?? "medium"];
 
@@ -237,7 +238,8 @@ export function FtuxDock() {
         className={cn(
           positionClasses[dockPosition],
           "flex items-center gap-1.5 p-2 transition-all duration-300",
-          dockSnapped && "justify-center",
+          dockSnapped && !isLargeSnapped && "justify-center",
+          isLargeSnapped && "px-4",
           !isVisible && dockPosition === "bottom" && "translate-y-full opacity-0",
           !isVisible && dockPosition === "top" && "-translate-y-full opacity-0",
           !isVisible && dockPosition === "left" && "-translate-x-full opacity-0",
@@ -261,9 +263,9 @@ export function FtuxDock() {
       >
         {/* 2-row grid of tool slots */}
         <div
-          className="grid gap-0.5"
+          className={cn("grid", isLargeSnapped ? "gap-1 flex-1" : "gap-0.5")}
           style={{
-            gridTemplateColumns: `repeat(${COLS}, 1fr)`,
+            gridTemplateColumns: isLargeSnapped ? `repeat(${COLS}, 1fr)` : `repeat(${COLS}, auto)`,
             gridTemplateRows: `repeat(${ROWS}, 1fr)`,
           }}
         >
@@ -276,7 +278,7 @@ export function FtuxDock() {
                 <div
                   key={`empty-${slotIndex}`}
                   className={cn(
-                    sz.slot, "rounded-lg flex items-center justify-center transition-colors",
+                    !isLargeSnapped && sz.slot, "rounded-lg flex items-center justify-center transition-colors",
                     sz.slotH,
                     isDropTarget
                       ? "bg-primary/15 border border-dashed border-primary/40"
@@ -335,7 +337,7 @@ export function FtuxDock() {
 
                 {/* Label */}
                 {dockShowLabels && (
-                  <span className={cn(sz.label, "text-muted-foreground/70 leading-none max-w-[52px] truncate text-center mt-0.5")}>
+                  <span className={cn(sz.label, "text-muted-foreground/70 leading-none truncate text-center mt-0.5", sz.labelMax)}>
                     {item.label}
                   </span>
                 )}
