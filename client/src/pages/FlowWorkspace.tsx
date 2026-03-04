@@ -302,6 +302,8 @@ function FlowWorkspaceInner() {
 
   const stateRef = useRef(state);
   stateRef.current = state;
+  const minimapStateRef = useRef(minimapState);
+  minimapStateRef.current = minimapState;
 
   // Ref to handleDropTool so keyboard shortcuts can call it (declared later)
   const handleDropToolRef = useRef<(toolId: string, cx: number, cy: number) => void>(() => {});
@@ -472,7 +474,7 @@ function FlowWorkspaceInner() {
 
       // M — toggle minimap
       if (e.key === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        minimapState.toggleVisible();
+        minimapStateRef.current.toggleVisible();
         e.preventDefault();
         return;
       }
@@ -558,7 +560,79 @@ function FlowWorkspaceInner() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [addNode, addEdge, deleteNode, selectNode, selectNodes, selectAll, undo, redo, toast, minimapState]);
+  }, [addNode, addEdge, deleteNode, selectNode, selectNodes, selectAll, undo, redo, toast]);
+
+  // ── Keyboard zoom: +/- with progressive acceleration when held ──
+
+  useEffect(() => {
+    const ZOOM_MIN = 0.1;
+    const ZOOM_MAX = 4;
+    // Progressive: starts at 1.08 (8%), accelerates to 1.35 (35%) over ~1.5s of holding
+    const BASE_FACTOR = 1.08;
+    const MAX_FACTOR = 1.35;
+    const ACCEL_PER_TICK = 0.015;
+    const INTERVAL_MS = 60;
+
+    let activeKey: string | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let currentFactor = BASE_FACTOR;
+
+    function applyZoom(direction: "in" | "out") {
+      const s = stateRef.current;
+      const el = canvasContainerRef.current;
+      const w = el?.clientWidth ?? 800;
+      const h = el?.clientHeight ?? 600;
+      // Zoom centered on viewport center
+      const centerX = w / 2;
+      const centerY = h / 2;
+      const factor = direction === "in" ? currentFactor : 1 / currentFactor;
+      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, s.viewport.zoom * factor));
+      const newX = centerX - (centerX - s.viewport.x) * (newZoom / s.viewport.zoom);
+      const newY = centerY - (centerY - s.viewport.y) * (newZoom / s.viewport.zoom);
+      setViewport(newX, newY, newZoom);
+      // Accelerate for next tick
+      currentFactor = Math.min(MAX_FACTOR, currentFactor + ACCEL_PER_TICK);
+    }
+
+    function startZoom(key: string) {
+      if (activeKey) return;
+      activeKey = key;
+      currentFactor = BASE_FACTOR;
+      const dir = key === "=" || key === "+" ? "in" : "out";
+      applyZoom(dir);
+      intervalId = setInterval(() => applyZoom(dir), INTERVAL_MS);
+    }
+
+    function stopZoom() {
+      activeKey = null;
+      currentFactor = BASE_FACTOR;
+      if (intervalId) { clearInterval(intervalId); intervalId = null; }
+    }
+
+    const onDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if ((e.key === "=" || e.key === "+" || e.key === "-") && !e.repeat) {
+        e.preventDefault();
+        startZoom(e.key);
+      }
+    };
+
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key === "=" || e.key === "+" || e.key === "-") {
+        stopZoom();
+      }
+    };
+
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      stopZoom();
+    };
+  }, [setViewport]);
 
   // ── Helper: compute canvas center for placing new nodes ──
 
