@@ -742,3 +742,12 @@
   50% { transform: translateX(200%); }
   100% { transform: translateX(400%); }
 }
+
+/* Minimap selected node pulse */
+@keyframes minimap-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
+.minimap-pulse {
+  animation: minimap-pulse 1.5s ease-in-out infinite;
+}
