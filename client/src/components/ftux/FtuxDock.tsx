@@ -31,6 +31,9 @@ import {
   Layers,
   Pin,
   PinOff,
+  Boxes,
+  Save,
+  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
 import { FtuxSettingsDialog } from "./FtuxSettingsDialog";
@@ -59,7 +62,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 };
 
 /** Grid: 2 rows x COLS columns. Items fill slots, remaining are empty. */
-const COLS = 6;
+const COLS = 10;
 const ROWS = 2;
 const TOTAL_SLOTS = COLS * ROWS;
 
@@ -72,6 +75,8 @@ export function FtuxDock() {
     dockAutoHide,
     dockColor,
     dockShowLabels,
+    dockButtonSize,
+    dockSnapped,
     activeTool,
     setActiveTool,
     setDockItems,
@@ -80,10 +85,19 @@ export function FtuxDock() {
     removeStatusBarPinnedItem,
   } = shell;
 
+  // Button size dimensions
+  const sizeMap = {
+    small: { slot: "w-11", slotH: dockShowLabels ? "h-13" : "h-10", btn: "w-8 h-8", icon: "w-4 h-4", label: "text-[7px]" },
+    medium: { slot: "w-14", slotH: dockShowLabels ? "h-16" : "h-12", btn: "w-10 h-10", icon: "w-5 h-5", label: "text-[8px]" },
+    large: { slot: "w-18", slotH: dockShowLabels ? "h-20" : "h-16", btn: "w-14 h-14", icon: "w-6 h-6", label: "text-[9px]" },
+  };
+  const sz = sizeMap[dockButtonSize ?? "medium"];
+
   const [isVisible, setIsVisible] = useState(!dockAutoHide);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gatewayOpen, setGatewayOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; toolId: string; label: string } | null>(null);
+  const [blueprintMenuOpen, setBlueprintMenuOpen] = useState(false);
   const hideTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   // Grid slots: each slot is a DockItem or null
@@ -176,12 +190,19 @@ export function FtuxDock() {
 
   const isHorizontal = dockPosition === "top" || dockPosition === "bottom";
 
-  const positionClasses = {
-    bottom: "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
-    top: "fixed top-[calc(var(--ftux-status-bar-height,36px)+12px)] left-1/2 -translate-x-1/2 z-40",
-    left: "fixed left-4 top-1/2 -translate-y-1/2 z-40",
-    right: "fixed right-4 top-1/2 -translate-y-1/2 z-40",
-  };
+  const positionClasses = dockSnapped
+    ? {
+        bottom: "fixed bottom-0 left-0 right-0 z-40",
+        top: "fixed top-[var(--ftux-status-bar-height,36px)] left-0 right-0 z-40",
+        left: "fixed left-0 top-0 bottom-0 z-40",
+        right: "fixed right-0 top-0 bottom-0 z-40",
+      }
+    : {
+        bottom: "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
+        top: "fixed top-[calc(var(--ftux-status-bar-height,36px)+12px)] left-1/2 -translate-x-1/2 z-40",
+        left: "fixed left-4 top-1/2 -translate-y-1/2 z-40",
+        right: "fixed right-4 top-1/2 -translate-y-1/2 z-40",
+      };
 
   function hexToRgba(hex: string, alpha: number): string {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -216,6 +237,7 @@ export function FtuxDock() {
         className={cn(
           positionClasses[dockPosition],
           "flex items-center gap-1.5 p-2 transition-all duration-300",
+          dockSnapped && "justify-center",
           !isVisible && dockPosition === "bottom" && "translate-y-full opacity-0",
           !isVisible && dockPosition === "top" && "-translate-y-full opacity-0",
           !isVisible && dockPosition === "left" && "-translate-x-full opacity-0",
@@ -224,9 +246,11 @@ export function FtuxDock() {
         style={{
           background: bgColor,
           backdropFilter: `blur(${blur}px)`,
-          border: "1px solid hsl(var(--border) / 0.3)",
-          borderRadius: "1rem",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+          border: dockSnapped ? "none" : "1px solid hsl(var(--border) / 0.3)",
+          borderRadius: dockSnapped ? "0" : "1rem",
+          borderTop: dockSnapped && dockPosition === "bottom" ? "1px solid hsl(var(--border) / 0.3)" : undefined,
+          borderBottom: dockSnapped && dockPosition === "top" ? "1px solid hsl(var(--border) / 0.3)" : undefined,
+          boxShadow: dockSnapped ? "none" : "0 8px 32px rgba(0,0,0,0.12)",
         }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -252,8 +276,8 @@ export function FtuxDock() {
                 <div
                   key={`empty-${slotIndex}`}
                   className={cn(
-                    "w-14 rounded-lg flex items-center justify-center transition-colors",
-                    dockShowLabels ? "h-16" : "h-12",
+                    sz.slot, "rounded-lg flex items-center justify-center transition-colors",
+                    sz.slotH,
                     isDropTarget
                       ? "bg-primary/15 border border-dashed border-primary/40"
                       : "bg-transparent border border-dashed border-border/20",
@@ -272,8 +296,8 @@ export function FtuxDock() {
                 key={item.toolId}
                 className={cn(
                   "relative flex flex-col items-center justify-center rounded-lg transition-all",
-                  "w-14",
-                  dockShowLabels ? "h-16" : "h-12",
+                  sz.slot,
+                  sz.slotH,
                   isDropTarget && "ring-2 ring-primary/40",
                 )}
                 draggable
@@ -294,13 +318,13 @@ export function FtuxDock() {
                       size="icon"
                       aria-label={item.label}
                       className={cn(
-                        "w-10 h-10 rounded-lg transition-transform duration-150 hover:scale-110",
+                        sz.btn, "rounded-lg transition-transform duration-150 hover:scale-110",
                         isActive && "bg-primary/15 text-primary",
                         !isActive && "text-muted-foreground hover:text-foreground",
                       )}
                       onClick={() => setActiveTool(item.toolId)}
                     >
-                      <IconComponent className="w-5 h-5" />
+                      <IconComponent className={sz.icon} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
@@ -311,7 +335,7 @@ export function FtuxDock() {
 
                 {/* Label */}
                 {dockShowLabels && (
-                  <span className="text-[8px] text-muted-foreground/70 leading-none max-w-[52px] truncate text-center mt-0.5">
+                  <span className={cn(sz.label, "text-muted-foreground/70 leading-none max-w-[52px] truncate text-center mt-0.5")}>
                     {item.label}
                   </span>
                 )}
@@ -356,6 +380,25 @@ export function FtuxDock() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Blueprints"
+                className="w-8 h-8 rounded-lg text-muted-foreground/50 hover:text-muted-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBlueprintMenuOpen((v) => !v);
+                }}
+              >
+                <Boxes className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
+              Blueprints
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
                 aria-label="Shell settings"
                 className="w-8 h-8 rounded-lg text-muted-foreground/50 hover:text-muted-foreground"
                 onClick={() => setSettingsOpen(true)}
@@ -369,6 +412,35 @@ export function FtuxDock() {
           </Tooltip>
         </div>
       </div>
+
+      {/* Blueprint menu */}
+      {blueprintMenuOpen && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setBlueprintMenuOpen(false)} />
+          <div className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100 bottom-20 right-4">
+            <button
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("flow:save-blueprint"));
+                setBlueprintMenuOpen(false);
+              }}
+            >
+              <Save className="w-3.5 h-3.5 text-muted-foreground" />
+              Save Blueprint
+            </button>
+            <button
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("flow:load-blueprint"));
+                setBlueprintMenuOpen(false);
+              }}
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
+              Load Blueprint
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Dock item context menu */}
       {contextMenu && (

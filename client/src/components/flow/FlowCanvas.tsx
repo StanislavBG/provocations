@@ -32,6 +32,7 @@ interface FlowCanvasProps {
   onToggleLock?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
+  transparentBg?: boolean;
 }
 
 const GRID_SIZE = 20;
@@ -81,6 +82,7 @@ export function FlowCanvas({
   onToggleLock,
   onDropTool,
   onDragStart,
+  transparentBg,
 }: FlowCanvasProps) {
   const {
     canvasRef,
@@ -190,7 +192,7 @@ export function FlowCanvas({
   return (
     <div
       ref={canvasRef}
-      className={`absolute inset-0 overflow-hidden bg-background ${cursorClass}`}
+      className={`absolute inset-0 overflow-hidden ${transparentBg ? "bg-transparent" : "bg-background"} ${cursorClass}`}
       onWheel={frozen ? undefined : handleWheel}
       onMouseDown={frozen ? undefined : handleMouseDown}
       onMouseMove={frozen ? undefined : handleMouseMove}

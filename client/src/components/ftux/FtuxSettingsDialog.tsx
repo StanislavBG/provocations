@@ -174,6 +174,35 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
               />
             </div>
 
+            {/* Snap to edge */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Snap to Edge</Label>
+              <Switch
+                checked={shell.dockSnapped ?? false}
+                onCheckedChange={shell.setDockSnapped}
+              />
+            </div>
+
+            {/* Button size */}
+            <div className="space-y-1">
+              <Label className="text-xs">Button Size</Label>
+              <div className="flex gap-1">
+                {(["small", "medium", "large"] as const).map((size) => (
+                  <button
+                    key={size}
+                    className={`flex-1 text-[10px] py-1 rounded border transition-colors ${
+                      (shell.dockButtonSize ?? "medium") === size
+                        ? "bg-primary/15 border-primary/40 text-primary font-medium"
+                        : "border-border/40 text-muted-foreground hover:bg-muted/50"
+                    }`}
+                    onClick={() => shell.setDockButtonSize(size)}
+                  >
+                    {size.charAt(0).toUpperCase() + size.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <Separator />
 
             <Button
