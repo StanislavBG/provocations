@@ -1,5 +1,5 @@
 import React from "react";
-import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, Youtube, Timer, X, Play, Loader2 } from "lucide-react";
+import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, Youtube, Timer, Filter, ToggleRight, GitBranch, Merge, Pause, X, Play, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
@@ -143,6 +143,50 @@ const NODE_STYLES: Record<
     badge: "Timer",
     accent: "emerald",
   },
+  filter: {
+    border: "border-teal-500/60",
+    bg: "bg-card",
+    headerBg: "bg-teal-500/15",
+    headerBorder: "border-teal-500/40",
+    iconClass: "text-teal-500",
+    badgeBg: "bg-teal-500/25",
+    badgeText: "text-teal-600 dark:text-teal-400",
+    badge: "Filter",
+    accent: "emerald",
+  },
+  gate: {
+    border: "border-yellow-500/60",
+    bg: "bg-card",
+    headerBg: "bg-yellow-500/15",
+    headerBorder: "border-yellow-500/40",
+    iconClass: "text-yellow-500",
+    badgeBg: "bg-yellow-500/25",
+    badgeText: "text-yellow-600 dark:text-yellow-400",
+    badge: "Gate",
+    accent: "amber",
+  },
+  router: {
+    border: "border-purple-500/60",
+    bg: "bg-card",
+    headerBg: "bg-purple-500/15",
+    headerBorder: "border-purple-500/40",
+    iconClass: "text-purple-500",
+    badgeBg: "bg-purple-500/25",
+    badgeText: "text-purple-600 dark:text-purple-400",
+    badge: "Router",
+    accent: "violet",
+  },
+  merge: {
+    border: "border-sky-500/60",
+    bg: "bg-card",
+    headerBg: "bg-sky-500/15",
+    headerBorder: "border-sky-500/40",
+    iconClass: "text-sky-500",
+    badgeBg: "bg-sky-500/25",
+    badgeText: "text-sky-600 dark:text-sky-400",
+    badge: "Merge",
+    accent: "blue",
+  },
 };
 
 const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
@@ -158,6 +202,10 @@ const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   audio: Mic,
   youtube: Youtube,
   "timer-event": Timer,
+  filter: Filter,
+  gate: ToggleRight,
+  router: GitBranch,
+  merge: Merge,
 };
 
 interface FlowNodeRendererProps {
@@ -266,6 +314,14 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
         onPortMouseDown={onPortMouseDown}
         accentColor={style.accent}
       />
+
+      {/* Pause indicator */}
+      {node.paused && (
+        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-yellow-500/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm">
+          <Pause className="w-2 h-2" />
+          Paused
+        </div>
+      )}
 
       {/* Delete button — visible on hover */}
       <button

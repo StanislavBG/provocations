@@ -397,6 +397,10 @@ const NODE_TYPE_COLORS: Record<string, string> = {
   audio: "#ef4444",
   youtube: "#dc2626",
   "timer-event": "#10b981",
+  filter: "#14b8a6",
+  gate: "#eab308",
+  router: "#a855f7",
+  merge: "#0ea5e9",
 };
 
 function Minimap({

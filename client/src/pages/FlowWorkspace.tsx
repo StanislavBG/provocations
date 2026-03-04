@@ -39,6 +39,7 @@ import {
   ZoomIn, ZoomOut, Lock, Unlock, ChevronDown, ScanLine,
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
   Lightbulb, Paintbrush2, PenLine, Users, Wifi, WifiOff,
+  Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
@@ -56,6 +57,7 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "painter", label: "Painter", icon: "Paintbrush", group: "build" },
   { toolId: "timeline", label: "Timeline", icon: "Clock", group: "build" },
   { toolId: "timer-event", label: "Timer Event", icon: "Timer", group: "build" },
+  { toolId: "logic", label: "Logic", icon: "CircuitBoard", group: "build" },
 ];
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -133,6 +135,7 @@ function FlowWorkspaceInner() {
   const [activeDocumentNodeId, setActiveDocumentNodeId] = useState<string | null>(null);
   const [activePainterNodeId, setActivePainterNodeId] = useState<string | null>(null);
   const [activeImageNodeId, setActiveImageNodeId] = useState<string | null>(null);
+  const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number } | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -248,6 +251,28 @@ function FlowWorkspaceInner() {
         }
       }
 
+      // If logic picker is open, 1-4 picks the type
+      if (pendingLogicAction) {
+        const logicTypes: Array<{ type: "filter" | "gate" | "router" | "merge"; label: string; snippet: string }> = [
+          { type: "filter", label: "Filter", snippet: "Pass through if condition met" },
+          { type: "gate", label: "Gate", snippet: "Manual on/off switch" },
+          { type: "router", label: "Router", snippet: "Route to outputs by condition" },
+          { type: "merge", label: "Merge", snippet: "Combine multiple inputs" },
+        ];
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx >= 0 && idx < logicTypes.length) {
+          const lt = logicTypes[idx];
+          addNode(lt.type, pendingLogicAction.x, pendingLogicAction.y, {
+            label: lt.label,
+            snippet: lt.snippet,
+            ...(lt.type === "gate" ? { gateOpen: true } : {}),
+          });
+          setPendingLogicAction(null);
+          e.preventDefault();
+          return;
+        }
+      }
+
       const num = parseInt(e.key, 10);
       if (num >= 1 && num <= 9) {
         const index = num - 1;
@@ -261,7 +286,7 @@ function FlowWorkspaceInner() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [dockItems, pendingContextAction, addNode, getCanvasPosAtMouse]);
+  }, [dockItems, pendingContextAction, pendingLogicAction, addNode, getCanvasPosAtMouse]);
 
   // ── Copy-paste, undo/redo, select all, escape ──
 
@@ -1024,6 +1049,10 @@ function FlowWorkspaceInner() {
         });
         return;
       }
+      if (toolId === "logic") {
+        setPendingLogicAction({ x: canvasX, y: canvasY });
+        return;
+      }
     },
     [addNode],
   );
@@ -1641,6 +1670,48 @@ function FlowWorkspaceInner() {
                 ))}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Logic node type picker dialog */}
+      <Dialog
+        open={pendingLogicAction !== null}
+        onOpenChange={(open) => !open && setPendingLogicAction(null)}
+      >
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Logic Node</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            {([
+              { type: "filter" as const, icon: Filter, label: "Filter", desc: "Pass data through only if condition is met", color: "text-teal-500" },
+              { type: "gate" as const, icon: ToggleRight, label: "Gate", desc: "Manual on/off switch to allow or block flow", color: "text-yellow-500" },
+              { type: "router" as const, icon: GitBranch, label: "Router", desc: "Route data to different outputs by condition", color: "text-purple-500" },
+              { type: "merge" as const, icon: MergeIcon, label: "Merge", desc: "Combine multiple inputs into a single output", color: "text-sky-500" },
+            ]).map((item, i) => (
+              <Button
+                key={item.type}
+                variant="outline"
+                className="justify-start gap-2 h-12"
+                onClick={() => {
+                  if (!pendingLogicAction) return;
+                  addNode(item.type, pendingLogicAction.x, pendingLogicAction.y, {
+                    label: item.label,
+                    snippet: item.desc,
+                    ...(item.type === "gate" ? { gateOpen: true } : {}),
+                  });
+                  setPendingLogicAction(null);
+                }}
+              >
+                <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">{i + 1}</span>
+                <item.icon className={`w-4 h-4 ${item.color}`} />
+                <div className="text-left">
+                  <div className="text-xs font-medium">{item.label}</div>
+                  <div className="text-[10px] text-muted-foreground">{item.desc}</div>
+                </div>
+              </Button>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

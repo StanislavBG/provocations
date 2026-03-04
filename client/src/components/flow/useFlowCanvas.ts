@@ -15,7 +15,11 @@ export type FlowNodeType =
   | "zone"
   | "audio"
   | "youtube"
-  | "timer-event";
+  | "timer-event"
+  | "filter"
+  | "gate"
+  | "router"
+  | "merge";
 
 export interface FlowNode {
   id: string;
@@ -76,6 +80,14 @@ export interface FlowNode {
   timerPulseCount?: number;
   /** Timer-Event node: timestamp of last pulse */
   timerLastPulse?: string;
+  /** Logic node: condition rule (human-readable expression) */
+  logicRule?: string;
+  /** Logic node: whether the gate is open (gate type only) */
+  gateOpen?: boolean;
+  /** Logic node: router output labels */
+  routerOutputs?: string[];
+  /** Pause flag: when true, automation stops at this node and waits */
+  paused?: boolean;
 }
 
 export interface FlowEdge {
@@ -114,6 +126,10 @@ export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
   audio: [{ side: "right", type: "output" }],
   youtube: [{ side: "right", type: "output" }],
   "timer-event": [{ side: "right", type: "output" }],
+  filter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  gate: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  router: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  merge: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   // research, interview, store, zone — no ports
 };
 
@@ -132,6 +148,10 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   audio: { width: 200, height: 140 },
   youtube: { width: 240, height: 170 },
   "timer-event": { width: 200, height: 160 },
+  filter: { width: 220, height: 130 },
+  gate: { width: 180, height: 120 },
+  router: { width: 220, height: 140 },
+  merge: { width: 200, height: 120 },
 };
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
