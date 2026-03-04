@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
@@ -23,6 +23,7 @@ interface FlowNodeRendererProps {
   onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
   onPlayNode?: (nodeId: string) => void;
+  onUpdateLabel?: (nodeId: string, label: string) => void;
 }
 
 export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
@@ -34,18 +35,44 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
   onToggleLock,
   onPortMouseDown,
   onPlayNode,
+  onUpdateLabel,
 }: FlowNodeRendererProps) {
   const style = NODE_STYLES[node.type];
   const Icon = NODE_ICONS[node.type];
   const isPlayable = PLAYABLE_TYPES.has(node.type);
   const isRunning = node.llmStatus === "running";
 
+  // ── Inline label editing state ──
+  const [editing, setEditing] = useState(false);
+  const labelRef = useRef<HTMLDivElement>(null);
+
+  const commitLabel = useCallback(() => {
+    if (!labelRef.current || !onUpdateLabel) return;
+    const text = labelRef.current.innerText.trim() || "Label";
+    onUpdateLabel(node.id, text);
+    setEditing(false);
+  }, [node.id, onUpdateLabel]);
+
+  // Focus the contentEditable when editing starts
+  useEffect(() => {
+    if (editing && labelRef.current) {
+      labelRef.current.focus();
+      // Move cursor to end
+      const sel = window.getSelection();
+      if (sel) {
+        sel.selectAllChildren(labelRef.current);
+        sel.collapseToEnd();
+      }
+    }
+  }, [editing]);
+
   // ── Label nodes: transparent text annotation ──
   if (node.type === "label") {
     return (
       <div
         className={cn(
-          "absolute select-none cursor-grab group",
+          "absolute select-none group z-10",
+          editing ? "cursor-text" : "cursor-grab",
           isSelected && "ring-1 ring-primary/50 rounded",
         )}
         style={{
@@ -55,20 +82,45 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
           minHeight: node.height,
           zIndex: node.zIndex,
         }}
-        onMouseDown={(e) => onMouseDown(e, node.id)}
-        onDoubleClick={(e) => onDoubleClick(e, node.id)}
+        onMouseDown={(e) => {
+          if (editing) { e.stopPropagation(); return; }
+          onMouseDown(e, node.id);
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (!editing) setEditing(true);
+        }}
       >
-        <p
+        <div
+          ref={labelRef}
+          contentEditable={editing}
+          suppressContentEditableWarning
           style={{ fontSize: node.labelFontSize || 16 }}
           className={cn(
-            "leading-snug px-2 py-1 whitespace-pre-wrap",
+            "leading-snug px-2 py-1 whitespace-pre-wrap outline-none",
             node.labelBold && "font-bold",
             node.labelItalic && "italic",
             node.labelColor || "text-foreground",
+            editing && "ring-1 ring-primary/60 rounded bg-background/50",
           )}
+          onBlur={commitLabel}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              commitLabel();
+            }
+            if (e.key === "Escape") {
+              // Revert to original text
+              if (labelRef.current) labelRef.current.innerText = node.label || "Label";
+              setEditing(false);
+            }
+            // Stop propagation during editing to prevent canvas shortcuts
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => { if (editing) e.stopPropagation(); }}
         >
           {node.label || "Label"}
-        </p>
+        </div>
 
         {/* Lock + Delete buttons on hover */}
         {(() => {

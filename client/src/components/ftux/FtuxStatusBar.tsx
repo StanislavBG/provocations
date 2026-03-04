@@ -15,53 +15,26 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Sparkles,
-  FileText,
-  Users,
-  ClipboardList,
-  Wand2,
-  Paintbrush,
-  BookOpen,
-  MessageCircleQuestion,
-  BarChart3,
-  Clock,
   Loader2,
   Wallpaper,
   ChevronDown,
   FolderOpen,
   Settings,
-  type LucideIcon,
 } from "lucide-react";
+import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
+import type { FlowNodeType } from "@/components/flow/useFlowCanvas";
 
-const ICON_MAP: Record<string, LucideIcon> = {
-  Sparkles, FileText, Users, ClipboardList, Wand2,
-  Paintbrush, BookOpen, MessageCircleQuestion, BarChart3, Clock,
-};
+/** Look up a tool/node icon from the registry. Falls back to Sparkles. */
+function getToolIcon(toolId: string): React.ElementType {
+  const def = FLOW_NODE_REGISTRY[toolId as FlowNodeType];
+  return def?.icon ?? Sparkles;
+}
 
-const TOOL_LABELS: Record<string, string> = {
-  research: "Research",
-  document: "Document",
-  provo: "Provocations",
-  notes: "Notes",
-  writer: "Writer",
-  painter: "Painter",
-  context: "Context Store",
-  interview: "Interview",
-  chart: "Chart",
-  timeline: "Timeline",
-};
-
-const TOOL_ICONS: Record<string, string> = {
-  research: "Sparkles",
-  document: "FileText",
-  provo: "Users",
-  notes: "ClipboardList",
-  writer: "Wand2",
-  painter: "Paintbrush",
-  context: "BookOpen",
-  interview: "MessageCircleQuestion",
-  chart: "BarChart3",
-  timeline: "Clock",
-};
+/** Look up a tool/node label from the registry. Falls back to the toolId itself. */
+function getToolLabel(toolId: string): string {
+  const def = FLOW_NODE_REGISTRY[toolId as FlowNodeType];
+  return def?.style.badge ?? toolId;
+}
 
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -122,7 +95,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
 
   return (
     <div
-      className="flex items-center justify-between px-4 shrink-0 border-b border-border/50"
+      className="relative z-50 flex items-center justify-between px-4 shrink-0 border-b border-border/50"
       style={{
         height: "var(--ftux-status-bar-height, 36px)",
         background: bgColor,
@@ -213,7 +186,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                 {jobCount} running
               </Badge>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
+            <TooltipContent side="bottom" className="text-xs z-[60]">
               {jobCount} AI {jobCount === 1 ? "job" : "jobs"} in progress
             </TooltipContent>
           </Tooltip>
@@ -229,9 +202,8 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
             {/* Desktop: full pinned item buttons */}
             <div className="hidden md:flex items-center gap-0.5 ml-2 border-l border-border/30 pl-2">
               {statusBarPinnedItems.map((toolId) => {
-                const iconName = TOOL_ICONS[toolId];
-                const Icon = iconName ? ICON_MAP[iconName] : Sparkles;
-                const label = TOOL_LABELS[toolId] ?? toolId;
+                const Icon = getToolIcon(toolId);
+                const label = getToolLabel(toolId);
 
                 return (
                   <Tooltip key={toolId}>
@@ -250,7 +222,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                         <Icon className="w-3.5 h-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
+                    <TooltipContent side="bottom" className="text-xs z-[60]">
                       {label}
                       <span className="text-muted-foreground ml-1">(right-click to unpin)</span>
                     </TooltipContent>
@@ -282,7 +254,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                 <Wallpaper className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
+            <TooltipContent side="bottom" className="text-xs z-[60]">
               {bgAnimationOn ? "Turn off background" : "Turn on background"}
             </TooltipContent>
           </Tooltip>
@@ -298,7 +270,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
               <Settings className="w-3.5 h-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">Settings</TooltipContent>
+          <TooltipContent side="bottom" className="text-xs z-[60]">Settings</TooltipContent>
         </Tooltip>
         <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
         <PaletteToggle value={shell.palette} onChange={shell.setPalette} />

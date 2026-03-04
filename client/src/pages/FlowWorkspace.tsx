@@ -14,6 +14,7 @@ import type { FlowNode, FlowEdge, FlowViewport } from "@/components/flow/useFlow
 import { useMinimapState } from "@/components/flow/useMinimapState";
 import { NotebookResearchChat } from "@/components/notebook/NotebookResearchChat";
 import { DEFAULT_SHELL_CONFIG } from "@/lib/ftux-shell-context";
+import { useFtuxShellConfig } from "@/hooks/use-ftux-shell-config";
 import { getPreset } from "@/components/flow/llm-presets";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -180,6 +181,16 @@ function FlowWorkspaceInner() {
       window.removeEventListener("flow:save-blueprint", onSave);
       window.removeEventListener("flow:load-blueprint", onLoad);
     };
+  }, []);
+
+  // Listen for label settings event (gear button on label nodes)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const nodeId = (e as CustomEvent).detail?.nodeId;
+      if (nodeId) setActiveLabelNodeId(nodeId);
+    };
+    window.addEventListener("flow:open-label-settings", handler);
+    return () => window.removeEventListener("flow:open-label-settings", handler);
   }, []);
 
   /** Convert current mouse screen position to canvas coordinates */
@@ -916,7 +927,12 @@ function FlowWorkspaceInner() {
   useEffect(() => {
     if (!activeTool) return;
     setActiveTool(null);
-    const pos = getCanvasPosAtMouse();
+    // If mouse is outside the canvas (e.g. clicked from status bar), place at center
+    const rect = canvasContainerRef.current?.getBoundingClientRect();
+    const mx = mousePosRef.current.x;
+    const my = mousePosRef.current.y;
+    const inCanvas = rect && mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+    const pos = inCanvas ? getCanvasPosAtMouse() : getPlacementCenter();
     handleDropToolRef.current(activeTool, pos.x, pos.y);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool]);
@@ -1040,10 +1056,8 @@ function FlowWorkspaceInner() {
         setStoreFolderPickerNodeId(nodeId);
         return;
       }
-      if (node.type === "label") {
-        setActiveLabelNodeId(nodeId);
-        return;
-      }
+      // Labels use inline editing on double-click (handled by FlowNodeRenderer)
+      if (node.type === "label") return;
 
       // Non-expandable types
       if (def.expandMode === "none") return;
@@ -2892,8 +2906,22 @@ function FlowWorkspaceInner() {
 }
 
 export default function FlowWorkspace() {
+  const { shellConfig, setShellConfig } = useFtuxShellConfig();
+
+  // Merge user's persisted config with FlowWorkspace defaults:
+  // Always use FLOW_DOCK_ITEMS (not the FtuxWorkspace defaults) and force tourCompleted
+  const mergedConfig = useMemo<FtuxShellConfig>(() => ({
+    ...shellConfig,
+    dockItems: FLOW_DOCK_ITEMS,
+    dockShowLabels: shellConfig.dockShowLabels ?? FLOW_SHELL_CONFIG.dockShowLabels,
+    dockSnapped: shellConfig.dockSnapped ?? FLOW_SHELL_CONFIG.dockSnapped,
+    dockButtonSize: shellConfig.dockButtonSize ?? FLOW_SHELL_CONFIG.dockButtonSize,
+    tourCompleted: true,
+    tipsEnabled: false,
+  }), [shellConfig]);
+
   return (
-    <FtuxShellProvider initialConfig={FLOW_SHELL_CONFIG} onConfigChange={() => {}}>
+    <FtuxShellProvider initialConfig={mergedConfig} onConfigChange={setShellConfig}>
       <FlowWorkspaceInner />
     </FtuxShellProvider>
   );

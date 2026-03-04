@@ -6,8 +6,8 @@
  * The body content is rendered via the `children` prop.
  */
 
-import React, { useCallback } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor } from "lucide-react";
+import React, { useCallback, useState, useRef, useEffect } from "react";
+import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -56,6 +56,7 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   onToggleLock,
   onPortMouseDown,
   onPlayNode,
+  onUpdateNode,
   borderOverride,
   badgeOverride,
   topLeftIndicator,
@@ -69,46 +70,22 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   const isRunning = node.llmStatus === "running";
   const lockMode = getEffectiveLockMode(node);
 
-  // ── Label nodes: transparent text annotation (special rendering) ──
+  // ── Label nodes: transparent text annotation with inline editing ──
   if (node.type === "label") {
     return (
-      <div
-        className={cn(
-          "absolute select-none cursor-grab group",
-          isSelected && "ring-1 ring-primary/50 rounded",
-        )}
-        style={{
-          left: node.x,
-          top: node.y,
-          width: node.width,
-          minHeight: node.height,
-          zIndex: node.zIndex,
-        }}
-        onMouseDown={(e) => onMouseDown(e, node.id)}
-        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
-      >
-        <p
-          style={{ fontSize: node.labelFontSize || 16 }}
-          className={cn(
-            "leading-snug px-2 py-1 whitespace-pre-wrap",
-            node.labelBold && "font-bold",
-            node.labelItalic && "italic",
-            node.labelColor || "text-foreground",
-          )}
-        >
-          {node.label || "Label"}
-        </p>
-
-        {/* Lock + Delete buttons on hover */}
-        <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          {onToggleLock && (
-            <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
-          )}
-          {lockMode === "none" && (
-            <DeleteButton nodeId={node.id} onDelete={onDelete} />
-          )}
-        </div>
-      </div>
+      <LabelNode
+        node={node}
+        isSelected={isSelected}
+        lockMode={lockMode}
+        onMouseDown={onMouseDown}
+        onDelete={onDelete}
+        onToggleLock={onToggleLock}
+        onUpdateNode={onUpdateNode}
+        onOpenSettings={onDoubleClick ? (nodeId: string) => {
+          // Dispatch a custom event to open the label formatting dialog
+          window.dispatchEvent(new CustomEvent("flow:open-label-settings", { detail: { nodeId } }));
+        } : undefined}
+      />
     );
   }
 
@@ -303,5 +280,122 @@ function DeleteButton({
     >
       <Trash2 className="w-2.5 h-2.5" />
     </button>
+  );
+}
+
+// ── Label node with inline editing ──
+
+function LabelNode({
+  node,
+  isSelected,
+  lockMode,
+  onMouseDown,
+  onDelete,
+  onToggleLock,
+  onUpdateNode,
+  onOpenSettings,
+}: {
+  node: FlowNode;
+  isSelected: boolean;
+  lockMode: "none" | "canvas" | "screen";
+  onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
+  onDelete: (nodeId: string) => void;
+  onToggleLock?: (nodeId: string) => void;
+  onUpdateNode?: (nodeId: string, patch: Partial<FlowNode>) => void;
+  onOpenSettings?: (nodeId: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const labelRef = useRef<HTMLDivElement>(null);
+
+  const commitLabel = useCallback(() => {
+    if (!labelRef.current || !onUpdateNode) return;
+    const text = labelRef.current.innerText.trim() || "Label";
+    onUpdateNode(node.id, { label: text });
+    setEditing(false);
+  }, [node.id, onUpdateNode]);
+
+  useEffect(() => {
+    if (editing && labelRef.current) {
+      labelRef.current.focus();
+      const sel = window.getSelection();
+      if (sel) {
+        sel.selectAllChildren(labelRef.current);
+        sel.collapseToEnd();
+      }
+    }
+  }, [editing]);
+
+  return (
+    <div
+      className={cn(
+        "absolute select-none group z-10",
+        editing ? "cursor-text" : "cursor-grab",
+        isSelected && "ring-1 ring-primary/50 rounded",
+      )}
+      style={{
+        left: node.x,
+        top: node.y,
+        width: node.width,
+        minHeight: node.height,
+        zIndex: node.zIndex,
+      }}
+      onMouseDown={(e) => {
+        if (editing) { e.stopPropagation(); return; }
+        onMouseDown(e, node.id);
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (!editing) setEditing(true);
+      }}
+    >
+      <div
+        ref={labelRef}
+        contentEditable={editing}
+        suppressContentEditableWarning
+        style={{ fontSize: node.labelFontSize || 16 }}
+        className={cn(
+          "leading-snug px-2 py-1 whitespace-pre-wrap outline-none",
+          node.labelBold && "font-bold",
+          node.labelItalic && "italic",
+          node.labelColor || "text-foreground",
+          editing && "ring-1 ring-primary/60 rounded bg-background/50",
+        )}
+        onBlur={commitLabel}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            commitLabel();
+          }
+          if (e.key === "Escape") {
+            if (labelRef.current) labelRef.current.innerText = node.label || "Label";
+            setEditing(false);
+          }
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => { if (editing) e.stopPropagation(); }}
+      >
+        {node.label || "Label"}
+      </div>
+
+      {/* Settings + Lock + Delete buttons on hover */}
+      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onOpenSettings && (
+          <button
+            className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpenSettings(node.id); }}
+            title="Label formatting"
+          >
+            <Settings className="w-2.5 h-2.5" />
+          </button>
+        )}
+        {onToggleLock && (
+          <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
+        )}
+        {lockMode === "none" && (
+          <DeleteButton nodeId={node.id} onDelete={onDelete} />
+        )}
+      </div>
+    </div>
   );
 }
