@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@clerk/clerk-react";
 import { FtuxShellProvider, useFtuxShell } from "@/lib/ftux-shell-context";
@@ -21,6 +22,7 @@ import { ProvokeText } from "@/components/ProvokeText";
 import { ShareDialog } from "@/components/ShareDialog";
 import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
+import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +42,7 @@ import {
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
   Lightbulb, Paintbrush2, PenLine, Users, Wifi, WifiOff,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
+  Plus,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
@@ -48,7 +51,7 @@ import type { ChatMessageWithMeta } from "@shared/schema";
 const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "context", label: "Context", icon: "BookOpen", group: "gather" },
   { toolId: "zone", label: "Zone", icon: "SquareDashedBottom", group: "gather" },
-  { toolId: "audio", label: "Capture Audio", icon: "Mic", group: "gather" },
+  { toolId: "audio", label: "Voice Capture", icon: "AudioLines", group: "gather" },
   { toolId: "youtube", label: "YouTube", icon: "Youtube", group: "gather" },
   { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop" },
   { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", group: "workshop" },
@@ -135,6 +138,7 @@ function FlowWorkspaceInner() {
   const [activeDocumentNodeId, setActiveDocumentNodeId] = useState<string | null>(null);
   const [activePainterNodeId, setActivePainterNodeId] = useState<string | null>(null);
   const [activeImageNodeId, setActiveImageNodeId] = useState<string | null>(null);
+  const [activeFullscreenNodeId, setActiveFullscreenNodeId] = useState<string | null>(null);
   const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number } | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
@@ -147,6 +151,69 @@ function FlowWorkspaceInner() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [collabEnabled, setCollabEnabled] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
+
+  // ── Workspace tabs ──
+  type WorkspaceTab = { id: string; label: string; snapshot: { nodes: FlowNode[]; edges: FlowEdge[]; viewport: FlowViewport } };
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>([
+    { id: "main", label: "Canvas 1", snapshot: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } } },
+  ]);
+  const [activeTabId, setActiveTabId] = useState("main");
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+
+  const switchTab = useCallback((targetTabId: string) => {
+    if (targetTabId === activeTabId) return;
+    // Save current state to the current tab's snapshot
+    setWorkspaceTabs((tabs) =>
+      tabs.map((t) =>
+        t.id === activeTabId
+          ? { ...t, snapshot: { nodes: state.nodes, edges: state.edges, viewport: state.viewport } }
+          : t,
+      ),
+    );
+    // Load target tab state
+    const target = workspaceTabs.find((t) => t.id === targetTabId);
+    if (target) {
+      loadCanvas(target.snapshot);
+    }
+    setActiveTabId(targetTabId);
+  }, [activeTabId, state, workspaceTabs, loadCanvas]);
+
+  const addTab = useCallback(() => {
+    const id = `tab-${Date.now()}`;
+    const num = workspaceTabs.length + 1;
+    // Save current state first
+    setWorkspaceTabs((tabs) => [
+      ...tabs.map((t) =>
+        t.id === activeTabId
+          ? { ...t, snapshot: { nodes: state.nodes, edges: state.edges, viewport: state.viewport } }
+          : t,
+      ),
+      { id, label: `Canvas ${num}`, snapshot: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } } },
+    ]);
+    resetCanvas();
+    setActiveTabId(id);
+  }, [workspaceTabs, activeTabId, state, resetCanvas]);
+
+  const closeTab = useCallback((tabId: string) => {
+    if (workspaceTabs.length <= 1) return; // Don't close the last tab
+    setWorkspaceTabs((tabs) => {
+      const remaining = tabs.filter((t) => t.id !== tabId);
+      if (tabId === activeTabId) {
+        // Switch to the first remaining tab
+        const target = remaining[0];
+        loadCanvas(target.snapshot);
+        setActiveTabId(target.id);
+      }
+      return remaining;
+    });
+  }, [workspaceTabs, activeTabId, loadCanvas]);
+
+  const renameTab = useCallback((tabId: string, newLabel: string) => {
+    setWorkspaceTabs((tabs) =>
+      tabs.map((t) => (t.id === tabId ? { ...t, label: newLabel || t.label } : t)),
+    );
+    setEditingTabId(null);
+  }, []);
 
   // ── Refs for accessing latest state/callbacks in keyboard handlers ──
 
@@ -710,18 +777,26 @@ function FlowWorkspaceInner() {
   const handleNodeDoubleClick = useCallback(
     (nodeId: string) => {
       const node = state.nodes.find((n) => n.id === nodeId);
-      if (node?.type === "research") {
-        setActiveResearchNodeId(nodeId);
-      }
-      if (node?.type === "document" && !node.imageUrl) {
-        setActiveDocumentNodeId(nodeId);
-        setDocEditorContent(node.documentContent || "");
-      }
-      if (node?.type === "document" && node.imageUrl) {
-        setActiveImageNodeId(nodeId);
-      }
-      if (node?.type === "painter") {
-        setActivePainterNodeId(nodeId);
+      if (!node) return;
+      switch (node.type) {
+        case "research":
+          setActiveResearchNodeId(nodeId);
+          break;
+        case "document":
+          if (node.imageUrl) {
+            setActiveImageNodeId(nodeId);
+          } else {
+            setActiveDocumentNodeId(nodeId);
+            setDocEditorContent(node.documentContent || "");
+          }
+          break;
+        case "painter":
+          setActivePainterNodeId(nodeId);
+          break;
+        default:
+          // All other node types open in the generic fullscreen overlay
+          setActiveFullscreenNodeId(nodeId);
+          break;
       }
     },
     [state.nodes],
@@ -1370,6 +1445,10 @@ function FlowWorkspaceInner() {
             <FilePlus2 className="w-3.5 h-3.5" />
             New Canvas
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={addTab} className="text-xs gap-2">
+            <Plus className="w-3.5 h-3.5" />
+            New Tab
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleZoomIn} className="text-xs gap-2">
             <ZoomIn className="w-3.5 h-3.5" />
@@ -1524,9 +1603,70 @@ function FlowWorkspaceInner() {
     [activePainterNodeId, addNode, addEdge, updateNode],
   );
 
+  // Count running AI jobs for status bar
+  const jobCount = state.nodes.filter(
+    (n) => n.llmStatus === "running" || n.youtubeFetchStatus === "fetching" || n.timerRunning,
+  ).length;
+
   return (
     <FtuxShell>
-      <FtuxStatusBar templateName="Flow" templateId={null} headerActions={headerActions} />
+      <FtuxStatusBar templateName="Flow" templateId={null} headerActions={headerActions} jobCount={jobCount} />
+
+      {/* Workspace tabs */}
+      {workspaceTabs.length > 1 && (
+        <div className="flex items-center bg-muted/30 border-b border-border/30 px-1 shrink-0">
+          {workspaceTabs.map((tab) => (
+            <div
+              key={tab.id}
+              className={cn(
+                "group flex items-center gap-1 px-3 py-1 text-[11px] cursor-pointer border-b-2 transition-colors",
+                tab.id === activeTabId
+                  ? "border-primary text-foreground font-medium bg-background/50"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50",
+              )}
+              onClick={() => switchTab(tab.id)}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setEditingTabId(tab.id);
+              }}
+            >
+              {editingTabId === tab.id ? (
+                <input
+                  className="text-[11px] bg-transparent border-b border-primary/50 outline-none w-20"
+                  defaultValue={tab.label}
+                  autoFocus
+                  onBlur={(e) => renameTab(tab.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") renameTab(tab.id, (e.target as HTMLInputElement).value);
+                    if (e.key === "Escape") setEditingTabId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span>{tab.label}</span>
+              )}
+              {workspaceTabs.length > 1 && (
+                <button
+                  className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity ml-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            className="flex items-center px-2 py-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            onClick={addTab}
+            title="New canvas"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden">
         <FlowCanvas
@@ -1914,6 +2054,20 @@ function FlowWorkspaceInner() {
               </div>
             </div>,
             document.body,
+          );
+        })()}
+
+      {/* Generic fullscreen node overlay (for types without a dedicated overlay) */}
+      {activeFullscreenNodeId &&
+        (() => {
+          const fsNode = state.nodes.find((n) => n.id === activeFullscreenNodeId);
+          if (!fsNode) return null;
+          return (
+            <FlowNodeFullscreen
+              node={fsNode}
+              onClose={() => setActiveFullscreenNodeId(null)}
+              onUpdateNode={updateNode}
+            />
           );
         })()}
 

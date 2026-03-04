@@ -24,10 +24,13 @@ import {
   FileEdit,
   SquareDashedBottom,
   Mic,
+  AudioLines,
   Youtube,
   Timer,
   CircuitBoard,
   Layers,
+  Pin,
+  PinOff,
   type LucideIcon,
 } from "lucide-react";
 import { FtuxSettingsDialog } from "./FtuxSettingsDialog";
@@ -49,6 +52,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   FileEdit,
   SquareDashedBottom,
   Mic,
+  AudioLines,
   Youtube,
   Timer,
   CircuitBoard,
@@ -71,11 +75,15 @@ export function FtuxDock() {
     activeTool,
     setActiveTool,
     setDockItems,
+    statusBarPinnedItems,
+    addStatusBarPinnedItem,
+    removeStatusBarPinnedItem,
   } = shell;
 
   const [isVisible, setIsVisible] = useState(!dockAutoHide);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gatewayOpen, setGatewayOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; toolId: string; label: string } | null>(null);
   const hideTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   // Grid slots: each slot is a DockItem or null
@@ -273,6 +281,11 @@ export function FtuxDock() {
                 onDragOver={(e) => handleSlotDragOver(slotIndex, e)}
                 onDrop={(e) => handleSlotDrop(slotIndex, e)}
                 onDragEnd={handleDragEnd}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({ x: e.clientX, y: e.clientY, toolId: item.toolId, label: item.label });
+                }}
               >
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -356,6 +369,41 @@ export function FtuxDock() {
           </Tooltip>
         </div>
       </div>
+
+      {/* Dock item context menu */}
+      {contextMenu && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />
+          <div
+            className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            {statusBarPinnedItems.includes(contextMenu.toolId) ? (
+              <button
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
+                onClick={() => {
+                  removeStatusBarPinnedItem(contextMenu.toolId);
+                  setContextMenu(null);
+                }}
+              >
+                <PinOff className="w-3.5 h-3.5 text-muted-foreground" />
+                Unpin from Status Bar
+              </button>
+            ) : (
+              <button
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
+                onClick={() => {
+                  addStatusBarPinnedItem(contextMenu.toolId);
+                  setContextMenu(null);
+                }}
+              >
+                <Pin className="w-3.5 h-3.5 text-muted-foreground" />
+                Pin to Status Bar
+              </button>
+            )}
+          </div>
+        </>
+      )}
 
       <AleComponentGateway open={gatewayOpen} onOpenChange={setGatewayOpen} />
       <FtuxSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

@@ -22,6 +22,7 @@ import {
   MessageCircleQuestion,
   BarChart3,
   Clock,
+  Loader2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,9 +69,11 @@ interface FtuxStatusBarProps {
   templateId: string | null;
   /** Extra actions rendered before the right-side controls */
   headerActions?: React.ReactNode;
+  /** Number of AI / processing jobs currently running */
+  jobCount?: number;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0 }: FtuxStatusBarProps) {
   const shell = useFtuxShell();
   const {
     statusBarPinnedItems,
@@ -104,6 +107,21 @@ export function FtuxStatusBar({ templateName, templateId, headerActions }: FtuxS
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
             {templateName}
           </Badge>
+        )}
+
+        {/* Job queue counter */}
+        {jobCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal gap-1 ml-1 border-primary/40 text-primary">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                {jobCount} running
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {jobCount} AI {jobCount === 1 ? "job" : "jobs"} in progress
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {/* Pinned items */}

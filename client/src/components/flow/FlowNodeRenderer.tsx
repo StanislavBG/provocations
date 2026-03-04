@@ -7,7 +7,7 @@ import { FlowPortDots } from "./FlowPortDots";
 /** Node types that support the "Play" (auto-execute) button */
 const PLAYABLE_TYPES = new Set<FlowNodeType>(["research", "interview", "painter", "timeline"]);
 
-const NODE_STYLES: Record<
+export const NODE_STYLES: Record<
   FlowNodeType,
   { border: string; bg: string; headerBg: string; headerBorder: string; iconClass: string; badgeBg: string; badgeText: string; badge: string; accent: string }
 > = {
@@ -189,7 +189,7 @@ const NODE_STYLES: Record<
   },
 };
 
-const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
+export const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   "context-doc": FileText,
   research: Sparkles,
   llm: Brain,
