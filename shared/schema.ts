@@ -469,6 +469,8 @@ export const interviewQuestionRequestSchema = z.object({
     themes: z.array(z.string()).optional(),
     eventCount: z.number().optional(),
   }).optional(),
+  // Chain context — additional context from previous chain steps or external sources
+  chainContext: z.string().optional(),
 });
 
 export type InterviewQuestionRequest = z.infer<typeof interviewQuestionRequestSchema>;

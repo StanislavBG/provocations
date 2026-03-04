@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import {
   BookOpen,
   MessageSquare,
@@ -23,6 +25,12 @@ import {
   PanelLeft,
   PanelRight,
   RotateCcw,
+  Monitor,
+  PanelBottom,
+  PanelTop,
+  LayoutGrid,
+  GalleryHorizontal,
+  EyeOff,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -30,6 +38,7 @@ import {
   DEFAULT_PANEL_LAYOUT,
   type PanelLayoutConfig,
 } from "@/hooks/use-panel-layout";
+import { useDockPrefs, type DockPrefs } from "@/hooks/use-dock-prefs";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   BookOpen,
@@ -57,6 +66,128 @@ interface PanelLayoutDialogProps {
   onOpenChange: (open: boolean) => void;
   panelLayout: PanelLayoutConfig;
   onSave: (layout: PanelLayoutConfig) => void;
+}
+
+// ── Dock Settings sub-component ──
+
+const DOCK_MODES: { value: DockPrefs["dockMode"]; label: string; icon: LucideIcon }[] = [
+  { value: "compact", label: "Compact", icon: LayoutGrid },
+  { value: "carousel", label: "Carousel", icon: GalleryHorizontal },
+  { value: "hidden", label: "Hidden", icon: EyeOff },
+];
+
+const POSITIONS: { value: "top" | "bottom" | "left" | "right"; icon: LucideIcon }[] = [
+  { value: "top", icon: PanelTop },
+  { value: "bottom", icon: PanelBottom },
+  { value: "left", icon: PanelLeft },
+  { value: "right", icon: PanelRight },
+];
+
+function PositionGrid({
+  value,
+  onChange,
+}: {
+  value: "top" | "bottom" | "left" | "right";
+  onChange: (v: "top" | "bottom" | "left" | "right") => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-1">
+      {POSITIONS.map((pos) => {
+        const Icon = pos.icon;
+        const active = value === pos.value;
+        return (
+          <Button
+            key={pos.value}
+            variant={active ? "default" : "outline"}
+            size="sm"
+            className="h-7 px-2 text-[10px] gap-1"
+            onClick={() => onChange(pos.value)}
+          >
+            <Icon className="w-3 h-3" />
+            {pos.value.charAt(0).toUpperCase() + pos.value.slice(1)}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DockSettingsSection() {
+  const { dockPrefs, updateDockPrefs } = useDockPrefs();
+
+  return (
+    <div className="mt-4 pt-4 border-t border-muted-foreground/15">
+      <div className="flex items-center gap-1.5 mb-3">
+        <Monitor className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Dock Settings
+        </span>
+      </div>
+
+      <div className="space-y-4">
+        {/* Dock Mode */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Dock Mode</Label>
+          <div className="flex gap-1">
+            {DOCK_MODES.map((mode) => {
+              const Icon = mode.icon;
+              const active = dockPrefs.dockMode === mode.value;
+              return (
+                <Button
+                  key={mode.value}
+                  variant={active ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-2.5 text-[10px] gap-1 flex-1"
+                  onClick={() => updateDockPrefs({ dockMode: mode.value })}
+                >
+                  <Icon className="w-3 h-3" />
+                  {mode.label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Dock Position */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Dock Position</Label>
+          <PositionGrid
+            value={dockPrefs.dockPosition}
+            onChange={(v) => updateDockPrefs({ dockPosition: v })}
+          />
+        </div>
+
+        {/* Top Bar Position */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Top Bar Position</Label>
+          <PositionGrid
+            value={dockPrefs.topBarPosition}
+            onChange={(v) => updateDockPrefs({ topBarPosition: v })}
+          />
+        </div>
+
+        {/* Carousel Width — only shown when mode is carousel */}
+        {dockPrefs.dockMode === "carousel" && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Carousel Width</Label>
+              <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+                {dockPrefs.dockCarouselWidth}
+              </span>
+            </div>
+            <Slider
+              min={4}
+              max={12}
+              step={1}
+              value={[dockPrefs.dockCarouselWidth]}
+              onValueChange={([v]) => updateDockPrefs({ dockCarouselWidth: v })}
+              className="w-full"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function PanelLayoutDialog({
@@ -272,6 +403,9 @@ export function PanelLayoutDialog({
           {renderPanel(leftTabs, "left", "Left Panel")}
           {renderPanel(rightTabs, "right", "Right Panel")}
         </div>
+
+        {/* ── Dock Settings ── */}
+        <DockSettingsSection />
 
         <DialogFooter className="mt-4 flex items-center justify-between sm:justify-between">
           <Button

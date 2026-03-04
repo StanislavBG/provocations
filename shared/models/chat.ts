@@ -113,6 +113,7 @@ export const userPreferences = pgTable("user_preferences", {
   autoSaveSession: boolean("auto_save_session").default(true).notNull(),
   panelLayout: text("panel_layout"),
   ftuxShellConfig: text("ftux_shell_config"),
+  dockPrefs: text("dock_prefs"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

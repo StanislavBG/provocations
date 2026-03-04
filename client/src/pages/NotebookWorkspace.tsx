@@ -10,9 +10,11 @@ import { NotebookLeftPanel } from "@/components/notebook/NotebookLeftPanel";
 import { NotebookCenterPanel } from "@/components/notebook/NotebookCenterPanel";
 import { NotebookRightPanel } from "@/components/notebook/NotebookRightPanel";
 import { PainterStudio } from "@/components/notebook/PainterStudio";
+import { NotebookDock } from "@/components/notebook/NotebookDock";
 import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { MobileCapture } from "@/components/notebook/MobileCapture";
+import { useDockPrefs } from "@/hooks/use-dock-prefs";
 
 export default function NotebookWorkspace() {
   const isMobile = useIsMobile();
@@ -24,6 +26,7 @@ export default function NotebookWorkspace() {
   const routeParams = appMatch ? appParams : oldParams;
 
   const ws = useWorkspaceState(routeMatch ? routeParams?.templateId ?? null : null);
+  const { dockPrefs, updateDockPrefs } = useDockPrefs();
 
   // Mobile: completely separate note-capture experience
   if (isMobile) {
@@ -45,6 +48,7 @@ export default function NotebookWorkspace() {
         }}
         activeChatConversationId={ws.activeChatConversationId}
         onActiveChatConversationChange={ws.setActiveChatConversationId}
+        dockPrefs={dockPrefs}
       />
 
       {/* Main layout */}
@@ -193,6 +197,9 @@ export default function NotebookWorkspace() {
             )}
         </ResizablePanelGroup>
       </div>
+
+      {/* Dock bar */}
+      <NotebookDock dockPrefs={dockPrefs} onOpenSettings={() => {}} />
 
       {/* Painter Studio fullscreen overlay */}
       {ws.showPainterStudio && (

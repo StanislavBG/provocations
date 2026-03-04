@@ -90,6 +90,7 @@ export async function ensureTables(): Promise<void> {
         ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS auto_save_session BOOLEAN DEFAULT TRUE NOT NULL;
         ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS panel_layout TEXT;
         ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS ftux_shell_config TEXT;
+        ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS dock_prefs TEXT;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
 

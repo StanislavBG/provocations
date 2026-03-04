@@ -3402,7 +3402,7 @@ Return ONLY a JSON array of objects with "question" (string) and "category" (one
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { objective, document: docText, appType, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors, timelineContext } = parsed.data;
+      const { objective, document: docText, appType, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors, timelineContext, chainContext } = parsed.data;
 
       const appConfig = getAppTypeConfig(appType);
       const appContext = formatAppTypeContext(appType);
@@ -3439,6 +3439,11 @@ Your goal is to use shared historical anchors to unlock personal memories the us
 IMPORTANT: Only reference historical events that are RELEVANT to the user's specific time period and location. Don't force connections. If a historical event genuinely overlaps with their timeline, weave it naturally into your question.`;
         }
       }
+
+      // Build chain context (additional context from previous chain steps or external sources)
+      const chainContextBlock = chainContext
+        ? `\n\nCHAIN CONTEXT (additional context from previous steps or external sources):\n${chainContext}`
+        : "";
 
       // Build context from previous Q&A
       const previousContext = previousEntries && previousEntries.length > 0
@@ -3607,7 +3612,7 @@ YOUR JOURNALISTIC APPROACH:
 ${directionContext}${universalLensesBlock}
 
 OBJECTIVE: ${objective || "Not explicitly stated — infer the document's purpose from its content and help the interviewee clarify it."}
-${templateContext}${documentContext}${provocationsContext}${guidanceContext}${timelineHistoricalContext}
+${templateContext}${documentContext}${provocationsContext}${guidanceContext}${timelineHistoricalContext}${chainContextBlock}
 
 PREVIOUS Q&A:
 ${previousContext}
@@ -3683,6 +3688,344 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
       console.error("Interview question error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "Failed to generate interview question", details: errorMessage });
+    }
+  });
+
+  // Streaming interview question with interleaved TTS audio (SSE)
+  // Same prompt logic as /api/interview/question but streams text + audio chunks.
+  app.post("/api/interview/question/stream", async (req, res) => {
+    try {
+      const body = req.body;
+      const parsed = interviewQuestionRequestSchema.safeParse(body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const voiceId = typeof body.voiceId === "string" ? body.voiceId : undefined;
+
+      const { objective, document: docText, appType, template, previousEntries, provocations, directionMode, directionPersonas, directionGuidance, thinkBigVectors, timelineContext, chainContext } = parsed.data;
+
+      const appConfig = getAppTypeConfig(appType);
+      const appContext = formatAppTypeContext(appType);
+
+      // Build timeline historical context (for autobiography interviews)
+      let timelineHistoricalContext = "";
+      if (timelineContext && appType === "timeline") {
+        const parts: string[] = [];
+        if (timelineContext.dateRange) {
+          parts.push(`The user's timeline spans from ${timelineContext.dateRange.earliest} to ${timelineContext.dateRange.latest}.`);
+        }
+        if (timelineContext.places && timelineContext.places.length > 0) {
+          parts.push(`Key places on their timeline: ${timelineContext.places.join(", ")}.`);
+        }
+        if (timelineContext.themes && timelineContext.themes.length > 0) {
+          parts.push(`Recurring themes: ${timelineContext.themes.join(", ")}.`);
+        }
+        if (timelineContext.eventCount) {
+          parts.push(`They have ${timelineContext.eventCount} events captured so far.`);
+        }
+
+        if (parts.length > 0) {
+          timelineHistoricalContext = `\n\nTIMELINE CONTEXT & HISTORICAL AWARENESS:
+${parts.join(" ")}
+
+USE THIS CONTEXT TO SPARK MEMORIES: Reference major historical events, cultural moments, or local events that occurred during the user's timeline periods and in their locations.
+
+IMPORTANT: Only reference historical events that are RELEVANT to the user's specific time period and location. Don't force connections. If a historical event genuinely overlaps with their timeline, weave it naturally into your question.`;
+        }
+      }
+
+      // Build chain context
+      const chainContextBlock = chainContext
+        ? `\n\nCHAIN CONTEXT (additional context from previous steps or external sources):\n${chainContext}`
+        : "";
+
+      // Build context from previous Q&A
+      const previousContext = previousEntries && previousEntries.length > 0
+        ? previousEntries.map(e => `Topic: ${e.topic}\nQ: ${e.question}\nA: ${e.answer}`).join("\n\n")
+        : "No previous questions yet — this is the first question.";
+
+      const templateContext = template
+        ? `\n\nDOCUMENT TEMPLATE (sections that need to be covered):\n${template.slice(0, 2000)}`
+        : "";
+
+      const documentContext = docText
+        ? `\n\nCURRENT DOCUMENT STATE:\n${docText}`
+        : "";
+
+      const pendingProvocations = provocations
+        ? provocations.filter(p => p.status === "pending")
+        : [];
+      const provocationsContext = pendingProvocations.length > 0
+        ? `\n\nPENDING PROVOCATIONS (challenges not yet addressed):\n${pendingProvocations.map(p => `- [${builtInPersonas[p.type as ProvocationType]?.label || p.type}] ${p.title}: ${p.content}`).join("\n")}`
+        : "";
+
+      // Build direction context from selected personas and mode
+      let directionContext = "";
+      let activePersonaLabels: string[] = [];
+
+      if (directionPersonas && directionPersonas.length > 0) {
+        const mode = directionMode;
+        const personaDescs = directionPersonas.map(t => {
+          const persona = builtInPersonas[t];
+          const label = persona?.label || t;
+          activePersonaLabels.push(label);
+          const role = persona?.role || "";
+          const summary = persona?.summary?.challenge || "";
+          return `- **${label}** (${role}): ${summary}`;
+        }).join("\n");
+
+        const modeInstruction = mode === "advise"
+          ? "Take an ADVISORY stance — suggest improvements, recommend approaches, and offer constructive guidance."
+          : mode === "challenge"
+            ? "Take a CHALLENGING stance — push back on assumptions, probe for weaknesses, and question claims."
+            : "";
+
+        let ceoContext = "";
+        if (directionPersonas.includes("ceo") && thinkBigVectors && thinkBigVectors.length > 0) {
+          const vectorDescs = thinkBigVectors.map(v => {
+            const vec = ceoVectorDescriptions[v];
+            if (!vec) return "";
+            return `- ${vec.label}\n  ${vec.description}\n  Goal: ${vec.goal}`;
+          }).filter(Boolean).join("\n\n");
+
+          ceoContext = `\n\nCEO FOCUS VECTORS (prioritize questions about these scaling dimensions):
+${vectorDescs}`;
+        }
+
+        const modeBlock = mode
+          ? `MODE: ${mode.toUpperCase()}\n${modeInstruction}\n\n`
+          : "";
+
+        directionContext = `\n\n## YOUR ACTIVE PERSONA ROLE (MANDATORY)
+${modeBlock}You MUST adopt one of these personas for EVERY question.
+
+ACTIVE PERSONAS:
+${personaDescs}
+
+RULES FOR PERSONA QUESTIONS:
+- Your "topic" field MUST start with the persona name
+- Your question MUST use the vocabulary, concerns, and perspective of that persona
+- Rotate between active personas across questions.${ceoContext}`;
+      }
+
+      let universalLensesBlock = "";
+      if (!directionPersonas || directionPersonas.length === 0) {
+        universalLensesBlock = `\n\n## JOURNALISTIC LENSES (no personas selected)
+When no specific personas are active, rotate between these journalistic lenses:
+- Devil's Advocate: Challenge assumptions, argue the opposite.
+- First Principles: Strip to fundamentals, question premises.
+- Next Step: Push for concrete, actionable specifics.
+- Empathy: Explore human impact, stakeholder feelings.
+- Patterns: Draw parallels to history, other domains, precedent.
+- Bigger Picture: Zoom out to systemic connections, unintended consequences.`;
+      }
+
+      const guidanceContext = directionGuidance
+        ? `\n\nUSER GUIDANCE: ${directionGuidance}`
+        : "";
+
+      const personaReminder = activePersonaLabels.length > 0
+        ? ` You are acting as one of: ${activePersonaLabels.join(", ")}. Your question MUST reflect that persona's unique expertise.`
+        : "";
+
+      const ruleOne = docText
+        ? `1. **Be specific to THIS document.** Reference concrete details from the document.`
+        : `1. **Be specific to what the user has SAID.** Reference their previous answers.`;
+
+      const openingRole = docText
+        ? `who has thoroughly read the interviewee's ${appConfig?.documentType || "document"} and objectives, then asks incisive, specific questions`
+        : `who helps the interviewee develop their thinking by asking incisive, specific questions grounded in their objective and previous answers`;
+
+      const hasPersonas = directionPersonas && directionPersonas.length > 0;
+      const questionMaxChars = appType ? 200 : 300;
+      const questionRefInstruction = docText
+        ? "MUST reference something specific from the document."
+        : "MUST reference something specific the user said or implied.";
+      const topicInstruction = hasPersonas
+        ? "MUST be prefixed with the active persona name."
+        : "MUST be prefixed with the lens name.";
+
+      const systemPrompt = `${appContext ? appContext + "\n\n" : ""}You are a ${appConfig?.outputFormat === "sql" ? "supportive SQL peer reviewer gathering context about the user's query" : "skilled journalist conducting a one-on-one interview"} ${openingRole}. You are NOT a generic questionnaire — you are a journalist who has done their homework.
+
+YOUR JOURNALISTIC APPROACH:
+- You read the material before the interview starts. You know what's in the document.
+- You notice what's missing, what's vague, and what's assumed without evidence.
+- You ask follow-up questions that build on previous answers — you listen.
+- You help the interviewee achieve their objective by making them think harder.
+- You never accept surface-level answers. You dig deeper with "why", "how", and "what if".
+${directionContext}${universalLensesBlock}
+
+OBJECTIVE: ${objective || "Not explicitly stated — infer the document's purpose from its content and help the interviewee clarify it."}
+${templateContext}${documentContext}${provocationsContext}${guidanceContext}${timelineHistoricalContext}${chainContextBlock}
+
+PREVIOUS Q&A:
+${previousContext}
+
+## CRITICAL RULES — read carefully
+
+${ruleOne}
+
+2. **Be a thought partner, not a checklist.** Ask the question that would make the interviewee say "oh, I hadn't thought of that."
+
+6. **Keep it conversational and direct.** Write like a journalist in conversation, not a form.
+
+7. **Build on the user's LATEST answer.** Your very next question MUST directly reference or follow up on what the user just said.
+
+Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
+{"question": "...", "topic": "PersonaName: Specific Topic", "reasoning": "..."}
+
+- question: Conversational, direct, max ${questionMaxChars} chars. ${questionRefInstruction}
+- topic: Max 40 chars. ${topicInstruction}
+- reasoning: Brief internal reasoning, max 100 chars.`;
+
+      const userPrompt = `Generate the next interview question to help me develop my document. Remember: be SPECIFIC to my content — quote or reference something I actually wrote.${personaReminder}`;
+
+      // Set up SSE
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      const sendEvent = (type: string, data: Record<string, unknown>) => {
+        res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+      };
+
+      // Stream LLM response
+      const stream = llm.stream({
+        maxTokens: 1024,
+        temperature: 0.9,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+
+      let fullText = "";
+      let sentenceBuffer = "";
+
+      // Try to get ElevenLabs session for TTS
+      let ttsSession: any = null;
+      let ttsErrored = false;
+      try {
+        const elevenlabs = await import("./elevenlabs.js");
+        if (elevenlabs.isAvailable() && voiceId) {
+          ttsSession = elevenlabs.createStreamingSession(voiceId);
+          ttsSession.onAudio((base64Chunk: string) => {
+            sendEvent("audio", { data: base64Chunk }); // pass-through: no re-encode
+          });
+          ttsSession.onError((err: Error) => {
+            console.error("ElevenLabs TTS mid-stream error:", err.message);
+            ttsErrored = true;
+            // Signal the client that audio is done (so it doesn't wait forever)
+            sendEvent("tts_error", { message: "TTS service error — falling back to text" });
+          });
+          await ttsSession.ready;
+        }
+      } catch (e) {
+        // TTS not available, text-only stream
+      }
+
+      // Hybrid TTS feeding: send text on natural boundary OR after 120 chars
+      // OR after 150ms since last send — whichever comes first.
+      // This eliminates 500-2000ms waits for sentence-ending punctuation.
+      let lastTtsSendTime = Date.now();
+      const TTS_CHAR_THRESHOLD = 120;
+      const TTS_TIME_THRESHOLD_MS = 150;
+      let ttsSendTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const flushBufferToTts = () => {
+        if (!ttsSession || ttsErrored || !sentenceBuffer.trim()) return;
+        ttsSession.send(sentenceBuffer.trim());
+        sentenceBuffer = "";
+        lastTtsSendTime = Date.now();
+        if (ttsSendTimer) { clearTimeout(ttsSendTimer); ttsSendTimer = null; }
+      };
+
+      const scheduleTtsFlush = () => {
+        if (ttsSendTimer) return; // already scheduled
+        const elapsed = Date.now() - lastTtsSendTime;
+        const delay = Math.max(0, TTS_TIME_THRESHOLD_MS - elapsed);
+        ttsSendTimer = setTimeout(flushBufferToTts, delay);
+      };
+
+      for await (const chunk of stream) {
+        fullText += chunk;
+        sentenceBuffer += chunk;
+
+        sendEvent("question_text", { chunk });
+
+        if (ttsSession && !ttsErrored) {
+          // Immediate send on natural sentence boundary
+          const sentenceEnd = sentenceBuffer.match(/[.!?,:;]\s/);
+          if (sentenceEnd && sentenceBuffer.length > 20) {
+            flushBufferToTts();
+          }
+          // Send if buffer exceeds char threshold
+          else if (sentenceBuffer.length >= TTS_CHAR_THRESHOLD) {
+            flushBufferToTts();
+          }
+          // Schedule a time-based flush so we never wait too long
+          else {
+            scheduleTtsFlush();
+          }
+        }
+      }
+
+      // Flush anything remaining to TTS
+      if (ttsSendTimer) clearTimeout(ttsSendTimer);
+      if (sentenceBuffer.trim() && ttsSession && !ttsErrored) {
+        ttsSession.send(sentenceBuffer.trim());
+        ttsSession.flush();
+      } else if (ttsSession && !ttsErrored) {
+        ttsSession.flush();
+      }
+
+      // Parse the full response for metadata (topic, reasoning)
+      let question = fullText;
+      let topic = "";
+      let reasoning = "";
+      try {
+        // Strip markdown code fences if present
+        let content = fullText.trim();
+        const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fenceMatch) {
+          content = fenceMatch[1].trim();
+        }
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsedJson = JSON.parse(jsonMatch[0]);
+          question = parsedJson.question || fullText;
+          topic = parsedJson.topic || "";
+          reasoning = parsedJson.reasoning || "";
+        }
+      } catch {}
+
+      // Fallback topic using active personas
+      if (activePersonaLabels.length > 0 && (!topic || topic === "General")) {
+        topic = `${activePersonaLabels[0]}: Key Concern`;
+      }
+
+      sendEvent("metadata", { topic, reasoning });
+      sendEvent("done", { question });
+
+      if (ttsSession) ttsSession.close();
+
+      // Pre-warm the next ElevenLabs connection so it's ready when the user answers
+      if (voiceId) {
+        try {
+          const el = await import("./elevenlabs.js");
+          el.prewarmConnection(voiceId);
+        } catch {}
+      }
+
+      res.end();
+    } catch (error) {
+      console.error("Interview stream error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Stream failed" });
+      } else {
+        res.end();
+      }
     }
   });
 
@@ -3889,6 +4232,37 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&
       console.error("TTS error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       res.status(500).json({ error: "TTS failed", details: errorMessage });
+    }
+  });
+
+  // ── TTS provider status ──
+  // Reports available TTS providers in priority order.
+  app.get("/api/tts/status", async (req, res) => {
+    const elevenlabs = await import("./elevenlabs.js");
+    const tiers: { tier: number; provider: string; available: boolean }[] = [];
+    if (elevenlabs.isAvailable()) {
+      tiers.push({ tier: 1, provider: "elevenlabs-ws", available: true });
+      tiers.push({ tier: 2, provider: "elevenlabs-rest", available: true });
+    }
+    // OpenAI-based TTS via llm.ts is always available
+    tiers.push({ tier: 3, provider: "openai-tts", available: true });
+    // Browser Speech Synthesis is always available client-side
+    tiers.push({ tier: 4, provider: "browser-speech", available: true });
+    res.json({ tiers });
+  });
+
+  // ── ElevenLabs voice listing ──
+  app.get("/api/tts/elevenlabs/voices", async (req, res) => {
+    try {
+      const elevenlabs = await import("./elevenlabs.js");
+      if (!elevenlabs.isAvailable()) {
+        return res.json({ voices: [], available: false });
+      }
+      const voices = await elevenlabs.listVoices();
+      res.json({ voices, available: true });
+    } catch (error) {
+      console.error("ElevenLabs voices error:", error);
+      res.status(500).json({ error: "Failed to list voices" });
     }
   });
 
@@ -5227,11 +5601,12 @@ RULES:
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const update: Partial<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null; ftuxShellConfig: string | null }> = {};
+      const update: Partial<{ autoDictate: boolean; verboseMode: boolean; panelLayout: string | null; ftuxShellConfig: string | null; dockPrefs: string | null }> = {};
       if (typeof req.body.autoDictate === "boolean") update.autoDictate = req.body.autoDictate;
       if (typeof req.body.verboseMode === "boolean") update.verboseMode = req.body.verboseMode;
       if (typeof req.body.panelLayout === "string" || req.body.panelLayout === null) update.panelLayout = req.body.panelLayout;
       if (typeof req.body.ftuxShellConfig === "string" || req.body.ftuxShellConfig === null) update.ftuxShellConfig = req.body.ftuxShellConfig;
+      if (typeof req.body.dockPrefs === "string" || req.body.dockPrefs === null) update.dockPrefs = req.body.dockPrefs;
 
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ error: "At least one preference field must be provided" });
