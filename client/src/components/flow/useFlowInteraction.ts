@@ -244,26 +244,26 @@ export function useFlowInteraction({
     [viewport, onViewportChange],
   );
 
-  // Click on canvas background → marquee select (or pan with Space/middle mouse)
+  // Click on canvas background → pan (or marquee with Shift)
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Middle mouse or Space+left → pan
-      if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
+      // Middle mouse, Space+left, or plain left on background → pan
+      if (e.button === 1 || (e.button === 0 && (spaceHeld.current || !e.shiftKey))) {
         e.preventDefault();
         setDragState({
           type: "pan",
           startX: e.clientX - viewport.x,
           startY: e.clientY - viewport.y,
         });
+        if (e.button === 0 && !e.shiftKey) {
+          onSelectNode(null); // clear selection on plain click
+        }
         return;
       }
       if (e.button !== 0) return;
 
-      // Left click on background → start marquee selection
+      // Shift + left click on background → start marquee selection
       const pos = screenToCanvas(e.clientX, e.clientY);
-      if (!e.shiftKey) {
-        onSelectNode(null); // clear selection unless Shift held
-      }
       setDragState({
         type: "marquee",
         startCanvasX: pos.x,
@@ -389,6 +389,9 @@ export function useFlowInteraction({
 
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
+
+      // Locked nodes cannot be dragged
+      if (node.locked) return;
 
       // Push undo snapshot before starting drag
       onDragStart?.();

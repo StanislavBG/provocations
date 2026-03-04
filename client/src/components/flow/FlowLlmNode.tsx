@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from "react";
-import { Brain, X, Loader2, Play, Copy, StickyNote, Check, AlertCircle } from "lucide-react";
+import React, { useCallback, useState, useRef } from "react";
+import { Brain, Trash2, Lock, Unlock, Loader2, Play, Copy, StickyNote, Check, AlertCircle, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +39,8 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
 }: FlowLlmNodeProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   const currentPreset = getPreset(node.llmPresetId);
   const status = node.llmStatus ?? "idle";
@@ -65,6 +67,49 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
     },
     [node.id, onUpdateNode],
   );
+
+  // ── Voice input ──
+  const toggleVoice = useCallback(() => {
+    if (isRecording && recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+      setIsRecording(false);
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast({ title: "Voice not supported", description: "Your browser doesn't support speech recognition" });
+      return;
+    }
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          transcript += event.results[i][0].transcript;
+        }
+      }
+      if (transcript.trim()) {
+        const current = node.llmObjective || "";
+        onUpdateNode(node.id, { llmObjective: current + (current ? " " : "") + transcript.trim() });
+      }
+    };
+    recognition.onerror = () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+    };
+    recognition.start();
+  }, [isRecording, node.id, node.llmObjective, onUpdateNode, toast]);
 
   // ── Custom objective edit ──
   const handleObjectiveChange = useCallback(
@@ -191,12 +236,26 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
 
         {/* Objective */}
         <div className="px-2 py-1 border-b border-border/50">
-          <label className="text-[8px] uppercase tracking-wider text-muted-foreground font-semibold">Objective</label>
+          <div className="flex items-center justify-between">
+            <label className="text-[8px] uppercase tracking-wider text-muted-foreground font-semibold">Objective</label>
+            <button
+              className={cn(
+                "w-4 h-4 rounded-full flex items-center justify-center transition-colors",
+                isRecording
+                  ? "bg-red-500 text-white animate-pulse"
+                  : "text-muted-foreground/50 hover:text-muted-foreground",
+              )}
+              onClick={toggleVoice}
+              title={isRecording ? "Stop recording" : "Voice input"}
+            >
+              {isRecording ? <MicOff className="w-2.5 h-2.5" /> : <Mic className="w-2.5 h-2.5" />}
+            </button>
+          </div>
           {currentPreset.id === "custom" ? (
             <textarea
               className="w-full mt-0.5 text-[9px] bg-transparent border border-border/50 rounded px-1 py-0.5 resize-none leading-relaxed focus:outline-none focus:ring-1 focus:ring-violet-500/50"
               rows={2}
-              placeholder="Describe what the LLM should do..."
+              placeholder="Describe what the LLM should do (or use voice)..."
               value={node.llmObjective || ""}
               onChange={handleObjectiveChange}
             />
@@ -278,17 +337,38 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
         accentColor="violet"
       />
 
-      {/* Delete button */}
-      <button
-        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(node.id);
-        }}
-      >
-        <X className="w-3 h-3" />
-      </button>
+      {/* Lock + Delete buttons */}
+      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          className={cn(
+            "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
+            node.locked
+              ? "bg-yellow-500 text-white"
+              : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+          )}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onUpdateNode(node.id, { locked: !node.locked });
+          }}
+          title={node.locked ? "Unlock node" : "Lock node"}
+        >
+          {node.locked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+        </button>
+        {!node.locked && (
+          <button
+            className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(node.id);
+            }}
+            title="Delete node"
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 });
