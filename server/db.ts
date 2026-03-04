@@ -337,6 +337,46 @@ export async function ensureTables(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read_at);
       CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
 
+      -- Platform credentials — encrypted OAuth tokens for social media
+      CREATE TABLE IF NOT EXISTS platform_credentials (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        platform VARCHAR(32) NOT NULL,
+        token_ciphertext TEXT NOT NULL,
+        token_salt VARCHAR(64) NOT NULL,
+        token_iv VARCHAR(32) NOT NULL,
+        refresh_token_ciphertext TEXT,
+        refresh_token_salt VARCHAR(64),
+        refresh_token_iv VARCHAR(32),
+        account_name VARCHAR(256),
+        scopes TEXT,
+        expires_at TIMESTAMP,
+        status VARCHAR(16) DEFAULT 'active' NOT NULL,
+        last_used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_platform_credentials_user ON platform_credentials(user_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_credentials_user_platform ON platform_credentials(user_id, platform);
+
+      -- Social post logs — tracks posting attempts, encrypted content
+      CREATE TABLE IF NOT EXISTS social_post_logs (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        platform VARCHAR(32) NOT NULL,
+        content_ciphertext TEXT NOT NULL,
+        content_salt VARCHAR(64) NOT NULL,
+        content_iv VARCHAR(32) NOT NULL,
+        status VARCHAR(16) DEFAULT 'pending' NOT NULL,
+        external_post_id VARCHAR(256),
+        error_message TEXT,
+        image_included BOOLEAN DEFAULT FALSE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_social_post_logs_user ON social_post_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_social_post_logs_status ON social_post_logs(status);
+
       -- Workspace sessions — saves full workspace state for resume functionality
       CREATE TABLE IF NOT EXISTS workspace_sessions (
         id SERIAL PRIMARY KEY,

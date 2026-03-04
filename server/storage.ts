@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications, platformCredentials, socialPostLogs } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification, StoredPlatformCredential, StoredSocialPostLog } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -141,6 +141,38 @@ export interface IStorage {
   deleteAgentPromptOverride(taskType: string): Promise<void>;
   // All known user IDs across the system
   getAllKnownUserIds(): Promise<string[]>;
+  // Platform credentials (social media OAuth)
+  upsertPlatformCredential(data: {
+    userId: string;
+    platform: string;
+    tokenCiphertext: string;
+    tokenSalt: string;
+    tokenIv: string;
+    refreshTokenCiphertext?: string | null;
+    refreshTokenSalt?: string | null;
+    refreshTokenIv?: string | null;
+    accountName?: string | null;
+    scopes?: string | null;
+    expiresAt?: Date | null;
+    status?: string;
+  }): Promise<StoredPlatformCredential>;
+  getPlatformCredentials(userId: string): Promise<Array<{ platform: string; accountName: string | null; status: string; expiresAt: Date | null }>>;
+  getPlatformCredential(userId: string, platform: string): Promise<StoredPlatformCredential | null>;
+  deletePlatformCredential(userId: string, platform: string): Promise<boolean>;
+  updatePlatformCredentialStatus(userId: string, platform: string, status: string): Promise<void>;
+  // Social post logs
+  insertSocialPostLog(data: {
+    userId: string;
+    platform: string;
+    contentCiphertext: string;
+    contentSalt: string;
+    contentIv: string;
+    status?: string;
+    externalPostId?: string | null;
+    errorMessage?: string | null;
+    imageIncluded?: boolean;
+  }): Promise<StoredSocialPostLog>;
+  getSocialPostLogs(userId: string, limit?: number): Promise<StoredSocialPostLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1707,6 +1739,134 @@ export class DatabaseStorage implements IStorage {
           isNull(notifications.readAt),
         ),
       );
+  }
+
+  // ── Platform Credentials ────────────────────────────────────────────
+
+  async upsertPlatformCredential(data: {
+    userId: string;
+    platform: string;
+    tokenCiphertext: string;
+    tokenSalt: string;
+    tokenIv: string;
+    refreshTokenCiphertext?: string | null;
+    refreshTokenSalt?: string | null;
+    refreshTokenIv?: string | null;
+    accountName?: string | null;
+    scopes?: string | null;
+    expiresAt?: Date | null;
+    status?: string;
+  }): Promise<StoredPlatformCredential> {
+    const [row] = await db
+      .insert(platformCredentials)
+      .values({
+        userId: data.userId,
+        platform: data.platform,
+        tokenCiphertext: data.tokenCiphertext,
+        tokenSalt: data.tokenSalt,
+        tokenIv: data.tokenIv,
+        refreshTokenCiphertext: data.refreshTokenCiphertext ?? null,
+        refreshTokenSalt: data.refreshTokenSalt ?? null,
+        refreshTokenIv: data.refreshTokenIv ?? null,
+        accountName: data.accountName ?? null,
+        scopes: data.scopes ?? null,
+        expiresAt: data.expiresAt ?? null,
+        status: data.status ?? "active",
+      })
+      .onConflictDoUpdate({
+        target: [platformCredentials.userId, platformCredentials.platform],
+        set: {
+          tokenCiphertext: data.tokenCiphertext,
+          tokenSalt: data.tokenSalt,
+          tokenIv: data.tokenIv,
+          refreshTokenCiphertext: data.refreshTokenCiphertext ?? null,
+          refreshTokenSalt: data.refreshTokenSalt ?? null,
+          refreshTokenIv: data.refreshTokenIv ?? null,
+          accountName: data.accountName ?? null,
+          scopes: data.scopes ?? null,
+          expiresAt: data.expiresAt ?? null,
+          status: data.status ?? "active",
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async getPlatformCredentials(userId: string): Promise<Array<{ platform: string; accountName: string | null; status: string; expiresAt: Date | null }>> {
+    const rows = await db
+      .select({
+        platform: platformCredentials.platform,
+        accountName: platformCredentials.accountName,
+        status: platformCredentials.status,
+        expiresAt: platformCredentials.expiresAt,
+      })
+      .from(platformCredentials)
+      .where(eq(platformCredentials.userId, userId));
+    return rows;
+  }
+
+  async getPlatformCredential(userId: string, platform: string): Promise<StoredPlatformCredential | null> {
+    const [row] = await db
+      .select()
+      .from(platformCredentials)
+      .where(and(eq(platformCredentials.userId, userId), eq(platformCredentials.platform, platform)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async deletePlatformCredential(userId: string, platform: string): Promise<boolean> {
+    const rows = await db
+      .delete(platformCredentials)
+      .where(and(eq(platformCredentials.userId, userId), eq(platformCredentials.platform, platform)))
+      .returning({ id: platformCredentials.id });
+    return rows.length > 0;
+  }
+
+  async updatePlatformCredentialStatus(userId: string, platform: string, status: string): Promise<void> {
+    await db
+      .update(platformCredentials)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(platformCredentials.userId, userId), eq(platformCredentials.platform, platform)));
+  }
+
+  // ── Social Post Logs ────────────────────────────────────────────────
+
+  async insertSocialPostLog(data: {
+    userId: string;
+    platform: string;
+    contentCiphertext: string;
+    contentSalt: string;
+    contentIv: string;
+    status?: string;
+    externalPostId?: string | null;
+    errorMessage?: string | null;
+    imageIncluded?: boolean;
+  }): Promise<StoredSocialPostLog> {
+    const [row] = await db
+      .insert(socialPostLogs)
+      .values({
+        userId: data.userId,
+        platform: data.platform,
+        contentCiphertext: data.contentCiphertext,
+        contentSalt: data.contentSalt,
+        contentIv: data.contentIv,
+        status: data.status ?? "pending",
+        externalPostId: data.externalPostId ?? null,
+        errorMessage: data.errorMessage ?? null,
+        imageIncluded: data.imageIncluded ?? false,
+      })
+      .returning();
+    return row;
+  }
+
+  async getSocialPostLogs(userId: string, limit = 50): Promise<StoredSocialPostLog[]> {
+    return db
+      .select()
+      .from(socialPostLogs)
+      .where(eq(socialPostLogs.userId, userId))
+      .orderBy(desc(socialPostLogs.createdAt))
+      .limit(limit);
   }
 }
 

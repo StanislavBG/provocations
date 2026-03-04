@@ -22,7 +22,9 @@ export type ToolId =
   | "youtube"
   | "timer-event"
   | "logic"
-  | "label";
+  | "label"
+  | "social-post"
+  | "api-connection";
 
 export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";

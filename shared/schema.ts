@@ -1508,3 +1508,31 @@ export interface NotificationItem {
   readAt: string | null;
   createdAt: string;
 }
+
+// ── Social Media Schemas ──
+
+export const socialPlatformIds = ["x", "linkedin", "facebook", "instagram", "reddit"] as const;
+export type SocialPlatformId = typeof socialPlatformIds[number];
+
+export const socialIntentValues = ["marketing", "blog", "announcement", "thought-leadership", "product-launch", "event"] as const;
+export type SocialIntent = typeof socialIntentValues[number];
+
+export const socialToneValues = ["professional", "casual", "witty", "inspirational", "informative"] as const;
+export type SocialTone = typeof socialToneValues[number];
+
+export const socialGenerateRequestSchema = z.object({
+  content: z.string().min(1, "Content is required"),
+  platforms: z.array(z.enum(socialPlatformIds)).min(1, "At least one platform required"),
+  intent: z.enum(socialIntentValues),
+  tone: z.enum(socialToneValues),
+});
+
+export type SocialGenerateRequest = z.infer<typeof socialGenerateRequestSchema>;
+
+export const socialPostRequestSchema = z.object({
+  platform: z.enum(socialPlatformIds),
+  content: z.string().min(1, "Content is required"),
+  imageUrl: z.string().optional(),
+});
+
+export type SocialPostRequest = z.infer<typeof socialPostRequestSchema>;

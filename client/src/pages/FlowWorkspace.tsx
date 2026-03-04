@@ -35,6 +35,9 @@ import { AudioExpandedView } from "@/components/flow/expanded/AudioExpandedView"
 import { YoutubeExpandedView } from "@/components/flow/expanded/YoutubeExpandedView";
 import { TimerExpandedView } from "@/components/flow/expanded/TimerExpandedView";
 import { LogicExpandedView } from "@/components/flow/expanded/LogicExpandedView";
+import { SocialPostExpandedView } from "@/components/flow/expanded/SocialPostExpandedView";
+import { ApiConnectionExpandedView } from "@/components/flow/expanded/ApiConnectionExpandedView";
+import { PlatformIntegrations } from "@/components/PlatformIntegrations";
 import {
   Dialog,
   DialogContent,
@@ -71,8 +74,10 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "llm", label: "Text Mods", icon: "Brain", group: "build" },
   { toolId: "painter", label: "Painter", icon: "Paintbrush", group: "build" },
   { toolId: "timeline", label: "Timeline", icon: "Clock", group: "build" },
-  { toolId: "timer-event", label: "Timer Event", icon: "Timer", group: "build" },
+  { toolId: "timer-event", label: "Trigger", icon: "Timer", group: "build" },
   { toolId: "logic", label: "Logic", icon: "CircuitBoard", group: "build" },
+  { toolId: "social-post", label: "Social Post", icon: "Share2", group: "build" },
+  { toolId: "api-connection", label: "API Post", icon: "Wifi", group: "build" },
 ];
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -248,6 +253,7 @@ function FlowWorkspaceInner() {
   });
   const [openCanvasDialogOpen, setOpenCanvasDialogOpen] = useState(false);
   const [connectionsDialogOpen, setConnectionsDialogOpen] = useState(false);
+  const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [collabEnabled, setCollabEnabled] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
@@ -1335,9 +1341,96 @@ function FlowWorkspaceInner() {
           const downstreamEdges2 = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
           for (const edge of downstreamEdges2) {
             const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
-            if (downstream && ["research", "interview", "painter", "timeline", "llm"].includes(downstream.type)) {
+            if (downstream && ["research", "interview", "painter", "timeline", "llm", "social-post", "api-connection"].includes(downstream.type)) {
               setTimeout(() => handlePlayNode(edge.toNodeId), 500);
             }
+          }
+          return;
+        } else if (node.type === "social-post") {
+          // Social Post: call LLM to generate platform-specific posts from upstream content
+          const platforms = node.socialPlatforms || {};
+          const enabledPlatforms = Object.entries(platforms).filter(([, v]) => v).map(([k]) => k);
+          if (enabledPlatforms.length === 0) {
+            updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
+            toast({ title: "No platforms enabled", description: "Double-click to enable platforms" });
+            return;
+          }
+          updateNode(nodeId, { socialGenStatus: "generating" });
+          try {
+            const res = await apiRequest("POST", "/api/social/generate", {
+              content: combinedContent,
+              platforms: enabledPlatforms,
+              intent: node.socialIntent || "marketing",
+              tone: node.socialTone || "professional",
+            });
+            const data = (await res.json()) as { posts: Record<string, { text: string; hashtags?: string[]; characterCount: number }> };
+            const generatedPosts: Record<string, { text: string; imageUrl?: string; charCount: number; status: string }> = {};
+            for (const [platform, post] of Object.entries(data.posts)) {
+              generatedPosts[platform] = {
+                text: post.text,
+                charCount: post.characterCount,
+                status: "draft",
+              };
+              // Create a child document node per platform
+              const childId = addNode("document", node.x + node.width + 60, node.y + Object.keys(generatedPosts).length * 80, {
+                label: `${platform} Post`,
+                documentContent: post.text,
+                snippet: post.text.slice(0, 120),
+              });
+              addEdge(nodeId, childId);
+            }
+            updateNode(nodeId, {
+              socialGeneratedPosts: generatedPosts,
+              socialGenStatus: "done",
+              llmStatus: "done",
+              snippet: `Generated ${enabledPlatforms.length} posts`,
+            });
+            toast({ title: "Posts generated", description: `Created ${enabledPlatforms.length} platform posts` });
+          } catch {
+            updateNode(nodeId, { socialGenStatus: "error", llmStatus: "error", snippet: "Generation failed" });
+            toast({ title: "Social post generation failed", variant: "destructive" });
+          }
+          // Chain propagation
+          const downstreamEdges3 = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
+          for (const edge of downstreamEdges3) {
+            const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
+            if (downstream && downstream.type === "api-connection") {
+              setTimeout(() => handlePlayNode(edge.toNodeId), 500);
+            }
+          }
+          return;
+        } else if (node.type === "api-connection") {
+          // API Connection: post content to connected platform
+          const platform = node.apiService;
+          if (!platform || platform === "webhook" || platform === "custom") {
+            updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
+            toast({ title: "No platform configured", description: "Double-click to select a platform" });
+            return;
+          }
+          updateNode(nodeId, { llmStatus: "running", snippet: "Posting..." });
+          try {
+            const res = await apiRequest("POST", "/api/social/post", {
+              platform,
+              content: combinedContent,
+            });
+            const data = (await res.json()) as { success: boolean; externalPostId?: string; externalPostUrl?: string; error?: string };
+            const logEntry = {
+              platform,
+              status: data.success ? "success" : "failed",
+              message: data.success ? `Posted (${data.externalPostId || "ok"})` : (data.error || "Failed"),
+              timestamp: new Date().toISOString(),
+              externalId: data.externalPostId,
+            };
+            updateNode(nodeId, {
+              llmStatus: data.success ? "done" : "error",
+              snippet: data.success ? `Posted to ${platform}` : (data.error || "Post failed"),
+              apiLastResult: logEntry,
+              apiPostLog: [...(node.apiPostLog || []), logEntry],
+            });
+            toast({ title: data.success ? "Posted successfully" : "Post failed", variant: data.success ? "default" : "destructive" });
+          } catch {
+            updateNode(nodeId, { llmStatus: "error", snippet: "Post failed" });
+            toast({ title: "API post failed", variant: "destructive" });
           }
           return;
         } else if (node.type === "llm") {
@@ -1385,7 +1478,7 @@ function FlowWorkspaceInner() {
         const downstreamEdges = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
         for (const edge of downstreamEdges) {
           const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
-          if (downstream && ["research", "interview", "painter", "timeline", "llm"].includes(downstream.type)) {
+          if (downstream && ["research", "interview", "painter", "timeline", "llm", "social-post", "api-connection"].includes(downstream.type)) {
             // Delay slightly to let state update propagate
             setTimeout(() => handlePlayNode(edge.toNodeId), 500);
           }
@@ -1497,8 +1590,9 @@ function FlowWorkspaceInner() {
       }
       if (toolId === "timer-event") {
         addNode("timer-event", canvasX, canvasY, {
-          label: "Timer Event",
-          snippet: "Click start to begin pulsing",
+          label: "Trigger",
+          snippet: "Click start to begin triggering",
+          triggerMode: "timed",
           timerRunning: false,
           timerPulseCount: 0,
           timerInterval: 5000,
@@ -1507,6 +1601,27 @@ function FlowWorkspaceInner() {
       }
       if (toolId === "logic") {
         setPendingLogicAction({ x: canvasX, y: canvasY, screenX: mousePosRef.current.x, screenY: mousePosRef.current.y });
+        return;
+      }
+      if (toolId === "social-post") {
+        addNode("social-post", canvasX, canvasY, {
+          label: "Social Post",
+          snippet: "Double-click to compose posts",
+          socialPlatforms: {},
+          socialIntent: "marketing",
+          socialTone: "professional",
+          socialGenerateImages: false,
+          socialGenStatus: "idle",
+        });
+        return;
+      }
+      if (toolId === "api-connection") {
+        addNode("api-connection", canvasX, canvasY, {
+          label: "API Post",
+          snippet: "Double-click to configure",
+          apiAuthStatus: "none",
+          apiPostLog: [],
+        });
         return;
       }
     },
@@ -1544,7 +1659,7 @@ function FlowWorkspaceInner() {
     }
   }, [state.nodes, addNode, addEdge]);
 
-  // ── Timer-Event: auto-create/append to document node on each pulse ──
+  // ── Trigger: auto-create/append to document node on each timed pulse ──
 
   const timerDocMapRef = useRef<Map<string, string>>(new Map());
   const timerLastPulseRef = useRef<Map<string, number>>(new Map());
@@ -1552,6 +1667,8 @@ function FlowWorkspaceInner() {
   useEffect(() => {
     for (const node of state.nodes) {
       if (node.type !== "timer-event" || !node.timerRunning) continue;
+      // Only apply auto-document for timed mode
+      if (node.triggerMode === "automated") continue;
       const pulseCount = node.timerPulseCount || 0;
       const lastKnown = timerLastPulseRef.current.get(node.id) || 0;
       if (pulseCount <= lastKnown) continue;
@@ -1572,8 +1689,8 @@ function FlowWorkspaceInner() {
         const docX = node.x + node.width + 60;
         const docY = node.y;
         const docId = addNode("document", docX, docY, {
-          label: `Timer Log — ${new Date().toLocaleDateString()}`,
-          snippet: node.content?.slice(-200) || "Timer events",
+          label: `Trigger Log — ${new Date().toLocaleDateString()}`,
+          snippet: node.content?.slice(-200) || "Trigger events",
           content: node.content || "",
           documentContent: node.content || "",
         });
@@ -1582,6 +1699,59 @@ function FlowWorkspaceInner() {
       }
     }
   }, [state.nodes, addNode, addEdge, updateNode]);
+
+  // ── Trigger (automated mode): watch for upstream node completion ──
+  // When an input node's llmStatus transitions to "done", fire downstream chain.
+
+  const automatedTriggerLastSeenRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    for (const node of state.nodes) {
+      if (node.type !== "timer-event" || node.triggerMode !== "automated" || !node.timerRunning) continue;
+
+      // Find input nodes connected to this trigger
+      const inputEdges = state.edges.filter((e) => e.toNodeId === node.id);
+      for (const edge of inputEdges) {
+        const inputNode = state.nodes.find((n) => n.id === edge.fromNodeId);
+        if (!inputNode) continue;
+
+        const status = inputNode.llmStatus || inputNode.socialGenStatus || "idle";
+        const key = `${node.id}:${inputNode.id}`;
+        const lastSeen = automatedTriggerLastSeenRef.current.get(key);
+
+        // Fire when status transitions to "done" and we haven't already fired for this completion
+        if (status === "done" && lastSeen !== "done") {
+          automatedTriggerLastSeenRef.current.set(key, "done");
+
+          // Log the trigger fire
+          const now = new Date();
+          const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          const count = (node.timerPulseCount || 0) + 1;
+          const entry = `[${ts}] Triggered by "${inputNode.label}" completion`;
+          const newContent = (node.content || "") + (node.content ? "\n" : "") + entry;
+
+          updateNode(node.id, {
+            timerPulseCount: count,
+            timerLastPulse: now.toISOString(),
+            content: newContent,
+            snippet: `Fired #${count} — ${inputNode.label}`,
+          });
+
+          // Propagate to downstream nodes
+          const downstreamEdges = state.edges.filter((e) => e.fromNodeId === node.id);
+          for (const de of downstreamEdges) {
+            const downstream = state.nodes.find((n) => n.id === de.toNodeId);
+            if (downstream && ["research", "interview", "painter", "timeline", "llm", "social-post", "api-connection"].includes(downstream.type)) {
+              setTimeout(() => handlePlayNode(de.toNodeId), 300);
+            }
+          }
+        } else if (status !== "done") {
+          // Reset tracking when node goes back to non-done state
+          automatedTriggerLastSeenRef.current.set(key, status);
+        }
+      }
+    }
+  }, [state.nodes, state.edges, updateNode, handlePlayNode]);
 
   // ── Context Store: Load File from dialog ──
 
@@ -1945,6 +2115,13 @@ function FlowWorkspaceInner() {
           >
             <Users className="w-3.5 h-3.5" />
             Connections
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => setIntegrationsDialogOpen(true)}
+            className="text-xs gap-2"
+          >
+            <Wifi className="w-3.5 h-3.5" />
+            Platform Integrations
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -2824,6 +3001,30 @@ function FlowWorkspaceInner() {
                   node={activeExpandedNode}
                   onUpdateNode={updateNode}
                   onPlayNode={handlePlayNode}
+                  allNodes={state.nodes}
+                  allEdges={state.edges}
+                />
+              );
+
+            case "social-post":
+              return (
+                <SocialPostExpandedView
+                  node={activeExpandedNode}
+                  nodes={state.nodes}
+                  edges={state.edges}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
+                />
+              );
+
+            case "api-connection":
+              return (
+                <ApiConnectionExpandedView
+                  node={activeExpandedNode}
+                  nodes={state.nodes}
+                  edges={state.edges}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
                 />
               );
 
@@ -2909,6 +3110,9 @@ function FlowWorkspaceInner() {
           <ConnectionsManager onBack={() => setConnectionsDialogOpen(false)} />
         </DialogContent>
       </Dialog>
+
+      {/* Platform Integrations dialog */}
+      <PlatformIntegrations open={integrationsDialogOpen} onOpenChange={setIntegrationsDialogOpen} />
 
       {/* Share Canvas dialog */}
       {canvasDocumentId && (

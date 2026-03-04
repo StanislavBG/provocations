@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useEffect, useState } from "react";
-import { Timer, Play, Square, Trash2, Lock, Unlock, Monitor } from "lucide-react";
+import { Timer, Play, Square, Trash2, Lock, Unlock, Monitor, Zap, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -28,6 +28,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
   const [isRunning, setIsRunning] = useState(node.timerRunning ?? false);
   const countRef = useRef(node.timerPulseCount || 0);
   const contentRef = useRef(node.content || "");
+  const mode = node.triggerMode || "timed";
 
   useEffect(() => {
     setIsRunning(node.timerRunning ?? false);
@@ -39,28 +40,31 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
 
     onUpdateNode(node.id, {
       timerRunning: true,
-      snippet: "Timer running...",
-      label: node.label === "Timer Event"
-        ? `Timer — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      snippet: mode === "timed" ? "Timed trigger running..." : "Listening for input...",
+      label: node.label === "Trigger" || node.label === "Timer Event"
+        ? `Trigger — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
         : node.label,
     });
     setIsRunning(true);
 
-    intervalRef.current = window.setInterval(() => {
-      countRef.current++;
-      const now = new Date();
-      const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      const entry = `[${ts}] Pulse #${countRef.current}`;
-      contentRef.current += (contentRef.current ? "\n" : "") + entry;
+    // Only start interval for timed mode — automated mode is handled by FlowWorkspace
+    if (mode === "timed") {
+      intervalRef.current = window.setInterval(() => {
+        countRef.current++;
+        const now = new Date();
+        const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const entry = `[${ts}] Pulse #${countRef.current}`;
+        contentRef.current += (contentRef.current ? "\n" : "") + entry;
 
-      onUpdateNode(node.id, {
-        timerPulseCount: countRef.current,
-        timerLastPulse: now.toISOString(),
-        content: contentRef.current,
-        snippet: `Pulse #${countRef.current} — ${ts}`,
-      });
-    }, node.timerInterval || 5000);
-  }, [node.id, node.label, node.timerInterval, node.timerPulseCount, node.content, onUpdateNode]);
+        onUpdateNode(node.id, {
+          timerPulseCount: countRef.current,
+          timerLastPulse: now.toISOString(),
+          content: contentRef.current,
+          snippet: `Pulse #${countRef.current} — ${ts}`,
+        });
+      }, node.timerInterval || 5000);
+    }
+  }, [node.id, node.label, node.timerInterval, node.timerPulseCount, node.content, onUpdateNode, mode]);
 
   const stopTimer = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -70,9 +74,11 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
     setIsRunning(false);
     onUpdateNode(node.id, {
       timerRunning: false,
-      snippet: `Stopped — ${countRef.current} pulses`,
+      snippet: mode === "timed"
+        ? `Stopped — ${countRef.current} pulses`
+        : `Stopped — ${countRef.current} fires`,
     });
-  }, [node.id, onUpdateNode]);
+  }, [node.id, onUpdateNode, mode]);
 
   const toggleTimer = useCallback(() => {
     if (isRunning) stopTimer();
@@ -109,21 +115,57 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
         )}
         onMouseDown={(e) => onMouseDown(e, node.id)}
       >
-        <Timer className={cn("w-3 h-3 shrink-0", isRunning ? "text-emerald-500 animate-pulse" : "text-emerald-500")} />
+        {mode === "timed" ? (
+          <Timer className={cn("w-3 h-3 shrink-0", isRunning ? "text-emerald-500 animate-pulse" : "text-emerald-500")} />
+        ) : (
+          <Radio className={cn("w-3 h-3 shrink-0", isRunning ? "text-emerald-500 animate-pulse" : "text-emerald-500")} />
+        )}
         <span className="text-[10px] font-medium truncate flex-1">{node.label}</span>
         <span className={cn(
           "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
           isRunning ? "bg-emerald-500/30 text-emerald-600 dark:text-emerald-400" : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
         )}>
-          {isRunning ? "LIVE" : "Timer"}
+          {isRunning ? "LIVE" : mode === "timed" ? "Timed" : "Auto"}
         </span>
       </div>
 
       {/* Body */}
       <div
-        className="flex-1 overflow-auto min-h-0 flex flex-col items-center justify-center px-2 py-1"
+        className="flex-1 overflow-auto min-h-0 flex flex-col items-center justify-center px-2 py-1 gap-1"
         onMouseDown={(e) => e.stopPropagation()}
       >
+        {/* Mode toggle pills */}
+        <div className="flex gap-0.5 bg-muted/40 rounded-full p-0.5">
+          <button
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[8px] font-medium transition-colors",
+              mode === "timed"
+                ? "bg-emerald-500/20 text-emerald-500"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => {
+              if (isRunning) stopTimer();
+              onUpdateNode(node.id, { triggerMode: "timed", snippet: "Timed trigger ready" });
+            }}
+          >
+            Timed
+          </button>
+          <button
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[8px] font-medium transition-colors",
+              mode === "automated"
+                ? "bg-emerald-500/20 text-emerald-500"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => {
+              if (isRunning) stopTimer();
+              onUpdateNode(node.id, { triggerMode: "automated", snippet: "Auto trigger ready" });
+            }}
+          >
+            Auto
+          </button>
+        </div>
+
         {/* Start/Stop toggle */}
         <button
           className={cn(
@@ -138,18 +180,22 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
         </button>
 
         {/* Status */}
-        <p className="text-[8px] text-muted-foreground mt-1 text-center leading-relaxed">
+        <p className="text-[8px] text-muted-foreground text-center leading-relaxed">
           {isRunning
-            ? `Pulse #${node.timerPulseCount || 0}`
+            ? mode === "timed"
+              ? `Pulse #${node.timerPulseCount || 0}`
+              : `Listening... (${node.timerPulseCount || 0} fires)`
             : node.timerPulseCount
-              ? `${node.timerPulseCount} pulses sent`
-              : "Click to start"}
+              ? `${node.timerPulseCount} ${mode === "timed" ? "pulses" : "fires"}`
+              : mode === "timed" ? "Click to start" : "Click to listen"}
         </p>
 
-        {/* Interval label */}
-        <p className="text-[7px] text-muted-foreground/50 mt-0.5">
-          Every {interval / 1000}s
-        </p>
+        {/* Interval label (timed only) */}
+        {mode === "timed" && (
+          <p className="text-[7px] text-muted-foreground/50">
+            Every {interval / 1000}s
+          </p>
+        )}
       </div>
 
       {/* Port dots */}
