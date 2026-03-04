@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { BookOpen, Sparkles } from "lucide-react";
+import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical } from "lucide-react";
 import type { FlowCanvasState, FlowNode, FlowEdge, FlowViewport } from "./useFlowCanvas";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
 import { FlowStoreNode } from "./FlowStoreNode";
@@ -341,6 +341,66 @@ export function FlowCanvas({
           />
         )}
       </div>
+
+      {/* Align/Distribute toolbar for multi-selection */}
+      {state.selectedNodeIds.size >= 2 && (() => {
+        const sel = state.nodes.filter((n) => state.selectedNodeIds.has(n.id));
+        if (sel.length < 2) return null;
+        // Compute bounding box center in screen coords
+        const minX = Math.min(...sel.map((n) => n.x));
+        const minY = Math.min(...sel.map((n) => n.y));
+        const maxX = Math.max(...sel.map((n) => n.x + n.width));
+        const screenCX = (minX + maxX) / 2 * state.viewport.zoom + state.viewport.x;
+        const screenTop = minY * state.viewport.zoom + state.viewport.y - 44;
+
+        const alignLeft = () => { sel.forEach((n) => onMoveNode(n.id, minX, n.y)); };
+        const alignRight = () => { sel.forEach((n) => onMoveNode(n.id, maxX - n.width, n.y)); };
+        const alignCenterH = () => { const cx = (minX + maxX) / 2; sel.forEach((n) => onMoveNode(n.id, cx - n.width / 2, n.y)); };
+        const alignTop = () => { sel.forEach((n) => onMoveNode(n.id, n.x, minY)); };
+        const alignBottom = () => { const maxY = Math.max(...sel.map((n) => n.y + n.height)); sel.forEach((n) => onMoveNode(n.id, n.x, maxY - n.height)); };
+        const alignCenterV = () => { const maxY = Math.max(...sel.map((n) => n.y + n.height)); const cy = (minY + maxY) / 2; sel.forEach((n) => onMoveNode(n.id, n.x, cy - n.height / 2)); };
+        const distributeH = () => {
+          if (sel.length < 3) return;
+          const sorted = [...sel].sort((a, b) => a.x - b.x);
+          const totalW = sorted.reduce((s, n) => s + n.width, 0);
+          const gap = (maxX - minX - totalW) / (sorted.length - 1);
+          let cx = minX;
+          sorted.forEach((n) => { onMoveNode(n.id, cx, n.y); cx += n.width + gap; });
+        };
+        const distributeV = () => {
+          if (sel.length < 3) return;
+          const maxY = Math.max(...sel.map((n) => n.y + n.height));
+          const sorted = [...sel].sort((a, b) => a.y - b.y);
+          const totalH = sorted.reduce((s, n) => s + n.height, 0);
+          const gap = (maxY - minY - totalH) / (sorted.length - 1);
+          let cy = minY;
+          sorted.forEach((n) => { onMoveNode(n.id, n.x, cy); cy += n.height + gap; });
+        };
+
+        const btnCls = "w-7 h-7 flex items-center justify-center rounded hover:bg-primary/15 text-muted-foreground hover:text-foreground transition-colors";
+        return (
+          <div
+            className="absolute z-30 flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-card/95 backdrop-blur-sm border border-border/50 shadow-lg"
+            style={{ left: screenCX, top: Math.max(4, screenTop), transform: "translateX(-50%)" }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button className={btnCls} onClick={alignLeft} title="Align left"><AlignStartVertical className="w-3.5 h-3.5" /></button>
+            <button className={btnCls} onClick={alignCenterH} title="Align center H"><AlignCenterVertical className="w-3.5 h-3.5" /></button>
+            <button className={btnCls} onClick={alignRight} title="Align right"><AlignEndVertical className="w-3.5 h-3.5" /></button>
+            <div className="w-px h-4 bg-border/50 mx-0.5" />
+            <button className={btnCls} onClick={alignTop} title="Align top"><AlignStartHorizontal className="w-3.5 h-3.5" /></button>
+            <button className={btnCls} onClick={alignCenterV} title="Align center V"><AlignCenterHorizontal className="w-3.5 h-3.5" /></button>
+            <button className={btnCls} onClick={alignBottom} title="Align bottom"><AlignEndHorizontal className="w-3.5 h-3.5" /></button>
+            {sel.length >= 3 && (
+              <>
+                <div className="w-px h-4 bg-border/50 mx-0.5" />
+                <button className={btnCls} onClick={distributeH} title="Distribute H"><GripHorizontal className="w-3.5 h-3.5" /></button>
+                <button className={btnCls} onClick={distributeV} title="Distribute V"><GripVertical className="w-3.5 h-3.5" /></button>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Minimap — bottom-right corner */}
       {state.nodes.length > 3 && (
