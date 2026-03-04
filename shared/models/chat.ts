@@ -514,3 +514,59 @@ export const notifications = pgTable("notifications", {
 
 export type StoredNotification = typeof notifications.$inferSelect;
 
+// ══════════════════════════════════════════════════════════════════
+// Social Media — Platform Credentials & Post Logs
+// ══════════════════════════════════════════════════════════════════
+
+// Platform credentials — encrypted OAuth tokens for social media platforms.
+// Zero-knowledge: access tokens and refresh tokens are AES-GCM encrypted at rest.
+export const platformCredentials = pgTable("platform_credentials", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  platform: varchar("platform", { length: 32 }).notNull(), // "x" | "instagram" | "facebook" | "linkedin" | "reddit"
+  // AES-GCM encrypted access token
+  tokenCiphertext: text("token_ciphertext").notNull(),
+  tokenSalt: varchar("token_salt", { length: 64 }).notNull(),
+  tokenIv: varchar("token_iv", { length: 32 }).notNull(),
+  // AES-GCM encrypted refresh token (nullable — not all platforms issue refresh tokens)
+  refreshTokenCiphertext: text("refresh_token_ciphertext"),
+  refreshTokenSalt: varchar("refresh_token_salt", { length: 64 }),
+  refreshTokenIv: varchar("refresh_token_iv", { length: 32 }),
+  // Display info
+  accountName: varchar("account_name", { length: 256 }),
+  scopes: text("scopes"), // JSON array of granted scopes
+  expiresAt: timestamp("expires_at"),
+  status: varchar("status", { length: 16 }).default("active").notNull(), // "active" | "expired" | "revoked" | "error"
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_platform_credentials_user").on(table.userId),
+  uniqueIndex("idx_platform_credentials_user_platform").on(table.userId, table.platform),
+]);
+
+export type StoredPlatformCredential = typeof platformCredentials.$inferSelect;
+
+// Social post logs — tracks every social media posting attempt.
+// Content is encrypted at rest.
+export const socialPostLogs = pgTable("social_post_logs", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  platform: varchar("platform", { length: 32 }).notNull(),
+  // AES-GCM encrypted post content
+  contentCiphertext: text("content_ciphertext").notNull(),
+  contentSalt: varchar("content_salt", { length: 64 }).notNull(),
+  contentIv: varchar("content_iv", { length: 32 }).notNull(),
+  status: varchar("status", { length: 16 }).default("pending").notNull(), // "pending" | "posting" | "success" | "failed"
+  externalPostId: varchar("external_post_id", { length: 256 }),
+  errorMessage: text("error_message"),
+  imageIncluded: boolean("image_included").default(false).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_social_post_logs_user").on(table.userId),
+  index("idx_social_post_logs_status").on(table.status),
+]);
+
+export type StoredSocialPostLog = typeof socialPostLogs.$inferSelect;
+

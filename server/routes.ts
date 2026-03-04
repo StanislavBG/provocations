@@ -59,6 +59,8 @@ import {
   type SharedItemDisplay,
   type NotificationItem,
   type NotificationType,
+  socialGenerateRequestSchema,
+  socialPostRequestSchema,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
 import { personaSchema } from "@shared/schema";
@@ -67,6 +69,9 @@ import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
 import { runWithGateway, isVerboseEnabled, getActiveScope as getActiveGatewayScope, type GatewayContext, type LlmVerboseMetadata } from "./llm-gateway";
 import { getAppTypeConfig, formatAppTypeContext } from "./context-builder";
 import { executeAgent } from "./agent-executor";
+import { SUPPORTED_PLATFORMS, PLATFORM_CONFIG, getRedirectUri, isPlatformConfigured, getClientCredentials, type SupportedPlatform } from "./oauth-config";
+import { getValidToken, revokeToken } from "./platform-auth";
+import { postToPlatform } from "./social-poster";
 import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
@@ -7484,6 +7489,296 @@ RULES:
     } catch (error) {
       console.error("Timeline discover-era error:", error);
       res.status(500).json({ error: "Failed to discover historical events" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // Social Media — OAuth, Generation & Posting
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── OAuth authorize — redirect user to platform's authorization page ──
+  app.get("/api/oauth/:platform/authorize", (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const platform = req.params.platform as SupportedPlatform;
+    if (!SUPPORTED_PLATFORMS.includes(platform)) {
+      return res.status(400).json({ error: `Unsupported platform: ${platform}` });
+    }
+    if (!isPlatformConfigured(platform)) {
+      return res.status(400).json({ error: `${platform} OAuth not configured — missing env vars` });
+    }
+
+    const config = PLATFORM_CONFIG[platform];
+    const creds = getClientCredentials(platform)!;
+    const redirectUri = getRedirectUri(platform);
+    const state = Buffer.from(JSON.stringify({ userId: auth.userId, platform })).toString("base64url");
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: creds.clientId,
+      redirect_uri: redirectUri,
+      scope: config.scopes.join(" "),
+      state,
+    });
+
+    if (config.usesPkce) {
+      // For PKCE platforms, use a simple verifier (in production, use crypto-random)
+      params.set("code_challenge_method", "plain");
+      params.set("code_challenge", "provocations_challenge");
+    }
+
+    return res.redirect(`${config.authUrl}?${params.toString()}`);
+  });
+
+  // ── OAuth callback — exchange code for tokens, encrypt, store ──
+  app.get("/api/oauth/:platform/callback", async (req, res) => {
+    const platform = req.params.platform as SupportedPlatform;
+    if (!SUPPORTED_PLATFORMS.includes(platform)) {
+      return res.status(400).send("Unsupported platform");
+    }
+
+    const { code, state, error: oauthError } = req.query;
+    if (oauthError) {
+      return res.send(`<script>window.opener?.postMessage({type:"oauth-error",platform:"${platform}",error:"${oauthError}"},"*");window.close();</script>`);
+    }
+    if (!code || !state) {
+      return res.status(400).send("Missing code or state");
+    }
+
+    let userId: string;
+    try {
+      const decoded = JSON.parse(Buffer.from(state as string, "base64url").toString());
+      userId = decoded.userId;
+    } catch {
+      return res.status(400).send("Invalid state");
+    }
+
+    const config = PLATFORM_CONFIG[platform];
+    const creds = getClientCredentials(platform);
+    if (!creds) return res.status(500).send("OAuth not configured");
+
+    try {
+      const body = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code as string,
+        redirect_uri: getRedirectUri(platform),
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+      });
+      if (config.usesPkce) {
+        body.set("code_verifier", "provocations_challenge");
+      }
+
+      const tokenRes = await fetch(config.tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        return res.send(`<script>window.opener?.postMessage({type:"oauth-error",platform:"${platform}",error:"Token exchange failed: ${tokenRes.status}"},"*");window.close();</script>`);
+      }
+
+      const tokenData = (await tokenRes.json()) as {
+        access_token: string;
+        refresh_token?: string;
+        expires_in?: number;
+        scope?: string;
+      };
+
+      const encKey = process.env.ENCRYPTION_SECRET || "dev-secret-key-change-me";
+      const encToken = encrypt(tokenData.access_token, encKey);
+      const encRefresh = tokenData.refresh_token ? encrypt(tokenData.refresh_token, encKey) : null;
+
+      await storage.upsertPlatformCredential({
+        userId,
+        platform,
+        tokenCiphertext: encToken.ciphertext,
+        tokenSalt: encToken.salt,
+        tokenIv: encToken.iv,
+        refreshTokenCiphertext: encRefresh?.ciphertext,
+        refreshTokenSalt: encRefresh?.salt,
+        refreshTokenIv: encRefresh?.iv,
+        scopes: tokenData.scope ? JSON.stringify(tokenData.scope.split(" ")) : null,
+        expiresAt: tokenData.expires_in ? new Date(Date.now() + tokenData.expires_in * 1000) : null,
+        status: "active",
+      });
+
+      return res.send(`<script>window.opener?.postMessage({type:"oauth-success",platform:"${platform}"},"*");window.close();</script>`);
+    } catch (err) {
+      console.error(`OAuth callback error (${platform}):`, err);
+      return res.send(`<script>window.opener?.postMessage({type:"oauth-error",platform:"${platform}",error:"Internal error"},"*");window.close();</script>`);
+    }
+  });
+
+  // ── List connected platforms (no secrets) ──
+  app.get("/api/platform-credentials", async (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const creds = await storage.getPlatformCredentials(auth.userId);
+      // Add configured status for each supported platform
+      const platforms = SUPPORTED_PLATFORMS.map((p) => {
+        const cred = creds.find((c) => c.platform === p);
+        return {
+          platform: p,
+          name: PLATFORM_CONFIG[p].name,
+          configured: isPlatformConfigured(p),
+          connected: !!cred && cred.status === "active",
+          status: cred?.status || "none",
+          accountName: cred?.accountName || null,
+          expiresAt: cred?.expiresAt?.toISOString() || null,
+        };
+      });
+      return res.json({ platforms });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ── Disconnect platform ──
+  app.delete("/api/platform-credentials/:platform", async (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "Unauthorized" });
+    const platform = req.params.platform as SupportedPlatform;
+    if (!SUPPORTED_PLATFORMS.includes(platform)) {
+      return res.status(400).json({ error: "Unsupported platform" });
+    }
+    try {
+      await revokeToken(auth.userId, platform);
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ── Force token refresh ──
+  app.post("/api/platform-credentials/:platform/refresh", async (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "Unauthorized" });
+    const platform = req.params.platform as SupportedPlatform;
+    if (!SUPPORTED_PLATFORMS.includes(platform)) {
+      return res.status(400).json({ error: "Unsupported platform" });
+    }
+    try {
+      const { refreshToken } = await import("./platform-auth");
+      const success = await refreshToken(auth.userId, platform);
+      return res.json({ success });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ── Generate platform-specific social posts via LLM ──
+  app.post("/api/social/generate", async (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const parsed = socialGenerateRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+
+    const { content, platforms, intent, tone } = parsed.data;
+
+    const platformSpecs = platforms.map((p) => {
+      const limits: Record<string, number> = { x: 280, linkedin: 3000, facebook: 63206, instagram: 2200, reddit: 40000 };
+      return `- ${p.toUpperCase()}: max ${limits[p] || 5000} characters`;
+    }).join("\n");
+
+    const systemPrompt = `You are an expert social media content strategist. Generate platform-specific posts from the given content.
+
+INTENT: ${intent}
+TONE: ${tone}
+
+PLATFORM REQUIREMENTS:
+${platformSpecs}
+
+RULES:
+- Each platform post must be independently readable (don't just truncate)
+- X posts: concise, punchy, use relevant hashtags (2-3 max), stay under 280 chars
+- LinkedIn posts: professional, include a hook opening, use line breaks for readability
+- Facebook posts: conversational, encourage engagement, can be longer
+- Instagram posts: caption style, heavy on hashtags (5-10), emoji-friendly
+- Reddit posts: informative, add context, no promotional language
+
+Respond with a JSON object where keys are platform IDs and values have: text (the post content), hashtags (array), characterCount (number).
+Example: { "x": { "text": "...", "hashtags": ["#ai"], "characterCount": 145 } }
+
+Return ONLY valid JSON, no markdown fences.`;
+
+    try {
+      const result = await llm.generate({
+        system: systemPrompt,
+        messages: [{ role: "user", content: `Generate social media posts from this content:\n\n${content.slice(0, 8000)}` }],
+        maxTokens: 4000,
+        temperature: 0.7,
+      });
+
+      // Parse the LLM JSON response
+      let posts: Record<string, { text: string; hashtags?: string[]; characterCount: number }>;
+      try {
+        const cleaned = result.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        posts = JSON.parse(cleaned);
+      } catch {
+        return res.status(500).json({ error: "Failed to parse LLM response as JSON" });
+      }
+
+      return res.json({ posts });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ── Post to a social platform ──
+  app.post("/api/social/post", async (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const parsed = socialPostRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+
+    const { platform, content, imageUrl } = parsed.data;
+
+    try {
+      const token = await getValidToken(auth.userId, platform);
+      if (!token) {
+        return res.status(401).json({ error: `Not connected to ${platform} — please connect first`, success: false });
+      }
+
+      const result = await postToPlatform(platform, token, content, imageUrl);
+
+      // Log the attempt
+      const encKey = process.env.ENCRYPTION_SECRET || "dev-secret-key-change-me";
+      const encContent = encrypt(content, encKey);
+      await storage.insertSocialPostLog({
+        userId: auth.userId,
+        platform,
+        contentCiphertext: encContent.ciphertext,
+        contentSalt: encContent.salt,
+        contentIv: encContent.iv,
+        status: result.success ? "success" : "failed",
+        externalPostId: result.externalPostId,
+        errorMessage: result.error,
+        imageIncluded: !!imageUrl,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message, success: false });
+    }
+  });
+
+  // ── Get post logs ──
+  app.get("/api/social/post-logs", async (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const logs = await storage.getSocialPostLogs(auth.userId, limit);
+      return res.json({ logs });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
     }
   });
 

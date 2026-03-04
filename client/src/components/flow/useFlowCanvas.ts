@@ -20,7 +20,9 @@ export type FlowNodeType =
   | "gate"
   | "router"
   | "merge"
-  | "label";
+  | "label"
+  | "social-post"
+  | "api-connection";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -77,13 +79,15 @@ export interface FlowNode {
   youtubeFetchStatus?: "idle" | "fetching" | "done" | "error";
   /** YouTube node: error message */
   youtubeError?: string;
-  /** Timer-Event node: whether the timer is currently running */
+  /** Trigger node: sub-type — "timed" fires on interval, "automated" fires when upstream finishes */
+  triggerMode?: "timed" | "automated";
+  /** Trigger node: whether the trigger is currently active */
   timerRunning?: boolean;
-  /** Timer-Event node: interval in milliseconds (default 5000) */
+  /** Trigger node (timed): interval in milliseconds (default 5000) */
   timerInterval?: number;
-  /** Timer-Event node: count of pulses fired so far */
+  /** Trigger node: count of pulses/fires so far */
   timerPulseCount?: number;
-  /** Timer-Event node: timestamp of last pulse */
+  /** Trigger node: timestamp of last pulse/fire */
   timerLastPulse?: string;
   /** Logic node: condition rule (human-readable expression) */
   logicRule?: string;
@@ -136,6 +140,30 @@ export interface FlowNode {
     voiceEnabled: boolean;
     ttsEnabled: boolean;
   };
+  /** Social Post node: enabled platforms */
+  socialPlatforms?: Record<string, boolean>;
+  /** Social Post node: content intent */
+  socialIntent?: "marketing" | "blog" | "announcement" | "thought-leadership" | "product-launch" | "event";
+  /** Social Post node: tone */
+  socialTone?: "professional" | "casual" | "witty" | "inspirational" | "informative";
+  /** Social Post node: whether to generate images */
+  socialGenerateImages?: boolean;
+  /** Social Post node: generated posts per platform */
+  socialGeneratedPosts?: Record<string, { text: string; imageUrl?: string; charCount: number; status: string }>;
+  /** Social Post node: generation status */
+  socialGenStatus?: "idle" | "generating" | "done" | "error";
+  /** API Connection node: target service */
+  apiService?: "x" | "linkedin" | "facebook" | "instagram" | "reddit" | "webhook" | "custom";
+  /** API Connection node: auth status */
+  apiAuthStatus?: "connected" | "expired" | "pending" | "error" | "none";
+  /** API Connection node: last result */
+  apiLastResult?: { status: string; message: string; timestamp: string; externalId?: string };
+  /** API Connection node: post log */
+  apiPostLog?: Array<{ platform: string; status: string; message: string; timestamp: string; externalId?: string }>;
+  /** API Connection node: webhook URL for custom type */
+  apiWebhookUrl?: string;
+  /** API Connection node: custom headers JSON */
+  apiCustomHeaders?: string;
 }
 
 export interface FlowEdge {

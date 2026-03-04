@@ -39,5 +39,7 @@ export default defineConfig({
     "chat_preferences",
     "shared_items",
     "notifications",
+    "platform_credentials",
+    "social_post_logs",
   ],
 });
