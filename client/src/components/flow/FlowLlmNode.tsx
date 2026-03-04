@@ -49,7 +49,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
       (n) => selectedNodeIds.has(n.id) && n.id !== node.id && n.type !== "store" && n.type !== "llm",
     );
     if (otherSelected.length > 0) return otherSelected;
-    return allNodes.filter((n) => n.type === "note" || n.type === "context-doc");
+    return allNodes.filter((n) => n.type === "document" || n.type === "context-doc");
   }, [allNodes, selectedNodeIds, node.id]);
 
   // ── Preset change ──

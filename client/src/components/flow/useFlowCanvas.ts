@@ -6,7 +6,6 @@ import { generateId } from "@/lib/utils";
 export type FlowNodeType =
   | "context-doc"
   | "research"
-  | "note"
   | "llm"
   | "store"
   | "painter"
@@ -57,6 +56,8 @@ export interface FlowNode {
   audioRecording?: boolean;
   /** Audio node: transcript text */
   audioTranscript?: string;
+  /** Image data URL (base64 PNG) — used by painter output and image documents */
+  imageUrl?: string;
 }
 
 export interface FlowEdge {
@@ -89,7 +90,6 @@ export interface PortDef {
 export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
   document: [{ side: "right", type: "output" }],
   "context-doc": [{ side: "right", type: "output" }],
-  note: [{ side: "right", type: "output" }],
   llm: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   painter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   timeline: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
@@ -102,7 +102,6 @@ export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
 const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }> = {
   "context-doc": { width: 200, height: 120 },
   research: { width: 220, height: 140 },
-  note: { width: 180, height: 100 },
   llm: { width: 260, height: 240 },
   store: { width: 260, height: 320 },
   painter: { width: 260, height: 200 },

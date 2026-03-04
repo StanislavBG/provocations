@@ -230,6 +230,7 @@ export function FlowCanvas({
               key={node.id}
               node={node}
               isSelected={state.selectedNodeIds.has(node.id)}
+              zoom={state.viewport.zoom}
               onMouseDown={handleNodeMouseDown}
               onDelete={onDeleteNode}
               onUpdateNode={onUpdateNode}
@@ -340,7 +341,6 @@ export function FlowCanvas({
 const NODE_TYPE_COLORS: Record<string, string> = {
   "context-doc": "#f59e0b",
   research: "#3b82f6",
-  note: "#10b981",
   llm: "#8b5cf6",
   store: "#b35c1e",
   painter: "#f43f5e",
