@@ -12,6 +12,8 @@ import { FlowYoutubeNode } from "./FlowYoutubeNode";
 import { FlowTimerEventNode } from "./FlowTimerEventNode";
 import { FlowEdgeLayer } from "./FlowEdgeLayer";
 import { useFlowInteraction } from "./useFlowInteraction";
+import { FlowMinimap } from "./FlowMinimap";
+import type { useMinimapState } from "./useMinimapState";
 
 interface FlowCanvasProps {
   state: FlowCanvasState;
@@ -33,6 +35,8 @@ interface FlowCanvasProps {
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
   transparentBg?: boolean;
+  minimapState?: ReturnType<typeof useMinimapState>;
+  onFitToView?: () => void;
 }
 
 const GRID_SIZE = 20;
@@ -82,6 +86,8 @@ export function FlowCanvas({
   onDropTool,
   onDragStart,
   transparentBg,
+  minimapState,
+  onFitToView,
 }: FlowCanvasProps) {
   const {
     canvasRef,
@@ -384,21 +390,18 @@ export function FlowCanvas({
         );
       })()}
 
-      {/* Minimap — bottom-right corner */}
-      {state.nodes.length > 3 && (
-        <Minimap
+      {/* Factorio-inspired minimap */}
+      {minimapState && (
+        <FlowMinimap
           nodes={state.nodes}
+          edges={state.edges}
           viewport={state.viewport}
+          selectedNodeIds={state.selectedNodeIds}
           canvasWidth={canvasDims.width}
           canvasHeight={canvasDims.height}
-          onNavigate={(x, y) => {
-            // Center viewport on the clicked point
-            onViewportChange(
-              canvasDims.width / 2 - x * state.viewport.zoom,
-              canvasDims.height / 2 - y * state.viewport.zoom,
-              state.viewport.zoom,
-            );
-          }}
+          onViewportChange={onViewportChange}
+          onFitToView={onFitToView}
+          minimapState={minimapState}
         />
       )}
 
@@ -428,125 +431,3 @@ export function FlowCanvas({
   );
 }
 
-// ── Minimap component ──
-
-const NODE_TYPE_COLORS: Record<string, string> = {
-  "context-doc": "#f59e0b",
-  research: "#3b82f6",
-  llm: "#8b5cf6",
-  store: "#b35c1e",
-  painter: "#f43f5e",
-  interview: "#06b6d4",
-  timeline: "#f97316",
-  document: "#6366f1",
-  zone: "#6b7280",
-  audio: "#ef4444",
-  youtube: "#dc2626",
-  "timer-event": "#10b981",
-  filter: "#14b8a6",
-  gate: "#eab308",
-  router: "#a855f7",
-  merge: "#0ea5e9",
-};
-
-function Minimap({
-  nodes,
-  viewport,
-  canvasWidth,
-  canvasHeight,
-  onNavigate,
-}: {
-  nodes: FlowNode[];
-  viewport: FlowViewport;
-  canvasWidth: number;
-  canvasHeight: number;
-  onNavigate: (canvasX: number, canvasY: number) => void;
-}) {
-  const MINIMAP_W = 160;
-  const MINIMAP_H = 100;
-  const PAD = 20;
-
-  // Compute bounds of all nodes
-  const bounds = useMemo(() => {
-    if (nodes.length === 0) return { minX: 0, minY: 0, maxX: 100, maxY: 100 };
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const n of nodes) {
-      minX = Math.min(minX, n.x);
-      minY = Math.min(minY, n.y);
-      maxX = Math.max(maxX, n.x + n.width);
-      maxY = Math.max(maxY, n.y + n.height);
-    }
-    // Add padding
-    return { minX: minX - PAD, minY: minY - PAD, maxX: maxX + PAD, maxY: maxY + PAD };
-  }, [nodes]);
-
-  const worldW = bounds.maxX - bounds.minX || 1;
-  const worldH = bounds.maxY - bounds.minY || 1;
-  const scale = Math.min(MINIMAP_W / worldW, MINIMAP_H / worldH);
-
-  // Visible viewport rect in minimap coords
-  const visLeft = (-viewport.x / viewport.zoom - bounds.minX) * scale;
-  const visTop = (-viewport.y / viewport.zoom - bounds.minY) * scale;
-  const visW = (canvasWidth / viewport.zoom) * scale;
-  const visH = (canvasHeight / viewport.zoom) * scale;
-
-  const handleClick = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const canvasX = mx / scale + bounds.minX;
-      const canvasY = my / scale + bounds.minY;
-      onNavigate(canvasX, canvasY);
-    },
-    [scale, bounds, onNavigate],
-  );
-
-  return (
-    <div
-      className="absolute bottom-14 right-4 rounded-lg border border-border/40 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden"
-      style={{ width: MINIMAP_W, height: MINIMAP_H }}
-    >
-      <svg
-        width={MINIMAP_W}
-        height={MINIMAP_H}
-        className="cursor-pointer"
-        onClick={handleClick}
-      >
-        {/* Node dots */}
-        {nodes.map((n) => {
-          const x = (n.x - bounds.minX) * scale;
-          const y = (n.y - bounds.minY) * scale;
-          const w = Math.max(n.width * scale, 2);
-          const h = Math.max(n.height * scale, 2);
-          const color = NODE_TYPE_COLORS[n.type] || "#888";
-          return (
-            <rect
-              key={n.id}
-              x={x}
-              y={y}
-              width={w}
-              height={h}
-              rx={1}
-              fill={color}
-              opacity={0.7}
-            />
-          );
-        })}
-
-        {/* Viewport indicator */}
-        <rect
-          x={Math.max(0, visLeft)}
-          y={Math.max(0, visTop)}
-          width={Math.min(visW, MINIMAP_W)}
-          height={Math.min(visH, MINIMAP_H)}
-          fill="none"
-          stroke="hsl(var(--primary))"
-          strokeWidth={1.5}
-          rx={2}
-          opacity={0.6}
-        />
-      </svg>
-    </div>
-  );
-}

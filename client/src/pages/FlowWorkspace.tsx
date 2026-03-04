@@ -11,6 +11,7 @@ import { FtuxDock } from "@/components/ftux/FtuxDock";
 import { FlowCanvas } from "@/components/flow/FlowCanvas";
 import { useFlowCanvas } from "@/components/flow/useFlowCanvas";
 import type { FlowNode, FlowEdge, FlowViewport } from "@/components/flow/useFlowCanvas";
+import { useMinimapState } from "@/components/flow/useMinimapState";
 import { NotebookResearchChat } from "@/components/notebook/NotebookResearchChat";
 import { DEFAULT_SHELL_CONFIG } from "@/lib/ftux-shell-context";
 import { getPreset } from "@/components/flow/llm-presets";
@@ -125,6 +126,30 @@ function FlowWorkspaceInner() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { user } = useUser();
+  const minimapState = useMinimapState();
+
+  // Fit all nodes into the viewport
+  const fitToView = useCallback(() => {
+    const nodes = state.nodes;
+    if (nodes.length === 0) return;
+    const el = canvasContainerRef.current;
+    const W = el?.clientWidth ?? 800;
+    const H = el?.clientHeight ?? 600;
+    const PAD = 60;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes) {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + n.width);
+      maxY = Math.max(maxY, n.y + n.height);
+    }
+    const worldW = maxX - minX + PAD * 2;
+    const worldH = maxY - minY + PAD * 2;
+    const zoom = Math.min(W / worldW, H / worldH, 2);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    setViewport(W / 2 - centerX * zoom, H / 2 - centerY * zoom, zoom);
+  }, [state.nodes, setViewport]);
 
   // Track mouse position over canvas for dock-shortcut placement
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -445,6 +470,13 @@ function FlowWorkspaceInner() {
         return;
       }
 
+      // M — toggle minimap
+      if (e.key === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        minimapState.toggleVisible();
+        e.preventDefault();
+        return;
+      }
+
       // Escape — deselect all
       if (e.key === "Escape") {
         selectNode(null);
@@ -526,7 +558,7 @@ function FlowWorkspaceInner() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [addNode, addEdge, deleteNode, selectNode, selectNodes, selectAll, undo, redo, toast]);
+  }, [addNode, addEdge, deleteNode, selectNode, selectNodes, selectAll, undo, redo, toast, minimapState]);
 
   // ── Helper: compute canvas center for placing new nodes ──
 
@@ -2006,6 +2038,8 @@ function FlowWorkspaceInner() {
           }}
           onDropTool={handleDropTool}
           onDragStart={pushUndoSnapshot}
+          minimapState={minimapState}
+          onFitToView={fitToView}
         />
 
         <FtuxDock />

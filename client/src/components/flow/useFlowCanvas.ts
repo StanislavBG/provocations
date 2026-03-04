@@ -111,6 +111,17 @@ export interface FlowNode {
   labelItalic?: boolean;
   /** Label node: text color (tailwind class or hex) */
   labelColor?: string;
+  /** Interview node: persisted Q&A entries */
+  interviewEntries?: Array<{ id: string; question: string; answer: string; topic: string; timestamp: number }>;
+  /** Interview node: objective text */
+  interviewObjective?: string;
+  /** Interview node: journalist config */
+  interviewConfig?: {
+    stance: "investigative" | "exploratory" | "balanced" | "autobiography";
+    journalistDescription: string;
+    voiceEnabled: boolean;
+    ttsEnabled: boolean;
+  };
 }
 
 export interface FlowEdge {
@@ -163,7 +174,8 @@ export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
   merge: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   store: [{ side: "left", type: "input" }],
   research: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  // interview, zone, label — no ports
+  interview: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  // zone, label — no ports
 };
 
 // ── Defaults ──

@@ -137,6 +137,11 @@ export function FtuxDock() {
     dragSourceSlot.current = slotIndex;
     e.dataTransfer.setData("application/x-flow-tool", item.toolId);
     e.dataTransfer.effectAllowed = "copyMove";
+    // Show only the icon button as the drag ghost, not the entire slot wrapper
+    const button = e.currentTarget.querySelector("button");
+    if (button) {
+      e.dataTransfer.setDragImage(button, button.offsetWidth / 2, button.offsetHeight / 2);
+    }
   }, [slots]);
 
   const handleSlotDragOver = useCallback((slotIndex: number, e: React.DragEvent) => {
