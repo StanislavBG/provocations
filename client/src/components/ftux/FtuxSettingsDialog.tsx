@@ -23,6 +23,7 @@ import {
   X,
   RotateCcw,
   Play,
+  Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +46,7 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-sm font-serif">Shell Settings</DialogTitle>
         </DialogHeader>
@@ -56,6 +57,7 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
             <TabsTrigger value="statusbar" className="flex-1 text-xs">Status Bar</TabsTrigger>
             <TabsTrigger value="tips" className="flex-1 text-xs">Tips</TabsTrigger>
             <TabsTrigger value="appearance" className="flex-1 text-xs">Theme</TabsTrigger>
+            <TabsTrigger value="keybinds" className="flex-1 text-xs">Key Binds</TabsTrigger>
           </TabsList>
 
           {/* Dock settings */}
@@ -421,6 +423,36 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
               <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
             </div>
           </TabsContent>
+
+          {/* Key Binds */}
+          <TabsContent value="keybinds" className="mt-4">
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+              <KeybindGroup title="Canvas">
+                <KeybindRow keys={["Scroll"]} description="Zoom in / out" />
+                <KeybindRow keys={["+"]} description="Zoom in (hold to accelerate)" />
+                <KeybindRow keys={["-"]} description="Zoom out (hold to accelerate)" />
+                <KeybindRow keys={["Space", "Drag"]} description="Pan canvas" />
+                <KeybindRow keys={["W", "A", "S", "D"]} description="Glide camera" />
+                <KeybindRow keys={["M"]} description="Toggle minimap" />
+              </KeybindGroup>
+              <KeybindGroup title="Selection">
+                <KeybindRow keys={[MOD, "A"]} description="Select all nodes" />
+                <KeybindRow keys={["Shift", "Drag"]} description="Marquee select" />
+                <KeybindRow keys={["Shift", "Click"]} description="Toggle select node" />
+                <KeybindRow keys={["Esc"]} description="Deselect all" />
+              </KeybindGroup>
+              <KeybindGroup title="Edit">
+                <KeybindRow keys={[MOD, "C"]} description="Copy selected nodes" />
+                <KeybindRow keys={[MOD, "V"]} description="Paste at cursor" />
+                <KeybindRow keys={[MOD, "Z"]} description="Undo" />
+                <KeybindRow keys={[MOD, "Shift", "Z"]} description="Redo" />
+                <KeybindRow keys={["Del"]} description="Delete selected" />
+              </KeybindGroup>
+              <KeybindGroup title="Dock">
+                <KeybindRow keys={["1-9"]} description="Place dock item at cursor" />
+              </KeybindGroup>
+            </div>
+          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -450,6 +482,37 @@ function PositionButton({
     >
       {icon}
     </button>
+  );
+}
+
+// ── Key Binds helpers ──
+
+const MOD = navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
+
+function KeybindGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{title}</p>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
+function KeybindRow({ keys, description }: { keys: string[]; description: string }) {
+  return (
+    <div className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-muted/30">
+      <span className="text-xs text-muted-foreground">{description}</span>
+      <div className="flex items-center gap-0.5">
+        {keys.map((k, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-[10px] text-muted-foreground/40 mx-0.5">+</span>}
+            <kbd className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[10px] font-mono font-medium rounded border bg-muted/50 text-muted-foreground">
+              {k}
+            </kbd>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
