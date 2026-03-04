@@ -19,7 +19,8 @@ export type FlowNodeType =
   | "filter"
   | "gate"
   | "router"
-  | "merge";
+  | "merge"
+  | "label";
 
 export interface FlowNode {
   id: string;
@@ -94,14 +95,30 @@ export interface FlowNode {
   storeFolderPath?: string;
   /** Pause flag: when true, automation stops at this node and waits */
   paused?: boolean;
-  /** Lock flag: when true, node cannot be moved or deleted */
+  /** Lock flag: when true, node cannot be moved or deleted (legacy — use lockMode) */
   locked?: boolean;
+  /** Lock mode: 'none' = movable, 'canvas' = fixed on canvas, 'screen' = HUD-style viewport-fixed */
+  lockMode?: "none" | "canvas" | "screen";
+  /** Screen-locked position: X offset in pixels relative to canvas container */
+  screenX?: number;
+  /** Screen-locked position: Y offset in pixels relative to canvas container */
+  screenY?: number;
+  /** Label node: font size in px */
+  labelFontSize?: number;
+  /** Label node: bold flag */
+  labelBold?: boolean;
+  /** Label node: italic flag */
+  labelItalic?: boolean;
+  /** Label node: text color (tailwind class or hex) */
+  labelColor?: string;
 }
 
 export interface FlowEdge {
   id: string;
   fromNodeId: string;
   toNodeId: string;
+  /** Role of the connection — how the source data is used by the target */
+  role?: "context" | "objective";
 }
 
 export interface FlowViewport {
@@ -115,6 +132,12 @@ export interface FlowCanvasState {
   edges: FlowEdge[];
   viewport: FlowViewport;
   selectedNodeIds: Set<string>;
+}
+
+/** Resolve effective lock mode, handling legacy `locked` boolean */
+export function getEffectiveLockMode(node: FlowNode): "none" | "canvas" | "screen" {
+  if (node.lockMode) return node.lockMode;
+  return node.locked ? "canvas" : "none";
 }
 
 // ── Port Configuration ──
@@ -132,14 +155,15 @@ export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
   painter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   timeline: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   audio: [{ side: "right", type: "output" }],
-  youtube: [{ side: "right", type: "output" }],
+  youtube: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   "timer-event": [{ side: "right", type: "output" }],
   filter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   gate: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   router: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   merge: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   store: [{ side: "left", type: "input" }],
-  // research, interview, zone — no ports
+  research: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+  // interview, zone, label — no ports
 };
 
 // ── Defaults ──
@@ -161,6 +185,7 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   gate: { width: 180, height: 120 },
   router: { width: 220, height: 140 },
   merge: { width: 200, height: 120 },
+  label: { width: 200, height: 60 },
 };
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
@@ -265,12 +290,14 @@ export function useFlowCanvas() {
   }, []);
 
   const addEdge = useCallback(
-    (fromNodeId: string, toNodeId: string): string => {
+    (fromNodeId: string, toNodeId: string, role?: "context" | "objective"): string => {
       pushHistory();
       const id = generateId("edge");
+      const edge: FlowEdge = { id, fromNodeId, toNodeId };
+      if (role) edge.role = role;
       setState((s) => ({
         ...s,
-        edges: [...s.edges, { id, fromNodeId, toNodeId }],
+        edges: [...s.edges, edge],
       }));
       return id;
     },
@@ -348,11 +375,16 @@ export function useFlowCanvas() {
   const loadCanvas = useCallback(
     (data: { nodes: FlowNode[]; edges: FlowEdge[]; viewport: FlowViewport }) => {
       // Migrate old store nodes from large embedded sidebar to compact card
+      // Migrate old locked: true → lockMode: "canvas"
       const nodes = (data.nodes || []).map((n: FlowNode) => {
-        if (n.type === "store" && n.width === 260 && n.height === 320) {
-          return { ...n, width: 200, height: 100 };
+        let node = n;
+        if (node.type === "store" && node.width === 260 && node.height === 320) {
+          node = { ...node, width: 200, height: 100 };
         }
-        return n;
+        if (node.locked && !node.lockMode) {
+          node = { ...node, lockMode: "canvas" };
+        }
+        return node;
       });
       setState({
         nodes,

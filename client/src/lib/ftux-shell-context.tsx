@@ -21,7 +21,8 @@ export type ToolId =
   | "audio"
   | "youtube"
   | "timer-event"
-  | "logic";
+  | "logic"
+  | "label";
 
 export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";

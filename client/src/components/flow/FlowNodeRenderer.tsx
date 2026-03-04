@@ -1,7 +1,8 @@
 import React from "react";
-import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, Youtube, Timer, Filter, ToggleRight, GitBranch, Merge, Pause, Trash2, Lock, Unlock, Play, Loader2 } from "lucide-react";
+import { FileText, Sparkles, Brain, BookOpen, Paintbrush, MessageCircleQuestion, Clock, FileEdit, SquareDashedBottom, Mic, Youtube, Timer, Filter, ToggleRight, GitBranch, Merge, Pause, Trash2, Lock, Unlock, Play, Loader2, Type, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
+import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
 
 /** Node types that support the "Play" (auto-execute) button */
@@ -187,6 +188,17 @@ export const NODE_STYLES: Record<
     badge: "Merge",
     accent: "blue",
   },
+  label: {
+    border: "border-stone-400/40",
+    bg: "bg-transparent",
+    headerBg: "bg-stone-500/10",
+    headerBorder: "border-stone-400/30",
+    iconClass: "text-stone-500",
+    badgeBg: "bg-stone-500/20",
+    badgeText: "text-stone-600 dark:text-stone-400",
+    badge: "Label",
+    accent: "stone",
+  },
 };
 
 export const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
@@ -206,6 +218,7 @@ export const NODE_ICONS: Record<FlowNodeType, React.ElementType> = {
   gate: ToggleRight,
   router: GitBranch,
   merge: Merge,
+  label: Type,
 };
 
 interface FlowNodeRendererProps {
@@ -233,6 +246,75 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
   const Icon = NODE_ICONS[node.type];
   const isPlayable = PLAYABLE_TYPES.has(node.type);
   const isRunning = node.llmStatus === "running";
+
+  // ── Label nodes: transparent text annotation ──
+  if (node.type === "label") {
+    return (
+      <div
+        className={cn(
+          "absolute select-none cursor-grab group",
+          isSelected && "ring-1 ring-primary/50 rounded",
+        )}
+        style={{
+          left: node.x,
+          top: node.y,
+          width: node.width,
+          minHeight: node.height,
+          zIndex: node.zIndex,
+        }}
+        onMouseDown={(e) => onMouseDown(e, node.id)}
+        onDoubleClick={(e) => onDoubleClick(e, node.id)}
+      >
+        <p
+          style={{ fontSize: node.labelFontSize || 16 }}
+          className={cn(
+            "leading-snug px-2 py-1 whitespace-pre-wrap",
+            node.labelBold && "font-bold",
+            node.labelItalic && "italic",
+            node.labelColor || "text-foreground",
+          )}
+        >
+          {node.label || "Label"}
+        </p>
+
+        {/* Lock + Delete buttons on hover */}
+        {(() => {
+          const lm = getEffectiveLockMode(node);
+          return (
+            <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              {onToggleLock && (
+                <button
+                  className={cn(
+                    "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
+                    lm === "canvas" ? "bg-yellow-500 text-white"
+                      : lm === "screen" ? "bg-blue-500 text-white"
+                      : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+                  )}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
+                  title={lm === "none" ? "Lock to canvas" : lm === "canvas" ? "Lock to screen" : "Unlock"}
+                >
+                  {lm === "none" && <Unlock className="w-2.5 h-2.5" />}
+                  {lm === "canvas" && <Lock className="w-2.5 h-2.5" />}
+                  {lm === "screen" && <Monitor className="w-2.5 h-2.5" />}
+                </button>
+              )}
+              {lm === "none" && (
+                <button
+                  className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+                  title="Delete label"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -326,42 +408,43 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       )}
 
       {/* Lock + Delete buttons — visible on hover */}
-      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        {onToggleLock && (
-          <button
-            className={cn(
-              "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-              node.locked
-                ? "bg-yellow-500 text-white"
-                : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+      {(() => {
+        const lockMode = getEffectiveLockMode(node);
+        return (
+          <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onToggleLock && (
+              <button
+                className={cn(
+                  "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
+                  lockMode === "canvas" ? "bg-yellow-500 text-white"
+                    : lockMode === "screen" ? "bg-blue-500 text-white"
+                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+                )}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
+                title={lockMode === "none" ? "Lock to canvas" : lockMode === "canvas" ? "Lock to screen" : "Unlock"}
+              >
+                {lockMode === "none" && <Unlock className="w-2.5 h-2.5" />}
+                {lockMode === "canvas" && <Lock className="w-2.5 h-2.5" />}
+                {lockMode === "screen" && <Monitor className="w-2.5 h-2.5" />}
+              </button>
             )}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleLock(node.id);
-            }}
-            title={node.locked ? "Unlock node" : "Lock node"}
-          >
-            {node.locked ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
-          </button>
-        )}
-        {!node.locked && (
-          <button
-            className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(node.id);
-            }}
-            title="Delete node"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        )}
-      </div>
+            {lockMode === "none" && (
+              <button
+                className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+                title="Delete node"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Lock indicator */}
-      {node.locked && (
+      {getEffectiveLockMode(node) === "canvas" && (
         <div className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-yellow-500/90 text-white flex items-center justify-center shadow-sm">
           <Lock className="w-2.5 h-2.5" />
         </div>

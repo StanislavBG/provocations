@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type ComponentPropsWithoutRef } from "react";
+import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X, ExternalLink, Copy, Check, Link2, Maximize2, Minimize2 } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X, ExternalLink, Copy, Check, Link2, Maximize2, Minimize2, Youtube } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -260,6 +261,18 @@ const researchMarkdownComponents = {
   ),
 } as const;
 
+/** Connection context passed from Flow Canvas */
+export interface ResearchConnectionContext {
+  inputNodes: Array<{ type: string; label: string; content?: string; documentContent?: string; snippet?: string; role?: "context" | "objective" }>;
+  outputNodes: Array<{ id: string; type: string; label: string }>;
+}
+
+/** Extract YouTube URLs from text */
+function extractYoutubeUrls(text: string): string[] {
+  const regex = /https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+(?:&[^\s)]*)?/g;
+  return Array.from(text.matchAll(regex)).map((m) => m[0]);
+}
+
 interface NotebookResearchChatProps {
   objective: string;
   /** Called when user captures an AI response as active context */
@@ -270,6 +283,10 @@ interface NotebookResearchChatProps {
   initialMessages?: ChatMessageWithMeta[];
   /** Called whenever messages change, so parent can persist them */
   onMessagesChange?: (messages: ChatMessageWithMeta[]) => void;
+  /** Connection context from Flow Canvas (null when used outside flow) */
+  connectionContext?: ResearchConnectionContext | null;
+  /** Emit structured output to downstream nodes */
+  onEmitOutput?: (data: { type: "youtube-url"; url: string; title?: string }) => void;
 }
 
 export function NotebookResearchChat({
@@ -278,6 +295,8 @@ export function NotebookResearchChat({
   onMessageCountChange,
   initialMessages,
   onMessagesChange,
+  connectionContext,
+  onEmitOutput,
 }: NotebookResearchChatProps) {
   const [messages, setMessages] = useState<ChatMessageWithMeta[]>(
     () => initialMessages ?? [],
@@ -297,6 +316,52 @@ export function NotebookResearchChat({
   const { toast } = useToast();
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fsBottomRef = useRef<HTMLDivElement>(null);
+
+  // ── Connection-aware YouTube mode ──
+  const hasYoutubeDownstream = connectionContext?.outputNodes.some(
+    (n) => n.type === "youtube",
+  ) ?? false;
+
+  // Role-aware input parsing
+  const { objectiveFromInputs, contextFromInputs, topicFromInputs } = useMemo(() => {
+    if (!connectionContext?.inputNodes.length) return { objectiveFromInputs: "", contextFromInputs: "", topicFromInputs: "" };
+    const objectiveNodes = connectionContext.inputNodes.filter((n) => n.role === "objective");
+    const contextNodes = connectionContext.inputNodes.filter((n) => n.role === "context");
+    const allNodes = connectionContext.inputNodes;
+    const getText = (n: typeof allNodes[0]) => n.documentContent || n.content || n.snippet || "";
+    return {
+      objectiveFromInputs: objectiveNodes.map(getText).filter(Boolean).join("; "),
+      contextFromInputs: contextNodes.map(getText).filter(Boolean).join("\n\n"),
+      topicFromInputs: allNodes.map(getText).filter(Boolean).join("; "),
+    };
+  }, [connectionContext?.inputNodes]);
+
+  const effectiveObjective = useMemo(() => {
+    // If there's an explicit objective from a connected document, use it
+    if (objectiveFromInputs) {
+      if (hasYoutubeDownstream) {
+        return `Find a single high-quality YouTube video about: ${objectiveFromInputs}. Return the YouTube URL and a brief description of why this video is relevant.`;
+      }
+      return objectiveFromInputs;
+    }
+    if (hasYoutubeDownstream && topicFromInputs) {
+      return `Find a single high-quality YouTube video about: ${topicFromInputs}. Return the YouTube URL and a brief description of why this video is relevant.`;
+    }
+    if (hasYoutubeDownstream) {
+      return "Find a relevant YouTube video. Return the YouTube URL and a brief description.";
+    }
+    return objective;
+  }, [hasYoutubeDownstream, objectiveFromInputs, topicFromInputs, objective]);
+
+  // Auto-set focus to "gather" when YouTube is downstream (only on mount)
+  const youtubeAutoConfigured = useRef(false);
+  useEffect(() => {
+    if (hasYoutubeDownstream && !youtubeAutoConfigured.current && messages.length === 0) {
+      youtubeAutoConfigured.current = true;
+      setFocusMode("gather");
+      setResponseConfig({ ...FOCUS_MODE_DEFAULTS["gather"] });
+    }
+  }, [hasYoutubeDownstream, messages.length]);
 
   // Escape key closes full screen
   useEffect(() => {
@@ -372,7 +437,7 @@ export function NotebookResearchChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: query,
-          objective: objective || "General research",
+          objective: effectiveObjective || "General research",
         }),
       });
       if (!response.ok) throw new Error("Failed to generate plan");
@@ -388,7 +453,7 @@ export function NotebookResearchChat({
     } finally {
       setIsGeneratingPlan(false);
     }
-  }, [objective, toast]);
+  }, [effectiveObjective, toast]);
 
   // Dismiss plan and clear state
   const handleDismissPlan = useCallback(() => {
@@ -419,11 +484,12 @@ export function NotebookResearchChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: query,
-          objective: objective || "General research",
+          objective: effectiveObjective || "General research",
           history: messages.slice(-30).map((m) => ({ role: m.role, content: m.content })),
           researchFocus: focusMode,
           responseConfig,
           researchPlan: planText,
+          ...(contextFromInputs ? { additionalContext: contextFromInputs } : {}),
         }),
         signal: controller.signal,
       });
@@ -495,7 +561,7 @@ export function NotebookResearchChat({
       setStreamingContent("");
       abortRef.current = null;
     }
-  }, [messages, objective, focusMode, responseConfig, streamingContent, toast]);
+  }, [messages, effectiveObjective, focusMode, responseConfig, streamingContent, toast]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -542,6 +608,38 @@ export function NotebookResearchChat({
   return (
     <>
     <div className="h-full flex flex-col">
+      {/* Connection-aware banner */}
+      {(hasYoutubeDownstream || connectionContext?.inputNodes.some((n) => n.role)) && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-blue-500/10 shrink-0 flex-wrap">
+          {hasYoutubeDownstream && (
+            <>
+              <Youtube className="w-3.5 h-3.5 text-red-500 shrink-0" />
+              <span className="text-[11px] font-medium text-red-600 dark:text-red-400">
+                YouTube Video Finder
+              </span>
+            </>
+          )}
+          {connectionContext?.inputNodes.map((n, i) => (
+            <span key={i} className={cn(
+              "text-[9px] px-1.5 py-0.5 rounded-full shrink-0 flex items-center gap-1",
+              n.role === "objective" ? "bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                : n.role === "context" ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                : "bg-muted/50 text-muted-foreground",
+            )}>
+              {n.role === "objective" && "⎯ "}
+              {n.role === "context" && "📎 "}
+              {n.label}
+              {n.role && <span className="font-medium uppercase tracking-wider ml-0.5">{n.role}</span>}
+            </span>
+          ))}
+          {objectiveFromInputs && (
+            <span className="text-[10px] text-muted-foreground truncate">
+              — {objectiveFromInputs.slice(0, 100)}{objectiveFromInputs.length > 100 ? "..." : ""}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Sticky header: message count + Clear */}
       {hasMessages && (
         <div className="flex items-center justify-between px-3 py-1 border-b shrink-0">
@@ -748,8 +846,24 @@ export function NotebookResearchChat({
 
                     {/* Action row: capture + follow-ups */}
                     <div className="mt-1 flex flex-col gap-1">
-                      {/* Capture button */}
-                      <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Capture button + Send to YouTube */}
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {hasYoutubeDownstream && onEmitOutput && (() => {
+                          const urls = extractYoutubeUrls(msg.content);
+                          if (urls.length === 0) return null;
+                          return urls.map((url, ui) => (
+                            <Button
+                              key={ui}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] gap-1 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                              onClick={() => onEmitOutput({ type: "youtube-url", url })}
+                            >
+                              <Youtube className="w-3 h-3" />
+                              Send to YouTube
+                            </Button>
+                          ));
+                        })()}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1132,7 +1246,23 @@ export function NotebookResearchChat({
 
                         {/* Action row */}
                         <div className="mt-2 flex flex-col gap-1.5">
-                          <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {hasYoutubeDownstream && onEmitOutput && (() => {
+                              const urls = extractYoutubeUrls(msg.content);
+                              if (urls.length === 0) return null;
+                              return urls.map((url, ui) => (
+                                <Button
+                                  key={ui}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                  onClick={() => onEmitOutput({ type: "youtube-url", url })}
+                                >
+                                  <Youtube className="w-3.5 h-3.5" />
+                                  Send to YouTube
+                                </Button>
+                              ));
+                            })()}
                             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-primary" onClick={() => handleCapture(msg.content)}>
                               <BookmarkPlus className="w-3.5 h-3.5" />
                               Send to Notes

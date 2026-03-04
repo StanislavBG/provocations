@@ -240,6 +240,31 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
               }}
             />
 
+            {/* Role label on edge */}
+            {edge.role && !isHovered && (
+              <g>
+                <rect
+                  x={mx - 24}
+                  y={my - 8}
+                  width={48}
+                  height={16}
+                  rx={4}
+                  fill={edge.role === "objective" ? "rgba(59,130,246,0.85)" : "rgba(217,119,6,0.85)"}
+                />
+                <text
+                  x={mx}
+                  y={my + 3}
+                  textAnchor="middle"
+                  fill="white"
+                  fontSize="8"
+                  fontWeight="600"
+                  style={{ textTransform: "uppercase", letterSpacing: "0.05em", userSelect: "none" }}
+                >
+                  {edge.role}
+                </text>
+              </g>
+            )}
+
             {/* Delete X button at midpoint on hover */}
             {isHovered && onDeleteEdge && (
               <g
