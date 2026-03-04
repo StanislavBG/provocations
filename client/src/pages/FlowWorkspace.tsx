@@ -132,6 +132,7 @@ function FlowWorkspaceInner() {
   const [activeResearchNodeId, setActiveResearchNodeId] = useState<string | null>(null);
   const [activeDocumentNodeId, setActiveDocumentNodeId] = useState<string | null>(null);
   const [activePainterNodeId, setActivePainterNodeId] = useState<string | null>(null);
+  const [activeImageNodeId, setActiveImageNodeId] = useState<string | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -690,6 +691,9 @@ function FlowWorkspaceInner() {
       if (node?.type === "document" && !node.imageUrl) {
         setActiveDocumentNodeId(nodeId);
         setDocEditorContent(node.documentContent || "");
+      }
+      if (node?.type === "document" && node.imageUrl) {
+        setActiveImageNodeId(nodeId);
       }
       if (node?.type === "painter") {
         setActivePainterNodeId(nodeId);
@@ -1806,6 +1810,40 @@ function FlowWorkspaceInner() {
           </div>,
           document.body,
         )}
+
+      {/* Full-screen Image viewer overlay */}
+      {activeImageNodeId &&
+        (() => {
+          const imgNode = state.nodes.find((n) => n.id === activeImageNodeId);
+          if (!imgNode?.imageUrl) return null;
+          return createPortal(
+            <div
+              className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm animate-in fade-in duration-200"
+              onClick={() => setActiveImageNodeId(null)}
+            >
+              <div className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-sm shrink-0">
+                <h2 className="text-sm font-semibold truncate">{imgNode.label || "Image"}</h2>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setActiveImageNodeId(null)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={(e) => e.stopPropagation()}>
+                <img
+                  src={imgNode.imageUrl}
+                  alt={imgNode.label || "Image"}
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+                  draggable={false}
+                />
+              </div>
+            </div>,
+            document.body,
+          );
+        })()}
 
       {/* Connections dialog */}
       <Dialog open={connectionsDialogOpen} onOpenChange={setConnectionsDialogOpen}>
