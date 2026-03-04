@@ -28,6 +28,11 @@ import {
   Youtube,
   Timer,
   CircuitBoard,
+  Type,
+  Filter,
+  ToggleRight,
+  GitBranch,
+  Merge as MergeIcon,
   Layers,
   Pin,
   PinOff,
@@ -59,6 +64,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Youtube,
   Timer,
   CircuitBoard,
+  Type,
+  Filter,
+  ToggleRight,
+  GitBranch,
+  Merge: MergeIcon,
 };
 
 /** Grid: 2 rows x COLS columns. Items fill slots, remaining are empty. */
