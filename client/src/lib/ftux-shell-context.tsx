@@ -69,6 +69,7 @@ export interface FtuxShellConfig {
   canvasFontSize: number;          // px (default 14)
   canvasFontColor: string | null;  // hex override or null for theme default
   canvasBgColor: string | null;    // hex override or null for theme default
+  canvasBgTexture: string | null;  // texture preset key or null for none
   statusBarPosition: StatusBarPosition;
   statusBarPinnedItems: string[];
   statusBarTranslucency: number;   // 0-100
@@ -96,6 +97,7 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
   canvasFontSize: 14,
   canvasFontColor: null,
   canvasBgColor: null,
+  canvasBgTexture: null,
   statusBarPosition: "top",
   statusBarPinnedItems: [],
   statusBarTranslucency: 85,
@@ -139,6 +141,7 @@ export interface FtuxShellContextValue extends FtuxShellConfig {
   setCanvasFontSize: (val: number) => void;
   setCanvasFontColor: (val: string | null) => void;
   setCanvasBgColor: (val: string | null) => void;
+  setCanvasBgTexture: (val: string | null) => void;
   setStatusBarPosition: (pos: StatusBarPosition) => void;
   setStatusBarTranslucency: (val: number) => void;
   setStatusBarColor: (val: string | null) => void;
@@ -288,6 +291,11 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
 
   const setCanvasBgColor = useCallback(
     (val: string | null) => updateConfig((c) => ({ ...c, canvasBgColor: val })),
+    [updateConfig],
+  );
+
+  const setCanvasBgTexture = useCallback(
+    (val: string | null) => updateConfig((c) => ({ ...c, canvasBgTexture: val })),
     [updateConfig],
   );
 
@@ -482,6 +490,7 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     setCanvasFontSize,
     setCanvasFontColor,
     setCanvasBgColor,
+    setCanvasBgTexture,
     setStatusBarPosition,
     setStatusBarTranslucency,
     setStatusBarColor,
