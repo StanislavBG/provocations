@@ -25,6 +25,7 @@ import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
 import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
+import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
 import {
   Dialog,
@@ -1051,6 +1052,73 @@ function FlowWorkspaceInner() {
       }
     },
     [state.nodes],
+  );
+
+  // ── Chain navigation: navigate between connected nodes in overlay ──
+
+  const activeOverlayNodeId =
+    activeResearchNodeId ||
+    activeDocumentNodeId ||
+    activePainterNodeId ||
+    activeImageNodeId ||
+    activeInterviewNodeId ||
+    activeFullscreenNodeId ||
+    null;
+
+  const navigateToNode = useCallback(
+    (nodeId: string) => {
+      // Save document editor state if open
+      if (activeDocumentNodeId) {
+        updateNode(activeDocumentNodeId, {
+          documentContent: docEditorContent,
+          snippet: docEditorContent.slice(0, 200) || "Double-click to edit",
+          label: docEditorContent
+            ? docEditorContent.split("\n")[0]?.slice(0, 40) || "Document"
+            : "New Document",
+        });
+      }
+      // Clear all overlays
+      setActiveResearchNodeId(null);
+      setActiveDocumentNodeId(null);
+      setDocEditorContent("");
+      setActivePainterNodeId(null);
+      setActiveImageNodeId(null);
+      setActiveLabelNodeId(null);
+      setActiveInterviewNodeId(null);
+      setActiveFullscreenNodeId(null);
+      // Open the target node's overlay (same logic as handleNodeDoubleClick)
+      const node = state.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      switch (node.type) {
+        case "research":
+          setActiveResearchNodeId(nodeId);
+          break;
+        case "document":
+          if (node.imageUrl) {
+            setActiveImageNodeId(nodeId);
+          } else {
+            setActiveDocumentNodeId(nodeId);
+            setDocEditorContent(node.documentContent || "");
+          }
+          break;
+        case "painter":
+          setActivePainterNodeId(nodeId);
+          break;
+        case "store":
+          setStoreFolderPickerNodeId(nodeId);
+          break;
+        case "label":
+          setActiveLabelNodeId(nodeId);
+          break;
+        case "interview":
+          setActiveInterviewNodeId(nodeId);
+          break;
+        default:
+          setActiveFullscreenNodeId(nodeId);
+          break;
+      }
+    },
+    [activeDocumentNodeId, docEditorContent, updateNode, state.nodes],
   );
 
   // ── Store node: select save folder ──
@@ -2587,7 +2655,7 @@ function FlowWorkspaceInner() {
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden pb-12">
               <NotebookResearchChat
                 key={activeResearchNodeId}
                 objective=""
@@ -2622,7 +2690,7 @@ function FlowWorkspaceInner() {
             </div>
 
             {/* Body: 1/3 tools + 2/3 editor */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden pb-12">
               {/* Left panel — tools */}
               <div className="w-1/3 max-w-[320px] border-r bg-card/50 flex flex-col overflow-auto">
                 <div className="p-3 border-b">
@@ -2721,7 +2789,7 @@ function FlowWorkspaceInner() {
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden pb-12">
               <ArtifyPanel
                 sourceText={painterSourceText}
                 sourceLabel={painterSourceText ? "Connected nodes" : "No inputs"}
@@ -2754,7 +2822,7 @@ function FlowWorkspaceInner() {
                   <X className="w-4 h-4" />
                 </Button>
               </div>
-              <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex-1 flex items-center justify-center p-4 pb-14 overflow-auto" onClick={(e) => e.stopPropagation()}>
                 <img
                   src={imgNode.imageUrl}
                   alt={imgNode.label || "Image"}
@@ -2796,6 +2864,18 @@ function FlowWorkspaceInner() {
             />
           );
         })()}
+
+      {/* Chain navigation bar (rendered once, above all overlays) */}
+      {activeOverlayNodeId &&
+        createPortal(
+          <FlowChainNavBar
+            activeNodeId={activeOverlayNodeId}
+            nodes={state.nodes}
+            edges={state.edges}
+            onNavigate={navigateToNode}
+          />,
+          document.body,
+        )}
 
       {/* Connections dialog */}
       <Dialog open={connectionsDialogOpen} onOpenChange={setConnectionsDialogOpen}>

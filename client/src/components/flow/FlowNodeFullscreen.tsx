@@ -3,25 +3,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { FlowNode } from "./useFlowCanvas";
-import { NODE_STYLES, NODE_ICONS } from "./FlowNodeRenderer";
-
-/** Accent color → Tailwind bg class for the subheader bar */
-const ACCENT_BG: Record<string, string> = {
-  amber: "bg-amber-500",
-  blue: "bg-blue-500",
-  violet: "bg-violet-500",
-  primary: "bg-primary",
-  rose: "bg-rose-500",
-  cyan: "bg-cyan-500",
-  orange: "bg-orange-500",
-  indigo: "bg-indigo-500",
-  red: "bg-red-500",
-  emerald: "bg-emerald-500",
-  teal: "bg-teal-500",
-  yellow: "bg-yellow-500",
-  purple: "bg-purple-500",
-  sky: "bg-sky-500",
-};
+import { NODE_STYLES, NODE_ICONS, ACCENT_BG } from "./FlowNodeRenderer";
 
 interface FlowNodeFullscreenProps {
   node: FlowNode;
@@ -57,7 +39,7 @@ export function FlowNodeFullscreen({ node, onClose, onUpdateNode }: FlowNodeFull
       </div>
 
       {/* Content area */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6 pb-16">
         {/* Editable label */}
         <div className="mb-4">
           <label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
