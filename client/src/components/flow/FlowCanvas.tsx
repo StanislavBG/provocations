@@ -23,7 +23,6 @@ interface FlowCanvasProps {
   onToggleSelectNode: (nodeId: string) => void;
   onNodeDoubleClick: (nodeId: string) => void;
   onViewportChange: (x: number, y: number, zoom: number) => void;
-  onPickDocument: (doc: { id: number; title: string; content: string }) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onCreateNote: (content: string, label: string) => void;
   onCreateEdge?: (fromNodeId: string, toNodeId: string) => void;
@@ -73,7 +72,6 @@ export function FlowCanvas({
   onToggleSelectNode,
   onNodeDoubleClick,
   onViewportChange,
-  onPickDocument,
   onUpdateNode,
   onCreateNote,
   onCreateEdge,
@@ -143,7 +141,7 @@ export function FlowCanvas({
 
   // Viewport virtualization: only render nodes within the visible area + buffer
   const visibleNodes = useMemo(() => {
-    if (state.nodes.length < 50) return sortedNodes; // Skip culling for small canvases
+    if (state.nodes.length < 30) return sortedNodes; // Skip culling for small canvases
     return sortedNodes.filter((node) =>
       isNodeVisible(node, state.viewport, canvasDims.width, canvasDims.height),
     );
@@ -151,7 +149,7 @@ export function FlowCanvas({
 
   // Also cull edges: only render edges where at least one endpoint is visible
   const visibleEdges = useMemo(() => {
-    if (state.nodes.length < 50) return state.edges;
+    if (state.nodes.length < 30) return state.edges;
     const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
     return state.edges.filter(
       (e) => visibleNodeIds.has(e.fromNodeId) || visibleNodeIds.has(e.toNodeId),
@@ -258,9 +256,10 @@ export function FlowCanvas({
               node={node}
               isSelected={state.selectedNodeIds.has(node.id)}
               onMouseDown={handleNodeMouseDown}
+              onDoubleClick={handleNodeDoubleClick}
               onDelete={onDeleteNode}
-              onUpdateNode={onUpdateNode}
-              onPickDocument={onPickDocument}
+              onToggleLock={onToggleLock}
+              onPortMouseDown={handlePortMouseDown}
             />
           ) : node.type === "document" ? (
             <FlowDocumentNode
@@ -423,7 +422,7 @@ export function FlowCanvas({
       )}
 
       {/* Virtualization stats (dev only) */}
-      {state.nodes.length >= 50 && (
+      {state.nodes.length >= 30 && (
         <div className="absolute bottom-2 left-2 text-[9px] text-muted-foreground/40 pointer-events-none">
           {visibleNodes.length}/{state.nodes.length} nodes rendered
         </div>

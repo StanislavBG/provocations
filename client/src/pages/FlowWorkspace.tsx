@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import { ShareDialog } from "@/components/ShareDialog";
 import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
 import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
+import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
 import {
   Dialog,
   DialogContent,
@@ -37,8 +38,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  X, Loader2, Save, Maximize, FileText, FolderOpen, FolderInput,
-  ZoomIn, ZoomOut, Lock, Unlock, ChevronDown, ScanLine,
+  X, Loader2, Save, Maximize, FileText, Folder, FolderOpen, FolderInput,
+  ZoomIn, ZoomOut, Lock, Unlock, ChevronDown, ChevronRight, ScanLine,
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
   Lightbulb, Paintbrush2, PenLine, Users, Wifi, WifiOff,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
@@ -77,6 +78,24 @@ interface DocumentListItem {
   id: number;
   title: string;
   docType?: string;
+  folderId?: number | null;
+}
+
+interface FolderItem {
+  id: number;
+  name: string;
+  parentFolderId: number | null;
+}
+
+function treeIndent(depth: number): number {
+  if (depth === 0) return 0;
+  let px = 0;
+  for (let i = 1; i <= depth; i++) {
+    if (i <= 4) px += 14;
+    else if (i <= 7) px += 10;
+    else px += 7;
+  }
+  return px;
 }
 
 // ── Document editor tool buttons ──
@@ -151,13 +170,16 @@ function FlowWorkspaceInner() {
   const [activePainterNodeId, setActivePainterNodeId] = useState<string | null>(null);
   const [activeImageNodeId, setActiveImageNodeId] = useState<string | null>(null);
   const [activeFullscreenNodeId, setActiveFullscreenNodeId] = useState<string | null>(null);
-  const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number } | null>(null);
+  const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number; screenX: number; screenY: number } | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
   const [frozen, setFrozen] = useState(false);
   const [bgAnimationOn, setBgAnimationOn] = useState(true);
+  const [storeFolderPickerNodeId, setStoreFolderPickerNodeId] = useState<string | null>(null);
+  const [pickerExpandedFolders, setPickerExpandedFolders] = useState<Set<number>>(new Set());
 
   // Sync hero div visibility with bgAnimationOn state
   useEffect(() => {
@@ -699,8 +721,26 @@ function FlowWorkspaceInner() {
     staleTime: 30_000,
   });
 
+  const { data: foldersData } = useQuery<FolderItem[]>({
+    queryKey: ["/api/folders"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/folders");
+      const data = await res.json();
+      return data.folders ?? data;
+    },
+    staleTime: 30_000,
+  });
+
   const docs = docsData?.documents ?? [];
+  const allFolders = foldersData ?? [];
   const canvasDocs = docs.filter((d) => d.docType === "chart");
+
+  // Tree helpers for document picker and folder picker dialogs
+  const pickerRootFolders = allFolders.filter((f) => f.parentFolderId === null);
+  const getPickerChildren = (parentId: number) => allFolders.filter((f) => f.parentFolderId === parentId);
+  const getPickerDocsInFolder = (folderId: number | null) =>
+    docs.filter((d) => (folderId === null ? !d.folderId : d.folderId === folderId));
+  const pickerRootDocs = getPickerDocsInFolder(null);
 
   // ── Intercept dock clicks — place at mouse cursor ──
 
@@ -724,21 +764,6 @@ function FlowWorkspaceInner() {
       y: (-state.viewport.y + h / 2) / state.viewport.zoom + offset,
     };
   }, [state.viewport, state.nodes.length]);
-
-  // ── Pick document from on-canvas Context Store ──
-
-  const handlePickDocument = useCallback(
-    (doc: { id: number; title: string; content: string }) => {
-      const pos = getPlacementCenter();
-      addNode("context-doc", pos.x, pos.y, {
-        label: doc.title,
-        documentId: doc.id,
-        snippet: doc.content.slice(0, 200),
-        content: doc.content,
-      });
-    },
-    [addNode, getPlacementCenter],
-  );
 
   // ── Research overlay: "Send to Notes" → creates document + edge ──
 
@@ -819,6 +844,9 @@ function FlowWorkspaceInner() {
         case "painter":
           setActivePainterNodeId(nodeId);
           break;
+        case "store":
+          setStoreFolderPickerNodeId(nodeId);
+          break;
         default:
           // All other node types open in the generic fullscreen overlay
           setActiveFullscreenNodeId(nodeId);
@@ -826,6 +854,21 @@ function FlowWorkspaceInner() {
       }
     },
     [state.nodes],
+  );
+
+  // ── Store node: select save folder ──
+
+  const handleSelectStoreFolder = useCallback(
+    (folderId: number | null, folderName: string, folderPath: string) => {
+      if (!storeFolderPickerNodeId) return;
+      updateNode(storeFolderPickerNodeId, {
+        storeFolderId: folderId ?? undefined,
+        storeFolderName: folderName,
+        storeFolderPath: folderPath,
+      });
+      setStoreFolderPickerNodeId(null);
+    },
+    [storeFolderPickerNodeId, updateNode],
   );
 
   // ── Create document from LLM output ──
@@ -1151,7 +1194,7 @@ function FlowWorkspaceInner() {
         return;
       }
       if (toolId === "logic") {
-        setPendingLogicAction({ x: canvasX, y: canvasY });
+        setPendingLogicAction({ x: canvasX, y: canvasY, screenX: mousePosRef.current.x, screenY: mousePosRef.current.y });
         return;
       }
     },
@@ -1299,11 +1342,16 @@ function FlowWorkspaceInner() {
   const handleOpenCanvas = useCallback(
     async (docId: number, docTitle: string) => {
       setCanvasLoading(true);
+      setLoadProgress(20);
       try {
         const res = await apiRequest("GET", `/api/documents/${docId}`);
+        setLoadProgress(60);
         const data = (await res.json()) as { title: string; content: string };
+        setLoadProgress(80);
         const parsed = JSON.parse(data.content);
+        setLoadProgress(90);
         loadCanvas(parsed);
+        setLoadProgress(100);
         setCanvasDocumentId(docId);
         setCanvasTitle(data.title || docTitle);
         setOpenCanvasDialogOpen(false);
@@ -1312,6 +1360,7 @@ function FlowWorkspaceInner() {
         toast({ title: "Failed to load canvas", variant: "destructive" });
       } finally {
         setCanvasLoading(false);
+        setLoadProgress(undefined);
       }
     },
     [loadCanvas, toast],
@@ -1746,7 +1795,6 @@ function FlowWorkspaceInner() {
           onToggleSelectNode={toggleSelectNode}
           onNodeDoubleClick={handleNodeDoubleClick}
           onViewportChange={setViewport}
-          onPickDocument={handlePickDocument}
           onUpdateNode={updateNode}
           onCreateNote={handleCreateNote}
           onCreateEdge={handleCreateEdge}
@@ -1758,6 +1806,7 @@ function FlowWorkspaceInner() {
         />
 
         <FtuxDock />
+        <FlowLoadingBar active={canvasLoading || isSaving} progress={canvasLoading ? loadProgress : undefined} />
       </div>
 
       {/* Context Store: Load/Save choice dialog */}
@@ -1824,7 +1873,7 @@ function FlowWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* Document picker dialog (after choosing Load File) */}
+      {/* Document picker dialog (after choosing Load File) — tree structure */}
       <Dialog
         open={pendingContextAction?.mode === "load"}
         onOpenChange={(open) => !open && setPendingContextAction(null)}
@@ -1834,11 +1883,53 @@ function FlowWorkspaceInner() {
             <DialogTitle className="text-sm">Pick a document</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-auto -mx-6 px-6">
-            {docs.length === 0 ? (
+            {docs.length === 0 && allFolders.length === 0 ? (
               <p className="text-xs text-muted-foreground py-4 text-center">No documents found</p>
             ) : (
               <div className="space-y-0.5">
-                {docs.map((doc) => (
+                {pickerRootFolders.map((folder) => {
+                  const renderPickerFolder = (f: FolderItem, depth: number): ReactNode => {
+                    const isExpanded = pickerExpandedFolders.has(f.id);
+                    const children = getPickerChildren(f.id);
+                    const folderDocs = getPickerDocsInFolder(f.id);
+                    const indent = treeIndent(depth);
+                    return (
+                      <div key={`f-${f.id}`}>
+                        <button
+                          className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
+                          style={{ paddingLeft: `${indent + 8}px` }}
+                          onClick={() => setPickerExpandedFolders((prev) => {
+                            const next = new Set(prev);
+                            next.has(f.id) ? next.delete(f.id) : next.add(f.id);
+                            return next;
+                          })}
+                        >
+                          {isExpanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+                          {isExpanded ? <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                          <span className="text-xs font-medium truncate">{f.name}</span>
+                        </button>
+                        {isExpanded && (
+                          <>
+                            {children.map((child) => renderPickerFolder(child, depth + 1))}
+                            {folderDocs.map((doc) => (
+                              <button
+                                key={doc.id}
+                                className="w-full flex items-center gap-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
+                                style={{ paddingLeft: `${treeIndent(depth + 1) + 8}px` }}
+                                onClick={() => handleDocPickFromDialog(doc.id, doc.title)}
+                              >
+                                <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-xs truncate">{doc.title}</span>
+                              </button>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    );
+                  };
+                  return renderPickerFolder(folder, 0);
+                })}
+                {pickerRootDocs.map((doc) => (
                   <button
                     key={doc.id}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
@@ -1849,6 +1940,72 @@ function FlowWorkspaceInner() {
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Folder picker for Store node — folders only */}
+      <Dialog
+        open={!!storeFolderPickerNodeId}
+        onOpenChange={(open) => !open && setStoreFolderPickerNodeId(null)}
+      >
+        <DialogContent className="max-w-xs max-h-[50vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Select save folder</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto -mx-6 px-6">
+            <button
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
+              onClick={() => handleSelectStoreFolder(null, "Root", "/ (Root)")}
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="text-xs font-medium">/ (Root)</span>
+            </button>
+            {pickerRootFolders.map((folder) => {
+              const renderStoreFolderPicker = (f: FolderItem, depth: number, parentPath: string): ReactNode => {
+                const isExpanded = pickerExpandedFolders.has(f.id);
+                const children = getPickerChildren(f.id);
+                const path = parentPath ? `${parentPath} > ${f.name}` : f.name;
+                const indent = treeIndent(depth);
+                return (
+                  <div key={`sf-${f.id}`}>
+                    <div
+                      className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors"
+                      style={{ paddingLeft: `${indent + 8}px` }}
+                    >
+                      {children.length > 0 ? (
+                        <button
+                          className="shrink-0"
+                          onClick={() => setPickerExpandedFolders((prev) => {
+                            const next = new Set(prev);
+                            next.has(f.id) ? next.delete(f.id) : next.add(f.id);
+                            return next;
+                          })}
+                        >
+                          {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                        </button>
+                      ) : (
+                        <span className="w-3 shrink-0" />
+                      )}
+                      <button
+                        className="flex items-center gap-1.5 flex-1 text-left min-w-0"
+                        onClick={() => handleSelectStoreFolder(f.id, f.name, path)}
+                      >
+                        <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span className="text-xs font-medium truncate">{f.name}</span>
+                      </button>
+                    </div>
+                    {isExpanded && children.map((child) => renderStoreFolderPicker(child, depth + 1, path))}
+                  </div>
+                );
+              };
+              return renderStoreFolderPicker(folder, 0, "");
+            })}
+            {allFolders.length === 0 && (
+              <p className="text-[10px] text-muted-foreground/60 py-2 text-center">
+                No folders yet. Create folders in the Context Store first.
+              </p>
             )}
           </div>
         </DialogContent>
@@ -1881,47 +2038,43 @@ function FlowWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
-      {/* Logic node type picker dialog */}
-      <Dialog
-        open={pendingLogicAction !== null}
-        onOpenChange={(open) => !open && setPendingLogicAction(null)}
-      >
-        <DialogContent className="max-w-xs">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Logic Node</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
+      {/* Logic node type picker — lightweight popover, no overlay dimming */}
+      {pendingLogicAction && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setPendingLogicAction(null)} />
+          <div
+            className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg p-1 w-48 animate-in fade-in zoom-in-95 duration-100"
+            style={{
+              left: Math.min(pendingLogicAction.screenX + 20, window.innerWidth - 210),
+              top: Math.min(pendingLogicAction.screenY - 60, window.innerHeight - 200),
+            }}
+          >
+            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Logic</div>
             {([
-              { type: "filter" as const, icon: Filter, label: "Filter", desc: "Pass data through only if condition is met", color: "text-teal-500" },
-              { type: "gate" as const, icon: ToggleRight, label: "Gate", desc: "Manual on/off switch to allow or block flow", color: "text-yellow-500" },
-              { type: "router" as const, icon: GitBranch, label: "Router", desc: "Route data to different outputs by condition", color: "text-purple-500" },
-              { type: "merge" as const, icon: MergeIcon, label: "Merge", desc: "Combine multiple inputs into a single output", color: "text-sky-500" },
-            ]).map((item, i) => (
-              <Button
+              { type: "filter" as const, icon: Filter, label: "Filter", color: "text-teal-500" },
+              { type: "gate" as const, icon: ToggleRight, label: "Gate", color: "text-yellow-500" },
+              { type: "router" as const, icon: GitBranch, label: "Router", color: "text-purple-500" },
+              { type: "merge" as const, icon: MergeIcon, label: "Merge", color: "text-sky-500" },
+            ]).map((item) => (
+              <button
                 key={item.type}
-                variant="outline"
-                className="justify-start gap-2 h-12"
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
                 onClick={() => {
-                  if (!pendingLogicAction) return;
                   addNode(item.type, pendingLogicAction.x, pendingLogicAction.y, {
                     label: item.label,
-                    snippet: item.desc,
+                    snippet: `${item.label} node`,
                     ...(item.type === "gate" ? { gateOpen: true } : {}),
                   });
                   setPendingLogicAction(null);
                 }}
               >
-                <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">{i + 1}</span>
-                <item.icon className={`w-4 h-4 ${item.color}`} />
-                <div className="text-left">
-                  <div className="text-xs font-medium">{item.label}</div>
-                  <div className="text-[10px] text-muted-foreground">{item.desc}</div>
-                </div>
-              </Button>
+                <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+                {item.label}
+              </button>
             ))}
           </div>
-        </DialogContent>
-      </Dialog>
+        </>
+      )}
 
       {/* Full-screen Research overlay (tied to specific node) */}
       {activeResearchNodeId &&

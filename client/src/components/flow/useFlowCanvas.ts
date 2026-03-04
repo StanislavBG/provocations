@@ -86,6 +86,12 @@ export interface FlowNode {
   gateOpen?: boolean;
   /** Logic node: router output labels */
   routerOutputs?: string[];
+  /** Store node: selected destination folder ID */
+  storeFolderId?: number;
+  /** Store node: display name of the selected folder */
+  storeFolderName?: string;
+  /** Store node: full path string like "Projects > Subfolder" */
+  storeFolderPath?: string;
   /** Pause flag: when true, automation stops at this node and waits */
   paused?: boolean;
   /** Lock flag: when true, node cannot be moved or deleted */
@@ -132,7 +138,8 @@ export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
   gate: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   router: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   merge: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
-  // research, interview, store, zone — no ports
+  store: [{ side: "left", type: "input" }],
+  // research, interview, zone — no ports
 };
 
 // ── Defaults ──
@@ -141,7 +148,7 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   "context-doc": { width: 200, height: 120 },
   research: { width: 220, height: 140 },
   llm: { width: 260, height: 240 },
-  store: { width: 260, height: 320 },
+  store: { width: 200, height: 100 },
   painter: { width: 260, height: 200 },
   interview: { width: 220, height: 140 },
   timeline: { width: 260, height: 160 },
@@ -319,10 +326,11 @@ export function useFlowCanvas() {
 
   /** Move multiple nodes by a delta (used for zone group drag) */
   const moveNodes = useCallback((nodeIds: string[], dx: number, dy: number) => {
+    const idSet = new Set(nodeIds);
     setState((s) => ({
       ...s,
       nodes: s.nodes.map((n) =>
-        nodeIds.includes(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n,
+        idSet.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n,
       ),
     }));
   }, []);
@@ -339,8 +347,15 @@ export function useFlowCanvas() {
   /** Load a full canvas state from saved JSON */
   const loadCanvas = useCallback(
     (data: { nodes: FlowNode[]; edges: FlowEdge[]; viewport: FlowViewport }) => {
+      // Migrate old store nodes from large embedded sidebar to compact card
+      const nodes = (data.nodes || []).map((n: FlowNode) => {
+        if (n.type === "store" && n.width === 260 && n.height === 320) {
+          return { ...n, width: 200, height: 100 };
+        }
+        return n;
+      });
       setState({
-        nodes: data.nodes || [],
+        nodes,
         edges: data.edges || [],
         viewport: data.viewport || INITIAL_VIEWPORT,
         selectedNodeIds: new Set(),

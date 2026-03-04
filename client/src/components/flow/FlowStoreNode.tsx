@@ -1,51 +1,36 @@
-import React, { useCallback, useState } from "react";
-import { BookOpen, Trash2, Lock, Unlock, Loader2 } from "lucide-react";
+import React from "react";
+import { FolderInput, Folder, FolderOpen, Trash2, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ContextSidebar } from "@/components/notebook/ContextSidebar";
-import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode } from "./useFlowCanvas";
+import { FlowPortDots } from "./FlowPortDots";
 
 interface FlowStoreNodeProps {
   node: FlowNode;
   isSelected: boolean;
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
+  onDoubleClick: (e: React.MouseEvent, nodeId: string) => void;
   onDelete: (nodeId: string) => void;
-  onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
-  onPickDocument: (doc: { id: number; title: string; content: string }) => void;
+  onToggleLock?: (nodeId: string) => void;
+  onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
 }
 
 export const FlowStoreNode = React.memo(function FlowStoreNode({
   node,
   isSelected,
   onMouseDown,
+  onDoubleClick,
   onDelete,
-  onUpdateNode,
-  onPickDocument,
+  onToggleLock,
+  onPortMouseDown,
 }: FlowStoreNodeProps) {
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleDocClick = useCallback(
-    async (id: number, title: string) => {
-      if (isLoading) return;
-      setIsLoading(true);
-      try {
-        const res = await apiRequest("GET", `/api/documents/${id}`);
-        const data = (await res.json()) as { title: string; content: string };
-        onPickDocument({ id, title: data.title || title, content: data.content });
-      } catch {
-        onPickDocument({ id, title, content: "" });
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [isLoading, onPickDocument],
-  );
+  const hasFolder = !!node.storeFolderId || !!node.storeFolderName;
 
   return (
     <div
       className={cn(
-        "absolute select-none rounded-lg border-2 shadow-md transition-shadow group flex flex-col",
-        "bg-card border-primary/60 hover:shadow-lg",
+        "absolute select-none rounded-lg border-2 shadow-md transition-shadow cursor-grab group flex flex-col",
+        "bg-card hover:shadow-lg",
+        hasFolder ? "border-primary/60" : "border-muted-foreground/30",
         isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{
@@ -55,37 +40,48 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
         height: node.height,
         zIndex: node.zIndex,
       }}
+      onMouseDown={(e) => onMouseDown(e, node.id)}
+      onDoubleClick={(e) => onDoubleClick(e, node.id)}
     >
-      {/* Draggable header */}
-      <div
-        className="flex items-center gap-1.5 px-2 py-1 border-b bg-primary/10 border-primary/20 rounded-t-lg cursor-grab shrink-0"
-        onMouseDown={(e) => onMouseDown(e, node.id)}
-      >
-        <BookOpen className="w-3 h-3 text-primary shrink-0" />
-        <span className="text-[10px] font-medium truncate flex-1">Context Store</span>
-        {isLoading && <Loader2 className="w-2.5 h-2.5 animate-spin text-primary" />}
+      {/* Header */}
+      <div className="flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg bg-primary/10 border-primary/20 shrink-0">
+        <FolderInput className="w-3 h-3 text-primary shrink-0" />
+        <span className="text-[10px] font-medium truncate flex-1">
+          {node.label || "Save File"}
+        </span>
         <span className="text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded bg-primary/20 text-primary">
           Store
         </span>
       </div>
 
-      {/* Embedded ContextSidebar — scrollable, interactive */}
-      <div
-        className="flex-1 overflow-auto min-h-0"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <ContextSidebar
-          pinnedDocIds={new Set()}
-          onPinDoc={() => {}}
-          onUnpinDoc={() => {}}
-          onPreviewDoc={handleDocClick}
-          isCollapsed={false}
-          onToggleCollapse={() => {}}
-          embedded
-        />
+      {/* Content: folder path or empty state */}
+      <div className="px-2 py-2 flex-1 flex items-center gap-1.5 min-w-0">
+        {hasFolder ? (
+          <>
+            <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="text-[10px] text-foreground/80 truncate">
+              {node.storeFolderPath || node.storeFolderName}
+            </span>
+          </>
+        ) : (
+          <>
+            <Folder className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+            <span className="text-[10px] text-muted-foreground/50 italic">
+              Double-click to pick folder
+            </span>
+          </>
+        )}
       </div>
 
-      {/* Lock + Delete buttons */}
+      {/* Port dots */}
+      <FlowPortDots
+        node={node}
+        isSelected={isSelected}
+        onPortMouseDown={onPortMouseDown}
+        accentColor="primary"
+      />
+
+      {/* Lock + Delete hover buttons */}
       <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           className={cn(
@@ -97,7 +93,7 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
-            onUpdateNode(node.id, { locked: !node.locked });
+            onToggleLock?.(node.id);
           }}
           title={node.locked ? "Unlock node" : "Lock node"}
         >
