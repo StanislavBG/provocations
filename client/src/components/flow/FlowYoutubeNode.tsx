@@ -62,24 +62,63 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
       return;
     }
 
-    onUpdateNode(node.id, { youtubeFetchStatus: "fetching", youtubeError: undefined, snippet: "Fetching transcript..." });
+    onUpdateNode(node.id, { youtubeFetchStatus: "fetching", youtubeError: undefined, snippet: "Fetching transcript…" });
 
     try {
-      const res = await apiRequest("POST", "/api/youtube/process-video", {
-        videoId,
-        videoUrl: url,
-        videoTitle: "",
+      // Use SSE streaming for progressive transcript delivery
+      const res = await fetch("/api/youtube/process-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ videoId, videoUrl: url, videoTitle: "" }),
       });
-      const data = (await res.json()) as { videoTitle: string; transcript: string };
 
-      onUpdateNode(node.id, {
-        youtubeFetchStatus: "done",
-        youtubeTitle: data.videoTitle,
-        content: data.transcript,
-        snippet: data.transcript.slice(0, 150),
-        label: `YT: ${(data.videoTitle || "Video").slice(0, 25)}`,
-      });
-      toast({ title: "Transcript ready" });
+      if (!res.ok) throw new Error("Transcript fetch failed");
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let accumulated = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === "status") {
+              onUpdateNode(node.id, { snippet: evt.message });
+            } else if (evt.type === "chunk") {
+              accumulated += (accumulated ? "\n" : "") + evt.text;
+              onUpdateNode(node.id, {
+                content: accumulated,
+                snippet: `${evt.progress}% — ${accumulated.length.toLocaleString()} chars`,
+              });
+            } else if (evt.type === "done") {
+              onUpdateNode(node.id, {
+                youtubeFetchStatus: "done",
+                youtubeTitle: evt.videoTitle,
+                content: evt.transcript,
+                snippet: evt.transcript.slice(0, 150),
+                label: `YT: ${(evt.videoTitle || "Video").slice(0, 25)}`,
+              });
+              toast({ title: "Transcript ready", description: `${evt.totalSegments} segments, ${evt.totalChars.toLocaleString()} chars` });
+            } else if (evt.type === "error") {
+              throw new Error(evt.message);
+            }
+          } catch (parseErr) {
+            // Skip malformed SSE lines
+            if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") throw parseErr;
+          }
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Fetch failed";
       onUpdateNode(node.id, { youtubeFetchStatus: "error", youtubeError: msg, snippet: "Error fetching transcript" });
