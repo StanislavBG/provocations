@@ -29,6 +29,11 @@ function computeEndpoints(from: FlowNode, to: FlowNode) {
     : { x1: fromCx, y1: from.y, x2: toCx, y2: to.y + to.height };
 }
 
+/** Check if this edge should show conveyor animation (painter running) */
+function isPainterConveyor(from: FlowNode): boolean {
+  return from.type === "painter" && from.llmStatus === "running";
+}
+
 export const FlowEdgeLayer = memo(function FlowEdgeLayer({
   nodes,
   edges,
@@ -64,7 +69,41 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
             className="fill-muted-foreground/40"
           />
         </marker>
+        {/* Painter conveyor arrow — rose colored */}
+        <marker
+          id="flow-arrow-painter"
+          markerWidth="8"
+          markerHeight="6"
+          refX="7"
+          refY="3"
+          orient="auto"
+        >
+          <polygon
+            points="0,0 8,3 0,6"
+            fill="#f43f5e"
+            opacity={0.7}
+          />
+        </marker>
       </defs>
+
+      {/* Painter conveyor animation keyframes */}
+      <style>{`
+        @keyframes conveyor-flow {
+          0% { stroke-dashoffset: 24; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes conveyor-glow {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.6; }
+        }
+        .conveyor-edge {
+          animation: conveyor-flow 0.8s linear infinite;
+        }
+        .conveyor-glow {
+          animation: conveyor-glow 1.5s ease-in-out infinite;
+        }
+      `}</style>
+
       {edges.map((edge) => {
         const from = nodeMap.get(edge.fromNodeId);
         const to = nodeMap.get(edge.toNodeId);
@@ -86,17 +125,56 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
 
         const path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`;
         const isHovered = hoveredEdge === edge.id;
+        const isConveyor = isPainterConveyor(from);
 
         return (
           <g key={edge.id}>
-            {/* Visible edge line */}
-            <path
-              d={path}
-              fill="none"
-              className={isHovered ? "stroke-destructive/60" : "stroke-muted-foreground/35"}
-              strokeWidth={isHovered ? 2.5 : 1.5}
-              markerEnd="url(#flow-arrow)"
-            />
+            {isConveyor ? (
+              <>
+                {/* Glow trail behind the conveyor */}
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#f43f5e"
+                  strokeWidth={6}
+                  opacity={0.12}
+                  className="conveyor-glow"
+                />
+                {/* Animated dashed conveyor line */}
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#f43f5e"
+                  strokeWidth={2.5}
+                  strokeDasharray="8 4 2 4"
+                  strokeLinecap="round"
+                  opacity={0.7}
+                  markerEnd="url(#flow-arrow-painter)"
+                  className="conveyor-edge"
+                />
+                {/* Paint blob dots traveling along the edge */}
+                <circle r={3} fill="#f43f5e" opacity={0.8}>
+                  <animateMotion dur="1.2s" repeatCount="indefinite" path={path} />
+                </circle>
+                <circle r={2} fill="#fb7185" opacity={0.6}>
+                  <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin="0.4s" />
+                </circle>
+                <circle r={2.5} fill="#e11d48" opacity={0.5}>
+                  <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin="0.8s" />
+                </circle>
+              </>
+            ) : (
+              <>
+                {/* Normal visible edge line */}
+                <path
+                  d={path}
+                  fill="none"
+                  className={isHovered ? "stroke-destructive/60" : "stroke-muted-foreground/35"}
+                  strokeWidth={isHovered ? 2.5 : 1.5}
+                  markerEnd="url(#flow-arrow)"
+                />
+              </>
+            )}
 
             {/* Invisible wide hit area for hover/click */}
             <path
