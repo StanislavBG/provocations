@@ -155,6 +155,7 @@ function FlowWorkspaceInner() {
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [canvasLoading, setCanvasLoading] = useState(false);
   const [frozen, setFrozen] = useState(false);
   const [bgAnimationOn, setBgAnimationOn] = useState(true);
 
@@ -696,7 +697,6 @@ function FlowWorkspaceInner() {
       return res.json();
     },
     staleTime: 30_000,
-    enabled: pendingContextAction?.mode === "load" || openCanvasDialogOpen,
   });
 
   const docs = docsData?.documents ?? [];
@@ -1298,6 +1298,7 @@ function FlowWorkspaceInner() {
 
   const handleOpenCanvas = useCallback(
     async (docId: number, docTitle: string) => {
+      setCanvasLoading(true);
       try {
         const res = await apiRequest("GET", `/api/documents/${docId}`);
         const data = (await res.json()) as { title: string; content: string };
@@ -1309,10 +1310,27 @@ function FlowWorkspaceInner() {
         toast({ title: "Canvas loaded", description: data.title || docTitle });
       } catch {
         toast({ title: "Failed to load canvas", variant: "destructive" });
+      } finally {
+        setCanvasLoading(false);
       }
     },
     [loadCanvas, toast],
   );
+
+  // ── Rename canvas ──
+
+  const handleRenameCanvas = useCallback(async (newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setCanvasTitle(trimmed);
+    if (canvasDocumentId) {
+      try {
+        await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, { title: trimmed });
+      } catch {
+        // silent — name is already set locally
+      }
+    }
+  }, [canvasDocumentId]);
 
   // ── New canvas ──
 
@@ -1646,12 +1664,17 @@ function FlowWorkspaceInner() {
   return (
     <FtuxShell>
       <FtuxStatusBar
-        templateName="Flow"
+        templateName={null}
         templateId={null}
         headerActions={headerActions}
         jobCount={jobCount}
         bgAnimationOn={bgAnimationOn}
         onToggleBgAnimation={() => setBgAnimationOn((v) => !v)}
+        canvasName={canvasTitle || "Untitled Canvas"}
+        onRenameCanvas={handleRenameCanvas}
+        savedCanvases={canvasDocs.map((d: DocumentListItem) => ({ id: d.id, title: d.title }))}
+        onOpenCanvas={handleOpenCanvas}
+        canvasLoading={canvasLoading}
       />
 
       {/* Workspace tabs */}
@@ -1750,18 +1773,6 @@ function FlowWorkspaceInner() {
             <Button
               variant="outline"
               className="justify-start gap-2 h-12"
-              onClick={() => setPendingContextAction((prev) => prev ? { ...prev, mode: "load" } : null)}
-            >
-              <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">1</span>
-              <FolderOpen className="w-4 h-4 text-primary" />
-              <div className="text-left">
-                <div className="text-xs font-medium">Load File</div>
-                <div className="text-[10px] text-muted-foreground">Browse and pick a document</div>
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2 h-12"
               onClick={() => {
                 if (!pendingContextAction) return;
                 addNode("document", pendingContextAction.x, pendingContextAction.y, {
@@ -1772,11 +1783,23 @@ function FlowWorkspaceInner() {
                 setPendingContextAction(null);
               }}
             >
-              <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">2</span>
+              <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">1</span>
               <FilePlus2 className="w-4 h-4 text-indigo-500" />
               <div className="text-left">
                 <div className="text-xs font-medium">New Document</div>
                 <div className="text-[10px] text-muted-foreground">Create a blank document node</div>
+              </div>
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start gap-2 h-12"
+              onClick={() => setPendingContextAction((prev) => prev ? { ...prev, mode: "load" } : null)}
+            >
+              <span className="text-[9px] font-mono text-muted-foreground/60 w-4 shrink-0">2</span>
+              <FolderOpen className="w-4 h-4 text-primary" />
+              <div className="text-left">
+                <div className="text-xs font-medium">Load File</div>
+                <div className="text-[10px] text-muted-foreground">Browse and pick a document</div>
               </div>
             </Button>
             <Button
