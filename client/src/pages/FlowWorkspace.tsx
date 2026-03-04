@@ -23,6 +23,7 @@ import { ShareDialog } from "@/components/ShareDialog";
 import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
 import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
+import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
 import {
   Dialog,
@@ -174,6 +175,7 @@ function FlowWorkspaceInner() {
   const [activeImageNodeId, setActiveImageNodeId] = useState<string | null>(null);
   const [activeFullscreenNodeId, setActiveFullscreenNodeId] = useState<string | null>(null);
   const [activeLabelNodeId, setActiveLabelNodeId] = useState<string | null>(null);
+  const [activeInterviewNodeId, setActiveInterviewNodeId] = useState<string | null>(null);
   const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number; screenX: number; screenY: number } | null>(null);
   const [pendingEdgeRole, setPendingEdgeRole] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
   const [docEditorContent, setDocEditorContent] = useState("");
@@ -193,8 +195,15 @@ function FlowWorkspaceInner() {
       hero.style.display = bgAnimationOn ? "" : "none";
     }
   }, [bgAnimationOn]);
-  const [canvasDocumentId, setCanvasDocumentId] = useState<number | null>(null);
-  const [canvasTitle, setCanvasTitle] = useState("");
+  const [canvasDocumentId, setCanvasDocumentId] = useState<number | null>(() => {
+    try {
+      const stored = localStorage.getItem("flow:lastCanvasId");
+      return stored ? parseInt(stored, 10) : null;
+    } catch { return null; }
+  });
+  const [canvasTitle, setCanvasTitle] = useState(() => {
+    try { return localStorage.getItem("flow:lastCanvasTitle") || ""; } catch { return ""; }
+  });
   const [openCanvasDialogOpen, setOpenCanvasDialogOpen] = useState(false);
   const [connectionsDialogOpen, setConnectionsDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -600,6 +609,49 @@ function FlowWorkspaceInner() {
   handleSaveBlueprintRef.current = handleSaveBlueprint;
   handleLoadBlueprintRef.current = handleLoadBlueprint;
 
+  // ── Persist last-used canvas ID to localStorage ──
+  useEffect(() => {
+    try {
+      if (canvasDocumentId) {
+        localStorage.setItem("flow:lastCanvasId", String(canvasDocumentId));
+        localStorage.setItem("flow:lastCanvasTitle", canvasTitle || "");
+      } else {
+        localStorage.removeItem("flow:lastCanvasId");
+        localStorage.removeItem("flow:lastCanvasTitle");
+      }
+    } catch { /* localStorage unavailable */ }
+  }, [canvasDocumentId, canvasTitle]);
+
+  // ── Auto-load last canvas on mount ──
+  const autoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    if (!canvasDocumentId) return;
+    if (state.nodes.length > 0) return; // Already has content
+    autoLoadedRef.current = true;
+    (async () => {
+      setCanvasLoading(true);
+      setLoadProgress(20);
+      try {
+        const res = await apiRequest("GET", `/api/documents/${canvasDocumentId}`);
+        setLoadProgress(60);
+        const data = (await res.json()) as { title: string; content: string };
+        setLoadProgress(80);
+        const parsed = JSON.parse(data.content);
+        setLoadProgress(90);
+        loadCanvas(parsed);
+        setLoadProgress(100);
+        setCanvasTitle(data.title || canvasTitle);
+      } catch {
+        // Canvas no longer exists — clear the stored ID
+        setCanvasDocumentId(null);
+      } finally {
+        setCanvasLoading(false);
+        setLoadProgress(undefined);
+      }
+    })();
+  }, [canvasDocumentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Auto-save every 5 minutes ──
   // Saves canvas to a "Canvas Auto-saves" system folder in the Context Store.
   // Hourly saves are kept permanently; 5-min saves are purged after 1 hour.
@@ -883,6 +935,9 @@ function FlowWorkspaceInner() {
         case "label":
           setActiveLabelNodeId(nodeId);
           break;
+        case "interview":
+          setActiveInterviewNodeId(nodeId);
+          break;
         default:
           // All other node types open in the generic fullscreen overlay
           setActiveFullscreenNodeId(nodeId);
@@ -941,7 +996,7 @@ function FlowWorkspaceInner() {
         fromNode &&
         toNode &&
         (fromNode.type === "document" || fromNode.type === "context-doc") &&
-        toNode.type === "research"
+        (toNode.type === "research" || toNode.type === "interview")
       ) {
         // Show role picker dialog
         setPendingEdgeRole({ fromNodeId, toNodeId });
@@ -1796,6 +1851,44 @@ function FlowWorkspaceInner() {
     [activePainterNodeId, addNode, addEdge, updateNode],
   );
 
+  // ── Interview overlay: connection context + export handler ──
+
+  const interviewConnectionCtx = useMemo(() => {
+    if (!activeInterviewNodeId) return null;
+    const inputEdges = state.edges.filter((e) => e.toNodeId === activeInterviewNodeId);
+    const inputNodes = inputEdges
+      .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
+      .filter(Boolean) as FlowNode[];
+    const roleMap = new Map(inputEdges.map((e) => [e.fromNodeId, e.role]));
+    const inputContent = inputNodes
+      .map((n) => n.documentContent || n.content || n.snippet || "")
+      .filter(Boolean)
+      .join("\n\n");
+    const objectiveText = inputNodes
+      .filter((n) => roleMap.get(n.id) === "objective")
+      .map((n) => n.documentContent || n.content || n.snippet || "")
+      .filter(Boolean)
+      .join("\n\n");
+    return { inputContent, objectiveText };
+  }, [activeInterviewNodeId, state.edges, state.nodes]);
+
+  const handleInterviewExport = useCallback(
+    (text: string, label: string) => {
+      if (!activeInterviewNodeId) return;
+      const interviewNode = stateRef.current.nodes.find((n) => n.id === activeInterviewNodeId);
+      const docX = (interviewNode?.x ?? 0) + (interviewNode?.width ?? 220) + 60;
+      const docY = interviewNode?.y ?? 0;
+      const docId = addNode("document", docX, docY, {
+        label,
+        snippet: text.slice(0, 200),
+        content: text,
+        documentContent: text,
+      });
+      addEdge(activeInterviewNodeId, docId);
+    },
+    [activeInterviewNodeId, addNode, addEdge],
+  );
+
   // Count running AI jobs for status bar
   const jobCount = state.nodes.filter(
     (n) => n.llmStatus === "running" || n.youtubeFetchStatus === "fetching" || n.timerRunning,
@@ -2550,6 +2643,22 @@ function FlowWorkspaceInner() {
               </div>
             </div>,
             document.body,
+          );
+        })()}
+
+      {/* Interview overlay */}
+      {activeInterviewNodeId &&
+        (() => {
+          const interviewNode = state.nodes.find((n) => n.id === activeInterviewNodeId);
+          if (!interviewNode) return null;
+          return (
+            <FlowInterviewOverlay
+              node={interviewNode}
+              onClose={() => setActiveInterviewNodeId(null)}
+              onUpdateNode={updateNode}
+              onExportTranscript={handleInterviewExport}
+              connectionContext={interviewConnectionCtx}
+            />
           );
         })()}
 
