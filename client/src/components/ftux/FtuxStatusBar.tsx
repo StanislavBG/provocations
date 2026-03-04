@@ -23,6 +23,7 @@ import {
   BarChart3,
   Clock,
   Loader2,
+  Wallpaper,
   type LucideIcon,
 } from "lucide-react";
 
@@ -71,9 +72,13 @@ interface FtuxStatusBarProps {
   headerActions?: React.ReactNode;
   /** Number of AI / processing jobs currently running */
   jobCount?: number;
+  /** Whether background animation is active */
+  bgAnimationOn?: boolean;
+  /** Toggle background animation */
+  onToggleBgAnimation?: () => void;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0 }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, bgAnimationOn, onToggleBgAnimation }: FtuxStatusBarProps) {
   const shell = useFtuxShell();
   const {
     statusBarPinnedItems,
@@ -175,6 +180,23 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
       {/* Right: Controls */}
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
+        {onToggleBgAnimation && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`w-7 h-7 rounded ${bgAnimationOn ? "text-primary" : "text-muted-foreground/50"}`}
+                onClick={onToggleBgAnimation}
+              >
+                <Wallpaper className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {bgAnimationOn ? "Turn off background" : "Turn on background"}
+            </TooltipContent>
+          </Tooltip>
+        )}
         <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
         <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
         <UserButton

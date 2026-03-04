@@ -114,6 +114,18 @@ function FlowWorkspaceInner() {
     return () => window.removeEventListener("mousemove", handler);
   }, []);
 
+  // Listen for blueprint events from dock
+  useEffect(() => {
+    const onSave = () => handleSaveBlueprintRef.current();
+    const onLoad = () => handleLoadBlueprintRef.current();
+    window.addEventListener("flow:save-blueprint", onSave);
+    window.addEventListener("flow:load-blueprint", onLoad);
+    return () => {
+      window.removeEventListener("flow:save-blueprint", onSave);
+      window.removeEventListener("flow:load-blueprint", onLoad);
+    };
+  }, []);
+
   /** Convert current mouse screen position to canvas coordinates */
   const getCanvasPosAtMouse = useCallback(() => {
     const el = canvasContainerRef.current;
@@ -144,6 +156,15 @@ function FlowWorkspaceInner() {
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [frozen, setFrozen] = useState(false);
+  const [bgAnimationOn, setBgAnimationOn] = useState(true);
+
+  // Sync hero div visibility with bgAnimationOn state
+  useEffect(() => {
+    const hero = document.getElementById("hero");
+    if (hero) {
+      hero.style.display = bgAnimationOn ? "" : "none";
+    }
+  }, [bgAnimationOn]);
   const [canvasDocumentId, setCanvasDocumentId] = useState<number | null>(null);
   const [canvasTitle, setCanvasTitle] = useState("");
   const [openCanvasDialogOpen, setOpenCanvasDialogOpen] = useState(false);
@@ -222,6 +243,8 @@ function FlowWorkspaceInner() {
 
   // Ref to handleDropTool so keyboard shortcuts can call it (declared later)
   const handleDropToolRef = useRef<(toolId: string, cx: number, cy: number) => void>(() => {});
+  const handleSaveBlueprintRef = useRef<() => void>(() => {});
+  const handleLoadBlueprintRef = useRef<() => void>(() => {});
 
   // ── Real-time collaboration ──
 
@@ -545,6 +568,9 @@ function FlowWorkspaceInner() {
 
     toast({ title: "Blueprint loaded", description: `"${name}" placed on canvas` });
   }, [addNode, addEdge, getCenter, toast]);
+
+  handleSaveBlueprintRef.current = handleSaveBlueprint;
+  handleLoadBlueprintRef.current = handleLoadBlueprint;
 
   // ── Auto-save every 5 minutes ──
   // Saves canvas to a "Canvas Auto-saves" system folder in the Context Store.
@@ -1411,32 +1437,31 @@ function FlowWorkspaceInner() {
   const zoomPercent = Math.round(state.viewport.zoom * 100);
 
   const headerActions = (
-    <div className="flex items-center gap-1 mr-2 border-r border-border/30 pr-2">
+    <div className="flex items-center gap-0.5 mr-2 border-r border-border/30 pr-2">
       {canvasTitle && (
         <span className="text-[10px] text-muted-foreground mr-1 max-w-[120px] truncate">
           {canvasTitle}
         </span>
       )}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-6 gap-1 text-[10px] px-2"
-        onClick={handleSaveCanvas}
-        disabled={isSaving || state.nodes.length === 0}
-      >
-        {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-        Save
-      </Button>
 
+      {/* File dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
-            <ScanLine className="w-3 h-3" />
-            {zoomPercent}%
+            <FileText className="w-3 h-3" />
+            File
             <ChevronDown className="w-2.5 h-2.5 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuContent align="start" className="w-40">
+          <DropdownMenuItem
+            onClick={handleSaveCanvas}
+            disabled={isSaving || state.nodes.length === 0}
+            className="text-xs gap-2"
+          >
+            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Save Canvas
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setOpenCanvasDialogOpen(true)} className="text-xs gap-2">
             <FolderUp className="w-3.5 h-3.5" />
             Open Canvas
@@ -1445,11 +1470,24 @@ function FlowWorkspaceInner() {
             <FilePlus2 className="w-3.5 h-3.5" />
             New Canvas
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={addTab} className="text-xs gap-2">
             <Plus className="w-3.5 h-3.5" />
             New Tab
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* View dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
+            <ScanLine className="w-3 h-3" />
+            {zoomPercent}%
+            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-40">
           <DropdownMenuItem onClick={handleZoomIn} className="text-xs gap-2">
             <ZoomIn className="w-3.5 h-3.5" />
             Zoom In
@@ -1480,6 +1518,26 @@ function FlowWorkspaceInner() {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
+            onClick={() => window.location.href = "/old"}
+            className="text-xs gap-2"
+          >
+            <Expand className="w-3.5 h-3.5" />
+            Classic View
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Share dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
+            <Share2 className="w-3 h-3" />
+            Share
+            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-44">
+          <DropdownMenuItem
             onClick={() => setShareDialogOpen(true)}
             disabled={!canvasDocumentId}
             className="text-xs gap-2"
@@ -1506,29 +1564,6 @@ function FlowWorkspaceInner() {
           >
             <Users className="w-3.5 h-3.5" />
             Connections
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => window.location.href = "/old"}
-            className="text-xs gap-2"
-          >
-            Classic View
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={handleSaveBlueprint}
-            disabled={state.selectedNodeIds.size === 0}
-            className="text-xs gap-2"
-          >
-            <Save className="w-3.5 h-3.5" />
-            Save Blueprint
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={handleLoadBlueprint}
-            className="text-xs gap-2"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            Load Blueprint
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -1610,7 +1645,14 @@ function FlowWorkspaceInner() {
 
   return (
     <FtuxShell>
-      <FtuxStatusBar templateName="Flow" templateId={null} headerActions={headerActions} jobCount={jobCount} />
+      <FtuxStatusBar
+        templateName="Flow"
+        templateId={null}
+        headerActions={headerActions}
+        jobCount={jobCount}
+        bgAnimationOn={bgAnimationOn}
+        onToggleBgAnimation={() => setBgAnimationOn((v) => !v)}
+      />
 
       {/* Workspace tabs */}
       {workspaceTabs.length > 1 && (
@@ -1672,6 +1714,7 @@ function FlowWorkspaceInner() {
         <FlowCanvas
           state={state}
           frozen={frozen}
+          transparentBg={bgAnimationOn}
           onMoveNode={moveNode}
           onMoveNodes={moveNodes}
           onDeleteNode={deleteNode}

@@ -50,6 +50,8 @@ export const DEFAULT_DOCK_ITEMS: DockItem[] = [
   { toolId: "provo", label: "Provocations", icon: "Users", group: "workshop" },
 ];
 
+export type DockButtonSize = "small" | "medium" | "large";
+
 export interface FtuxShellConfig {
   dockPosition: DockPosition;
   dockItems: DockItem[];
@@ -58,6 +60,8 @@ export interface FtuxShellConfig {
   dockColor: string | null;        // null = theme default, or hex color
   dockShowLabels: boolean;
   dockShowGroupLabels: boolean;
+  dockButtonSize: DockButtonSize;
+  dockSnapped: boolean;            // snap to edge, full-width bar
   statusBarPosition: StatusBarPosition;
   statusBarPinnedItems: string[];
   statusBarTranslucency: number;   // 0-100
@@ -79,6 +83,8 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
   dockColor: null,
   dockShowLabels: false,
   dockShowGroupLabels: false,
+  dockButtonSize: "medium",
+  dockSnapped: false,
   statusBarPosition: "top",
   statusBarPinnedItems: [],
   statusBarTranslucency: 85,
@@ -116,6 +122,8 @@ export interface FtuxShellContextValue extends FtuxShellConfig {
   setDockColor: (val: string | null) => void;
   setDockShowLabels: (val: boolean) => void;
   setDockShowGroupLabels: (val: boolean) => void;
+  setDockButtonSize: (val: DockButtonSize) => void;
+  setDockSnapped: (val: boolean) => void;
   setStatusBarPosition: (pos: StatusBarPosition) => void;
   setStatusBarTranslucency: (val: number) => void;
   setStatusBarColor: (val: string | null) => void;
@@ -235,6 +243,16 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
 
   const setDockShowGroupLabels = useCallback(
     (val: boolean) => updateConfig((c) => ({ ...c, dockShowGroupLabels: val })),
+    [updateConfig],
+  );
+
+  const setDockButtonSize = useCallback(
+    (val: DockButtonSize) => updateConfig((c) => ({ ...c, dockButtonSize: val })),
+    [updateConfig],
+  );
+
+  const setDockSnapped = useCallback(
+    (val: boolean) => updateConfig((c) => ({ ...c, dockSnapped: val })),
     [updateConfig],
   );
 
@@ -422,6 +440,8 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     setDockColor,
     setDockShowLabels,
     setDockShowGroupLabels,
+    setDockButtonSize,
+    setDockSnapped,
     setStatusBarPosition,
     setStatusBarTranslucency,
     setStatusBarColor,
