@@ -10,6 +10,7 @@ import { ChatDrawer, type ChatSessionContext } from "@/components/ChatDrawer";
 import { MailboxDrawer } from "@/components/MailboxDrawer";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
+import { AbsorbedDockItems } from "./NotebookDock";
 import { DebugButton } from "@/components/DebugButton";
 import { LlmTraceButton } from "@/components/LlmTraceButton";
 import { MessageLogButton } from "@/components/MessageLogButton";
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
 import type { PanelLayoutConfig } from "@/hooks/use-panel-layout";
+import type { DockPrefs } from "@/hooks/use-dock-prefs";
 
 // ── PeerChat configuration ──
 const PEERCHAT_SERVER = "https://peerchat.app";
@@ -45,6 +47,8 @@ interface NotebookTopBarProps {
   chatSessionContext?: ChatSessionContext;
   activeChatConversationId?: number | null;
   onActiveChatConversationChange?: (id: number | null) => void;
+  /** Dock preferences — when dockMode is "hidden", absorbed items render in the top bar */
+  dockPrefs?: DockPrefs;
 }
 
 export function NotebookTopBar({
@@ -57,6 +61,7 @@ export function NotebookTopBar({
   chatSessionContext,
   activeChatConversationId = null,
   onActiveChatConversationChange,
+  dockPrefs,
 }: NotebookTopBarProps) {
   const [layoutDialogOpen, setLayoutDialogOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -98,6 +103,9 @@ export function NotebookTopBar({
             Provocations
           </span>
         </Link>
+
+        {/* Absorbed dock items when dock is hidden */}
+        {dockPrefs?.dockMode === "hidden" && <AbsorbedDockItems />}
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5">

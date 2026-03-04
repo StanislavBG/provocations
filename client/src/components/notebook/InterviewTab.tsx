@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AudioStreamPlayer } from "@/lib/audioStreamPlayer";
+import { useConversationTurn } from "@/hooks/use-conversation-turn";
 import {
   Play,
   Pause,
@@ -34,6 +37,7 @@ import {
   VolumeX,
   Radio,
   Info,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -42,6 +46,55 @@ import type {
   PodcastResponse,
   PodcastSegment,
 } from "@shared/schema";
+
+// ── Live interview types ──
+
+type InterviewMode = "standard" | "voice" | "live";
+
+interface ConversationTurn {
+  speaker: "ai" | "user";
+  text: string;
+  topic?: string;
+  timestamp: number;
+}
+
+interface ConversationTranscript {
+  id: string;
+  mode: InterviewMode;
+  stance: string;
+  voiceId?: string;
+  startedAt: number;
+  endedAt: number;
+  objective: string;
+  turns: ConversationTurn[];
+}
+
+/** Format a transcript as rich markdown for saving to Context Store */
+function formatTranscriptMarkdown(transcript: ConversationTranscript): string {
+  const date = new Date(transcript.startedAt);
+  const durationMs = transcript.endedAt - transcript.startedAt;
+  const durationMin = Math.round(durationMs / 60000);
+
+  let md = `# Interview Transcript\n`;
+  md += `**Date:** ${date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}\n`;
+  md += `**Stance:** ${transcript.stance.charAt(0).toUpperCase() + transcript.stance.slice(1)}\n`;
+  md += `**Objective:** ${transcript.objective}\n`;
+  md += `**Duration:** ${durationMin} minute${durationMin !== 1 ? "s" : ""}\n`;
+  md += `\n---\n\n`;
+
+  for (const turn of transcript.turns) {
+    if (turn.speaker === "ai") {
+      md += `**AI Interviewer**${turn.topic ? ` (${turn.topic})` : ""}\n`;
+      md += `${turn.text}\n\n`;
+    } else {
+      md += `**User**\n`;
+      md += `${turn.text}\n\n`;
+    }
+    md += `---\n\n`;
+  }
+
+  return md.trim();
+}
 
 // ── Interview stance (Journalist approach styles) ──
 
@@ -105,6 +158,8 @@ interface InterviewTabProps {
   onCaptureToContext?: (text: string, label: string) => void;
   /** Timeline summary data for autobiography interviews (era-aware questions) */
   timelineContext?: TimelineContextSummary | null;
+  /** Chain context from upstream flow nodes */
+  chainContext?: string;
 }
 
 // ── Component ──
@@ -117,6 +172,7 @@ export function InterviewTab({
   isMerging = false,
   onCaptureToContext,
   timelineContext,
+  chainContext,
 }: InterviewTabProps) {
   const { toast } = useToast();
 
@@ -134,6 +190,38 @@ export function InterviewTab({
   );
   const [focusText, setFocusText] = useState("");
   const [trueInterview, setTrueInterview] = useState(false);
+
+  // ── Live interview mode ──
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>("standard");
+  const [liveTranscript, setLiveTranscript] = useState<ConversationTurn[]>([]);
+  const [liveStartedAt, setLiveStartedAt] = useState<number | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | undefined>();
+  const [availableVoices, setAvailableVoices] = useState<{ voice_id: string; name: string }[]>([]);
+  const [streamingQuestionText, setStreamingQuestionText] = useState("");
+  const audioPlayerRef = useRef<AudioStreamPlayer | null>(null);
+
+  // Fetch ElevenLabs voices on mount
+  useEffect(() => {
+    apiRequest("GET", "/api/tts/elevenlabs/voices")
+      .then((res) => res.json())
+      .then((data: { voices: { voice_id: string; name: string }[]; available: boolean }) => {
+        if (data.available && data.voices.length > 0) {
+          setAvailableVoices(data.voices);
+          if (!selectedVoiceId) setSelectedVoiceId(data.voices[0].voice_id);
+        }
+      })
+      .catch(() => {}); // Non-critical
+  }, []);
+
+  // ── Conversation turn state machine (for live mode) ──
+  const conversationTurn = useConversationTurn({
+    onTranscript: useCallback((text: string, isFinal: boolean) => {
+      if (isFinal && text.trim()) {
+        setAnswerText(text.trim());
+      }
+    }, []),
+    silenceTimeout: 1000,
+  });
 
   // ── Podcast state ──
   const [podcastAudioUrl, setPodcastAudioUrl] = useState<string | null>(null);
@@ -340,6 +428,190 @@ export function InterviewTab({
 
   // ── Handlers ──
 
+  // ── Live interview: stream next question with TTS ──
+  // (defined before handleStart because handleStart references it)
+  const streamNextQuestion = useCallback(async (updatedEntries?: InterviewEntry[]) => {
+    const allEntries = updatedEntries ?? entries;
+    const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
+
+    setStreamingQuestionText("");
+    conversationTurn.startProcessing();
+
+    // Init audio player on first use
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new AudioStreamPlayer();
+    }
+    audioPlayerRef.current.init();
+
+    try {
+      const body = {
+        objective: effectiveObjective,
+        document: documentText,
+        appType,
+        previousEntries: allEntries.length > 0 ? allEntries : undefined,
+        directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" || stance === "autobiography" ? "advise" : undefined,
+        directionGuidance: buildGuidance(stance, focusText, appType),
+        ...(stance === "autobiography" && timelineContext ? { timelineContext } : {}),
+        ...(chainContext ? { chainContext } : {}),
+        voiceId: selectedVoiceId,
+      };
+
+      const res = await fetch("/api/interview/question/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok || !res.body) throw new Error("Stream failed");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullQuestionText = "";
+      let firstAudioReceived = false;
+      let topic = "";
+
+      const player = audioPlayerRef.current;
+      player.onEnded = () => {
+        conversationTurn.finishSpeaking();
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "question_text") {
+              fullQuestionText += event.chunk;
+              setStreamingQuestionText(fullQuestionText);
+            } else if (event.type === "audio") {
+              if (!firstAudioReceived) {
+                firstAudioReceived = true;
+                conversationTurn.startSpeaking();
+              }
+              player.addChunk(event.data); // fire-and-forget: don't block SSE parsing on audio decode
+            } else if (event.type === "tts_error") {
+              // ElevenLabs failed mid-stream — mark so we use browser fallback
+              firstAudioReceived = false;
+              if (audioPlayerRef.current) audioPlayerRef.current.stop();
+            } else if (event.type === "metadata") {
+              topic = event.topic || "";
+            } else if (event.type === "done") {
+              const questionText = event.question || fullQuestionText;
+              setCurrentQuestion(questionText);
+              setCurrentTopic(topic);
+              // Record AI turn in live transcript
+              setLiveTranscript((prev) => [
+                ...prev,
+                { speaker: "ai", text: questionText, topic, timestamp: Date.now() },
+              ]);
+              player.flush();
+            }
+          } catch {}
+        }
+      }
+
+      // If no audio was received (TTS unavailable), use browser speechSynthesis fallback
+      if (!firstAudioReceived && fullQuestionText.trim()) {
+        conversationTurn.startSpeaking();
+        if ("speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(fullQuestionText);
+          utterance.rate = 1.0;
+          utterance.onend = () => conversationTurn.finishSpeaking();
+          utterance.onerror = () => conversationTurn.finishSpeaking();
+          window.speechSynthesis.speak(utterance);
+        } else {
+          // No speech synthesis available — just skip to listening
+          conversationTurn.finishSpeaking();
+        }
+      } else if (!firstAudioReceived) {
+        // No text and no audio — skip straight through
+        conversationTurn.startSpeaking();
+        conversationTurn.finishSpeaking();
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Stream failed";
+      errorLogStore.push({ step: "Live Interview Stream", endpoint: "/api/interview/question/stream", message: msg });
+
+      // Fallback: try non-streaming interview question endpoint
+      try {
+        const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
+        const fallbackRes = await apiRequest("POST", "/api/interview/question", {
+          objective: effectiveObjective,
+          document: documentText,
+          appType,
+          previousEntries: (updatedEntries ?? entries).length > 0 ? (updatedEntries ?? entries) : undefined,
+          directionGuidance: buildGuidance(stance, focusText, appType),
+          ...(chainContext ? { chainContext } : {}),
+        });
+        const data = (await fallbackRes.json()) as { question: string; topic: string; reasoning: string };
+        setCurrentQuestion(data.question);
+        setCurrentTopic(data.topic);
+        setLiveTranscript((prev) => [
+          ...prev,
+          { speaker: "ai", text: data.question, topic: data.topic, timestamp: Date.now() },
+        ]);
+
+        // Use browser speech for the fallback question
+        conversationTurn.startSpeaking();
+        if ("speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(data.question);
+          utterance.onend = () => conversationTurn.finishSpeaking();
+          utterance.onerror = () => conversationTurn.finishSpeaking();
+          window.speechSynthesis.speak(utterance);
+        } else {
+          conversationTurn.finishSpeaking();
+        }
+      } catch (fallbackError) {
+        // Both streaming and fallback failed
+        toast({ title: "Question failed", description: msg, variant: "destructive" });
+        conversationTurn.reset();
+      }
+    }
+  }, [entries, objective, documentText, appType, stance, focusText, timelineContext, chainContext, selectedVoiceId, conversationTurn, toast]);
+
+  // ── Auto-save transcript to Context Store when live interview ends ──
+  // (defined before handleStop because handleStop references it)
+  const autoSaveTranscript = useCallback(async () => {
+    if (liveTranscript.length < 3 || !onCaptureToContext) return;
+
+    const transcript: ConversationTranscript = {
+      id: generateId("tx"),
+      mode: interviewMode,
+      stance,
+      voiceId: selectedVoiceId,
+      startedAt: liveStartedAt || Date.now(),
+      endedAt: Date.now(),
+      objective: objective.trim() || AUTOBIOGRAPHY_DEFAULT_OBJECTIVE,
+      turns: liveTranscript,
+    };
+
+    const markdown = formatTranscriptMarkdown(transcript);
+    const title = `Interview: ${(objective || "Untitled").slice(0, 60)} — ${new Date().toLocaleDateString()}`;
+
+    // Save to Context Store via API
+    try {
+      await apiRequest("POST", "/api/documents", {
+        title,
+        content: markdown,
+        docType: "note",
+      });
+    } catch {
+      // Non-critical — still save to in-memory context
+    }
+
+    // Also add to in-memory captured context
+    onCaptureToContext(markdown, title);
+    toast({ title: "Interview transcript saved", description: "Saved to Context Store" });
+  }, [liveTranscript, interviewMode, stance, selectedVoiceId, liveStartedAt, objective, onCaptureToContext, toast]);
+
   const handleStart = useCallback(() => {
     // Autobiography mode can start without an objective — it uses a sensible default
     if (!objective.trim() && stance !== "autobiography") {
@@ -347,18 +619,46 @@ export function InterviewTab({
       return;
     }
     // Unlock audio on mobile — must happen inside a user gesture handler
-    if (ttsEnabled) unlockMobileAudio();
+    if (ttsEnabled || interviewMode === "live") unlockMobileAudio();
     setIsActive(true);
-    questionMutation.mutate(undefined);
-    trackEvent("interview_started");
-  }, [objective, stance, questionMutation, toast, ttsEnabled, unlockMobileAudio]);
+
+    if (interviewMode === "live") {
+      // Live mode: use streaming endpoint
+      setLiveStartedAt(Date.now());
+      setLiveTranscript([]);
+      if (!audioPlayerRef.current) {
+        audioPlayerRef.current = new AudioStreamPlayer();
+      }
+      audioPlayerRef.current.init();
+      streamNextQuestion(undefined);
+      trackEvent("interview_started", { metadata: { mode: "live" } });
+    } else {
+      questionMutation.mutate(undefined);
+      trackEvent("interview_started", { metadata: { mode: interviewMode } });
+    }
+  }, [objective, stance, questionMutation, toast, ttsEnabled, unlockMobileAudio, interviewMode, streamNextQuestion]);
 
   const handleStop = useCallback(() => {
     setIsActive(false);
     setCurrentQuestion(null);
     setCurrentTopic(null);
-    trackEvent("interview_ended", { metadata: { entryCount: String(entries.length) } });
-  }, [entries.length]);
+    setStreamingQuestionText("");
+
+    // Stop audio player
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.stop();
+    }
+
+    // Reset conversation turn state machine
+    conversationTurn.reset();
+
+    // Auto-save transcript for live interviews with 3+ turns
+    if (interviewMode === "live" && liveTranscript.length >= 3) {
+      autoSaveTranscript();
+    }
+
+    trackEvent("interview_ended", { metadata: { entryCount: String(entries.length), mode: interviewMode } });
+  }, [entries.length, interviewMode, liveTranscript.length, autoSaveTranscript, conversationTurn]);
 
   const handleAnswer = useCallback(
     (answer: string) => {
@@ -466,6 +766,45 @@ export function InterviewTab({
     onCaptureToContext(text, "Interview Q&A");
     toast({ title: "Saved to notes", description: `${entries.length} Q&A pairs captured` });
   }, [entries, onCaptureToContext, toast]);
+
+  // ── Live mode: auto-submit answer when conversation turn transitions from LISTENING ──
+  useEffect(() => {
+    if (interviewMode !== "live") return;
+    if (conversationTurn.state !== "PROCESSING") return;
+    // If we have answer text and were just listening, submit it
+    if (answerText.trim() && currentQuestion) {
+      // Record user turn in live transcript
+      setLiveTranscript((prev) => [
+        ...prev,
+        { speaker: "user", text: answerText.trim(), timestamp: Date.now() },
+      ]);
+
+      const entry: InterviewEntry = {
+        id: generateId("iv"),
+        question: currentQuestion,
+        answer: answerText.trim(),
+        topic: currentTopic || "General",
+        timestamp: Date.now(),
+      };
+      const nextEntries = [...entries, entry];
+      setEntries(nextEntries);
+      setCurrentQuestion(null);
+      setCurrentTopic(null);
+      setAnswerText("");
+      setStreamingQuestionText("");
+      trackEvent("interview_answer", { metadata: { inputMethod: "live-voice" } });
+      streamNextQuestion(nextEntries);
+    }
+  }, [conversationTurn.state, interviewMode, answerText, currentQuestion, currentTopic, entries, streamNextQuestion]);
+
+  // ── Live mode: handle user interruption ──
+  useEffect(() => {
+    if (interviewMode !== "live") return;
+    if (conversationTurn.state === "LISTENING" && audioPlayerRef.current) {
+      // If the user starts speaking while AI is playing, stop audio
+      audioPlayerRef.current.stop();
+    }
+  }, [conversationTurn.state, interviewMode]);
 
   // ── Stance cycle helper ──
   const cycleStance = useCallback(() => {
@@ -593,28 +932,47 @@ export function InterviewTab({
               />
             </div>
 
+            {/* Interview Mode selector — 3-way toggle */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Interview Mode</p>
+              <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1.5 border">
+                {([
+                  { id: "standard" as InterviewMode, label: "Standard", icon: MessageCircleQuestion, desc: "Text Q&A — type answers" },
+                  { id: "voice" as InterviewMode, label: "Voice", icon: Mic, desc: "TTS reads, you tap mic" },
+                  { id: "live" as InterviewMode, label: "Live", icon: Zap, desc: "Hands-free 2-way audio" },
+                ]).map((m) => {
+                  const Icon = m.icon;
+                  const isSelected = interviewMode === m.id;
+                  return (
+                    <Tooltip key={m.id}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInterviewMode(m.id);
+                            if (m.id === "voice") { setTrueInterview(true); setTtsEnabled(true); }
+                            else if (m.id === "live") { setTrueInterview(false); setTtsEnabled(true); }
+                            else { setTrueInterview(false); }
+                          }}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors flex-1 justify-center ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          }`}
+                        >
+                          <Icon className="w-3 h-3" />
+                          {m.label}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs max-w-[200px]">{m.desc}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Mode toggles */}
             <div className="space-y-2">
-              {/* True Interview — continuous dialog */}
-              <button
-                onClick={() => {
-                  const next = !trueInterview;
-                  setTrueInterview(next);
-                  if (next) setTtsEnabled(true);
-                }}
-                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md border text-xs transition-colors ${
-                  trueInterview
-                    ? "border-emerald-500/60 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
-                    : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
-                }`}
-              >
-                <Radio className="w-3.5 h-3.5 shrink-0" />
-                <div className="text-left flex-1">
-                  <span className="font-medium">True Interview</span>
-                  <span className="text-[10px] opacity-70 ml-1.5">continuous voice dialog — hands-free</span>
-                </div>
-              </button>
-
               {/* Autobiography toggle */}
               <button
                 onClick={() => setStance(stance === "autobiography" ? "investigative" : "autobiography")}
@@ -643,26 +1001,24 @@ export function InterviewTab({
                 />
               </div>
 
-              {/* Voice conversation mode toggle */}
-              <button
-                onClick={() => {
-                  const next = !ttsEnabled;
-                  setTtsEnabled(next);
-                  // Unlock audio on mobile when enabling TTS (user gesture required)
-                  if (next) unlockMobileAudio();
-                }}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
-                  ttsEnabled
-                    ? "border-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400"
-                    : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
-                }`}
-              >
-                {ttsEnabled ? <Volume2 className="w-3.5 h-3.5 shrink-0" /> : <VolumeX className="w-3.5 h-3.5 shrink-0" />}
-                <div className="text-left">
-                  <span className="font-medium">Voice Conversation</span>
-                  <span className="text-[10px] opacity-70 ml-1.5">questions read aloud</span>
+              {/* Voice selector — shown for voice & live modes when ElevenLabs available */}
+              {(interviewMode === "voice" || interviewMode === "live") && availableVoices.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Voice</p>
+                  <Select value={selectedVoiceId} onValueChange={setSelectedVoiceId}>
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Select voice" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableVoices.map((v) => (
+                        <SelectItem key={v.voice_id} value={v.voice_id} className="text-xs">
+                          {v.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </button>
+              )}
             </div>
 
             <LlmHoverButton previewTitle="Start Interview" previewBlocks={interviewStartBlocks} previewSummary={interviewStartSummary} side="left" align="start">
@@ -672,8 +1028,8 @@ export function InterviewTab({
                 onClick={handleStart}
                 disabled={!objective.trim() && stance !== "autobiography"}
               >
-                <Mic className="w-3.5 h-3.5" />
-                {trueInterview ? "Start True Interview" : "Start Interview"}
+                {interviewMode === "live" ? <Zap className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                {interviewMode === "live" ? "Start Live Interview" : interviewMode === "voice" ? "Start Voice Interview" : "Start Interview"}
               </Button>
             </LlmHoverButton>
             {!objective.trim() && stance !== "autobiography" && (
@@ -943,6 +1299,19 @@ export function InterviewTab({
             </div>
           ))}
 
+          {/* Live mode: streaming question text */}
+          {interviewMode === "live" && streamingQuestionText && !currentQuestion && (
+            <div className="flex justify-start">
+              <div className="max-w-[90%] bg-card border border-cyan-500/30 rounded-lg rounded-bl-sm p-2.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Zap className="w-3 h-3 text-cyan-500" />
+                  <span className="text-[10px] text-cyan-500 font-medium">Streaming...</span>
+                </div>
+                <p className="text-sm leading-relaxed">{streamingQuestionText}</p>
+              </div>
+            </div>
+          )}
+
           {/* Loading indicator for next question */}
           {questionMutation.isPending && (
             <div className="flex justify-start">
@@ -1031,17 +1400,51 @@ export function InterviewTab({
                     Listening... <span className="text-muted-foreground text-[10px] font-normal ml-1">Say &quot;Provo Message&quot; to submit</span>
                   </div>
                 )}
-                {isSpeaking && (
+                {isSpeaking && interviewMode !== "live" && (
                   <div className="flex items-center gap-1.5 text-xs text-violet-500 animate-pulse">
                     <Volume2 className="w-3 h-3" />
                     Speaking question...
                   </div>
                 )}
-                {trueInterview && !isSpeaking && !isRecordingAnswer && currentQuestion && (
+                {trueInterview && !isSpeaking && !isRecordingAnswer && currentQuestion && interviewMode !== "live" && (
                   <div className="flex items-center gap-1.5 text-xs text-emerald-500">
                     <Mic className="w-3 h-3" />
                     Your turn — tap mic to answer
                   </div>
+                )}
+                {/* Live mode state indicators */}
+                {interviewMode === "live" && (
+                  <>
+                    {conversationTurn.state === "PROCESSING" && (
+                      <div className="flex items-center gap-1.5 text-xs text-cyan-500 animate-pulse">
+                        <div className="w-3 h-3 rounded-full border-2 border-cyan-500 animate-ping" />
+                        AI thinking...
+                      </div>
+                    )}
+                    {conversationTurn.state === "AI_SPEAKING" && (
+                      <div className="flex items-center gap-1.5 text-xs text-violet-500">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4].map((i) => (
+                            <div
+                              key={i}
+                              className="w-0.5 bg-violet-500 rounded-full animate-pulse"
+                              style={{
+                                height: `${8 + Math.random() * 8}px`,
+                                animationDelay: `${i * 100}ms`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                        AI speaking — say something to interrupt
+                      </div>
+                    )}
+                    {conversationTurn.state === "LISTENING" && (
+                      <div className="flex items-center gap-1.5 text-xs text-red-500 animate-pulse">
+                        <Mic className="w-3 h-3" />
+                        Listening... {conversationTurn.currentTranscript && <span className="text-muted-foreground font-normal truncate max-w-[150px]">{conversationTurn.currentTranscript}</span>}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
