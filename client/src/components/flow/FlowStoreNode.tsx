@@ -42,9 +42,9 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
   return (
     <div
       className={cn(
-        "absolute select-none rounded-lg border shadow-sm transition-shadow group flex flex-col",
-        "bg-card border-primary/30 hover:shadow-md",
-        isSelected && "ring-2 ring-primary shadow-md",
+        "absolute select-none rounded-lg border-2 shadow-md transition-shadow group flex flex-col",
+        "bg-card border-primary/60 hover:shadow-lg",
+        isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{
         left: node.x,

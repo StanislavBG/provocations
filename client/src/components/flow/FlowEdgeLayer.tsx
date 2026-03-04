@@ -66,7 +66,7 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         >
           <polygon
             points="0,0 8,3 0,6"
-            className="fill-muted-foreground/40"
+            className="fill-muted-foreground/60"
           />
         </marker>
         {/* Painter conveyor arrow — rose colored */}
@@ -169,8 +169,8 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
                 <path
                   d={path}
                   fill="none"
-                  className={isHovered ? "stroke-destructive/60" : "stroke-muted-foreground/35"}
-                  strokeWidth={isHovered ? 2.5 : 1.5}
+                  className={isHovered ? "stroke-destructive/70" : "stroke-muted-foreground/50"}
+                  strokeWidth={isHovered ? 3 : 2}
                   markerEnd="url(#flow-arrow)"
                 />
               </>

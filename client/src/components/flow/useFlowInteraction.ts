@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { FlowNode, FlowViewport } from "./useFlowCanvas";
 
 const ZOOM_MIN = 0.1;
@@ -34,7 +34,17 @@ interface DrawEdgeDrag {
   cursorY: number;
 }
 
-type DragState = PanDrag | MoveNodeDrag | DrawEdgeDrag;
+interface MarqueeDrag {
+  type: "marquee";
+  /** Canvas-space start point */
+  startCanvasX: number;
+  startCanvasY: number;
+  /** Canvas-space current point */
+  currentCanvasX: number;
+  currentCanvasY: number;
+}
+
+type DragState = PanDrag | MoveNodeDrag | DrawEdgeDrag | MarqueeDrag;
 
 /** Preview edge data exposed to canvas for rendering */
 export interface PreviewEdge {
@@ -43,15 +53,25 @@ export interface PreviewEdge {
   cursorY: number;
 }
 
+/** Marquee rectangle in canvas coordinates */
+export interface MarqueeRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface UseFlowInteractionProps {
   viewport: FlowViewport;
   onViewportChange: (x: number, y: number, zoom: number) => void;
   onNodeMove: (nodeId: string, x: number, y: number) => void;
   onNodesMove?: (nodeIds: string[], dx: number, dy: number) => void;
   onSelectNode: (nodeId: string | null) => void;
+  onSelectNodes?: (nodeIds: string[]) => void;
   onToggleSelectNode: (nodeId: string) => void;
   onNodeDoubleClick: (nodeId: string) => void;
   onEdgeCreate?: (fromNodeId: string, toNodeId: string) => void;
+  onDragStart?: () => void;
   nodes: FlowNode[];
 }
 
@@ -73,13 +93,34 @@ export function useFlowInteraction({
   onNodeMove,
   onNodesMove,
   onSelectNode,
+  onSelectNodes,
   onToggleSelectNode,
   onNodeDoubleClick,
   onEdgeCreate,
+  onDragStart,
   nodes,
 }: UseFlowInteractionProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const spaceHeld = useRef(false);
+
+  // Track Space key for pan-while-space-held
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !(e.target as HTMLElement)?.closest("input, textarea, [contenteditable]")) {
+        spaceHeld.current = true;
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Space") spaceHeld.current = false;
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
 
   const screenToCanvas = useCallback(
     (screenX: number, screenY: number) => {
@@ -113,18 +154,35 @@ export function useFlowInteraction({
     [viewport, onViewportChange],
   );
 
-  // Click on canvas background → start pan
+  // Click on canvas background → marquee select (or pan with Space/middle mouse)
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // Middle mouse or Space+left → pan
+      if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
+        e.preventDefault();
+        setDragState({
+          type: "pan",
+          startX: e.clientX - viewport.x,
+          startY: e.clientY - viewport.y,
+        });
+        return;
+      }
       if (e.button !== 0) return;
-      onSelectNode(null);
+
+      // Left click on background → start marquee selection
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      if (!e.shiftKey) {
+        onSelectNode(null); // clear selection unless Shift held
+      }
       setDragState({
-        type: "pan",
-        startX: e.clientX - viewport.x,
-        startY: e.clientY - viewport.y,
+        type: "marquee",
+        startCanvasX: pos.x,
+        startCanvasY: pos.y,
+        currentCanvasX: pos.x,
+        currentCanvasY: pos.y,
       });
     },
-    [viewport, onSelectNode],
+    [viewport, screenToCanvas, onSelectNode],
   );
 
   const handleMouseMove = useCallback(
@@ -137,6 +195,15 @@ export function useFlowInteraction({
           e.clientY - dragState.startY,
           viewport.zoom,
         );
+        return;
+      }
+
+      if (dragState.type === "marquee") {
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        setDragState((prev) => {
+          if (!prev || prev.type !== "marquee") return prev;
+          return { ...prev, currentCanvasX: pos.x, currentCanvasY: pos.y };
+        });
         return;
       }
 
@@ -176,6 +243,28 @@ export function useFlowInteraction({
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
+      if (dragState?.type === "marquee" && onSelectNodes) {
+        // Select all nodes whose bounds overlap the marquee rectangle
+        const { startCanvasX, startCanvasY, currentCanvasX, currentCanvasY } = dragState;
+        const left = Math.min(startCanvasX, currentCanvasX);
+        const top = Math.min(startCanvasY, currentCanvasY);
+        const right = Math.max(startCanvasX, currentCanvasX);
+        const bottom = Math.max(startCanvasY, currentCanvasY);
+        // Only select if the marquee has some size (> 5px to avoid accidental clicks)
+        const w = right - left;
+        const h = bottom - top;
+        if (w > 5 || h > 5) {
+          const selected = nodes.filter((n) => {
+            const nx = n.x;
+            const ny = n.y;
+            const nr = n.x + n.width;
+            const nb = n.y + n.height;
+            return nx < right && nr > left && ny < bottom && nb > top;
+          });
+          onSelectNodes(selected.map((n) => n.id));
+        }
+      }
+
       if (dragState?.type === "draw-edge" && onEdgeCreate) {
         // Find target node under cursor
         const pos = screenToCanvas(e.clientX, e.clientY);
@@ -194,7 +283,7 @@ export function useFlowInteraction({
       }
       setDragState(null);
     },
-    [dragState, nodes, screenToCanvas, onEdgeCreate],
+    [dragState, nodes, screenToCanvas, onEdgeCreate, onSelectNodes],
   );
 
   // Called from node components
@@ -210,6 +299,9 @@ export function useFlowInteraction({
 
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
+
+      // Push undo snapshot before starting drag
+      onDragStart?.();
 
       const pos = screenToCanvas(e.clientX, e.clientY);
 
@@ -270,6 +362,17 @@ export function useFlowInteraction({
         }
       : null;
 
+  // Build marquee rect for rendering
+  const marqueeRect: MarqueeRect | null =
+    dragState?.type === "marquee"
+      ? {
+          x: Math.min(dragState.startCanvasX, dragState.currentCanvasX),
+          y: Math.min(dragState.startCanvasY, dragState.currentCanvasY),
+          width: Math.abs(dragState.currentCanvasX - dragState.startCanvasX),
+          height: Math.abs(dragState.currentCanvasY - dragState.startCanvasY),
+        }
+      : null;
+
   return {
     canvasRef,
     handleWheel,
@@ -281,7 +384,10 @@ export function useFlowInteraction({
     handlePortMouseDown,
     screenToCanvas,
     isDragging: !!dragState,
+    isPanning: dragState?.type === "pan",
     isDrawingEdge: dragState?.type === "draw-edge",
+    isMarquee: dragState?.type === "marquee",
     previewEdge,
+    marqueeRect,
   };
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { generateId } from "@/lib/utils";
 
 // ── Types ──
@@ -116,6 +116,13 @@ const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };
 
 // ── Hook ──
 
+const MAX_HISTORY = 50;
+
+interface HistorySnapshot {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
 export function useFlowCanvas() {
   const [state, setState] = useState<FlowCanvasState>({
     nodes: [],
@@ -124,6 +131,37 @@ export function useFlowCanvas() {
     selectedNodeIds: new Set(),
   });
 
+  // ── Undo / Redo history ──
+  const undoStack = useRef<HistorySnapshot[]>([]);
+  const redoStack = useRef<HistorySnapshot[]>([]);
+  const stateForHistory = useRef(state);
+  stateForHistory.current = state;
+
+  /** Capture a snapshot before a mutation. Call this BEFORE setState. */
+  const pushHistory = useCallback(() => {
+    const s = stateForHistory.current;
+    undoStack.current.push({ nodes: s.nodes, edges: s.edges });
+    if (undoStack.current.length > MAX_HISTORY) undoStack.current.shift();
+    redoStack.current = []; // new mutation clears redo
+  }, []);
+
+  const undo = useCallback(() => {
+    const snapshot = undoStack.current.pop();
+    if (!snapshot) return;
+    // Save current state to redo before restoring
+    const s = stateForHistory.current;
+    redoStack.current.push({ nodes: s.nodes, edges: s.edges });
+    setState((prev) => ({ ...prev, nodes: snapshot.nodes, edges: snapshot.edges }));
+  }, []);
+
+  const redo = useCallback(() => {
+    const snapshot = redoStack.current.pop();
+    if (!snapshot) return;
+    const s = stateForHistory.current;
+    undoStack.current.push({ nodes: s.nodes, edges: s.edges });
+    setState((prev) => ({ ...prev, nodes: snapshot.nodes, edges: snapshot.edges }));
+  }, []);
+
   const addNode = useCallback(
     (
       type: FlowNodeType,
@@ -131,6 +169,7 @@ export function useFlowCanvas() {
       y: number,
       data: Partial<Omit<FlowNode, "id" | "type" | "x" | "y" | "width" | "height" | "zIndex">> & { label: string },
     ) => {
+      pushHistory();
       const dims = DEFAULT_DIMENSIONS[type];
       const node: FlowNode = {
         id: generateId("flow"),
@@ -149,7 +188,7 @@ export function useFlowCanvas() {
       }));
       return node.id;
     },
-    [],
+    [pushHistory],
   );
 
   const updateNode = useCallback(
@@ -162,6 +201,11 @@ export function useFlowCanvas() {
     [],
   );
 
+  /** Push an undo snapshot explicitly (e.g. before a drag operation starts) */
+  const pushUndoSnapshot = useCallback(() => {
+    pushHistory();
+  }, [pushHistory]);
+
   const moveNode = useCallback((nodeId: string, x: number, y: number) => {
     setState((s) => ({
       ...s,
@@ -171,6 +215,7 @@ export function useFlowCanvas() {
 
   const addEdge = useCallback(
     (fromNodeId: string, toNodeId: string): string => {
+      pushHistory();
       const id = generateId("edge");
       setState((s) => ({
         ...s,
@@ -178,10 +223,11 @@ export function useFlowCanvas() {
       }));
       return id;
     },
-    [],
+    [pushHistory],
   );
 
   const deleteNode = useCallback((nodeId: string) => {
+    pushHistory();
     setState((s) => {
       const next = new Set(s.selectedNodeIds);
       next.delete(nodeId);
@@ -192,7 +238,7 @@ export function useFlowCanvas() {
         selectedNodeIds: next,
       };
     });
-  }, []);
+  }, [pushHistory]);
 
   const selectNode = useCallback((nodeId: string | null) => {
     setState((s) => ({
@@ -213,6 +259,16 @@ export function useFlowCanvas() {
     });
   }, []);
 
+  /** Set multiple nodes as selected (used by marquee selection) */
+  const selectNodes = useCallback((nodeIds: string[]) => {
+    setState((s) => ({ ...s, selectedNodeIds: new Set(nodeIds) }));
+  }, []);
+
+  /** Select all nodes */
+  const selectAll = useCallback(() => {
+    setState((s) => ({ ...s, selectedNodeIds: new Set(s.nodes.map((n) => n.id)) }));
+  }, []);
+
   const setViewport = useCallback((x: number, y: number, zoom: number) => {
     setState((s) => ({ ...s, viewport: { x, y, zoom } }));
   }, []);
@@ -229,11 +285,12 @@ export function useFlowCanvas() {
 
   /** Delete an edge by id */
   const deleteEdge = useCallback((edgeId: string) => {
+    pushHistory();
     setState((s) => ({
       ...s,
       edges: s.edges.filter((e) => e.id !== edgeId),
     }));
-  }, []);
+  }, [pushHistory]);
 
   /** Load a full canvas state from saved JSON */
   const loadCanvas = useCallback(
@@ -263,14 +320,19 @@ export function useFlowCanvas() {
     addNode,
     addEdge,
     updateNode,
+    pushUndoSnapshot,
     moveNode,
     moveNodes,
     deleteNode,
     deleteEdge,
     selectNode,
+    selectNodes,
+    selectAll,
     toggleSelectNode,
     setViewport,
     loadCanvas,
     resetCanvas,
+    undo,
+    redo,
   };
 }
