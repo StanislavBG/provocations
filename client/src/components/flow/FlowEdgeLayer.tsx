@@ -29,9 +29,30 @@ function computeEndpoints(from: FlowNode, to: FlowNode) {
     : { x1: fromCx, y1: from.y, x2: toCx, y2: to.y + to.height };
 }
 
-/** Check if this edge should show conveyor animation (painter running) */
-function isPainterConveyor(from: FlowNode): boolean {
-  return from.type === "painter" && from.llmStatus === "running";
+/** Edge animation descriptor */
+interface EdgeAnimation {
+  color: string;
+  markerSuffix: string;
+  dashArray: string;
+  animClass: string;
+  speed: string;
+  blobShape: "circle" | "rect";
+  blobCount: number;
+  glow: boolean;
+}
+
+/** Determine edge animation style based on the source node's state */
+function getEdgeAnimation(from: FlowNode): EdgeAnimation | null {
+  if (from.type === "painter" && from.llmStatus === "running") {
+    return { color: "#f43f5e", markerSuffix: "painter", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.2", blobShape: "circle", blobCount: 3, glow: true };
+  }
+  if (from.type === "youtube" && from.youtubeFetchStatus === "fetching") {
+    return { color: "#dc2626", markerSuffix: "youtube", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.0", blobShape: "rect", blobCount: 3, glow: true };
+  }
+  if (from.type === "timer-event" && from.timerRunning) {
+    return { color: "#10b981", markerSuffix: "timer", dashArray: "4 4", animClass: "kafka-edge", speed: "0.6", blobShape: "rect", blobCount: 4, glow: false };
+  }
+  return null;
 }
 
 export const FlowEdgeLayer = memo(function FlowEdgeLayer({
@@ -70,26 +91,27 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
           />
         </marker>
         {/* Painter conveyor arrow — rose colored */}
-        <marker
-          id="flow-arrow-painter"
-          markerWidth="8"
-          markerHeight="6"
-          refX="7"
-          refY="3"
-          orient="auto"
-        >
-          <polygon
-            points="0,0 8,3 0,6"
-            fill="#f43f5e"
-            opacity={0.7}
-          />
+        <marker id="flow-arrow-painter" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#f43f5e" opacity={0.7} />
+        </marker>
+        {/* YouTube conveyor arrow — red */}
+        <marker id="flow-arrow-youtube" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#dc2626" opacity={0.7} />
+        </marker>
+        {/* Timer/Kafka stream arrow — emerald */}
+        <marker id="flow-arrow-timer" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="#10b981" opacity={0.7} />
         </marker>
       </defs>
 
-      {/* Painter conveyor animation keyframes */}
+      {/* Edge animation keyframes */}
       <style>{`
         @keyframes conveyor-flow {
           0% { stroke-dashoffset: 24; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes kafka-flow {
+          0% { stroke-dashoffset: 16; }
           100% { stroke-dashoffset: 0; }
         }
         @keyframes conveyor-glow {
@@ -98,6 +120,9 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         }
         .conveyor-edge {
           animation: conveyor-flow 0.8s linear infinite;
+        }
+        .kafka-edge {
+          animation: kafka-flow 0.4s linear infinite;
         }
         .conveyor-glow {
           animation: conveyor-glow 1.5s ease-in-out infinite;
@@ -125,43 +150,47 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
 
         const path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`;
         const isHovered = hoveredEdge === edge.id;
-        const isConveyor = isPainterConveyor(from);
+        const animation = getEdgeAnimation(from);
 
         return (
           <g key={edge.id}>
-            {isConveyor ? (
+            {animation ? (
               <>
-                {/* Glow trail behind the conveyor */}
+                {/* Glow trail */}
                 <path
                   d={path}
                   fill="none"
-                  stroke="#f43f5e"
+                  stroke={animation.color}
                   strokeWidth={6}
                   opacity={0.12}
-                  className="conveyor-glow"
+                  className={animation.glow ? "conveyor-glow" : ""}
                 />
-                {/* Animated dashed conveyor line */}
+                {/* Animated dashed line */}
                 <path
                   d={path}
                   fill="none"
-                  stroke="#f43f5e"
+                  stroke={animation.color}
                   strokeWidth={2.5}
-                  strokeDasharray="8 4 2 4"
+                  strokeDasharray={animation.dashArray}
                   strokeLinecap="round"
                   opacity={0.7}
-                  markerEnd="url(#flow-arrow-painter)"
-                  className="conveyor-edge"
+                  markerEnd={`url(#flow-arrow-${animation.markerSuffix})`}
+                  className={animation.animClass}
                 />
-                {/* Paint blob dots traveling along the edge */}
-                <circle r={3} fill="#f43f5e" opacity={0.8}>
-                  <animateMotion dur="1.2s" repeatCount="indefinite" path={path} />
-                </circle>
-                <circle r={2} fill="#fb7185" opacity={0.6}>
-                  <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin="0.4s" />
-                </circle>
-                <circle r={2.5} fill="#e11d48" opacity={0.5}>
-                  <animateMotion dur="1.2s" repeatCount="indefinite" path={path} begin="0.8s" />
-                </circle>
+                {/* Traveling blobs */}
+                {Array.from({ length: animation.blobCount }).map((_, i) => {
+                  const beginDelay = `${(i * parseFloat(animation.speed)) / animation.blobCount}s`;
+                  const opacity = 0.8 - i * 0.12;
+                  return animation.blobShape === "circle" ? (
+                    <circle key={i} r={3 - i * 0.3} fill={animation.color} opacity={opacity}>
+                      <animateMotion dur={`${animation.speed}s`} repeatCount="indefinite" path={path} begin={beginDelay} />
+                    </circle>
+                  ) : (
+                    <rect key={i} width={6} height={3} rx={1} fill={animation.color} opacity={opacity}>
+                      <animateMotion dur={`${animation.speed}s`} repeatCount="indefinite" path={path} begin={beginDelay} />
+                    </rect>
+                  );
+                })}
               </>
             ) : (
               <>

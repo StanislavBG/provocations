@@ -13,7 +13,9 @@ export type FlowNodeType =
   | "timeline"
   | "document"
   | "zone"
-  | "audio";
+  | "audio"
+  | "youtube"
+  | "timer-event";
 
 export interface FlowNode {
   id: string;
@@ -58,6 +60,22 @@ export interface FlowNode {
   audioTranscript?: string;
   /** Image data URL (base64 PNG) — used by painter output and image documents */
   imageUrl?: string;
+  /** YouTube node: the URL pasted by the user */
+  youtubeUrl?: string;
+  /** YouTube node: extracted video title */
+  youtubeTitle?: string;
+  /** YouTube node: fetch status */
+  youtubeFetchStatus?: "idle" | "fetching" | "done" | "error";
+  /** YouTube node: error message */
+  youtubeError?: string;
+  /** Timer-Event node: whether the timer is currently running */
+  timerRunning?: boolean;
+  /** Timer-Event node: interval in milliseconds (default 5000) */
+  timerInterval?: number;
+  /** Timer-Event node: count of pulses fired so far */
+  timerPulseCount?: number;
+  /** Timer-Event node: timestamp of last pulse */
+  timerLastPulse?: string;
 }
 
 export interface FlowEdge {
@@ -94,6 +112,8 @@ export const NODE_PORTS: Partial<Record<FlowNodeType, PortDef[]>> = {
   painter: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   timeline: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
   audio: [{ side: "right", type: "output" }],
+  youtube: [{ side: "right", type: "output" }],
+  "timer-event": [{ side: "right", type: "output" }],
   // research, interview, store, zone — no ports
 };
 
@@ -110,6 +130,8 @@ const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: number }
   document: { width: 200, height: 130 },
   zone: { width: 400, height: 300 },
   audio: { width: 200, height: 140 },
+  youtube: { width: 240, height: 170 },
+  "timer-event": { width: 200, height: 160 },
 };
 
 const INITIAL_VIEWPORT: FlowViewport = { x: 0, y: 0, zoom: 1 };

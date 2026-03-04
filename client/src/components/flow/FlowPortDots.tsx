@@ -20,6 +20,7 @@ const ACCENT_COLORS: Record<string, { fill: string; border: string }> = {
   cyan: { fill: "bg-cyan-500", border: "border-cyan-500" },
   orange: { fill: "bg-orange-500", border: "border-orange-500" },
   indigo: { fill: "bg-indigo-500", border: "border-indigo-500" },
+  red: { fill: "bg-red-500", border: "border-red-500" },
 };
 
 export const FlowPortDots = React.memo(function FlowPortDots({
