@@ -15,6 +15,7 @@ import { createSocialPostHandlers } from "./social-post";
 import { createApiConnectionHandlers } from "./api-connection";
 import { createLogicHandlers } from "./logic";
 import { createInterviewHandlers } from "./interview";
+import { createCoherenceHandlers } from "./coherence";
 
 /** No-op handlers for passive nodes (document, context-doc, store, audio, label, zone) */
 function createPassiveHandlers(): NodeLifecycleHandlers {
@@ -33,6 +34,7 @@ const LIFECYCLE_FACTORIES: Record<LifecyclePreset, () => NodeLifecycleHandlers> 
   api: createApiConnectionHandlers,
   logic: createLogicHandlers,
   interview: createInterviewHandlers,
+  coherence: createCoherenceHandlers,
 };
 
 /** Get lifecycle handlers for a given lifecycle preset */
@@ -50,3 +52,4 @@ export { createSocialPostHandlers } from "./social-post";
 export { createApiConnectionHandlers } from "./api-connection";
 export { createLogicHandlers } from "./logic";
 export { createInterviewHandlers } from "./interview";
+export { createCoherenceHandlers } from "./coherence";

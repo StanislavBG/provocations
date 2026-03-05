@@ -25,6 +25,7 @@ import {
   Type,
   Share2,
   Wifi,
+  ShieldCheck,
 } from "lucide-react";
 import type { FlowNodeType, PortDef } from "./useFlowCanvas";
 
@@ -45,7 +46,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence";
 
 // ── Registry definition ──
 
@@ -451,6 +452,32 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     minHeight: 80,
     inputDescription: "Content from upstream nodes. The gate blocks or allows content based on its open/closed state.",
     outputDescription: "When open, passes content through unchanged. When closed, blocks all downstream propagation.",
+  },
+  "coherence-gate": {
+    type: "coherence-gate",
+    style: {
+      border: "border-emerald-500/60",
+      bg: "bg-card",
+      headerBg: "bg-emerald-500/15",
+      headerBorder: "border-emerald-500/40",
+      iconClass: "text-emerald-500",
+      badgeBg: "bg-emerald-500/25",
+      badgeText: "text-emerald-600 dark:text-emerald-400",
+      badge: "Coherence",
+      accent: "emerald",
+    },
+    icon: ShieldCheck,
+    defaultWidth: 160,
+    defaultHeight: 160,
+    ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+    expandMode: "overlay",
+    playable: true,
+    supportsChainExecution: true,
+    lifecyclePreset: "coherence",
+    minWidth: 120,
+    minHeight: 120,
+    inputDescription: "Content from upstream nodes to evaluate for quality. Scores against configured checks and threshold.",
+    outputDescription: "Pass: content forwarded with confidence score. Fail: blocks propagation or routes to retry branch.",
   },
   router: {
     type: "router",

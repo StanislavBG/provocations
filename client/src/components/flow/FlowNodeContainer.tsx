@@ -105,6 +105,141 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
     );
   }
 
+  // ── Coherence Gate: circular node with score display ──
+  if (node.type === "coherence-gate") {
+    const score = node.coherenceLastScore;
+    const verdict = node.coherenceLastVerdict;
+    const threshold = node.coherenceThreshold ?? 75;
+    const strictness = node.coherenceStrictness ?? "medium";
+    const isGateRunning = node.llmStatus === "running";
+
+    const ringColor =
+      score == null
+        ? "border-emerald-500/40"
+        : score >= threshold
+          ? "border-emerald-500"
+          : score >= threshold * 0.8
+            ? "border-amber-500"
+            : "border-red-500";
+
+    const scoreColor =
+      score == null
+        ? "text-muted-foreground"
+        : score >= threshold
+          ? "text-emerald-400"
+          : score >= threshold * 0.8
+            ? "text-amber-400"
+            : "text-red-400";
+
+    const bgGlow =
+      score == null
+        ? ""
+        : score >= threshold
+          ? "shadow-emerald-500/20"
+          : score >= threshold * 0.8
+            ? "shadow-amber-500/20"
+            : "shadow-red-500/20";
+
+    const strictnessColor =
+      strictness === "strict" ? "bg-red-500/20 text-red-400"
+        : strictness === "medium" ? "bg-amber-500/20 text-amber-400"
+          : "bg-yellow-500/20 text-yellow-400";
+
+    return (
+      <div
+        className="absolute select-none group"
+        style={{
+          left: node.x,
+          top: node.y,
+          width: node.width,
+          height: node.height,
+          zIndex: node.zIndex,
+        }}
+        onMouseDown={(e) => onMouseDown(e, node.id)}
+        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
+      >
+        {/* Circular body */}
+        <div
+          className={cn(
+            "w-full h-full rounded-full border-[3px] flex flex-col items-center justify-center",
+            "bg-card shadow-lg transition-all cursor-grab",
+            ringColor,
+            bgGlow,
+            isSelected && "ring-2 ring-primary",
+            isGateRunning && "animate-pulse",
+          )}
+        >
+          {/* Score display */}
+          <span className={cn("text-2xl font-bold", scoreColor)}>
+            {isGateRunning ? "..." : score != null ? `${score}%` : "—"}
+          </span>
+
+          {/* Verdict */}
+          {verdict && !isGateRunning && (
+            <span className={cn(
+              "text-[9px] font-semibold uppercase mt-0.5",
+              verdict === "pass" ? "text-emerald-400" : "text-red-400",
+            )}>
+              {verdict}
+            </span>
+          )}
+
+          {/* Strictness badge */}
+          <span className={cn(
+            "text-[7px] font-semibold uppercase px-1.5 py-0.5 rounded-full mt-1",
+            strictnessColor,
+          )}>
+            {strictness}
+          </span>
+        </div>
+
+        {/* Label below circle */}
+        <div className="text-center mt-1">
+          <span className="text-[10px] font-medium text-muted-foreground truncate block">
+            {node.label}
+          </span>
+        </div>
+
+        {/* Port dots */}
+        <FlowPortDots
+          node={node}
+          isSelected={isSelected}
+          onPortMouseDown={onPortMouseDown}
+          accentColor={style.accent}
+        />
+
+        {/* Delete button on hover */}
+        {lockMode === "none" && (
+          <button
+            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive/80 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+            title="Delete"
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+          </button>
+        )}
+
+        {/* Play button on hover */}
+        {onPlayNode && (
+          <button
+            className={cn(
+              "absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 text-[8px] font-medium px-2 py-0.5 rounded-full transition-all",
+              "bg-emerald-500/80 text-white opacity-0 group-hover:opacity-100",
+              isGateRunning && "opacity-100 pointer-events-none",
+            )}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onPlayNode(node.id); }}
+            disabled={isGateRunning}
+          >
+            {isGateRunning ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Play className="w-2.5 h-2.5" />}
+            {isGateRunning ? "Eval" : "Eval"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // ── Standard card rendering ──
   return (
     <div
@@ -124,11 +259,45 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
       }}
       onMouseDown={interactiveBody ? undefined : (e) => onMouseDown(e, node.id)}
       onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
+      title={
+        node.llmStatus === "running" ? "Running..."
+          : node.llmStatus === "done" ? "Completed successfully"
+          : node.llmStatus === "error" ? `Failed: ${node.llmError || "Unknown error"}`
+          : undefined
+      }
     >
+      {/* Status pulse overlay */}
+      {node.llmStatus && node.llmStatus !== "idle" && (() => {
+        const speed = node.pulseSpeed ?? 2;
+        const opacity = (node.pulseOpacity ?? 10) / 100;
+        const colorMap: Record<string, string> = {
+          running: node.statusColorRunning ?? "#2196F3",
+          done: node.statusColorSuccess ?? "#4CAF50",
+          error: node.statusColorFailure ?? "#F44336",
+        };
+        const color = colorMap[node.llmStatus!] ?? "transparent";
+        const shouldPulse = node.llmStatus === "running" || (node.llmStatus === "error" && !node.failureAcknowledged);
+        const pulseSpeed = node.llmStatus === "error" ? Math.min(speed, 0.8) : speed;
+
+        return (
+          <div
+            className="absolute inset-0 rounded-lg pointer-events-none z-0"
+            style={{
+              backgroundColor: color,
+              opacity: shouldPulse ? undefined : opacity,
+              animation: shouldPulse
+                ? `flowNodePulse ${pulseSpeed}s ease-in-out infinite`
+                : undefined,
+              ['--pulse-opacity' as string]: opacity,
+            } as React.CSSProperties}
+          />
+        );
+      })()}
+
       {/* Header — always draggable */}
       <div
         className={cn(
-          "flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg shrink-0",
+          "flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg shrink-0 relative z-10",
           interactiveBody && "cursor-grab",
           style.headerBg,
           style.headerBorder,
@@ -210,11 +379,11 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
       {/* Body — content slot */}
       {children ? (
         interactiveBody ? (
-          <div className="flex-1 overflow-auto min-h-0 flex flex-col" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="flex-1 overflow-auto min-h-0 flex flex-col relative z-10" onMouseDown={(e) => e.stopPropagation()}>
             {children}
           </div>
         ) : (
-          children
+          <div className="relative z-10 flex-1 flex flex-col">{children}</div>
         )
       ) : (
         /* Default body: snippet preview */
