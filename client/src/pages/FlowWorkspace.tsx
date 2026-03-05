@@ -98,101 +98,12 @@ const FLOW_SHELL_CONFIG: FtuxShellConfig = {
   tipsEnabled: false,
 };
 
-// ── Canvas themes ──
+// ── Canvas styles — re-exported from shared module to avoid circular deps ──
+export { CANVAS_STYLES, type CanvasStyleDef } from "@/lib/canvas-styles";
+import { CANVAS_STYLES } from "@/lib/canvas-styles";
 
-export interface CanvasThemeDef {
-  key: string;
-  label: string;
-  description: string;
-  background: string | null;  // CSS background value, null = theme default
-  gridOpacity: number;        // 0-1
-  gridColor: string;          // CSS color
-  heroVisible: boolean;       // show BG Labs hero animation
-  swatchColor: string;        // swatch preview color
-}
-
-export const CANVAS_THEMES: CanvasThemeDef[] = [
-  {
-    key: "aurora",
-    label: "Aurora",
-    description: "Animated particle field",
-    background: null,
-    gridOpacity: 0.2,
-    gridColor: "currentColor",
-    heroVisible: true,
-    swatchColor: "#1a1040",
-  },
-  {
-    key: "void",
-    label: "Void",
-    description: "Pure darkness, maximum contrast",
-    background: "radial-gradient(ellipse at 50% 50%, #16161e 0%, #0a0a0f 70%, #050508 100%)",
-    gridOpacity: 0,
-    gridColor: "currentColor",
-    heroVisible: false,
-    swatchColor: "#0a0a0f",
-  },
-  {
-    key: "cosmos",
-    label: "Cosmos",
-    description: "Sparse starfield, deep space",
-    background: `radial-gradient(ellipse at 50% 50%, #0d0d18 0%, #06060c 100%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Ccircle cx='23' cy='67' r='0.5' fill='%23ffffff18'/%3E%3Ccircle cx='187' cy='23' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='321' cy='89' r='0.6' fill='%23ffffff15'/%3E%3Ccircle cx='67' cy='234' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='289' cy='178' r='0.5' fill='%23ffffff14'/%3E%3Ccircle cx='134' cy='312' r='0.4' fill='%23ffffff11'/%3E%3Ccircle cx='356' cy='267' r='0.5' fill='%23ffffff13'/%3E%3Ccircle cx='78' cy='378' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='234' cy='345' r='0.6' fill='%23ffffff16'/%3E%3Ccircle cx='167' cy='145' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='390' cy='390' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='45' cy='156' r='0.5' fill='%23ffffff14'/%3E%3C/svg%3E")`,
-    gridOpacity: 0,
-    gridColor: "currentColor",
-    heroVisible: false,
-    swatchColor: "#0d0d18",
-  },
-  {
-    key: "drafting",
-    label: "Drafting",
-    description: "Technical drafting board",
-    background: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%230a1628'/%3E%3Cpath d='M80 0L0 0 0 80' fill='none' stroke='%23ffffff06' stroke-width='0.5'/%3E%3C/svg%3E")`,
-    gridOpacity: 0.3,
-    gridColor: "#4488cc",
-    heroVisible: false,
-    swatchColor: "#0a1628",
-  },
-  {
-    key: "parchment",
-    label: "Parchment",
-    description: "Aged paper, warm tone",
-    background: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' fill='%23140f0a'/%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`,
-    gridOpacity: 0.15,
-    gridColor: "#8b7355",
-    heroVisible: false,
-    swatchColor: "#140f0a",
-  },
-  {
-    key: "mist",
-    label: "Mist",
-    description: "Atmospheric fog, soft depth",
-    background: "radial-gradient(ellipse at 0% 0%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 100% 100%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, #0e1117 0%, #080a0f 100%)",
-    gridOpacity: 0.12,
-    gridColor: "#6688aa",
-    heroVisible: false,
-    swatchColor: "#0e1117",
-  },
-  {
-    key: "graphite",
-    label: "Graphite",
-    description: "Industrial matte surface",
-    background: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100' height='100' fill='%23121215'/%3E%3Crect width='100' height='100' filter='url(%23g)' opacity='0.04'/%3E%3C/svg%3E")`,
-    gridOpacity: 0.15,
-    gridColor: "currentColor",
-    heroVisible: false,
-    swatchColor: "#121215",
-  },
-  {
-    key: "none",
-    label: "None",
-    description: "Clean, no distraction",
-    background: null,
-    gridOpacity: 0.2,
-    gridColor: "currentColor",
-    heroVisible: false,
-    swatchColor: "#1a1a1a",
-  },
-];
+/** @deprecated Use CANVAS_STYLES instead */
+export const CANVAS_THEMES = CANVAS_STYLES;
 
 // ── Document list item type ──
 
@@ -315,7 +226,7 @@ function splitOutputIntoSections(text: string, count: number): string[] {
 // ── Inner workspace (needs shell context) ──
 
 function FlowWorkspaceInner() {
-  const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasFontColor, canvasBgColor, canvasTheme, setCanvasTheme, keyBinds } = useFtuxShell();
+  const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasTheme, setCanvasTheme, keyBinds } = useFtuxShell();
   const {
     state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteEdge,
     selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
@@ -420,7 +331,7 @@ function FlowWorkspaceInner() {
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
   const [frozen, setFrozen] = useState(false);
   // Resolve the active canvas theme
-  const activeTheme = CANVAS_THEMES.find((t) => t.key === canvasTheme) ?? CANVAS_THEMES[0];
+  const activeTheme = CANVAS_STYLES.find((t) => t.key === canvasTheme) ?? CANVAS_STYLES[0];
   const [storeFolderPickerNodeId, setStoreFolderPickerNodeId] = useState<string | null>(null);
   const [pickerExpandedFolders, setPickerExpandedFolders] = useState<Set<number>>(new Set());
 
@@ -2688,12 +2599,10 @@ function FlowWorkspaceInner() {
         ref={canvasContainerRef}
         className="flex-1 relative overflow-hidden"
         style={{
-          ...(!activeTheme.heroVisible ? {
-            background: activeTheme.background
-              ?? (canvasTheme === "none" && canvasBgColor ? canvasBgColor : undefined),
+          ...(!activeTheme.heroVisible && activeTheme.background ? {
+            background: activeTheme.background,
           } : {}),
           ...(canvasFontSize && canvasFontSize !== 14 ? { fontSize: `${canvasFontSize}px` } : {}),
-          ...(canvasFontColor ? { color: canvasFontColor } : {}),
         }}
       >
         <FlowCanvas

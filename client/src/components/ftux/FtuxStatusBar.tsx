@@ -1,8 +1,6 @@
 import { useState, useRef } from "react";
 import { UserButton } from "@clerk/clerk-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { PaletteToggle } from "@/components/PaletteToggle";
 import { FtuxBreadcrumbStepper } from "./FtuxBreadcrumbStepper";
 import { FtuxSettingsDialog } from "./FtuxSettingsDialog";
 import { useFtuxShell, type ToolId } from "@/lib/ftux-shell-context";
@@ -16,16 +14,18 @@ import {
 import {
   Sparkles,
   Loader2,
-  Wallpaper,
+  Paintbrush,
   ChevronDown,
   FolderOpen,
   Settings,
   Check,
   Info,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { FlowNodeType } from "@/components/flow/useFlowCanvas";
-import { CANVAS_THEMES } from "@/pages/FlowWorkspace";
+import { CANVAS_STYLES } from "@/lib/canvas-styles";
 
 /** Look up a tool/node icon from the registry. Falls back to Sparkles. */
 function getToolIcon(toolId: string): React.ElementType {
@@ -267,6 +267,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
             </TooltipContent>
           </Tooltip>
         )}
+        {/* Unified Canvas Style dropdown */}
         {onChangeCanvasTheme && (
           <div className="relative">
             <Tooltip>
@@ -274,15 +275,19 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`w-7 h-7 rounded ${canvasTheme && canvasTheme !== "none" ? "text-primary" : "text-muted-foreground/50"}`}
+                  className="w-7 h-7 rounded text-muted-foreground hover:text-foreground relative"
                   onClick={() => setThemeDropdownOpen((v) => !v)}
                 >
-                  <Wallpaper className="w-3.5 h-3.5" />
+                  <Paintbrush className="w-3.5 h-3.5" />
+                  <span
+                    className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full ring-1 ring-card"
+                    style={{ backgroundColor: CANVAS_STYLES.find((s) => s.key === canvasTheme)?.swatchColor ?? "#1a1040" }}
+                  />
                 </Button>
               </TooltipTrigger>
               {!themeDropdownOpen && (
                 <TooltipContent side="bottom" className="text-xs z-[60]">
-                  Canvas theme: {CANVAS_THEMES.find((t) => t.key === canvasTheme)?.label ?? "Aurora"}
+                  Style: {CANVAS_STYLES.find((s) => s.key === canvasTheme)?.label ?? "Aurora"}
                 </TooltipContent>
               )}
             </Tooltip>
@@ -290,25 +295,57 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
             {themeDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-50" onClick={() => setThemeDropdownOpen(false)} onKeyDown={(e) => { if (e.key === "Escape") setThemeDropdownOpen(false); }} />
-                <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[220px] animate-in fade-in zoom-in-95 duration-100">
-                  {CANVAS_THEMES.map((theme) => (
+                <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[240px] animate-in fade-in zoom-in-95 duration-100">
+                  {/* Dark themes section */}
+                  <div className="px-3 py-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">Dark</div>
+                  {CANVAS_STYLES.filter((s) => s.isDark).map((style) => (
                     <button
-                      key={theme.key}
+                      key={style.key}
                       className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
                       onClick={() => {
-                        onChangeCanvasTheme(theme.key);
+                        onChangeCanvasTheme(style.key);
                         setThemeDropdownOpen(false);
                       }}
                     >
                       <div
                         className="w-4 h-4 rounded-full border border-border/60 shrink-0"
-                        style={{ background: theme.swatchColor }}
+                        style={{ background: style.swatchColor }}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium">{theme.label}</div>
-                        <div className="text-[10px] text-muted-foreground truncate">{theme.description}</div>
+                        <div className="text-xs font-medium flex items-center gap-1.5">
+                          {style.label}
+                          <Moon className="w-2.5 h-2.5 text-muted-foreground/50" />
+                        </div>
+                        <div className="text-[10px] text-muted-foreground truncate">{style.description}</div>
                       </div>
-                      {canvasTheme === theme.key && (
+                      {canvasTheme === style.key && (
+                        <Check className="w-3.5 h-3.5 text-primary shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                  {/* Light themes section */}
+                  <div className="px-3 py-1 mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 border-t border-border/30">Light</div>
+                  {CANVAS_STYLES.filter((s) => !s.isDark).map((style) => (
+                    <button
+                      key={style.key}
+                      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                      onClick={() => {
+                        onChangeCanvasTheme(style.key);
+                        setThemeDropdownOpen(false);
+                      }}
+                    >
+                      <div
+                        className="w-4 h-4 rounded-full border border-border/60 shrink-0"
+                        style={{ background: style.swatchColor }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium flex items-center gap-1.5">
+                          {style.label}
+                          <Sun className="w-2.5 h-2.5 text-muted-foreground/50" />
+                        </div>
+                        <div className="text-[10px] text-muted-foreground truncate">{style.description}</div>
+                      </div>
+                      {canvasTheme === style.key && (
                         <Check className="w-3.5 h-3.5 text-primary shrink-0" />
                       )}
                     </button>
@@ -331,8 +368,6 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs z-[60]">Settings</TooltipContent>
         </Tooltip>
-        <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
-        <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
         <UserButton
           appearance={{
             elements: {
