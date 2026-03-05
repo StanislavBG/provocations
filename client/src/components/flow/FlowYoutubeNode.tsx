@@ -120,10 +120,13 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
               lcLog("process", "success", `${evt.totalChars?.toLocaleString() || "?"} chars, ${evt.totalSegments || "?"} segments`, { durationMs: elapsed });
               onUpdateNode(node.id, {
                 youtubeFetchStatus: "done",
+                llmStatus: "done", // Signal chain completion for downstream propagation
                 youtubeTitle: evt.videoTitle,
                 content: evt.transcript,
+                documentContent: evt.transcript,
                 snippet: evt.transcript.slice(0, 150),
                 label: `YT: ${(evt.videoTitle || "Video").slice(0, 25)}`,
+                youtubeThumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
               });
               lcLog("post-process", "success", `Title: ${evt.videoTitle || "(none)"}`);
               toast({ title: "Transcript ready", description: `${evt.totalSegments} segments, ${evt.totalChars.toLocaleString()} chars` });
@@ -194,6 +197,17 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
             )}
           </button>
         </div>
+
+        {/* Thumbnail (when done) */}
+        {status === "done" && node.youtubeThumbnailUrl && (
+          <div className="px-2 py-1">
+            <img
+              src={node.youtubeThumbnailUrl}
+              alt="Thumbnail"
+              className="w-full h-12 object-cover rounded border border-border/30"
+            />
+          </div>
+        )}
 
         {/* Status / output */}
         {status === "error" && node.youtubeError && (

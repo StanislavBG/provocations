@@ -123,6 +123,26 @@ export function FlowInterviewOverlay({
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const mobileAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // ── Voice selection ──
+  const [ttsProvider, setTtsProvider] = useState<"auto" | "elevenlabs" | "openai">("auto");
+  const [elevenlabsVoices, setElevenlabsVoices] = useState<{ voice_id: string; name: string; category: string }[]>([]);
+  const [selectedElevenVoiceId, setSelectedElevenVoiceId] = useState<string | undefined>(undefined);
+  const [openaiVoice, setOpenaiVoice] = useState<string>("nova");
+  const [elevenlabsAvailable, setElevenlabsAvailable] = useState(false);
+
+  // Fetch ElevenLabs voices on mount
+  useEffect(() => {
+    fetch("/api/tts/elevenlabs/voices")
+      .then((r) => r.json())
+      .then((data: { voices?: { voice_id: string; name: string; category: string }[]; available?: boolean }) => {
+        if (data.available && data.voices?.length) {
+          setElevenlabsVoices(data.voices);
+          setElevenlabsAvailable(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Ref to hold the latest handleAnswer for conversation turn callback
   const handleAnswerRef = useRef<(answer: string) => void>(() => {});
 
@@ -209,7 +229,12 @@ export function FlowInterviewOverlay({
     try {
       setIsSpeaking(true);
       if (trueInterview) conversationTurn.startSpeaking();
-      const res = await apiRequest("POST", "/api/tts", { text, voice: "nova" });
+      const res = await apiRequest("POST", "/api/tts", {
+        text,
+        voice: openaiVoice,
+        provider: ttsProvider,
+        elevenlabsVoiceId: selectedElevenVoiceId,
+      });
       const data = (await res.json()) as { audio: string; mimeType: string };
       if (!data.audio) {
         setIsSpeaking(false);
@@ -246,7 +271,7 @@ export function FlowInterviewOverlay({
       setIsSpeaking(false);
       if (trueInterview) conversationTurn.finishSpeaking();
     }
-  }, [ttsEnabled, trueInterview, conversationTurn]);
+  }, [ttsEnabled, trueInterview, conversationTurn, openaiVoice, ttsProvider, selectedElevenVoiceId]);
 
   // ── Input content from connected nodes ──
   const documentText = connectionContext?.inputContent ?? "";
@@ -321,16 +346,21 @@ export function FlowInterviewOverlay({
   // ── Handlers ──
 
   const handleStart = useCallback(() => {
-    if (!objective.trim() && stance !== "autobiography") {
-      toast({ title: "Objective required", description: "Set an interview objective before starting.", variant: "destructive" });
-      return;
-    }
     if (ttsEnabled) unlockMobileAudio();
     setIsActive(true);
     if (trueInterview) conversationTurn.startProcessing();
-    questionMutation.mutate(undefined);
+
+    // If no objective is set (and not autobiography), use a default opening question
+    if (!objective.trim() && stance !== "autobiography") {
+      const defaultOpening = "What would you like to discuss today?";
+      setCurrentQuestion(defaultOpening);
+      setCurrentTopic("Getting Started");
+      speakQuestion(defaultOpening);
+    } else {
+      questionMutation.mutate(undefined);
+    }
     trackEvent("interview_started");
-  }, [objective, stance, questionMutation, toast, ttsEnabled, unlockMobileAudio, trueInterview, conversationTurn]);
+  }, [objective, stance, questionMutation, ttsEnabled, unlockMobileAudio, trueInterview, conversationTurn, speakQuestion]);
 
   const handleStop = useCallback(() => {
     setIsActive(false);
@@ -356,13 +386,19 @@ export function FlowInterviewOverlay({
       setCurrentTopic(null);
       setAnswerText("");
       trackEvent("interview_answer");
+
+      // If this is the first answer and no objective was set, use it as the objective
+      if (!objective.trim() && entries.length === 0 && stance !== "autobiography") {
+        setObjective(answer.trim());
+      }
+
       // In true interview mode, transition back to PROCESSING for next question
       if (trueInterview && conversationTurn.state === "LISTENING") {
         conversationTurn.submitAnswer();
       }
       questionMutation.mutate(nextEntries);
     },
-    [currentQuestion, currentTopic, questionMutation, entries, trueInterview, conversationTurn],
+    [currentQuestion, currentTopic, questionMutation, entries, objective, stance, trueInterview, conversationTurn],
   );
 
   // Keep handleAnswerRef in sync for conversation turn callback
@@ -581,6 +617,64 @@ export function FlowInterviewOverlay({
                 </button>
               </div>
 
+              {/* Voice selection (visible when TTS enabled) */}
+              {ttsEnabled && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Voice</p>
+                  {elevenlabsAvailable && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 border">
+                        <button
+                          onClick={() => setTtsProvider("auto")}
+                          className={`flex-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${ttsProvider === "auto" ? "bg-cyan-500 text-white" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          Auto
+                        </button>
+                        <button
+                          onClick={() => setTtsProvider("elevenlabs")}
+                          className={`flex-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${ttsProvider === "elevenlabs" ? "bg-cyan-500 text-white" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          ElevenLabs
+                        </button>
+                        <button
+                          onClick={() => setTtsProvider("openai")}
+                          className={`flex-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${ttsProvider === "openai" ? "bg-cyan-500 text-white" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          OpenAI
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {/* ElevenLabs voice selector */}
+                  {(ttsProvider === "elevenlabs" || ttsProvider === "auto") && elevenlabsAvailable && elevenlabsVoices.length > 0 && (
+                    <select
+                      value={selectedElevenVoiceId ?? ""}
+                      onChange={(e) => setSelectedElevenVoiceId(e.target.value || undefined)}
+                      className="w-full px-2 py-1.5 text-xs bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-cyan-500/50"
+                    >
+                      <option value="">Default voice</option>
+                      {elevenlabsVoices.map((v) => (
+                        <option key={v.voice_id} value={v.voice_id}>
+                          {v.name} ({v.category})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {/* OpenAI voice selector */}
+                  {(ttsProvider === "openai" || (!elevenlabsAvailable && ttsProvider === "auto")) && (
+                    <select
+                      value={openaiVoice}
+                      onChange={(e) => setOpenaiVoice(e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-cyan-500/50"
+                    >
+                      {["nova", "onyx", "alloy", "echo", "fable", "shimmer"].map((v) => (
+                        <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
               {/* Connected inputs info */}
               {connectionContext?.inputContent && (
                 <div className="space-y-1.5">
@@ -599,7 +693,6 @@ export function FlowInterviewOverlay({
                     size="sm"
                     className="gap-1.5 w-full bg-cyan-600 hover:bg-cyan-700 text-white"
                     onClick={handleStart}
-                    disabled={!objective.trim() && stance !== "autobiography"}
                   >
                     <Play className="w-3.5 h-3.5" />
                     {entries.length > 0 ? "Continue Interview" : trueInterview ? "Start True Interview" : "Start Interview"}
@@ -646,7 +739,7 @@ export function FlowInterviewOverlay({
 
                 {!objective.trim() && stance !== "autobiography" && (
                   <p className="text-[10px] text-muted-foreground/60 text-center">
-                    Set an objective to begin
+                    No objective? No problem — the interview will start with an open question
                   </p>
                 )}
                 {!objective.trim() && stance === "autobiography" && (

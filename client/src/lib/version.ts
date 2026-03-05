@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.10.0";
+export const APP_VERSION = "0.11.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,24 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.11.0",
+    date: "2026-03-05",
+    changes: [
+      "YouTube node: 3-mode input (URL, Search, Playlist) with multi-video transcript fetching",
+      "YouTube node: auto chapter detection, thumbnail preview, embedded player, search within transcript",
+      "YouTube node: search by keywords with Top N / manual selection of results to process",
+      "YouTube node: chain propagation fix (sets llmStatus=done so downstream nodes auto-trigger)",
+      "YouTube node: playable=true, thumbnail on compact card, removed fake LLM transcript fallback",
+      "YouTube API: new /api/youtube/search and /api/youtube/playlist endpoints",
+      "Interview: no longer requires objective to start — opens with 'What would you like to discuss?' and infers objective from first answer",
+      "Interview: ElevenLabs now preferred TTS provider (when available) with voice selection UI",
+      "Interview: voice picker shows ElevenLabs voices and OpenAI voice options when TTS enabled",
+      "TTS endpoint: auto-selects ElevenLabs when available, falls back to OpenAI",
+      "Status bar: fixed icons for Context Library, Logic, and Research pinned items",
+      "Status bar: Logic submenu no longer positions off-screen when status bar is at top",
+    ],
+  },
   {
     version: "0.10.0",
     date: "2026-03-05",

@@ -80,6 +80,20 @@ export interface FlowNode {
   youtubeFetchStatus?: "idle" | "fetching" | "done" | "error";
   /** YouTube node: error message */
   youtubeError?: string;
+  /** YouTube node: input mode */
+  youtubeMode?: "url" | "search" | "playlist";
+  /** YouTube node: search results from keyword search */
+  youtubeSearchResults?: { videoId: string; title: string; description: string; channelTitle: string; publishedAt: string; thumbnailUrl: string; duration?: string; viewCount?: string }[];
+  /** YouTube node: selected video IDs (for multi-video / search selection) */
+  youtubeSelectedVideos?: string[];
+  /** YouTube node: max results to process (top N or selected) */
+  youtubeTopN?: number;
+  /** YouTube node: chapter segments detected in transcript */
+  youtubeChapters?: { title: string; startTime: string; content: string }[];
+  /** YouTube node: video thumbnail URL */
+  youtubeThumbnailUrl?: string;
+  /** YouTube node: video metadata */
+  youtubeMetadata?: { duration?: string; viewCount?: string; channelTitle?: string; publishedAt?: string };
   /** Trigger node: sub-type — "manual" fires on button push, "timed" fires on interval, "automated" fires when upstream finishes */
   triggerMode?: "manual" | "timed" | "automated";
   /** Trigger node: whether the trigger is currently active */

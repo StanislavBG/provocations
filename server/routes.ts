@@ -46,12 +46,16 @@ import {
   type StreamingRequirement,
   youtubeChannelRequestSchema,
   processVideoRequestSchema,
+  youtubeSearchRequestSchema,
+  youtubePlaylistRequestSchema,
   generateSummaryRequestSchema,
   generateInfographicRequestSchema,
   chatRequestSchema,
   summarizeSessionRequestSchema,
   saveChatSessionRequestSchema,
   type YouTubeChannelResponse,
+  type YouTubeSearchResult,
+  type YouTubePlaylistResponse,
   type ResponseConfig,
   type GenerateSummaryResponse,
   type InfographicSpec,
@@ -4280,20 +4284,51 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&
 
   // ── Text-to-Speech endpoint ──
   // Converts a short text to speech audio (MP3) for interview question read-aloud.
+  // Prefers ElevenLabs when available, falls back to OpenAI TTS.
   app.post("/api/tts", async (req, res) => {
     try {
-      const { text, voice } = req.body as { text?: string; voice?: string };
+      const { text, voice, provider, elevenlabsVoiceId } = req.body as {
+        text?: string;
+        voice?: string;
+        provider?: "elevenlabs" | "openai" | "auto";
+        elevenlabsVoiceId?: string;
+      };
       if (!text || typeof text !== "string" || !text.trim()) {
         return res.status(400).json({ error: "text is required" });
       }
       // Limit text length to prevent abuse (questions are short)
       const truncated = text.slice(0, 1000);
+      const preferredProvider = provider ?? "auto";
+
+      // Try ElevenLabs first if requested or on auto
+      if (preferredProvider === "elevenlabs" || preferredProvider === "auto") {
+        try {
+          const elevenlabs = await import("./elevenlabs.js");
+          if (elevenlabs.isAvailable()) {
+            const stream = await elevenlabs.streamTTS(truncated, elevenlabsVoiceId);
+            const chunks: Buffer[] = [];
+            for await (const chunk of stream) {
+              chunks.push(chunk);
+            }
+            const audioBuffer = Buffer.concat(chunks);
+            const audioBase64 = audioBuffer.toString("base64");
+            return res.json({ audio: audioBase64, mimeType: "audio/mp3", provider: "elevenlabs" });
+          }
+        } catch (elErr) {
+          // ElevenLabs failed — fall through to OpenAI
+          if (preferredProvider === "elevenlabs") {
+            console.error("ElevenLabs TTS failed:", elErr);
+          }
+        }
+      }
+
+      // Fallback: OpenAI TTS
       const ttsVoice = (voice === "nova" || voice === "onyx" || voice === "alloy" || voice === "echo" || voice === "fable" || voice === "shimmer")
         ? voice
         : "nova";
       const audioBuffer = await textToSpeech(truncated, ttsVoice, "mp3");
       const audioBase64 = audioBuffer.toString("base64");
-      res.json({ audio: audioBase64, mimeType: "audio/mp3" });
+      res.json({ audio: audioBase64, mimeType: "audio/mp3", provider: "openai" });
     } catch (error) {
       console.error("TTS error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -6088,6 +6123,100 @@ Output ONLY the JSON — no markdown, no explanation.`,
     }
   });
 
+  // ── YouTube Search — LLM-powered search (no YouTube API key needed) ──
+  app.post("/api/youtube/search", async (req, res) => {
+    try {
+      const parsed = youtubeSearchRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+      const { query, maxResults } = parsed.data;
+
+      const response = await llm.generate({
+        maxTokens: 4096,
+        temperature: 0.3,
+        system: `You are a YouTube search results generator. Given a search query, generate realistic YouTube search results that would actually appear for this query. Each result must have a real-looking 11-character videoId, realistic title, description, channel name, publish date, and thumbnail URL.
+
+Output ONLY valid JSON array matching this schema:
+[
+  {
+    "videoId": "xxxxxxxxxxx",
+    "title": "Video Title",
+    "description": "Brief description",
+    "channelTitle": "Channel Name",
+    "publishedAt": "2025-01-15T10:00:00Z",
+    "thumbnailUrl": "https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg",
+    "duration": "12:34",
+    "viewCount": "1.2M"
+  }
+]
+
+Generate ${maxResults} results. Make titles, descriptions, and channels realistic for the topic.
+Output ONLY the JSON array — no markdown, no explanation.`,
+        messages: [
+          { role: "user", content: `Search query: "${query}"\nGenerate ${maxResults} YouTube search results.` },
+        ],
+      });
+
+      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const results = JSON.parse(jsonText) as YouTubeSearchResult[];
+      res.json({ query, results });
+    } catch (error) {
+      console.error("YouTube search error:", error);
+      res.status(500).json({ error: "Search failed", details: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // ── YouTube Playlist ──
+  app.post("/api/youtube/playlist", async (req, res) => {
+    try {
+      const parsed = youtubePlaylistRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+      const { playlistUrl, maxResults } = parsed.data;
+
+      // Extract playlist ID from URL
+      const plMatch = playlistUrl.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+      const playlistId = plMatch ? plMatch[1] : playlistUrl.trim();
+
+      const response = await llm.generate({
+        maxTokens: 4096,
+        temperature: 0.3,
+        system: `You are a YouTube playlist content analyzer. Given a playlist URL or ID, generate a realistic list of videos that such a playlist might contain.
+
+Output ONLY valid JSON matching this schema:
+{
+  "playlistTitle": "Playlist Title",
+  "playlistId": "${playlistId}",
+  "videos": [
+    {
+      "videoId": "xxxxxxxxxxx",
+      "title": "Video Title",
+      "description": "Brief description",
+      "publishedAt": "2025-01-15T10:00:00Z",
+      "thumbnailUrl": "https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg",
+      "channelTitle": "Channel Name"
+    }
+  ]
+}
+
+Generate ${maxResults} videos. Make the content realistic and topically coherent.
+Output ONLY the JSON — no markdown, no explanation.`,
+        messages: [
+          { role: "user", content: `Playlist URL: ${playlistUrl}\nPlaylist ID: ${playlistId}\nGenerate ${maxResults} videos.` },
+        ],
+      });
+
+      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const playlistData = JSON.parse(jsonText) as YouTubePlaylistResponse;
+      res.json(playlistData);
+    } catch (error) {
+      console.error("YouTube playlist error:", error);
+      res.status(500).json({ error: "Playlist fetch failed", details: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
   // Extract transcript from a YouTube video (Step 1 only — transcript extraction)
   // The client then calls /api/pipeline/summarize and /api/pipeline/infographic
   // to complete the shared pipeline (same as text-to-infographic).
@@ -6162,19 +6291,8 @@ Output ONLY the JSON — no markdown, no explanation.`,
             transcript: fullText,
           });
         } else {
-          // Fallback: LLM-generated transcript
-          send("status", { message: "No captions found — generating with AI…" });
-          const transcriptResponse = await llm.generate({
-            maxTokens: 4096,
-            temperature: 0.4,
-            system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript. Include estimated timestamps in [MM:SS] format every few paragraphs. Output ONLY the transcript text with timestamps.`,
-            messages: [
-              { role: "user", content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})\nGenerate a detailed transcript.` },
-            ],
-          });
-          const transcript = transcriptResponse.text.trim();
-          send("chunk", { text: transcript, progress: 100, segmentsProcessed: 0, totalSegments: 0 });
-          send("done", { videoTitle: videoTitle || "Untitled Video", totalSegments: 0, totalChars: transcript.length, transcript });
+          // No captions available — report honest error instead of generating fake transcript
+          send("error", { message: "No captions/subtitles available for this video. The video may not have auto-generated or manual captions enabled." });
         }
       } catch (error) {
         console.error("YouTube SSE transcript error:", error);
@@ -6200,16 +6318,10 @@ Output ONLY the JSON — no markdown, no explanation.`,
       }
 
       if (!transcript) {
-        console.log(`[YouTube] Falling back to LLM-generated transcript for: ${videoTitle}`);
-        const transcriptResponse = await llm.generate({
-          maxTokens: 4096,
-          temperature: 0.4,
-          system: `You are a YouTube video transcript generator. Given a video title and URL, generate a realistic, detailed transcript. Include estimated timestamps in [MM:SS] format. Output ONLY the transcript text with timestamps.`,
-          messages: [
-            { role: "user", content: `Video: "${videoTitle || "Untitled Video"}" (${videoUrl})\nGenerate a detailed transcript.` },
-          ],
+        return res.status(404).json({
+          error: "No captions available",
+          details: "This video does not have auto-generated or manual captions/subtitles enabled.",
         });
-        transcript = transcriptResponse.text.trim();
       }
 
       res.json({ videoId, videoTitle: videoTitle || "Untitled Video", thumbnailUrl, transcript });
