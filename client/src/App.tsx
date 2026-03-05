@@ -44,6 +44,7 @@ function Router() {
       <Route path="/admin" component={Admin} />
       <Route path="/components/:componentId" component={ComponentShowcase} />
       <Route path="/components" component={ComponentLibrary} />
+      <Route path="/canvas/:canvasId">{() => <FlowWorkspace />}</Route>
       <Route path="/flow">{() => <FlowWorkspace />}</Route>
       <Route path="/old" component={NotebookWorkspace} />
       <Route path="/old/:templateId" component={NotebookWorkspace} />
