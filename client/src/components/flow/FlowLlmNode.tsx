@@ -21,6 +21,7 @@ interface FlowLlmNodeProps {
   onToggleLock?: (nodeId: string) => void;
   onCreateNote: (content: string, label: string, sourceNodeId?: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
+  onDoubleClick?: (e: React.MouseEvent, nodeId: string) => void;
 }
 
 const PRESET_COLORS: Record<string, { chip: string; active: string }> = {
@@ -42,6 +43,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
   onToggleLock,
   onCreateNote,
   onPortMouseDown,
+  onDoubleClick,
 }: FlowLlmNodeProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
@@ -240,6 +242,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
       <div
         className="flex items-center gap-1.5 px-2 py-1 border-b bg-violet-500/15 border-violet-500/40 rounded-t-lg cursor-grab shrink-0"
         onMouseDown={(e) => onMouseDown(e, node.id)}
+        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         <Brain className="w-3 h-3 text-violet-500 shrink-0" />
         <span className="text-[10px] font-medium truncate flex-1">{node.label || "Text Modifications"}</span>

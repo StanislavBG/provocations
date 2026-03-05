@@ -14,6 +14,7 @@ interface FlowAudioNodeProps {
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
+  onDoubleClick?: (e: React.MouseEvent, nodeId: string) => void;
 }
 
 export const FlowAudioNode = React.memo(function FlowAudioNode({
@@ -24,6 +25,7 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
   onUpdateNode,
   onToggleLock,
   onPortMouseDown,
+  onDoubleClick,
 }: FlowAudioNodeProps) {
   const recognitionRef = useRef<any>(null);
   const [isRecording, setIsRecording] = useState(node.audioRecording ?? false);
@@ -152,6 +154,7 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
           isRecording ? "bg-red-500/20 border-red-500/30" : "bg-red-500/10 border-red-500/20",
         )}
         onMouseDown={(e) => onMouseDown(e, node.id)}
+        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         <Mic className={cn("w-3 h-3 shrink-0", isRecording ? "text-red-500 animate-pulse" : "text-red-500")} />
         <span className="text-[10px] font-medium truncate flex-1">{node.label}</span>
