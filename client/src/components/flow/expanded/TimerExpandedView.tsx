@@ -18,13 +18,15 @@ interface TimerExpandedViewProps {
   node: FlowNode;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onPlayNode?: (nodeId: string) => void;
+  /** Lifecycle engine toggle — activates or deactivates the trigger */
+  onToggleTrigger?: (nodeId: string) => void;
   /** All nodes on canvas — needed for automated mode to show upstream inputs */
   allNodes?: FlowNode[];
   /** All edges on canvas — needed for automated mode to find input connections */
   allEdges?: FlowEdge[];
 }
 
-export function TimerExpandedView({ node, onUpdateNode, onPlayNode, allNodes, allEdges }: TimerExpandedViewProps) {
+export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrigger, allNodes, allEdges }: TimerExpandedViewProps) {
   const isRunning = node.timerRunning || false;
   const interval = node.timerInterval || 5000;
   const pulseCount = node.timerPulseCount || 0;
@@ -51,8 +53,12 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, allNodes, al
   }, [node.id, onUpdateNode]);
 
   const handleToggle = useCallback(() => {
-    onUpdateNode(node.id, { timerRunning: !isRunning });
-  }, [node.id, isRunning, onUpdateNode]);
+    if (onToggleTrigger) {
+      onToggleTrigger(node.id);
+    } else {
+      onUpdateNode(node.id, { timerRunning: !isRunning });
+    }
+  }, [node.id, isRunning, onUpdateNode, onToggleTrigger]);
 
   const handleClearLog = useCallback(() => {
     onUpdateNode(node.id, {
@@ -64,13 +70,17 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, allNodes, al
 
   const handleSetMode = useCallback((newMode: "timed" | "automated") => {
     if (isRunning) {
-      onUpdateNode(node.id, { timerRunning: false });
+      if (onToggleTrigger) {
+        onToggleTrigger(node.id);
+      } else {
+        onUpdateNode(node.id, { timerRunning: false });
+      }
     }
     onUpdateNode(node.id, {
       triggerMode: newMode,
       snippet: newMode === "timed" ? "Timed trigger ready" : "Auto trigger ready",
     });
-  }, [node.id, isRunning, onUpdateNode]);
+  }, [node.id, isRunning, onUpdateNode, onToggleTrigger]);
 
   return (
     <div className="flex h-full overflow-hidden">
