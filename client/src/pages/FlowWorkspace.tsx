@@ -28,6 +28,7 @@ import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
 import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
 import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
+import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
 import { LlmExpandedView } from "@/components/flow/expanded/LlmExpandedView";
@@ -57,7 +58,7 @@ import {
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
   Lightbulb, Paintbrush2, PenLine, Users, Wifi, WifiOff,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
-  Plus, Type, Target, BookOpenCheck,
+  Plus, Type, Target, BookOpenCheck, LayoutTemplate,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
@@ -91,16 +92,101 @@ const FLOW_SHELL_CONFIG: FtuxShellConfig = {
   tipsEnabled: false,
 };
 
-// ── Background texture CSS lookup ──
+// ── Canvas themes ──
 
-const BG_TEXTURE_CSS: Record<string, string> = {
-  void: "radial-gradient(ellipse at 50% 50%, #16161e 0%, #0a0a0f 70%, #050508 100%)",
-  cosmos: `radial-gradient(ellipse at 50% 50%, #0d0d18 0%, #06060c 100%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Ccircle cx='23' cy='67' r='0.5' fill='%23ffffff18'/%3E%3Ccircle cx='187' cy='23' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='321' cy='89' r='0.6' fill='%23ffffff15'/%3E%3Ccircle cx='67' cy='234' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='289' cy='178' r='0.5' fill='%23ffffff14'/%3E%3Ccircle cx='134' cy='312' r='0.4' fill='%23ffffff11'/%3E%3Ccircle cx='356' cy='267' r='0.5' fill='%23ffffff13'/%3E%3Ccircle cx='78' cy='378' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='234' cy='345' r='0.6' fill='%23ffffff16'/%3E%3Ccircle cx='167' cy='145' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='390' cy='390' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='45' cy='156' r='0.5' fill='%23ffffff14'/%3E%3C/svg%3E")`,
-  blueprint: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%230a1628'/%3E%3Cpath d='M80 0L0 0 0 80' fill='none' stroke='%23ffffff06' stroke-width='0.5'/%3E%3C/svg%3E")`,
-  parchment: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' fill='%23140f0a'/%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`,
-  mist: "radial-gradient(ellipse at 0% 0%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 100% 100%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, #0e1117 0%, #080a0f 100%)",
-  graphite: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100' height='100' fill='%23121215'/%3E%3Crect width='100' height='100' filter='url(%23g)' opacity='0.04'/%3E%3C/svg%3E")`,
-};
+export interface CanvasThemeDef {
+  key: string;
+  label: string;
+  description: string;
+  background: string | null;  // CSS background value, null = theme default
+  gridOpacity: number;        // 0-1
+  gridColor: string;          // CSS color
+  heroVisible: boolean;       // show BG Labs hero animation
+  swatchColor: string;        // swatch preview color
+}
+
+export const CANVAS_THEMES: CanvasThemeDef[] = [
+  {
+    key: "aurora",
+    label: "Aurora",
+    description: "Animated particle field",
+    background: null,
+    gridOpacity: 0.2,
+    gridColor: "currentColor",
+    heroVisible: true,
+    swatchColor: "#1a1040",
+  },
+  {
+    key: "void",
+    label: "Void",
+    description: "Pure darkness, maximum contrast",
+    background: "radial-gradient(ellipse at 50% 50%, #16161e 0%, #0a0a0f 70%, #050508 100%)",
+    gridOpacity: 0,
+    gridColor: "currentColor",
+    heroVisible: false,
+    swatchColor: "#0a0a0f",
+  },
+  {
+    key: "cosmos",
+    label: "Cosmos",
+    description: "Sparse starfield, deep space",
+    background: `radial-gradient(ellipse at 50% 50%, #0d0d18 0%, #06060c 100%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Ccircle cx='23' cy='67' r='0.5' fill='%23ffffff18'/%3E%3Ccircle cx='187' cy='23' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='321' cy='89' r='0.6' fill='%23ffffff15'/%3E%3Ccircle cx='67' cy='234' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='289' cy='178' r='0.5' fill='%23ffffff14'/%3E%3Ccircle cx='134' cy='312' r='0.4' fill='%23ffffff11'/%3E%3Ccircle cx='356' cy='267' r='0.5' fill='%23ffffff13'/%3E%3Ccircle cx='78' cy='378' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='234' cy='345' r='0.6' fill='%23ffffff16'/%3E%3Ccircle cx='167' cy='145' r='0.4' fill='%23ffffff12'/%3E%3Ccircle cx='390' cy='390' r='0.3' fill='%23ffffff10'/%3E%3Ccircle cx='45' cy='156' r='0.5' fill='%23ffffff14'/%3E%3C/svg%3E")`,
+    gridOpacity: 0,
+    gridColor: "currentColor",
+    heroVisible: false,
+    swatchColor: "#0d0d18",
+  },
+  {
+    key: "drafting",
+    label: "Drafting",
+    description: "Technical drafting board",
+    background: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%230a1628'/%3E%3Cpath d='M80 0L0 0 0 80' fill='none' stroke='%23ffffff06' stroke-width='0.5'/%3E%3C/svg%3E")`,
+    gridOpacity: 0.3,
+    gridColor: "#4488cc",
+    heroVisible: false,
+    swatchColor: "#0a1628",
+  },
+  {
+    key: "parchment",
+    label: "Parchment",
+    description: "Aged paper, warm tone",
+    background: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' fill='%23140f0a'/%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`,
+    gridOpacity: 0.15,
+    gridColor: "#8b7355",
+    heroVisible: false,
+    swatchColor: "#140f0a",
+  },
+  {
+    key: "mist",
+    label: "Mist",
+    description: "Atmospheric fog, soft depth",
+    background: "radial-gradient(ellipse at 0% 0%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 100% 100%, #0f1a2208 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, #0e1117 0%, #080a0f 100%)",
+    gridOpacity: 0.12,
+    gridColor: "#6688aa",
+    heroVisible: false,
+    swatchColor: "#0e1117",
+  },
+  {
+    key: "graphite",
+    label: "Graphite",
+    description: "Industrial matte surface",
+    background: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100' height='100' fill='%23121215'/%3E%3Crect width='100' height='100' filter='url(%23g)' opacity='0.04'/%3E%3C/svg%3E")`,
+    gridOpacity: 0.15,
+    gridColor: "currentColor",
+    heroVisible: false,
+    swatchColor: "#121215",
+  },
+  {
+    key: "none",
+    label: "None",
+    description: "Clean, no distraction",
+    background: null,
+    gridOpacity: 0.2,
+    gridColor: "currentColor",
+    heroVisible: false,
+    swatchColor: "#1a1a1a",
+  },
+];
 
 // ── Document list item type ──
 
@@ -139,10 +225,58 @@ const DOC_TOOLS = [
   { id: "correct", label: "Correct", icon: PenLine, instruction: "Fix grammar, spelling, logic errors, and inconsistencies" },
 ];
 
+/** Split output text into N sections by markdown headings, falling back to equal chunks */
+function splitOutputIntoSections(text: string, count: number): string[] {
+  // Try splitting by markdown headings (## or #)
+  const headingRegex = /^#{1,3}\s+/m;
+  const parts = text.split(headingRegex).filter((s) => s.trim());
+
+  if (parts.length >= count) {
+    // Re-attach heading markers and distribute
+    const sections: string[] = [];
+    const step = Math.ceil(parts.length / count);
+    for (let i = 0; i < count; i++) {
+      sections.push(parts.slice(i * step, (i + 1) * step).join("\n\n## ").trim());
+    }
+    return sections;
+  }
+
+  // Try splitting by horizontal rules (---)
+  const hrParts = text.split(/\n---+\n/).filter((s) => s.trim());
+  if (hrParts.length >= count) {
+    const sections: string[] = [];
+    const step = Math.ceil(hrParts.length / count);
+    for (let i = 0; i < count; i++) {
+      sections.push(hrParts.slice(i * step, (i + 1) * step).join("\n\n---\n\n").trim());
+    }
+    return sections;
+  }
+
+  // Fallback: split by paragraphs (double newlines), distribute evenly
+  const paragraphs = text.split(/\n\n+/).filter((s) => s.trim());
+  if (paragraphs.length >= count) {
+    const sections: string[] = [];
+    const step = Math.ceil(paragraphs.length / count);
+    for (let i = 0; i < count; i++) {
+      sections.push(paragraphs.slice(i * step, (i + 1) * step).join("\n\n").trim());
+    }
+    return sections;
+  }
+
+  // Last resort: equal character chunks
+  const chunkSize = Math.ceil(text.length / count);
+  const sections: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const chunk = text.slice(i * chunkSize, (i + 1) * chunkSize).trim();
+    if (chunk) sections.push(chunk);
+  }
+  return sections;
+}
+
 // ── Inner workspace (needs shell context) ──
 
 function FlowWorkspaceInner() {
-  const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasFontColor, canvasBgColor, canvasBgTexture } = useFtuxShell();
+  const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasFontColor, canvasBgColor, canvasTheme, setCanvasTheme } = useFtuxShell();
   const {
     state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteEdge,
     selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
@@ -236,23 +370,25 @@ function FlowWorkspaceInner() {
   const [activeLabelNodeId, setActiveLabelNodeId] = useState<string | null>(null);
   const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number; screenX: number; screenY: number } | null>(null);
   const [pendingEdgeRole, setPendingEdgeRole] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
+  const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
   const [frozen, setFrozen] = useState(false);
-  const [bgAnimationOn, setBgAnimationOn] = useState(true);
+  // Resolve the active canvas theme
+  const activeTheme = CANVAS_THEMES.find((t) => t.key === canvasTheme) ?? CANVAS_THEMES[0];
   const [storeFolderPickerNodeId, setStoreFolderPickerNodeId] = useState<string | null>(null);
   const [pickerExpandedFolders, setPickerExpandedFolders] = useState<Set<number>>(new Set());
 
-  // Sync hero div visibility with bgAnimationOn state
+  // Sync hero div visibility with canvas theme
   useEffect(() => {
     const hero = document.getElementById("hero");
     if (hero) {
-      hero.style.display = bgAnimationOn ? "" : "none";
+      hero.style.display = activeTheme.heroVisible ? "" : "none";
     }
-  }, [bgAnimationOn]);
+  }, [activeTheme.heroVisible]);
   const [canvasDocumentId, setCanvasDocumentId] = useState<number | null>(() => {
     try {
       const stored = localStorage.getItem("flow:lastCanvasId");
@@ -417,11 +553,6 @@ function FlowWorkspaceInner() {
       // If context action menu is open, 1/2/3 pick from it
       if (pendingContextAction && !pendingContextAction.mode) {
         if (e.key === "1") {
-          setPendingContextAction({ ...pendingContextAction, mode: "load" });
-          e.preventDefault();
-          return;
-        }
-        if (e.key === "2") {
           const pos = pendingContextAction;
           addNode("document", pos.x, pos.y, {
             label: "New Document",
@@ -429,6 +560,11 @@ function FlowWorkspaceInner() {
             documentContent: "",
           });
           setPendingContextAction(null);
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "2") {
+          setPendingContextAction({ ...pendingContextAction, mode: "load" });
           e.preventDefault();
           return;
         }
@@ -1225,13 +1361,31 @@ function FlowWorkspaceInner() {
         return;
       }
 
-      // Combine input content
-      const combinedContent = inputNodes
-        .map((n) => n.documentContent || n.content || n.snippet || "")
+      // Separate inputs by role
+      const contextContent = inputEdges
+        .map((e) => {
+          const srcNode = stateRef.current.nodes.find((n) => n.id === e.fromNodeId);
+          if (!srcNode) return "";
+          if (e.role === "output-format") return ""; // handled separately
+          return srcNode.documentContent || srcNode.content || srcNode.snippet || "";
+        })
         .filter((s) => s.trim())
         .join("\n\n---\n\n");
 
-      if (!combinedContent.trim()) {
+      // Gather output-format template content
+      const outputFormatEdges = inputEdges.filter((e) => e.role === "output-format");
+      const templateContent = outputFormatEdges
+        .map((e) => {
+          const srcNode = stateRef.current.nodes.find((n) => n.id === e.fromNodeId);
+          return srcNode?.documentContent || srcNode?.content || srcNode?.snippet || "";
+        })
+        .filter((s) => s.trim())
+        .join("\n\n");
+
+      // Combined content for non-format inputs
+      const combinedContent = contextContent;
+
+      if (!combinedContent.trim() && node.type !== "research") {
         toast({ title: "No content", description: "Input nodes have no content" });
         return;
       }
@@ -1247,7 +1401,8 @@ function FlowWorkspaceInner() {
           const oc = node.outputConfig;
           const countHint = oc?.outputCount ? `Provide exactly ${oc.outputCount} items/results.` : "";
           const customHint = oc?.customInstruction ? `\nAdditional instructions: ${oc.customInstruction}` : "";
-          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${combinedContent}${countHint ? `\n\n${countHint}` : ""}${customHint}`;
+          const templateHint = templateContent ? `\n\nFormat your output according to this template/schema:\n${templateContent}` : "";
+          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${combinedContent}${countHint ? `\n\n${countHint}` : ""}${customHint}${templateHint}`;
 
           // Stream research using SSE
           const res = await fetch("/api/chat/stream", {
@@ -1472,17 +1627,29 @@ function FlowWorkspaceInner() {
           snippet: outputText.slice(0, 200),
         });
 
-        // Create an output Document node to the right of the played node
-        const outputDocId = addNode("document", node.x + node.width + 60, node.y, {
-          label: `${node.label} Output`,
-          documentContent: outputText,
-          snippet: outputText.slice(0, 200),
-        });
-
-        // Create edge from the played node to the output document
-        addEdge(nodeId, outputDocId);
-
-        toast({ title: "Execution complete", description: `Output document created` });
+        // ── Split mode: create N separate document nodes ──
+        const oc2 = node.outputConfig;
+        if (oc2?.outputMode === "split" && oc2?.outputCount && oc2.outputCount > 1) {
+          const sections = splitOutputIntoSections(outputText, oc2.outputCount);
+          for (let i = 0; i < sections.length; i++) {
+            const docId = addNode("document", node.x + node.width + 60, node.y + i * 160, {
+              label: `${node.label} [${i + 1}/${sections.length}]`,
+              documentContent: sections[i],
+              snippet: sections[i].slice(0, 200),
+            });
+            addEdge(nodeId, docId);
+          }
+          toast({ title: "Execution complete", description: `Created ${sections.length} output documents` });
+        } else {
+          // Consolidated mode: single output document
+          const outputDocId = addNode("document", node.x + node.width + 60, node.y, {
+            label: `${node.label} Output`,
+            documentContent: outputText,
+            snippet: outputText.slice(0, 200),
+          });
+          addEdge(nodeId, outputDocId);
+          toast({ title: "Execution complete", description: `Output document created` });
+        }
 
         // ── Chain propagation: auto-trigger downstream playable nodes ──
         // Find nodes that receive input from this node (edges from nodeId → downstream)
@@ -2291,13 +2458,15 @@ function FlowWorkspaceInner() {
         templateId={null}
         headerActions={headerActions}
         jobCount={jobCount}
-        bgAnimationOn={bgAnimationOn}
-        onToggleBgAnimation={() => setBgAnimationOn((v) => !v)}
+        canvasTheme={canvasTheme}
+        onChangeCanvasTheme={setCanvasTheme}
         canvasName={canvasTitle || "Untitled Canvas"}
         onRenameCanvas={handleRenameCanvas}
         savedCanvases={canvasDocs.map((d: DocumentListItem) => ({ id: d.id, title: d.title }))}
         onOpenCanvas={handleOpenCanvas}
         canvasLoading={canvasLoading}
+        onToggleDetails={() => setDetailsPanelOpen((v) => !v)}
+        detailsOpen={detailsPanelOpen}
       />
 
       {/* Workspace tabs */}
@@ -2360,10 +2529,9 @@ function FlowWorkspaceInner() {
         ref={canvasContainerRef}
         className="flex-1 relative overflow-hidden"
         style={{
-          ...(!bgAnimationOn ? {
-            background: canvasBgTexture
-              ? BG_TEXTURE_CSS[canvasBgTexture] ?? (canvasBgColor || undefined)
-              : (canvasBgColor || undefined),
+          ...(!activeTheme.heroVisible ? {
+            background: activeTheme.background
+              ?? (canvasTheme === "none" && canvasBgColor ? canvasBgColor : undefined),
           } : {}),
           ...(canvasFontSize && canvasFontSize !== 14 ? { fontSize: `${canvasFontSize}px` } : {}),
           ...(canvasFontColor ? { color: canvasFontColor } : {}),
@@ -2372,7 +2540,9 @@ function FlowWorkspaceInner() {
         <FlowCanvas
           state={state}
           frozen={frozen}
-          transparentBg={bgAnimationOn}
+          transparentBg={activeTheme.heroVisible}
+          gridOpacity={activeTheme.gridOpacity}
+          gridColor={activeTheme.gridColor}
           onMoveNode={moveNode}
           onMoveNodes={moveNodes}
           onDeleteNode={deleteNode}
@@ -2645,6 +2815,26 @@ function FlowWorkspaceInner() {
         </DialogContent>
       </Dialog>
 
+      {/* Node Details Panel */}
+      {detailsPanelOpen && (() => {
+        const selectedIds = Array.from(state.selectedNodeIds);
+        const selectedNode = selectedIds.length === 1 ? state.nodes.find((n) => n.id === selectedIds[0]) : null;
+        if (!selectedNode) return (
+          <div className="fixed right-0 top-0 bottom-0 w-80 z-[42] bg-card border-l border-border shadow-xl flex items-center justify-center animate-in slide-in-from-right duration-200">
+            <p className="text-xs text-muted-foreground/50">Select a single node to view details</p>
+          </div>
+        );
+        return (
+          <FlowDetailsPanel
+            node={selectedNode}
+            nodes={state.nodes}
+            edges={state.edges}
+            onClose={() => setDetailsPanelOpen(false)}
+            onUpdateNode={updateNode}
+          />
+        );
+      })()}
+
       {/* Logic node type picker — lightweight popover, no overlay dimming */}
       {/* Edge role picker dialog: Context or Objective */}
       {pendingEdgeRole && (
@@ -2681,6 +2871,19 @@ function FlowWorkspaceInner() {
                 <div>
                   <div className="text-xs font-medium">Objective / Starting Prompt</div>
                   <div className="text-[10px] text-muted-foreground">Sets the research topic and direction</div>
+                </div>
+              </button>
+              <button
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-left"
+                onClick={() => {
+                  addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, "output-format");
+                  setPendingEdgeRole(null);
+                }}
+              >
+                <LayoutTemplate className="w-4 h-4 text-violet-500 shrink-0" />
+                <div>
+                  <div className="text-xs font-medium">Output Format / Template</div>
+                  <div className="text-[10px] text-muted-foreground">Schema or template the output must follow</div>
                 </div>
               </button>
             </div>

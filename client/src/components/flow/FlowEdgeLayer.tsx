@@ -15,7 +15,8 @@ interface FlowEdgeLayerProps {
  */
 const RESEARCH_ZONE_Y: Record<string, number> = {
   objective: 0.2,
-  context: 0.5,
+  context: 0.45,
+  "output-format": 0.65,
 };
 
 function computeEndpoints(from: FlowNode, to: FlowNode, role?: string) {
@@ -264,7 +265,7 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
                   width={48}
                   height={16}
                   rx={4}
-                  fill={edge.role === "objective" ? "rgba(59,130,246,0.85)" : "rgba(217,119,6,0.85)"}
+                  fill={edge.role === "objective" ? "rgba(59,130,246,0.85)" : edge.role === "output-format" ? "rgba(139,92,246,0.85)" : "rgba(217,119,6,0.85)"}
                 />
                 <text
                   x={mx}

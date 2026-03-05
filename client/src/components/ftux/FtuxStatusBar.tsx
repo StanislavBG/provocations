@@ -20,9 +20,12 @@ import {
   ChevronDown,
   FolderOpen,
   Settings,
+  Check,
+  Info,
 } from "lucide-react";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { FlowNodeType } from "@/components/flow/useFlowCanvas";
+import { CANVAS_THEMES } from "@/pages/FlowWorkspace";
 
 /** Look up a tool/node icon from the registry. Falls back to Sparkles. */
 function getToolIcon(toolId: string): React.ElementType {
@@ -55,10 +58,10 @@ interface FtuxStatusBarProps {
   headerActions?: React.ReactNode;
   /** Number of AI / processing jobs currently running */
   jobCount?: number;
-  /** Whether background animation is active */
-  bgAnimationOn?: boolean;
-  /** Toggle background animation */
-  onToggleBgAnimation?: () => void;
+  /** Current canvas theme key */
+  canvasTheme?: string;
+  /** Callback to change canvas theme */
+  onChangeCanvasTheme?: (theme: string) => void;
   /** Current canvas name */
   canvasName?: string;
   /** Callback to rename canvas */
@@ -67,12 +70,17 @@ interface FtuxStatusBarProps {
   savedCanvases?: SavedCanvas[];
   /** Callback to open/switch to a saved canvas */
   onOpenCanvas?: (id: number, title: string) => void;
+  /** Toggle the node details panel */
+  onToggleDetails?: () => void;
+  /** Whether the details panel is open */
+  detailsOpen?: boolean;
   /** Whether a canvas is currently loading */
   canvasLoading?: boolean;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, bgAnimationOn, onToggleBgAnimation, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, canvasLoading }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onToggleDetails, detailsOpen, canvasLoading }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -242,22 +250,73 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
       {/* Right: Controls */}
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
-        {onToggleBgAnimation && (
+        {onToggleDetails && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`w-7 h-7 rounded ${bgAnimationOn ? "text-primary" : "text-muted-foreground/50"}`}
-                onClick={onToggleBgAnimation}
+                className={`w-7 h-7 rounded ${detailsOpen ? "text-primary bg-primary/10" : "text-muted-foreground/50"}`}
+                onClick={onToggleDetails}
               >
-                <Wallpaper className="w-3.5 h-3.5" />
+                <Info className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs z-[60]">
-              {bgAnimationOn ? "Turn off background" : "Turn on background"}
+              Node details
             </TooltipContent>
           </Tooltip>
+        )}
+        {onChangeCanvasTheme && (
+          <div className="relative">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`w-7 h-7 rounded ${canvasTheme && canvasTheme !== "none" ? "text-primary" : "text-muted-foreground/50"}`}
+                  onClick={() => setThemeDropdownOpen((v) => !v)}
+                >
+                  <Wallpaper className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              {!themeDropdownOpen && (
+                <TooltipContent side="bottom" className="text-xs z-[60]">
+                  Canvas theme: {CANVAS_THEMES.find((t) => t.key === canvasTheme)?.label ?? "Aurora"}
+                </TooltipContent>
+              )}
+            </Tooltip>
+
+            {themeDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-50" onClick={() => setThemeDropdownOpen(false)} onKeyDown={(e) => { if (e.key === "Escape") setThemeDropdownOpen(false); }} />
+                <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[220px] animate-in fade-in zoom-in-95 duration-100">
+                  {CANVAS_THEMES.map((theme) => (
+                    <button
+                      key={theme.key}
+                      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                      onClick={() => {
+                        onChangeCanvasTheme(theme.key);
+                        setThemeDropdownOpen(false);
+                      }}
+                    >
+                      <div
+                        className="w-4 h-4 rounded-full border border-border/60 shrink-0"
+                        style={{ background: theme.swatchColor }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium">{theme.label}</div>
+                        <div className="text-[10px] text-muted-foreground truncate">{theme.description}</div>
+                      </div>
+                      {canvasTheme === theme.key && (
+                        <Check className="w-3.5 h-3.5 text-primary shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
         <Tooltip>
           <TooltipTrigger asChild>

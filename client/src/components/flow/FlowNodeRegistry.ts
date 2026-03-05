@@ -74,6 +74,15 @@ export interface FlowNodeDefinition {
 
   /** Lifecycle processing category */
   lifecyclePreset: LifecyclePreset;
+
+  /** Minimum resize constraints */
+  minWidth: number;
+  minHeight: number;
+
+  /** Verbose description of what this node accepts as input */
+  inputDescription: string;
+  /** Verbose description of what this node produces as output */
+  outputDescription: string;
 }
 
 // ── The Registry ──
@@ -100,6 +109,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: false,
     lifecyclePreset: "passive",
+    minWidth: 140,
+    minHeight: 80,
+    inputDescription: "No input — loaded from Context Store. Contains the document title, content, and metadata.",
+    outputDescription: "Full document text content. Connected downstream nodes receive the document body as context.",
   },
   research: {
     type: "research",
@@ -116,12 +129,16 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     },
     icon: Sparkles,
     defaultWidth: 240,
-    defaultHeight: 260,
+    defaultHeight: 300,
     ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
     expandMode: "overlay",
     playable: true,
     supportsChainExecution: true,
     lifecyclePreset: "stream",
+    minWidth: 200,
+    minHeight: 200,
+    inputDescription: "Accepts three edge roles: Objective (what to research), Context (background documents), and Output Format (schema/template for structuring results).",
+    outputDescription: "Produces a research document based on the objective, context, and output format. Can output 1 consolidated doc or N split docs depending on output mode.",
   },
   llm: {
     type: "llm",
@@ -144,6 +161,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: true,
     lifecyclePreset: "llm",
+    minWidth: 180,
+    minHeight: 140,
+    inputDescription: "Text content from connected source nodes. Applies a selected preset transformation (Summarize, Clean, Expand, or Custom instruction).",
+    outputDescription: "Transformed text after applying the selected preset. The output replaces or appends to the node's content.",
   },
   store: {
     type: "store",
@@ -166,6 +187,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: false,
     lifecyclePreset: "passive",
+    minWidth: 140,
+    minHeight: 70,
+    inputDescription: "Receives content from upstream nodes to be saved. The destination folder is configured on the node.",
+    outputDescription: "No output — this is a terminal node. Content is persisted to the Context Store.",
   },
   painter: {
     type: "painter",
@@ -188,6 +213,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: true,
     supportsChainExecution: true,
     lifecyclePreset: "media",
+    minWidth: 180,
+    minHeight: 140,
+    inputDescription: "Text description or prompt that guides the image generation. Connected documents provide subject matter context.",
+    outputDescription: "Generated image (PNG). The image URL is stored on the node and can be saved to Context Store.",
   },
   interview: {
     type: "interview",
@@ -210,6 +239,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: true,
     supportsChainExecution: true,
     lifecyclePreset: "stream",
+    minWidth: 180,
+    minHeight: 100,
+    inputDescription: "Objective text and context documents that define the interview topic. Supports journalist stance configuration.",
+    outputDescription: "Interview transcript (Q&A entries). Can be summarized into a structured document for downstream nodes.",
   },
   timeline: {
     type: "timeline",
@@ -232,6 +265,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: true,
     supportsChainExecution: true,
     lifecyclePreset: "llm",
+    minWidth: 180,
+    minHeight: 100,
+    inputDescription: "Text content describing events, milestones, or items to arrange chronologically.",
+    outputDescription: "Structured timeline document with dated entries. Can feed into downstream document or store nodes.",
   },
   document: {
     type: "document",
@@ -254,6 +291,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: false,
     lifecyclePreset: "passive",
+    minWidth: 140,
+    minHeight: 80,
+    inputDescription: "No automatic input — content is edited directly or created by upstream nodes (e.g., research output).",
+    outputDescription: "Markdown text content. Connected downstream nodes receive the full document text.",
   },
   zone: {
     type: "zone",
@@ -276,6 +317,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: false,
     lifecyclePreset: "passive",
+    minWidth: 150,
+    minHeight: 100,
+    inputDescription: "No input — zones are visual grouping containers. They don't participate in data flow.",
+    outputDescription: "No output — zones organize nodes visually but don't produce data.",
   },
   audio: {
     type: "audio",
@@ -298,6 +343,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: false,
     lifecyclePreset: "passive",
+    minWidth: 140,
+    minHeight: 100,
+    inputDescription: "No input — records audio directly via microphone using Web Speech API for real-time transcription.",
+    outputDescription: "Transcribed text from voice recording. Can be connected to LLM, Research, or Document nodes for processing.",
   },
   youtube: {
     type: "youtube",
@@ -320,6 +369,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: true,
     lifecyclePreset: "stream",
+    minWidth: 180,
+    minHeight: 120,
+    inputDescription: "YouTube URL pasted by the user. Fetches video metadata and transcript automatically.",
+    outputDescription: "Extracted video transcript text and metadata (title, description). Available as context for downstream nodes.",
   },
   "timer-event": {
     type: "timer-event",
@@ -342,6 +395,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: true,
     lifecyclePreset: "timer",
+    minWidth: 140,
+    minHeight: 100,
+    inputDescription: "Trigger signal from upstream nodes or timer configuration. Can be timed (interval) or automated (on upstream completion).",
+    outputDescription: "Fires a pulse signal to connected downstream nodes, triggering their execution in sequence.",
   },
   filter: {
     type: "filter",
@@ -364,6 +421,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: true,
     lifecyclePreset: "passive",
+    minWidth: 160,
+    minHeight: 90,
+    inputDescription: "Content from upstream nodes. The filter evaluates a condition rule to decide what passes through.",
+    outputDescription: "Filtered content — only items matching the condition rule are forwarded to downstream nodes.",
   },
   gate: {
     type: "gate",
@@ -386,6 +447,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: true,
     lifecyclePreset: "passive",
+    minWidth: 130,
+    minHeight: 80,
+    inputDescription: "Content from upstream nodes. The gate blocks or allows content based on its open/closed state.",
+    outputDescription: "When open, passes content through unchanged. When closed, blocks all downstream propagation.",
   },
   router: {
     type: "router",
@@ -408,6 +473,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: true,
     lifecyclePreset: "passive",
+    minWidth: 160,
+    minHeight: 100,
+    inputDescription: "Content from upstream nodes. Routes to different output branches based on configured rules or labels.",
+    outputDescription: "Distributes content to specific downstream nodes based on matching output labels.",
   },
   merge: {
     type: "merge",
@@ -430,6 +499,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: true,
     lifecyclePreset: "passive",
+    minWidth: 140,
+    minHeight: 80,
+    inputDescription: "Multiple input connections from different branches. Combines all incoming content into a single output.",
+    outputDescription: "Merged content from all input sources, concatenated or interleaved based on arrival order.",
   },
   "social-post": {
     type: "social-post",
@@ -452,6 +525,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: true,
     supportsChainExecution: true,
     lifecyclePreset: "llm",
+    minWidth: 180,
+    minHeight: 120,
+    inputDescription: "Text content to adapt for social media. Accepts intent, tone, and platform selection to guide generation.",
+    outputDescription: "Platform-specific social posts (text + optional images). Each platform gets tailored content respecting character limits.",
   },
   "api-connection": {
     type: "api-connection",
@@ -474,6 +551,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: true,
     supportsChainExecution: true,
     lifecyclePreset: "llm",
+    minWidth: 160,
+    minHeight: 100,
+    inputDescription: "Content from upstream social post nodes or documents. Publishes to configured external API (X, LinkedIn, etc.).",
+    outputDescription: "Post result status (success/failure, external ID). Logs all publish attempts with timestamps.",
   },
   label: {
     type: "label",
@@ -496,6 +577,10 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     playable: false,
     supportsChainExecution: false,
     lifecyclePreset: "passive",
+    minWidth: 60,
+    minHeight: 24,
+    inputDescription: "No input — labels are text annotations placed on the canvas for organizational purposes.",
+    outputDescription: "No output — labels don't participate in data flow. They are visual-only elements.",
   },
 };
 
