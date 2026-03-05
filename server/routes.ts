@@ -7697,7 +7697,8 @@ RULES:
 - Instagram posts: caption style, heavy on hashtags (5-10), emoji-friendly
 - Reddit posts: informative, add context, no promotional language
 
-Respond with a JSON object where keys are platform IDs and values have: text (the post content), hashtags (array), characterCount (number).
+Respond with a JSON object where keys are ONLY the platform IDs listed above (${platforms.join(", ")}). Do NOT include any other platforms.
+Each value must have: text (the post content), hashtags (array), characterCount (number).
 Example: { "x": { "text": "...", "hashtags": ["#ai"], "characterCount": 145 } }
 
 Return ONLY valid JSON, no markdown fences.`;
@@ -7714,7 +7715,12 @@ Return ONLY valid JSON, no markdown fences.`;
       let posts: Record<string, { text: string; hashtags?: string[]; characterCount: number }>;
       try {
         const cleaned = result.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        posts = JSON.parse(cleaned);
+        const parsed2 = JSON.parse(cleaned);
+        // Filter to only requested platforms — LLM may hallucinate extras
+        posts = {};
+        for (const p of platforms) {
+          if (parsed2[p]) posts[p] = parsed2[p];
+        }
       } catch {
         return res.status(500).json({ error: "Failed to parse LLM response as JSON" });
       }

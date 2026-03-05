@@ -137,6 +137,7 @@ export function FlowCanvas({
     onEdgeCreate: onCreateEdge,
     onDragStart,
     nodes: state.nodes,
+    selectedNodeIds: state.selectedNodeIds,
     glideKeys: resolvedGlideKeys,
   });
 
