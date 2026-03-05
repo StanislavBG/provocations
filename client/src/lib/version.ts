@@ -58,6 +58,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "TTS endpoint: auto-selects ElevenLabs when available, falls back to OpenAI",
       "Status bar: fixed icons for Context Library, Logic, and Research pinned items",
       "Status bar: Logic submenu no longer positions off-screen when status bar is at top",
+      "Landing page: BG-labs aurora animation as background with large ProvoIcon logo",
+      "Landing page: glassmorphism cards and header over animated aurora backdrop",
     ],
   },
   {
