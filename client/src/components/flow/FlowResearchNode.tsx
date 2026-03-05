@@ -171,6 +171,31 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
             <button
               className={cn(
                 "text-[7px] px-1 py-0.5 rounded transition-colors",
+                (node.outputReplaceMode ?? "replace") === "replace"
+                  ? "bg-amber-500/30 text-amber-300 font-semibold"
+                  : "bg-muted/30 text-muted-foreground/50 hover:bg-muted/50",
+              )}
+              onClick={(e) => { e.stopPropagation(); onUpdateNode(node.id, { outputReplaceMode: "replace" }); }}
+              title="Replace existing outputs on re-run"
+            >
+              Replace
+            </button>
+            <button
+              className={cn(
+                "text-[7px] px-1 py-0.5 rounded transition-colors",
+                node.outputReplaceMode === "new"
+                  ? "bg-amber-500/30 text-amber-300 font-semibold"
+                  : "bg-muted/30 text-muted-foreground/50 hover:bg-muted/50",
+              )}
+              onClick={(e) => { e.stopPropagation(); onUpdateNode(node.id, { outputReplaceMode: "new" }); }}
+              title="Keep existing outputs and add new ones"
+            >
+              +New
+            </button>
+            <div className="w-px h-3 bg-muted-foreground/20 mx-0.5" />
+            <button
+              className={cn(
+                "text-[7px] px-1 py-0.5 rounded transition-colors",
                 (oc.outputMode || "consolidated") === "consolidated"
                   ? "bg-violet-500/30 text-violet-300 font-semibold"
                   : "bg-muted/30 text-muted-foreground/50 hover:bg-muted/50",

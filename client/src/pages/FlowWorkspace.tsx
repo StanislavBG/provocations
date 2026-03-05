@@ -64,7 +64,7 @@ import {
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
-  Plus, Type, Target, BookOpenCheck, LayoutTemplate,
+  Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
@@ -228,7 +228,7 @@ function splitOutputIntoSections(text: string, count: number): string[] {
 function FlowWorkspaceInner() {
   const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasTheme, setCanvasTheme, keyBinds } = useFtuxShell();
   const {
-    state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteEdge,
+    state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteNodes, deleteEdge,
     selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
     undo, redo,
   } = useFlowCanvas();
@@ -1348,6 +1348,21 @@ function FlowWorkspaceInner() {
     [lcLog],
   );
 
+  // ── Replace downstream outputs helper ──
+  const replaceDownstreamOutputs = useCallback(
+    (nodeId: string) => {
+      const node = stateRef.current.nodes.find((n) => n.id === nodeId);
+      if (!node || (node.outputReplaceMode ?? "replace") !== "replace") return;
+      const outEdges = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
+      const docIds = outEdges
+        .map((e) => stateRef.current.nodes.find((n) => n.id === e.toNodeId))
+        .filter((n): n is FlowNode => !!n && n.type === "document")
+        .map((n) => n.id);
+      if (docIds.length > 0) deleteNodes(docIds);
+    },
+    [deleteNodes],
+  );
+
   // ── Play node: auto-execute a node using its inputs ──
 
   const handlePlayNode = useCallback(
@@ -1424,6 +1439,9 @@ function FlowWorkspaceInner() {
 
       // Mark node as running
       updateNode(nodeId, { llmStatus: "running", snippet: "Running..." });
+
+      // Replace existing downstream document outputs if in "replace" mode
+      replaceDownstreamOutputs(nodeId);
 
       // ── PROCESS: Execute node-specific logic ──
       lcLog(node, "process", "start", `Processing as ${node.type}`);
@@ -1814,7 +1832,7 @@ function FlowWorkspaceInner() {
         toast({ title: "Execution failed", variant: "destructive" });
       }
     },
-    [addNode, addEdge, updateNode, toast, lcLog, propagateDownstream],
+    [addNode, addEdge, updateNode, toast, lcLog, propagateDownstream, replaceDownstreamOutputs],
   );
 
   // Keep ref in sync for chain propagation
@@ -2315,6 +2333,13 @@ function FlowWorkspaceInner() {
           >
             {frozen ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
             {frozen ? "Unlock Canvas" : "Freeze Canvas"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => minimapState.toggleVisible()}
+            className="text-xs gap-2"
+          >
+            <MapIcon className="w-3.5 h-3.5" />
+            {minimapState.state.visible ? "Hide Minimap" : "Show Minimap"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
