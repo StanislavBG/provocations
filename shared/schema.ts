@@ -1070,6 +1070,41 @@ export const processVideoRequestSchema = z.object({
 
 export type ProcessVideoRequest = z.infer<typeof processVideoRequestSchema>;
 
+// YouTube search request
+export const youtubeSearchRequestSchema = z.object({
+  query: z.string().min(1, "Search query is required"),
+  maxResults: z.number().min(1).max(25).default(5),
+});
+
+export type YouTubeSearchRequest = z.infer<typeof youtubeSearchRequestSchema>;
+
+// YouTube search result (richer than channel video)
+export interface YouTubeSearchResult {
+  videoId: string;
+  title: string;
+  description: string;
+  channelTitle: string;
+  publishedAt: string;
+  thumbnailUrl: string;
+  duration?: string;
+  viewCount?: string;
+}
+
+// YouTube playlist request
+export const youtubePlaylistRequestSchema = z.object({
+  playlistUrl: z.string().min(1, "Playlist URL is required"),
+  maxResults: z.number().min(1).max(50).default(10),
+});
+
+export type YouTubePlaylistRequest = z.infer<typeof youtubePlaylistRequestSchema>;
+
+// YouTube playlist response
+export interface YouTubePlaylistResponse {
+  playlistTitle: string;
+  playlistId: string;
+  videos: YouTubeVideo[];
+}
+
 // Request to process an uploaded voice transcript
 export const processTranscriptUploadRequestSchema = z.object({
   transcript: z.string().min(1, "Transcript content is required"),

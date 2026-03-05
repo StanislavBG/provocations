@@ -26,22 +26,41 @@ import {
   Palette,
   Users,
   Wifi,
+  BookOpen,
+  CircuitBoard,
+  AudioLines,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { FlowNodeType } from "@/components/flow/useFlowCanvas";
 import { CANVAS_STYLES } from "@/lib/canvas-styles";
 
-/** Look up a tool/node icon from the registry. Falls back to Sparkles. */
-function getToolIcon(toolId: string): React.ElementType {
+/**
+ * Icons for virtual dock toolIds that don't map to a FlowNodeType in the registry.
+ * These are "meta" items (context, logic, audio via AudioLines) whose toolId
+ * doesn't match a registry key.
+ */
+const VIRTUAL_TOOL_ICONS: Record<string, LucideIcon> = {
+  context: BookOpen,
+  logic: CircuitBoard,
+};
+
+/** Look up a tool/node icon from the registry, with fallback for virtual dock items. */
+function getToolIcon(toolId: string, dockIconName?: string): React.ElementType {
+  // 1. Check registry (covers real node types like "research", "llm", etc.)
   const def = FLOW_NODE_REGISTRY[toolId as FlowNodeType];
-  return def?.icon ?? Sparkles;
+  if (def) return def.icon;
+  // 2. Check virtual tool map (covers "context", "logic", etc.)
+  if (VIRTUAL_TOOL_ICONS[toolId]) return VIRTUAL_TOOL_ICONS[toolId];
+  // 3. Fallback
+  return Sparkles;
 }
 
 /** Look up a tool/node label from the registry. Falls back to the toolId itself. */
 function getToolLabel(toolId: string): string {
   const def = FLOW_NODE_REGISTRY[toolId as FlowNodeType];
-  return def?.style.badge ?? toolId;
+  return def?.style.badge ?? (toolId.charAt(0).toUpperCase() + toolId.slice(1));
 }
 
 function hexToRgba(hex: string, alpha: number): string {

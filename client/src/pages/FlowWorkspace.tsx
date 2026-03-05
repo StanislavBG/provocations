@@ -3010,8 +3010,14 @@ function FlowWorkspaceInner() {
           <div
             className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg p-1 w-48 animate-in fade-in zoom-in-95 duration-100"
             style={{
-              left: Math.min(pendingLogicAction.screenX + 20, window.innerWidth - 210),
-              top: Math.min(pendingLogicAction.screenY - 60, window.innerHeight - 200),
+              left: Math.max(8, Math.min(pendingLogicAction.screenX + 20, window.innerWidth - 210)),
+              top: Math.max(8, Math.min(
+                // If near the top of screen (e.g. clicked from status bar), show below the click point
+                pendingLogicAction.screenY < 100
+                  ? pendingLogicAction.screenY + 8
+                  : pendingLogicAction.screenY - 60,
+                window.innerHeight - 260,
+              )),
             }}
           >
             <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Logic</div>
