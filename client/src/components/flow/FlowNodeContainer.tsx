@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useState, useRef, useEffect } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor, Settings } from "lucide-react";
+import { Pause, Trash2, Lock, Unlock, Play, Loader2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -257,28 +257,18 @@ function LockButton({
     <button
       className={cn(
         "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-        lockMode === "canvas"
+        lockMode !== "none"
           ? "bg-yellow-500 text-white"
-          : lockMode === "screen"
-            ? "bg-blue-500 text-white"
-            : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+          : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
       )}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
         onToggleLock(nodeId);
       }}
-      title={
-        lockMode === "none"
-          ? "Lock to canvas"
-          : lockMode === "canvas"
-            ? "Lock to screen"
-            : "Unlock"
-      }
+      title={lockMode === "none" ? "Lock position" : "Unlock"}
     >
-      {lockMode === "none" && <Unlock className="w-2.5 h-2.5" />}
-      {lockMode === "canvas" && <Lock className="w-2.5 h-2.5" />}
-      {lockMode === "screen" && <Monitor className="w-2.5 h-2.5" />}
+      {lockMode === "none" ? <Unlock className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
     </button>
   );
 }

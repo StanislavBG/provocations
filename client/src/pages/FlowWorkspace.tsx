@@ -2616,21 +2616,19 @@ function FlowWorkspaceInner() {
           onToggleLock={(nodeId) => {
             const node = state.nodes.find((n) => n.id === nodeId);
             if (!node) return;
-            const current = node.lockMode || (node.locked ? "canvas" : "none");
-            if (current === "none") {
-              updateNode(nodeId, { lockMode: "canvas", locked: true });
-            } else if (current === "canvas") {
-              // Canvas → Screen: convert canvas position to screen position
-              const vp = state.viewport;
-              const screenX = node.x * vp.zoom + vp.x;
-              const screenY = node.y * vp.zoom + vp.y;
-              updateNode(nodeId, { lockMode: "screen", locked: true, screenX, screenY });
+            const isLocked = node.locked || node.lockMode === "canvas" || node.lockMode === "screen";
+            if (isLocked) {
+              // Unlock: if screen-locked, convert position back to canvas coords
+              if (node.lockMode === "screen") {
+                const vp = state.viewport;
+                const canvasX = ((node.screenX ?? 100) - vp.x) / vp.zoom;
+                const canvasY = ((node.screenY ?? 100) - vp.y) / vp.zoom;
+                updateNode(nodeId, { lockMode: "none", locked: false, x: canvasX, y: canvasY });
+              } else {
+                updateNode(nodeId, { lockMode: "none", locked: false });
+              }
             } else {
-              // Screen → Unlock: convert screen position back to canvas
-              const vp = state.viewport;
-              const canvasX = ((node.screenX ?? 100) - vp.x) / vp.zoom;
-              const canvasY = ((node.screenY ?? 100) - vp.y) / vp.zoom;
-              updateNode(nodeId, { lockMode: "none", locked: false, x: canvasX, y: canvasY });
+              updateNode(nodeId, { lockMode: "canvas", locked: true });
             }
           }}
           onDropTool={handleDropTool}
