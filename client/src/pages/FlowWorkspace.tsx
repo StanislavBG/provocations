@@ -66,9 +66,10 @@ import {
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
-  Search, Zap,
+  Search, Zap, Settings, ScrollText,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
+import { APP_VERSION, RELEASE_NOTES } from "@/lib/version";
 
 // ── Dock config ──
 
@@ -361,6 +362,7 @@ function FlowWorkspaceInner() {
   // Canvas is always live — collab is on whenever a canvas ID exists
   const collabEnabled = true;
   const [lifecycleConsoleOpen, setLifecycleConsoleOpen] = useState(false);
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
 
   // ── Workspace tabs ──
@@ -2500,6 +2502,25 @@ function FlowWorkspaceInner() {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Settings dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
+            <Settings className="w-3 h-3" />
+            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-44">
+          <DropdownMenuItem
+            onClick={() => setReleaseNotesOpen(true)}
+            className="text-xs gap-2"
+          >
+            <ScrollText className="w-3.5 h-3.5" />
+            Release Notes
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {/* Collaboration presence indicator */}
       {collabEnabled && (
         <div className="flex items-center gap-1 ml-1">
@@ -2779,6 +2800,15 @@ function FlowWorkspaceInner() {
         {!dockHidden && <FtuxDock />}
         <FlowLoadingBar active={canvasLoading || isSaving} progress={canvasLoading ? loadProgress : undefined} />
 
+        {/* Version watermark — bottom-left corner */}
+        <button
+          onClick={() => setReleaseNotesOpen(true)}
+          className="absolute bottom-2 left-2 z-10 text-[9px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors font-mono cursor-pointer select-none"
+          title={`Provocations v${APP_VERSION} — Click for release notes`}
+        >
+          v{APP_VERSION}
+        </button>
+
         {/* Activity Logs overlay (full screen) */}
         {lifecycleConsoleOpen && (
           <ActivityLogsOverlay
@@ -2802,6 +2832,40 @@ function FlowWorkspaceInner() {
           />
         )}
       </div>
+
+      {/* Release Notes dialog */}
+      <Dialog open={releaseNotesOpen} onOpenChange={setReleaseNotesOpen}>
+        <DialogContent className="max-w-lg max-h-[70vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <ScrollText className="w-4 h-4" />
+              Release Notes — v{APP_VERSION}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto space-y-4 pr-2">
+            {RELEASE_NOTES.map((release) => (
+              <div key={release.version} className="space-y-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs font-semibold font-mono text-primary">
+                    v{release.version}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {release.date}
+                  </span>
+                </div>
+                <ul className="space-y-0.5 ml-3">
+                  {release.changes.map((change, i) => (
+                    <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                      <span className="text-primary/60 mt-0.5">•</span>
+                      {change}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Context Store: Load/Save choice dialog */}
       <Dialog
