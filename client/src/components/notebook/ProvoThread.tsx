@@ -22,7 +22,8 @@ import {
   Target,
   Users,
 } from "lucide-react";
-import type { ProvocationType, Challenge, Advice } from "@shared/schema";
+import type { ProvocationType, Challenge, Advice, ProvocationRound } from "@shared/schema";
+import { Link } from "lucide-react";
 
 interface ProvoThreadProps {
   documentText: string;
@@ -61,6 +62,10 @@ export function ProvoThread({
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
+  // ── Provocation chain history ──
+  const [provocationHistory, setProvocationHistory] = useState<ProvocationRound[]>([]);
+  const roundNumber = Math.floor(provocationHistory.length / Math.max(1, challenges.length)) + 1;
+
   // ── Generate provocations ──
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -78,6 +83,7 @@ export function ProvoThread({
         document: effectiveDoc,
         objective: objective.trim() || undefined,
         personaIds: Array.from(activePersonas),
+        provocationHistory: provocationHistory.length > 0 ? provocationHistory.slice(-5) : undefined,
       });
       return res.json() as Promise<{ challenges: Challenge[] }>;
     },
@@ -193,9 +199,18 @@ export function ProvoThread({
           `**Response to ${challenge.persona.label} — "${challenge.title}"**\n\n${text}`,
           `Response: ${challenge.title}`,
         );
+        // Record round in provocation history
+        setProvocationHistory((prev) => [...prev, {
+          roundNumber: roundNumber,
+          personaId: challenge.persona.id,
+          challenge: challenge.content,
+          userResponse: text,
+          accepted: true,
+          timestamp: new Date().toISOString(),
+        }]);
       }
     },
-    [responseText, challenges, onCaptureToContext],
+    [responseText, challenges, onCaptureToContext, roundNumber],
   );
 
   const handleDismiss = useCallback((challengeId: string) => {
@@ -204,7 +219,18 @@ export function ProvoThread({
       next.add(challengeId);
       return next;
     });
-  }, []);
+    // Record dismissal in provocation history
+    const challenge = challenges.find((c) => c.id === challengeId);
+    if (challenge) {
+      setProvocationHistory((prev) => [...prev, {
+        roundNumber: roundNumber,
+        personaId: challenge.persona.id,
+        challenge: challenge.content,
+        accepted: false,
+        timestamp: new Date().toISOString(),
+      }]);
+    }
+  }, [challenges, roundNumber]);
 
   const visibleChallenges = challenges.filter((c) => !dismissedIds.has(c.id));
   const canGenerate =
@@ -252,12 +278,18 @@ export function ProvoThread({
             ) : (
               <>
                 <Flame className="w-3.5 h-3.5" />
-                Generate Provocations
+                {provocationHistory.length > 0 ? "Deepen Provocations" : "Generate Provocations"}
                 {activePersonas.size > 0 && (
                   <span className="text-[10px] opacity-70 font-normal">
                     ({activePersonas.size} persona
                     {activePersonas.size !== 1 ? "s" : ""})
                   </span>
+                )}
+                {provocationHistory.length > 0 && (
+                  <Badge variant="secondary" className="text-[9px] h-4 px-1 ml-1">
+                    <Link className="w-2.5 h-2.5 mr-0.5" />
+                    Round {roundNumber}
+                  </Badge>
                 )}
               </>
             )}

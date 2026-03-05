@@ -3,7 +3,7 @@ import { ProvoThread } from "./ProvoThread";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { NotebookResearchChat } from "./NotebookResearchChat";
 import { InterviewTab } from "./InterviewTab";
-import { PainterPanel, type PaintImageRequest } from "./PainterPanel";
+import { PainterStudio, type PaintImageRequest } from "./PainterStudio";
 import { WriterPanel, type WriterConfig } from "./WriterPanel";
 import { ContextSidebar } from "./ContextSidebar";
 import { resolveVisibleTabs } from "./panelTabs";
@@ -230,7 +230,8 @@ export function NotebookRightPanel({
 
       {/* Painter */}
       <div className={effectiveActiveTab === "painter" ? "flex-1 overflow-hidden" : "hidden"}>
-        <PainterPanel
+        <PainterStudio
+          variant="panel"
           documentText={documentText}
           objective={objective}
           onPaintImage={onPaintImage}

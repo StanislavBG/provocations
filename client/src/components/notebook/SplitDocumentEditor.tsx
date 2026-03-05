@@ -5,6 +5,8 @@ import { BSChartWorkspace } from "@/components/bschart/BSChartWorkspace";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { ImageCanvas } from "./ImageCanvas";
 import { ImageLightbox, extractImageUrl } from "./ImageLightbox";
+import { VersionHistory } from "./VersionHistory";
+import type { DocumentVersion } from "@shared/schema";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -99,6 +101,10 @@ interface SplitDocumentEditorProps {
   onWriterFeedback?: (instruction: string, selectedText?: string, description?: string) => void;
   /** When set, updates the active document tab title (used when loading from Context Store) */
   activeDocumentTitle?: string | null;
+  /** Document versions for history/diffing */
+  versions?: DocumentVersion[];
+  /** Called when user restores a previous version */
+  onRestoreVersion?: (content: string) => void;
 }
 
 /** Imperative handle for parent to add image/timeline tabs */
@@ -129,10 +135,13 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
   onTimelineSummaryChange,
   onWriterFeedback,
   activeDocumentTitle,
+  versions,
+  onRestoreVersion,
 }: SplitDocumentEditorProps, ref: React.Ref<SplitDocumentEditorHandle>) {
   const { toast } = useToast();
   const [objectiveExpanded, setObjectiveExpanded] = useState(true);
   const [previewLightbox, setPreviewLightbox] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
   // Stores initial JSON data for timeline tabs, keyed by tab ID
   const timelineInitDataRef = useRef<Map<string, string>>(new Map());
 
@@ -491,6 +500,22 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
             </Button>
           </TooltipTrigger>
           <TooltipContent>Save to Context Store</TooltipContent>
+        </Tooltip>
+      )}
+      {versions && versions.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => setShowVersionHistory(true)}
+              title="Version history"
+            >
+              <Clock className="w-3.5 h-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Version History ({versions.length})</TooltipContent>
         </Tooltip>
       )}
       <Button
@@ -1019,6 +1044,22 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
           </div>
         </div>
       ) : null}
+
+      {/* ─── Version History overlay ─── */}
+      {showVersionHistory && versions && (
+        <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm rounded-lg border border-border shadow-lg">
+          <VersionHistory
+            versions={versions}
+            currentContent={text}
+            onRestore={(content) => {
+              onTextChange(content);
+              setShowVersionHistory(false);
+              toast({ title: "Version restored", description: "Document reverted to selected version" });
+            }}
+            onClose={() => setShowVersionHistory(false)}
+          />
+        </div>
+      )}
     </div>
   );
 });

@@ -5,7 +5,7 @@ import { InterviewTab } from "./InterviewTab";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { ProvoThread } from "./ProvoThread";
 import { WriterPanel, type WriterConfig } from "./WriterPanel";
-import { PainterPanel, type PainterConfig, type PainterMode } from "./PainterPanel";
+import { PainterStudio, type PainterConfig, type PainterMode } from "./PainterStudio";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -278,7 +278,8 @@ export function NotebookLeftPanel({
 
         {effectiveActiveTab === "painter" && onPaintImage && (
           <div className="h-full overflow-hidden">
-            <PainterPanel
+            <PainterStudio
+              variant="panel"
               documentText={documentText}
               objective={objective}
               onPaintImage={onPaintImage}

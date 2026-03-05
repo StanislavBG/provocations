@@ -10,7 +10,7 @@ import {
 import { prebuiltTemplates } from "@/lib/prebuiltTemplates";
 import { trackEvent } from "@/lib/tracking";
 import { errorLogStore } from "@/lib/errorLog";
-import type { PainterConfig, PainterMode, PainterSource, PaintImageRequest, PainterAdvancedParams } from "@/components/notebook/PainterPanel";
+import type { PainterConfig, PainterMode, PainterSource, PaintImageRequest, PainterAdvancedParams } from "@/components/notebook/PainterStudio";
 import type { WriterConfig } from "@/components/notebook/WriterPanel";
 import type { ImageTabData, SplitDocumentEditorHandle } from "@/components/notebook/SplitDocumentEditor";
 import type { TimelineSummary } from "@/components/timeline/TimelineWorkspace";
