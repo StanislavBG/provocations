@@ -751,3 +751,15 @@
 .minimap-pulse {
   animation: minimap-pulse 1.5s ease-in-out infinite;
 }
+
+/* Flow node status pulse — subtle heartbeat glow */
+@keyframes flowNodePulse {
+  0%, 100% { opacity: 0; }
+  50% { opacity: var(--pulse-opacity, 0.1); }
+}
+
+/* Flow node error pulse — faster, brighter */
+@keyframes flowNodePulseError {
+  0%, 100% { opacity: 0.02; }
+  50% { opacity: var(--pulse-opacity, 0.15); }
+}

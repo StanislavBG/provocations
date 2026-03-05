@@ -44,6 +44,7 @@ import { TimerExpandedView } from "@/components/flow/expanded/TimerExpandedView"
 import { LogicExpandedView } from "@/components/flow/expanded/LogicExpandedView";
 import { SocialPostExpandedView } from "@/components/flow/expanded/SocialPostExpandedView";
 import { ApiConnectionExpandedView } from "@/components/flow/expanded/ApiConnectionExpandedView";
+import { CoherenceGateExpandedView } from "@/components/flow/expanded/CoherenceGateExpandedView";
 import { PlatformIntegrations } from "@/components/PlatformIntegrations";
 import {
   Dialog,
@@ -63,8 +64,9 @@ import {
   ZoomIn, ZoomOut, Lock, Unlock, ChevronDown, ChevronRight, ScanLine,
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
-  Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
+  Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
+  Rocket, Search, Zap,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
@@ -543,9 +545,10 @@ function FlowWorkspaceInner() {
 
       // If logic picker is open, 1-4 picks the type
       if (pendingLogicAction) {
-        const logicTypes: Array<{ type: "filter" | "gate" | "router" | "merge"; label: string; snippet: string }> = [
+        const logicTypes: Array<{ type: "filter" | "gate" | "coherence-gate" | "router" | "merge"; label: string; snippet: string }> = [
           { type: "filter", label: "Filter", snippet: "Pass through if condition met" },
           { type: "gate", label: "Gate", snippet: "Manual on/off switch" },
+          { type: "coherence-gate", label: "Coherence Gate", snippet: "Quality checkpoint with scoring" },
           { type: "router", label: "Router", snippet: "Route to outputs by condition" },
           { type: "merge", label: "Merge", snippet: "Combine multiple inputs" },
         ];
@@ -556,6 +559,12 @@ function FlowWorkspaceInner() {
             label: lt.label,
             snippet: lt.snippet,
             ...(lt.type === "gate" ? { gateOpen: true } : {}),
+            ...(lt.type === "coherence-gate" ? {
+              coherenceThreshold: 75,
+              coherenceChecks: { topicMatch: true, toneConsistency: true, factDrift: false, styleMatch: false },
+              coherenceStrictness: "medium" as const,
+              coherenceRetryCount: 1,
+            } : {}),
           });
           setPendingLogicAction(null);
           e.preventDefault();
@@ -849,6 +858,56 @@ function FlowWorkspaceInner() {
 
   handleSaveBlueprintRef.current = handleSaveBlueprint;
   handleLoadBlueprintRef.current = handleLoadBlueprint;
+
+  // ── Load demo chain template via API ──
+  const handleLoadDemoTemplate = useCallback(async (templateId: string) => {
+    try {
+      const res = await fetch(`/api/flow/templates/${templateId}`);
+      if (!res.ok) {
+        toast({ title: "Failed to load template", variant: "destructive" });
+        return;
+      }
+      const template = await res.json();
+      const pos = getCenter();
+      const idMap = new Map<string, string>();
+
+      // Create nodes with remapped IDs
+      for (const src of template.nodes) {
+        const newId = addNode(src.type, pos.x + src.x, pos.y + src.y, {
+          label: src.label,
+          snippet: src.snippet,
+          content: src.content,
+          documentContent: src.documentContent,
+          llmPresetId: src.llmPresetId,
+          llmObjective: src.llmObjective,
+          llmStatus: "idle",
+          researchQuery: src.researchQuery,
+          outputConfig: src.outputConfig,
+          triggerMode: src.triggerMode,
+          timerRunning: false,
+          timerPulseCount: 0,
+          timerInterval: src.timerInterval,
+          coherenceThreshold: src.coherenceThreshold,
+          coherenceChecks: src.coherenceChecks,
+          coherenceStrictness: src.coherenceStrictness,
+          coherenceRetryCount: src.coherenceRetryCount,
+          coherencePrompt: src.coherencePrompt,
+        });
+        idMap.set(src.id, newId);
+      }
+
+      // Create edges with remapped IDs
+      for (const edge of template.edges) {
+        const newFrom = idMap.get(edge.fromNodeId);
+        const newTo = idMap.get(edge.toNodeId);
+        if (newFrom && newTo) addEdge(newFrom, newTo, edge.role);
+      }
+
+      toast({ title: "Template loaded", description: `"${template.label}" placed on canvas` });
+    } catch (err) {
+      toast({ title: "Error loading template", description: String(err), variant: "destructive" });
+    }
+  }, [addNode, addEdge, getCenter, toast]);
 
   // ── Persist last-used canvas ID to localStorage ──
   useEffect(() => {
@@ -1720,6 +1779,64 @@ function FlowWorkspaceInner() {
           toast({ title: "Use Run", description: "LLM nodes have their own Run button" });
           updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
           return;
+        } else if (node.type === "coherence-gate") {
+          // Coherence Gate: call /api/flow/coherence-eval
+          updateNode(nodeId, { snippet: "Evaluating quality..." });
+          const evalRes = await apiRequest("POST", "/api/flow/coherence-eval", {
+            content: combinedContent,
+            originalContext: node.coherencePrompt || "",
+            checks: node.coherenceChecks ?? { topicMatch: true, toneConsistency: true, factDrift: false, styleMatch: false },
+            customPrompt: node.coherencePrompt,
+            threshold: node.coherenceThreshold ?? 75,
+          });
+          const evalData = (await evalRes.json()) as { score: number; verdict: string; reasoning: string };
+          updateNode(nodeId, {
+            coherenceLastScore: evalData.score,
+            coherenceLastVerdict: evalData.verdict as "pass" | "fail",
+            coherenceFailCount: evalData.verdict === "fail" ? (node.coherenceFailCount ?? 0) + 1 : 0,
+          });
+
+          if (evalData.verdict === "pass") {
+            outputText = combinedContent; // pass content through
+            updateNode(nodeId, { snippet: `Pass: ${evalData.score}% — ${evalData.reasoning.slice(0, 80)}` });
+          } else {
+            // Retry logic
+            const maxRetries = node.coherenceRetryCount ?? 1;
+            let retried = false;
+            for (let i = 0; i < maxRetries; i++) {
+              updateNode(nodeId, { snippet: `Retry ${i + 1}/${maxRetries}...` });
+              const retryRes = await apiRequest("POST", "/api/flow/coherence-eval", {
+                content: combinedContent,
+                originalContext: node.coherencePrompt || "",
+                checks: node.coherenceChecks ?? { topicMatch: true, toneConsistency: true },
+                customPrompt: node.coherencePrompt,
+                threshold: node.coherenceThreshold ?? 75,
+              });
+              const retryData = (await retryRes.json()) as { score: number; verdict: string; reasoning: string };
+              updateNode(nodeId, {
+                coherenceLastScore: retryData.score,
+                coherenceLastVerdict: retryData.verdict as "pass" | "fail",
+              });
+              if (retryData.verdict === "pass") {
+                outputText = combinedContent;
+                updateNode(nodeId, { snippet: `Pass (retry ${i + 1}): ${retryData.score}%` });
+                retried = true;
+                break;
+              }
+            }
+            if (!retried) {
+              const fc = (node.coherenceFailCount ?? 0) + 1;
+              const pfThreshold = node.coherencePersistentFailThreshold ?? 5;
+              const driftWarning = fc >= pfThreshold ? " — Upstream drift likely" : "";
+              lcLog(node, "process", "error", `Failed: ${evalData.score}%${driftWarning}`, { error: evalData.reasoning });
+              updateNode(nodeId, {
+                llmStatus: "error",
+                snippet: `Failed: ${evalData.score}%${driftWarning}`,
+                coherenceFailCount: fc,
+              });
+              return;
+            }
+          }
         } else if (node.type === "filter" || node.type === "gate" || node.type === "router" || node.type === "merge") {
           // Logic nodes: pass-through content
           if (node.type === "gate" && node.gateOpen === false) {
@@ -2292,6 +2409,49 @@ function FlowWorkspaceInner() {
           <DropdownMenuItem onClick={addTab} className="text-xs gap-2">
             <Plus className="w-3.5 h-3.5" />
             New Tab
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Demos dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
+            <Rocket className="w-3 h-3" />
+            Demos
+            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuItem
+            onClick={() => handleLoadDemoTemplate("meme-machine")}
+            className="text-xs gap-2"
+          >
+            <Zap className="w-3.5 h-3.5 text-yellow-500" />
+            <div>
+              <div className="font-medium">Meme Machine</div>
+              <div className="text-[10px] text-muted-foreground">Caption + quality check + image</div>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => handleLoadDemoTemplate("prd-generator")}
+            className="text-xs gap-2"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-500" />
+            <div>
+              <div className="font-medium">Product PRD Generator</div>
+              <div className="text-[10px] text-muted-foreground">Research + draft + wireframes + polish</div>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => handleLoadDemoTemplate("deep-dive-research")}
+            className="text-xs gap-2"
+          >
+            <Search className="w-3.5 h-3.5 text-emerald-500" />
+            <div>
+              <div className="font-medium">Deep Dive Research</div>
+              <div className="text-[10px] text-muted-foreground">Analysis + gaps + infographic + summary</div>
+            </div>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -2991,6 +3151,7 @@ function FlowWorkspaceInner() {
             {([
               { type: "filter" as const, icon: Filter, label: "Filter", color: "text-teal-500" },
               { type: "gate" as const, icon: ToggleRight, label: "Gate", color: "text-yellow-500" },
+              { type: "coherence-gate" as const, icon: ShieldCheck, label: "Coherence Gate", color: "text-emerald-500" },
               { type: "router" as const, icon: GitBranch, label: "Router", color: "text-purple-500" },
               { type: "merge" as const, icon: MergeIcon, label: "Merge", color: "text-sky-500" },
             ]).map((item) => (
@@ -3002,6 +3163,12 @@ function FlowWorkspaceInner() {
                     label: item.label,
                     snippet: `${item.label} node`,
                     ...(item.type === "gate" ? { gateOpen: true } : {}),
+                    ...(item.type === "coherence-gate" ? {
+                      coherenceThreshold: 75,
+                      coherenceChecks: { topicMatch: true, toneConsistency: true, factDrift: false, styleMatch: false },
+                      coherenceStrictness: "medium" as const,
+                      coherenceRetryCount: 1,
+                    } : {}),
                   });
                   setPendingLogicAction(null);
                 }}
@@ -3325,6 +3492,17 @@ function FlowWorkspaceInner() {
             case "api-connection":
               return (
                 <ApiConnectionExpandedView
+                  node={activeExpandedNode}
+                  nodes={state.nodes}
+                  edges={state.edges}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
+                />
+              );
+
+            case "coherence-gate":
+              return (
+                <CoherenceGateExpandedView
                   node={activeExpandedNode}
                   nodes={state.nodes}
                   edges={state.edges}

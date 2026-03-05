@@ -4,6 +4,7 @@ import { getAuth, clerkClient } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt, encryptAsync, decryptAsync, decryptFieldAsync, decryptFieldsBatch } from "./crypto";
 import { llm } from "./llm";
+import { FLOW_TEMPLATES, getFlowTemplate } from "./flow-templates";
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -624,6 +625,98 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[search] Error:", error.message);
       res.status(500).json({ error: error.message || "Search failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // Flow Coherence Gate Evaluation
+  // ═══════════════════════════════════════════════════════════════
+
+  app.post("/api/flow/coherence-eval", async (req, res) => {
+    try {
+      const { z } = await import("zod");
+      const schema = z.object({
+        content: z.string().min(1),
+        originalContext: z.string().optional().default(""),
+        checks: z.object({
+          topicMatch: z.boolean().optional().default(false),
+          toneConsistency: z.boolean().optional().default(false),
+          factDrift: z.boolean().optional().default(false),
+          styleMatch: z.boolean().optional().default(false),
+        }),
+        customPrompt: z.string().optional().default(""),
+        threshold: z.number().min(0).max(100).default(75),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { content, originalContext, checks, customPrompt, threshold } = parsed.data;
+
+      // Build eval criteria from enabled checks
+      const criteria: string[] = [];
+      if (checks.topicMatch) criteria.push("Topic Match: Does the content stay on the original topic/query? Score 0-100.");
+      if (checks.toneConsistency) criteria.push("Tone Consistency: Is the tone consistent throughout the content? Score 0-100.");
+      if (checks.factDrift) criteria.push("Fact Drift: Has the content drifted from verifiable source facts? Score 0-100 (100 = no drift).");
+      if (checks.styleMatch) criteria.push("Style Match: Does the writing style match the expected format and quality? Score 0-100.");
+
+      if (criteria.length === 0) {
+        criteria.push("Overall Quality: Rate the overall coherence and quality of this content. Score 0-100.");
+      }
+
+      const systemPrompt = `You are a content quality evaluator. Evaluate the provided content against specific criteria and return a JSON score.
+
+${originalContext ? `ORIGINAL CONTEXT/QUERY:\n${originalContext}\n` : ""}
+${customPrompt ? `CUSTOM EVALUATION INSTRUCTION:\n${customPrompt}\n` : ""}
+
+EVALUATION CRITERIA:
+${criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+
+PASS THRESHOLD: ${threshold}%
+
+You MUST respond with ONLY valid JSON in this exact format (no markdown, no explanation outside the JSON):
+{
+  "score": <number 0-100, the overall weighted average>,
+  "verdict": "<'pass' if score >= ${threshold}, otherwise 'fail'>",
+  "confidence": <number 0-100>,
+  "breakdown": { ${criteria.map((c) => `"${c.split(":")[0].trim()}": <number 0-100>`).join(", ")} },
+  "reasoning": "<1-2 sentence explanation of the score>"
+}`;
+
+      const result = await llm.generate({
+        system: systemPrompt,
+        messages: [{ role: "user", content: `Evaluate this content:\n\n${content.slice(0, 6000)}` }],
+        maxTokens: 1024,
+        temperature: 0.1,
+      });
+
+      // Parse LLM JSON response
+      let evalResult: { score: number; verdict: string; confidence: number; breakdown: Record<string, number>; reasoning: string };
+      try {
+        // Extract JSON from response (handle potential markdown wrapping)
+        const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("No JSON found in response");
+        evalResult = JSON.parse(jsonMatch[0]);
+      } catch {
+        // Fallback: if LLM didn't return valid JSON, create a conservative result
+        evalResult = {
+          score: 50,
+          verdict: 50 >= threshold ? "pass" : "fail",
+          confidence: 30,
+          breakdown: {},
+          reasoning: "Unable to parse evaluation — defaulting to conservative score.",
+        };
+      }
+
+      // Ensure verdict matches threshold
+      evalResult.verdict = evalResult.score >= threshold ? "pass" : "fail";
+
+      res.json(evalResult);
+    } catch (err) {
+      console.error("Coherence eval error:", err);
+      res.status(500).json({ error: "Evaluation failed", details: err instanceof Error ? err.message : "Unknown" });
     }
   });
 
@@ -7811,6 +7904,34 @@ Return ONLY valid JSON, no markdown fences.`;
       const msg = err instanceof Error ? err.message : "Unknown error";
       res.status(500).json({ error: "PDF generation failed", details: msg });
     }
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // Flow Chain Template API
+  // ═══════════════════════════════════════════════════════════════
+
+  /** List all available flow chain templates (demos + future user-created) */
+  app.get("/api/flow/templates", (_req, res) => {
+    res.json(
+      FLOW_TEMPLATES.map(({ id, label, description, icon, category, nodes, edges }) => ({
+        id,
+        label,
+        description,
+        icon,
+        category,
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+      })),
+    );
+  });
+
+  /** Get a single flow template by ID (full node/edge data for instantiation) */
+  app.get("/api/flow/templates/:templateId", (req, res) => {
+    const template = getFlowTemplate(req.params.templateId);
+    if (!template) {
+      return res.status(404).json({ error: "Template not found" });
+    }
+    res.json(template);
   });
 
   // ── Message purge scheduler (runs every hour) ──

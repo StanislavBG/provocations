@@ -22,7 +22,8 @@ export type FlowNodeType =
   | "merge"
   | "label"
   | "social-post"
-  | "api-connection";
+  | "api-connection"
+  | "coherence-gate";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -171,6 +172,43 @@ export interface FlowNode {
   apiWebhookUrl?: string;
   /** API Connection node: custom headers JSON */
   apiCustomHeaders?: string;
+  /** Coherence Gate: quality threshold 50-100 (default 75) */
+  coherenceThreshold?: number;
+  /** Coherence Gate: enabled evaluation checks */
+  coherenceChecks?: {
+    topicMatch?: boolean;
+    toneConsistency?: boolean;
+    factDrift?: boolean;
+    styleMatch?: boolean;
+  };
+  /** Coherence Gate: custom evaluation prompt */
+  coherencePrompt?: string;
+  /** Coherence Gate: retry count 0-5 (default 1) */
+  coherenceRetryCount?: number;
+  /** Coherence Gate: strictness preset */
+  coherenceStrictness?: "strict" | "medium" | "loose";
+  /** Coherence Gate: last evaluation score */
+  coherenceLastScore?: number;
+  /** Coherence Gate: last evaluation verdict */
+  coherenceLastVerdict?: "pass" | "fail";
+  /** Coherence Gate: consecutive failure count */
+  coherenceFailCount?: number;
+  /** Coherence Gate: log on persistent fail toggle */
+  coherenceLogOnPersistentFail?: boolean;
+  /** Coherence Gate: persistent fail threshold (default 5) */
+  coherencePersistentFailThreshold?: number;
+  /** Visual config: pulse animation speed in seconds (0.5-5, default 2) */
+  pulseSpeed?: number;
+  /** Visual config: pulse opacity percentage (0-30, default 10) */
+  pulseOpacity?: number;
+  /** Visual config: running color hex (default #2196F3) */
+  statusColorRunning?: string;
+  /** Visual config: success color hex (default #4CAF50) */
+  statusColorSuccess?: string;
+  /** Visual config: failure color hex (default #F44336) */
+  statusColorFailure?: string;
+  /** Visual config: whether failure has been acknowledged */
+  failureAcknowledged?: boolean;
 }
 
 export interface FlowEdge {
