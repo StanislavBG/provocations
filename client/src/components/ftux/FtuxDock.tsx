@@ -205,6 +205,9 @@ export function FtuxDock() {
   }, [dockAutoHide]);
 
   const isHorizontal = dockPosition === "top" || dockPosition === "bottom";
+  // When vertical (left/right), swap grid axes so items stack in a column
+  const gridCols = isHorizontal ? COLS : ROWS;
+  const gridRows = isHorizontal ? ROWS : COLS;
 
   const positionClasses = dockSnapped
     ? {
@@ -252,9 +255,11 @@ export function FtuxDock() {
       <div
         className={cn(
           positionClasses[dockPosition],
-          "flex items-center gap-1.5 p-2 transition-all duration-300",
+          "flex gap-1.5 p-2 transition-all duration-300",
+          isHorizontal ? "items-center flex-row" : "items-center flex-col",
           dockSnapped && !isLargeSnapped && "justify-center",
-          isLargeSnapped && "px-4",
+          isLargeSnapped && isHorizontal && "px-4",
+          isLargeSnapped && !isHorizontal && "py-4",
           !isVisible && dockPosition === "bottom" && "translate-y-full opacity-0",
           !isVisible && dockPosition === "top" && "-translate-y-full opacity-0",
           !isVisible && dockPosition === "left" && "-translate-x-full opacity-0",
@@ -267,6 +272,8 @@ export function FtuxDock() {
           borderRadius: dockSnapped ? "0" : "1rem",
           borderTop: dockSnapped && dockPosition === "bottom" ? "1px solid hsl(var(--border) / 0.3)" : undefined,
           borderBottom: dockSnapped && dockPosition === "top" ? "1px solid hsl(var(--border) / 0.3)" : undefined,
+          borderRight: dockSnapped && dockPosition === "left" ? "1px solid hsl(var(--border) / 0.3)" : undefined,
+          borderLeft: dockSnapped && dockPosition === "right" ? "1px solid hsl(var(--border) / 0.3)" : undefined,
           boxShadow: dockSnapped ? "none" : "0 8px 32px rgba(0,0,0,0.12)",
         }}
         onMouseEnter={handleMouseEnter}
@@ -280,8 +287,8 @@ export function FtuxDock() {
         <div
           className={cn("grid", isLargeSnapped ? "gap-1 flex-1" : "gap-0.5")}
           style={{
-            gridTemplateColumns: isLargeSnapped ? `repeat(${COLS}, 1fr)` : `repeat(${COLS}, auto)`,
-            gridTemplateRows: `repeat(${ROWS}, 1fr)`,
+            gridTemplateColumns: isLargeSnapped ? `repeat(${gridCols}, 1fr)` : `repeat(${gridCols}, auto)`,
+            gridTemplateRows: `repeat(${gridRows}, 1fr)`,
           }}
         >
           {slots.map((item, slotIndex) => {
@@ -373,8 +380,8 @@ export function FtuxDock() {
 
         {/* System buttons */}
         <div className={cn(
-          "flex gap-0.5 border-border/30 pl-1.5 ml-0.5",
-          isHorizontal ? "flex-col border-l" : "flex-row border-t pt-1.5 mt-0.5",
+          "flex gap-0.5 border-border/30",
+          isHorizontal ? "flex-col border-l pl-1.5 ml-0.5" : "flex-row border-t pt-1.5 mt-0.5 justify-center",
         )}>
           <Tooltip>
             <TooltipTrigger asChild>
