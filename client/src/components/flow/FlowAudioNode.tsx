@@ -146,6 +146,7 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
         height: node.height,
         zIndex: node.zIndex,
       }}
+      onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
     >
       {/* Header */}
       <div
@@ -154,7 +155,6 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
           isRecording ? "bg-red-500/20 border-red-500/30" : "bg-red-500/10 border-red-500/20",
         )}
         onMouseDown={(e) => onMouseDown(e, node.id)}
-        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         <Mic className={cn("w-3 h-3 shrink-0", isRecording ? "text-red-500 animate-pulse" : "text-red-500")} />
         <span className="text-[10px] font-medium truncate flex-1">{node.label}</span>
@@ -170,6 +170,7 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
       <div
         className="flex-1 overflow-auto min-h-0 flex flex-col items-center justify-center px-2 py-1"
         onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
       >
         {/* Mic toggle button */}
         <button

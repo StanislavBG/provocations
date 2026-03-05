@@ -61,6 +61,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
         isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{ left: node.x, top: node.y, width: node.width, height: node.height, zIndex: node.zIndex }}
+      onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
     >
       {/* Header */}
       <div
@@ -69,7 +70,6 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
           isRunning ? "bg-emerald-500/20 border-emerald-500/30" : "bg-emerald-500/10 border-emerald-500/20",
         )}
         onMouseDown={(e) => onMouseDown(e, node.id)}
-        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         {mode === "timed" ? (
           <Timer className={cn("w-3 h-3 shrink-0", isRunning ? "text-emerald-500 animate-pulse" : "text-emerald-500")} />
@@ -89,6 +89,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
       <div
         className="flex-1 overflow-auto min-h-0 flex flex-col items-center justify-center px-2 py-1 gap-1"
         onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
       >
         {/* Mode toggle pills */}
         <div className="flex gap-0.5 bg-muted/40 rounded-full p-0.5">

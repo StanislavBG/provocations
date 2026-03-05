@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.9.1";
+export const APP_VERSION = "0.9.2";
 
 export interface ReleaseNote {
   version: string;
@@ -19,10 +19,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.2",
+    date: "2026-03-05",
+    changes: [
+      "Fix double-click expand: move handler to root div, stopPropagation on interactive body areas",
+      "Matches pattern used by Research and Document nodes for reliable expand on all node types",
+    ],
+  },
+  {
     version: "0.9.1",
     date: "2026-03-05",
     changes: [
-      "Fix double-click to expand on Trigger, LLM, Audio, and YouTube nodes",
+      "Add onDoubleClick prop to Trigger, LLM, Audio, and YouTube nodes",
     ],
   },
   {

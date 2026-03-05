@@ -152,12 +152,12 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
         isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{ left: node.x, top: node.y, width: node.width, height: node.height, zIndex: node.zIndex }}
+      onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
     >
       {/* Draggable header */}
       <div
         className="flex items-center gap-1.5 px-2 py-1 border-b bg-red-600/15 border-red-600/40 rounded-t-lg cursor-grab shrink-0"
         onMouseDown={(e) => onMouseDown(e, node.id)}
-        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         <Youtube className="w-3 h-3 text-red-600 shrink-0" />
         <span className="text-[10px] font-medium truncate flex-1">{node.label || "YouTube"}</span>
@@ -167,7 +167,7 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
       </div>
 
       {/* Interactive body */}
-      <div className="flex-1 overflow-auto min-h-0 flex flex-col" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex-1 overflow-auto min-h-0 flex flex-col" onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
         {/* URL input */}
         <div className="px-2 py-1 border-b border-border/50">
           <input

@@ -237,12 +237,12 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
         height: node.height,
         zIndex: node.zIndex,
       }}
+      onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
     >
       {/* Draggable header */}
       <div
         className="flex items-center gap-1.5 px-2 py-1 border-b bg-violet-500/15 border-violet-500/40 rounded-t-lg cursor-grab shrink-0"
         onMouseDown={(e) => onMouseDown(e, node.id)}
-        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         <Brain className="w-3 h-3 text-violet-500 shrink-0" />
         <span className="text-[10px] font-medium truncate flex-1">{node.label || "Text Modifications"}</span>
@@ -258,6 +258,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
       <div
         className="flex-1 overflow-auto min-h-0 flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
       >
         {/* Preset chips */}
         <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/50 flex-wrap">
