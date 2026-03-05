@@ -5,6 +5,7 @@ import {
   type ImageTabData,
 } from "./SplitDocumentEditor";
 import type { TimelineSummary } from "@/components/timeline/TimelineWorkspace";
+import type { DocumentVersion } from "@shared/schema";
 
 interface NotebookCenterPanelProps {
   documentText: string;
@@ -28,6 +29,8 @@ interface NotebookCenterPanelProps {
   onTimelineSummaryChange?: (summary: TimelineSummary) => void;
   onWriterFeedback?: (instruction: string, selectedText?: string, description?: string) => void;
   activeDocumentTitle?: string | null;
+  versions?: DocumentVersion[];
+  onRestoreVersion?: (content: string) => void;
 }
 
 export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, NotebookCenterPanelProps>(
@@ -54,6 +57,8 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
       onTimelineSummaryChange,
       onWriterFeedback,
       activeDocumentTitle,
+      versions,
+      onRestoreVersion,
     },
     ref,
   ) {
@@ -82,6 +87,8 @@ export const NotebookCenterPanel = forwardRef<SplitDocumentEditorHandle, Noteboo
           onTimelineSummaryChange={onTimelineSummaryChange}
           onWriterFeedback={onWriterFeedback}
           activeDocumentTitle={activeDocumentTitle}
+          versions={versions}
+          onRestoreVersion={onRestoreVersion}
         />
       </div>
     );

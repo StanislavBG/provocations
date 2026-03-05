@@ -211,36 +211,8 @@ const ceoVectorDescriptions: Record<string, { label: string; description: string
   },
 };
 
-// Instruction classification patterns
-const instructionPatterns: Record<InstructionType, RegExp[]> = {
-  expand: [/expand/i, /elaborate/i, /add.*detail/i, /develop/i, /flesh out/i, /more about/i, /tell me more/i, /explain.*further/i],
-  condense: [/condense/i, /shorten/i, /shorter/i, /summarize/i, /brief/i, /concise/i, /cut/i, /reduce/i, /tighten/i, /trim/i],
-  restructure: [/restructure/i, /reorganize/i, /reorder/i, /move/i, /rearrange/i, /add.*section/i, /add.*heading/i, /split/i, /merge.*section/i],
-  clarify: [/clarify/i, /simplify/i, /clearer/i, /easier.*understand/i, /plain/i, /straightforward/i, /confus/i],
-  style: [/tone/i, /voice/i, /formal/i, /informal/i, /professional/i, /casual/i, /friendly/i, /academic/i, /style/i],
-  correct: [/fix/i, /correct/i, /error/i, /mistake/i, /typo/i, /grammar/i, /spelling/i, /wrong/i, /inaccurate/i],
-  general: [], // fallback
-};
-
-// Speech artifact patterns to detect voice transcripts
-const speechArtifacts = [
-  /\b(um|uh|er|ah|like|you know|basically|so basically|I mean|kind of|sort of)\b/gi,
-  /\b(gonna|wanna|gotta|kinda|sorta)\b/gi,
-  /(\w+)\s+\1\b/gi, // repeated words
-  /^(so|and|but|okay|alright|well)\s/i, // filler starts
-];
-
-// Detect if instruction looks like a voice transcript
-function isLikelyVoiceTranscript(text: string): boolean {
-  let artifactCount = 0;
-  for (const pattern of speechArtifacts) {
-    const matches = text.match(pattern);
-    if (matches) artifactCount += matches.length;
-  }
-  // If more than 2 artifacts per 100 words, likely voice
-  const wordCount = text.split(/\s+/).length;
-  return artifactCount > 0 && (artifactCount / wordCount) > 0.02;
-}
+// Centralized text classification — imported from shared utility
+import { isLikelyVoiceTranscript, classifyInstruction, instructionStrategies } from "./utils/text-classification";
 
 // Clean voice transcript to extract clear intent
 async function cleanVoiceTranscript(transcript: string): Promise<string> {
@@ -498,31 +470,7 @@ The goal is to ensure clear positioning, defensible differentiation, and consist
 The goal is to ensure content reaches the right audience through the right channel with a measurable outcome.`,
 };
 
-// Strategy prompts for each instruction type
-const instructionStrategies: Record<InstructionType, string> = {
-  expand: "Add depth, examples, supporting details, and elaboration. Develop ideas more fully while maintaining coherence.",
-  condense: "Remove redundancy, tighten prose, eliminate filler words. Preserve core meaning while reducing length.",
-  restructure: "Reorganize content for better flow. Add or modify headings, reorder sections, improve logical progression.",
-  clarify: "Simplify language, add transitions, break down complex ideas. Make the text more accessible without losing meaning.",
-  style: "Adjust the voice and tone. Maintain the content while shifting the register, formality, or emotional quality.",
-  correct: "Fix errors in grammar, spelling, facts, or logic. Make precise corrections without unnecessary changes.",
-  general: "Make targeted improvements based on the specific instruction. Balance multiple considerations appropriately.",
-};
-
-function classifyInstruction(instruction: string): InstructionType {
-  const lowerInstruction = instruction.toLowerCase();
-
-  for (const [type, patterns] of Object.entries(instructionPatterns)) {
-    if (type === 'general') continue;
-    for (const pattern of patterns) {
-      if (pattern.test(lowerInstruction)) {
-        return type as InstructionType;
-      }
-    }
-  }
-
-  return 'general';
-}
+// instructionStrategies and classifyInstruction imported from ./utils/text-classification
 
 /** Infer the LLM task type from the API endpoint path */
 function inferTaskType(path: string, body?: any): string {
@@ -690,7 +638,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
 
-      const { document: docText, objective: rawChallengeObjective, personaIds, guidance, referenceDocuments, appType: challengeAppType } = parsed.data;
+      const { document: docText, objective: rawChallengeObjective, personaIds, guidance, referenceDocuments, appType: challengeAppType, provocationHistory } = parsed.data;
       const objective = rawChallengeObjective?.trim() || "";
 
       const challengeAppConfig = getAppTypeConfig(challengeAppType);
@@ -756,6 +704,26 @@ Instead:
         ? `\n\nUSER GUIDANCE: The user specifically wants challenges about: ${guidance}`
         : "";
 
+      // Build provocation chain context from history (max 5 rounds)
+      let chainContext = "";
+      if (provocationHistory && provocationHistory.length > 0) {
+        const recentHistory = provocationHistory.slice(-5);
+        const historyLines = recentHistory.map((round) => {
+          const action = round.accepted ? "accepted" : round.accepted === false ? "dismissed" : "no response";
+          const responsePart = round.userResponse ? ` User responded: "${round.userResponse.slice(0, 200)}"` : "";
+          return `  Round ${round.roundNumber} (${round.personaId}): "${round.challenge.slice(0, 200)}" → ${action}${responsePart}`;
+        }).join("\n");
+        chainContext = `\n\nPREVIOUS PROVOCATION HISTORY (${recentHistory.length} rounds):
+${historyLines}
+
+BUILD ON THIS HISTORY:
+- Do NOT repeat challenges the user has already addressed
+- Reference their previous responses where relevant ("You addressed X, but now consider Y...")
+- Push deeper on areas where they dismissed or gave weak responses
+- Acknowledge genuine growth where they've strengthened their thinking
+- Each new challenge should advance the conversation, not restart it`;
+      }
+
       const perPersonaCount = Math.max(2, Math.ceil(6 / personas.length));
       const personaIdsList = personas.map((p) => p.id).join(", ");
 
@@ -773,7 +741,7 @@ IMPORTANT: Only generate challenges. Do NOT provide advice, solutions, or sugges
 
 Generate challenges from these personas:
 ${personaDescriptions}
-${refContext}${guidanceContext}${lockGuardrail}
+${refContext}${guidanceContext}${chainContext}${lockGuardrail}
 
 Respond with a JSON object containing a "challenges" array. Generate ${perPersonaCount} challenges per persona.
 For each challenge:

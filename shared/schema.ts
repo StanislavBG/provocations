@@ -167,6 +167,20 @@ export const adviceSchema = z.object({
 
 export type Advice = z.infer<typeof adviceSchema>;
 
+// ── Provocation chain history ──
+// Tracks previous rounds of provocations so personas can build on earlier challenges.
+
+export const provocationRoundSchema = z.object({
+  roundNumber: z.number(),
+  personaId: z.string(),
+  challenge: z.string(),
+  userResponse: z.string().optional(),
+  accepted: z.boolean().optional(),
+  timestamp: z.string(),
+});
+
+export type ProvocationRound = z.infer<typeof provocationRoundSchema>;
+
 // ── Generate challenge request ──
 
 export const generateChallengeRequestSchema = z.object({
@@ -176,6 +190,7 @@ export const generateChallengeRequestSchema = z.object({
   guidance: z.string().optional(),                             // user-specific focus area
   referenceDocuments: z.array(z.lazy(() => referenceDocumentSchema)).optional(),
   appType: z.enum(templateIds).optional(),                      // application template — must match a templateIds entry
+  provocationHistory: z.array(provocationRoundSchema).optional(), // previous rounds for chain continuity
 });
 
 export type GenerateChallengeRequest = z.infer<typeof generateChallengeRequestSchema>;

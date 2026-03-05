@@ -146,6 +146,8 @@ export default function NotebookWorkspace() {
                   onTimelineSummaryChange={ws.setTimelineSummary}
                   onWriterFeedback={ws.handleWriterFeedback}
                   activeDocumentTitle={ws.activeDocumentTitle}
+                  versions={ws.versions}
+                  onRestoreVersion={(content) => ws.setDocument({ ...ws.document, rawText: content })}
                 />
               )}
             </ResizablePanel>
