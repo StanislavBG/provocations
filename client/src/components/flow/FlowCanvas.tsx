@@ -1,4 +1,6 @@
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect, useContext } from "react";
+import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { getEffectiveKeys } from "@/lib/keybind-actions";
 import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical, Monitor } from "lucide-react";
 import type { FlowCanvasState, FlowNode, FlowEdge, FlowViewport } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -96,6 +98,15 @@ export function FlowCanvas({
   minimapState,
   onFitToView,
 }: FlowCanvasProps) {
+  // Resolve customizable glide-camera keys from shell preferences
+  const shellCtx = useFtuxShell();
+  const resolvedGlideKeys = useMemo(() => ({
+    up: (getEffectiveKeys("canvas.glideUp", shellCtx.keyBinds)[0] ?? "w").toLowerCase(),
+    down: (getEffectiveKeys("canvas.glideDown", shellCtx.keyBinds)[0] ?? "s").toLowerCase(),
+    left: (getEffectiveKeys("canvas.glideLeft", shellCtx.keyBinds)[0] ?? "a").toLowerCase(),
+    right: (getEffectiveKeys("canvas.glideRight", shellCtx.keyBinds)[0] ?? "d").toLowerCase(),
+  }), [shellCtx.keyBinds]);
+
   const {
     canvasRef,
     handleWheel,
@@ -124,6 +135,7 @@ export function FlowCanvas({
     onEdgeCreate: onCreateEdge,
     onDragStart,
     nodes: state.nodes,
+    glideKeys: resolvedGlideKeys,
   });
 
   // Track canvas dimensions for viewport culling

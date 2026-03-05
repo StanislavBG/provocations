@@ -188,8 +188,64 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
               )}
               onClick={(e) => { e.stopPropagation(); updateConfig({ outputMode: "split" }); }}
             >
-              N Docs
+              Any
             </button>
+            {/* Count — only shown when "Any" (split) mode is active */}
+            {oc.outputMode === "split" && (
+              <div className="flex items-center gap-0.5 ml-1">
+                <button
+                  className={cn(
+                    "text-[7px] w-4 h-4 flex items-center justify-center rounded transition-colors",
+                    "bg-muted/30 text-muted-foreground/50 hover:bg-muted/50",
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const current = oc.outputCount;
+                    // Decrement: undefined(∞) → 5 → 4 → ... → 0 → undefined(∞)
+                    if (current === undefined || current === null) {
+                      updateConfig({ outputCount: 5 });
+                    } else if (current <= 0) {
+                      updateConfig({ outputCount: undefined });
+                    } else {
+                      updateConfig({ outputCount: current - 1 });
+                    }
+                  }}
+                >
+                  −
+                </button>
+                <span
+                  className="text-[8px] w-5 text-center font-semibold text-violet-300 cursor-pointer"
+                  title={oc.outputCount === undefined || oc.outputCount === null ? "As many as necessary (max 5)" : `${oc.outputCount} documents`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Click to reset to ∞
+                    updateConfig({ outputCount: undefined });
+                  }}
+                >
+                  {oc.outputCount === undefined || oc.outputCount === null ? "∞" : oc.outputCount}
+                </span>
+                <button
+                  className={cn(
+                    "text-[7px] w-4 h-4 flex items-center justify-center rounded transition-colors",
+                    "bg-muted/30 text-muted-foreground/50 hover:bg-muted/50",
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const current = oc.outputCount;
+                    // Increment: undefined(∞) → 0 → 1 → ... → 5 → undefined(∞)
+                    if (current === undefined || current === null) {
+                      updateConfig({ outputCount: 0 });
+                    } else if (current >= 5) {
+                      updateConfig({ outputCount: undefined });
+                    } else {
+                      updateConfig({ outputCount: current + 1 });
+                    }
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -257,23 +313,6 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
           ))}
         </div>
 
-        {/* Output count */}
-        <div className="flex items-center gap-1">
-          <span className="text-[7px] text-muted-foreground/50">Count:</span>
-          <input
-            type="number"
-            min={1}
-            max={100}
-            className="w-10 text-[8px] bg-muted/30 border border-border/30 rounded px-1 py-0.5 text-center focus:outline-none focus:border-blue-500/50"
-            value={oc.outputCount || ""}
-            placeholder="any"
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              updateConfig({ outputCount: isNaN(val) ? undefined : Math.max(1, Math.min(100, val)) });
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
       </div>
 
       {/* ── ZONE 4: OUTPUT preview (bottom) ── */}

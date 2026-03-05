@@ -79,6 +79,8 @@ interface UseFlowInteractionProps {
   onEdgeCreate?: (fromNodeId: string, toNodeId: string) => void;
   onDragStart?: () => void;
   nodes: FlowNode[];
+  /** Customizable glide camera keys (default: WASD) */
+  glideKeys?: { up: string; down: string; left: string; right: string };
 }
 
 /** Check if a node's center is inside a zone's bounds */
@@ -105,6 +107,7 @@ export function useFlowInteraction({
   onEdgeCreate,
   onDragStart,
   nodes,
+  glideKeys,
 }: UseFlowInteractionProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -128,31 +131,36 @@ export function useFlowInteraction({
     };
   }, []);
 
-  // ── WASD glide-camera (game-style smooth panning) ──
-  const wasdKeys = useRef<Set<string>>(new Set());
-  const wasdVel = useRef({ x: 0, y: 0 });
-  const wasdRaf = useRef<number>(0);
+  // ── Glide-camera (game-style smooth panning, customizable keys) ──
+  const glideKeysActive = useRef<Set<string>>(new Set());
+  const glideVel = useRef({ x: 0, y: 0 });
+  const glideRaf = useRef<number>(0);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
+  const glideKeysRef = useRef(glideKeys);
+  glideKeysRef.current = glideKeys;
 
   useEffect(() => {
     const isInput = (e: KeyboardEvent) =>
       !!(e.target as HTMLElement)?.closest("input, textarea, [contenteditable]");
 
+    const getGK = () => glideKeysRef.current ?? { up: "w", down: "s", left: "a", right: "d" };
+
     const down = (e: KeyboardEvent) => {
       if (isInput(e)) return;
       const k = e.key.toLowerCase();
-      if (k === "w" || k === "a" || k === "s" || k === "d") {
+      const gk = getGK();
+      if (k === gk.up || k === gk.down || k === gk.left || k === gk.right) {
         e.preventDefault();
-        wasdKeys.current.add(k);
+        glideKeysActive.current.add(k);
       }
     };
     const up = (e: KeyboardEvent) => {
-      wasdKeys.current.delete(e.key.toLowerCase());
+      glideKeysActive.current.delete(e.key.toLowerCase());
     };
-    const blur = () => wasdKeys.current.clear();
+    const blur = () => glideKeysActive.current.clear();
 
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -160,38 +168,34 @@ export function useFlowInteraction({
 
     let lastTime = 0;
     const tick = (time: number) => {
-      wasdRaf.current = requestAnimationFrame(tick);
+      glideRaf.current = requestAnimationFrame(tick);
 
-      // Compute delta for frame-rate independence (target 60fps)
       const dt = lastTime ? Math.min((time - lastTime) / 16.67, 3) : 1;
       lastTime = time;
 
-      const keys = wasdKeys.current;
-      const vel = wasdVel.current;
+      const keys = glideKeysActive.current;
+      const vel = glideVel.current;
+      const gk = getGK();
 
-      // Acceleration: apply while keys held
       let ax = 0, ay = 0;
-      if (keys.has("a")) ax += 1;
-      if (keys.has("d")) ax -= 1;
-      if (keys.has("w")) ay += 1;
-      if (keys.has("s")) ay -= 1;
+      if (keys.has(gk.left)) ax += 1;
+      if (keys.has(gk.right)) ax -= 1;
+      if (keys.has(gk.up)) ay += 1;
+      if (keys.has(gk.down)) ay -= 1;
 
       if (ax !== 0 || ay !== 0) {
-        // Normalize diagonal so it doesn't move faster
         const len = Math.sqrt(ax * ax + ay * ay);
         ax = (ax / len) * WASD_ACCEL * dt;
         ay = (ay / len) * WASD_ACCEL * dt;
         vel.x = Math.max(-WASD_MAX_SPEED, Math.min(WASD_MAX_SPEED, vel.x + ax));
         vel.y = Math.max(-WASD_MAX_SPEED, Math.min(WASD_MAX_SPEED, vel.y + ay));
       } else {
-        // Friction decay when no keys held
         vel.x *= Math.pow(WASD_FRICTION, dt);
         vel.y *= Math.pow(WASD_FRICTION, dt);
         if (Math.abs(vel.x) < WASD_STOP_THRESHOLD) vel.x = 0;
         if (Math.abs(vel.y) < WASD_STOP_THRESHOLD) vel.y = 0;
       }
 
-      // Apply velocity to viewport
       if (vel.x !== 0 || vel.y !== 0) {
         const vp = viewportRef.current;
         onViewportChangeRef.current(
@@ -202,10 +206,10 @@ export function useFlowInteraction({
       }
     };
 
-    wasdRaf.current = requestAnimationFrame(tick);
+    glideRaf.current = requestAnimationFrame(tick);
 
     return () => {
-      cancelAnimationFrame(wasdRaf.current);
+      cancelAnimationFrame(glideRaf.current);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);

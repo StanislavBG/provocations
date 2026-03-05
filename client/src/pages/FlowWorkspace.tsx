@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@clerk/clerk-react";
 import { FtuxShellProvider, useFtuxShell } from "@/lib/ftux-shell-context";
 import type { FtuxShellConfig, DockItem } from "@/lib/ftux-shell-context";
+import { matchesAction } from "@/lib/keybind-actions";
 import { FtuxShell } from "@/components/ftux/FtuxShell";
 import { FtuxStatusBar } from "@/components/ftux/FtuxStatusBar";
 import { FtuxDock } from "@/components/ftux/FtuxDock";
@@ -276,7 +277,7 @@ function splitOutputIntoSections(text: string, count: number): string[] {
 // ── Inner workspace (needs shell context) ──
 
 function FlowWorkspaceInner() {
-  const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasFontColor, canvasBgColor, canvasTheme, setCanvasTheme } = useFtuxShell();
+  const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasFontColor, canvasBgColor, canvasTheme, setCanvasTheme, keyBinds } = useFtuxShell();
   const {
     state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteEdge,
     selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
@@ -621,55 +622,55 @@ function FlowWorkspaceInner() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
 
-      // Ctrl+Z — undo
-      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+      // Undo
+      if (matchesAction(e, "edit.undo", keyBinds)) {
         undo();
         e.preventDefault();
         return;
       }
 
-      // Ctrl+Shift+Z or Ctrl+Y — redo
-      if ((e.ctrlKey || e.metaKey) && ((e.key === "z" && e.shiftKey) || e.key === "y")) {
+      // Redo
+      if (matchesAction(e, "edit.redo", keyBinds)) {
         redo();
         e.preventDefault();
         return;
       }
 
-      // Ctrl+A — select all
-      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+      // Select all
+      if (matchesAction(e, "selection.selectAll", keyBinds)) {
         selectAll();
         e.preventDefault();
         return;
       }
 
-      // M — toggle minimap
-      if (e.key === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Toggle minimap
+      if (matchesAction(e, "canvas.minimap", keyBinds)) {
         minimapStateRef.current.toggleVisible();
         e.preventDefault();
         return;
       }
 
-      // Escape — deselect all
-      if (e.key === "Escape") {
+      // Deselect all
+      if (matchesAction(e, "selection.deselectAll", keyBinds)) {
         selectNode(null);
         return;
       }
 
-      // Ctrl+C — copy selected nodes
-      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+      // Copy selected nodes
+      if (matchesAction(e, "edit.copy", keyBinds)) {
         const selected = stateRef.current.nodes.filter((n) => stateRef.current.selectedNodeIds.has(n.id));
         if (selected.length === 0) return;
         const selectedIds = new Set(selected.map((n) => n.id));
         const internalEdges = stateRef.current.edges.filter(
-          (e) => selectedIds.has(e.fromNodeId) && selectedIds.has(e.toNodeId),
+          (edge) => selectedIds.has(edge.fromNodeId) && selectedIds.has(edge.toNodeId),
         );
         clipboardRef.current = { nodes: selected, edges: internalEdges };
         toast({ title: `Copied ${selected.length} node${selected.length > 1 ? "s" : ""}` });
         e.preventDefault();
       }
 
-      // Ctrl+V — paste at mouse position
-      if ((e.ctrlKey || e.metaKey) && e.key === "v" && clipboardRef.current) {
+      // Paste at mouse position
+      if (matchesAction(e, "edit.paste", keyBinds) && clipboardRef.current) {
         const { nodes: srcNodes, edges: srcEdges } = clipboardRef.current;
         const idMap = new Map<string, string>();
 
@@ -720,8 +721,8 @@ function FlowWorkspaceInner() {
         e.preventDefault();
       }
 
-      // Delete key — remove selected nodes
-      if (e.key === "Delete" || e.key === "Backspace") {
+      // Delete selected nodes
+      if (matchesAction(e, "edit.delete", keyBinds)) {
         const selected = Array.from(stateRef.current.selectedNodeIds);
         for (const id of selected) {
           deleteNode(id);
@@ -730,7 +731,7 @@ function FlowWorkspaceInner() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [addNode, addEdge, deleteNode, selectNode, selectNodes, selectAll, undo, redo, toast]);
+  }, [addNode, addEdge, deleteNode, selectNode, selectNodes, selectAll, undo, redo, toast, keyBinds]);
 
   // ── Keyboard zoom: +/- with progressive acceleration when held ──
 
@@ -743,7 +744,7 @@ function FlowWorkspaceInner() {
     const ACCEL_PER_TICK = 0.015;
     const INTERVAL_MS = 60;
 
-    let activeKey: string | null = null;
+    let activeDir: "in" | "out" | null = null;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     let currentFactor = BASE_FACTOR;
 
@@ -752,7 +753,6 @@ function FlowWorkspaceInner() {
       const el = canvasContainerRef.current;
       const w = el?.clientWidth ?? 800;
       const h = el?.clientHeight ?? 600;
-      // Zoom centered on viewport center
       const centerX = w / 2;
       const centerY = h / 2;
       const factor = direction === "in" ? currentFactor : 1 / currentFactor;
@@ -760,21 +760,19 @@ function FlowWorkspaceInner() {
       const newX = centerX - (centerX - s.viewport.x) * (newZoom / s.viewport.zoom);
       const newY = centerY - (centerY - s.viewport.y) * (newZoom / s.viewport.zoom);
       setViewport(newX, newY, newZoom);
-      // Accelerate for next tick
       currentFactor = Math.min(MAX_FACTOR, currentFactor + ACCEL_PER_TICK);
     }
 
-    function startZoom(key: string) {
-      if (activeKey) return;
-      activeKey = key;
+    function startZoom(dir: "in" | "out") {
+      if (activeDir) return;
+      activeDir = dir;
       currentFactor = BASE_FACTOR;
-      const dir = key === "=" || key === "+" ? "in" : "out";
       applyZoom(dir);
       intervalId = setInterval(() => applyZoom(dir), INTERVAL_MS);
     }
 
     function stopZoom() {
-      activeKey = null;
+      activeDir = null;
       currentFactor = BASE_FACTOR;
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
     }
@@ -782,17 +780,19 @@ function FlowWorkspaceInner() {
     const onDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if ((e.key === "=" || e.key === "+" || e.key === "-") && !e.repeat) {
+      if (e.repeat) return;
+      if (matchesAction(e, "canvas.zoomIn", keyBinds)) {
         e.preventDefault();
-        startZoom(e.key);
+        startZoom("in");
+      } else if (matchesAction(e, "canvas.zoomOut", keyBinds)) {
+        e.preventDefault();
+        startZoom("out");
       }
     };
 
-    const onUp = (e: KeyboardEvent) => {
-      if (e.key === "=" || e.key === "+" || e.key === "-") {
-        stopZoom();
-      }
+    const onUp = (_e: KeyboardEvent) => {
+      // Stop zoom on any key-up when zooming (simplest reliable approach)
+      if (activeDir) stopZoom();
     };
 
     window.addEventListener("keydown", onDown);
@@ -802,7 +802,7 @@ function FlowWorkspaceInner() {
       window.removeEventListener("keyup", onUp);
       stopZoom();
     };
-  }, [setViewport]);
+  }, [setViewport, keyBinds]);
 
   // ── Helper: compute canvas center for placing new nodes ──
 
@@ -1419,7 +1419,10 @@ function FlowWorkspaceInner() {
         if (node.type === "research") {
           // Build output-aware research prompt from outputConfig
           const oc = node.outputConfig;
-          const countHint = oc?.outputCount ? `Provide exactly ${oc.outputCount} items/results.` : "";
+          const effectiveCount = oc?.outputMode === "split"
+            ? (oc?.outputCount === undefined || oc?.outputCount === null ? 5 : Math.min(oc.outputCount, 5))
+            : undefined;
+          const countHint = effectiveCount ? `Provide exactly ${effectiveCount} items/results.` : "";
           const customHint = oc?.customInstruction ? `\nAdditional instructions: ${oc.customInstruction}` : "";
           const templateHint = templateContent ? `\n\nFormat your output according to this template/schema:\n${templateContent}` : "";
           const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${processedInput || combinedContent}${countHint ? `\n\n${countHint}` : ""}${customHint}${templateHint}`;
@@ -1667,8 +1670,11 @@ function FlowWorkspaceInner() {
 
         // ── Split mode: create N separate document nodes ──
         const oc2 = node.outputConfig;
-        if (oc2?.outputMode === "split" && oc2?.outputCount && oc2.outputCount > 1) {
-          const sections = splitOutputIntoSections(outputText, oc2.outputCount);
+        const splitCount = oc2?.outputMode === "split"
+          ? (oc2?.outputCount === undefined || oc2?.outputCount === null ? 5 : Math.min(oc2.outputCount, 5))
+          : 0;
+        if (oc2?.outputMode === "split" && splitCount > 0) {
+          const sections = splitOutputIntoSections(outputText, splitCount);
           for (let i = 0; i < sections.length; i++) {
             const docId = addNode("document", node.x + node.width + 60, node.y + i * 160, {
               label: `${node.label} [${i + 1}/${sections.length}]`,

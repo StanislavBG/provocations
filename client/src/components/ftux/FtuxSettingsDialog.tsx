@@ -1,4 +1,13 @@
+import { useState, useEffect } from "react";
 import { useFtuxShell, type DockPosition } from "@/lib/ftux-shell-context";
+import {
+  KEYBIND_ACTIONS,
+  getEffectiveKeys,
+  formatCombo,
+  eventToCombo,
+  type KeyBindActionId,
+  type KeyBindAction,
+} from "@/lib/keybind-actions";
 import {
   Dialog,
   DialogContent,
@@ -559,30 +568,44 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
           {/* Key Binds */}
           <TabsContent value="keybinds" className="mt-4">
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-              <KeybindGroup title="Canvas">
+              {(["Canvas", "Selection", "Edit"] as const).map((group) => (
+                <KeybindGroup key={group} title={group}>
+                  {KEYBIND_ACTIONS
+                    .filter((a) => a.group === group)
+                    .map((action) => (
+                      <EditableKeybindRow
+                        key={action.id}
+                        action={action}
+                        currentKeys={getEffectiveKeys(action.id, shell.keyBinds)}
+                        isCustomized={!!shell.keyBinds?.[action.id]}
+                        onSave={(keys) => shell.setKeyBind(action.id, keys)}
+                        onReset={() => shell.resetKeyBind(action.id)}
+                      />
+                    ))}
+                </KeybindGroup>
+              ))}
+
+              {/* Non-customizable (mouse-based) */}
+              <KeybindGroup title="Mouse">
                 <KeybindRow keys={["Scroll"]} description="Zoom in / out" />
-                <KeybindRow keys={["+"]} description="Zoom in (hold to accelerate)" />
-                <KeybindRow keys={["-"]} description="Zoom out (hold to accelerate)" />
                 <KeybindRow keys={["Space", "Drag"]} description="Pan canvas" />
-                <KeybindRow keys={["W", "A", "S", "D"]} description="Glide camera" />
-                <KeybindRow keys={["M"]} description="Toggle minimap" />
-              </KeybindGroup>
-              <KeybindGroup title="Selection">
-                <KeybindRow keys={[MOD, "A"]} description="Select all nodes" />
                 <KeybindRow keys={["Shift", "Drag"]} description="Marquee select" />
                 <KeybindRow keys={["Shift", "Click"]} description="Toggle select node" />
-                <KeybindRow keys={["Esc"]} description="Deselect all" />
-              </KeybindGroup>
-              <KeybindGroup title="Edit">
-                <KeybindRow keys={[MOD, "C"]} description="Copy selected nodes" />
-                <KeybindRow keys={[MOD, "V"]} description="Paste at cursor" />
-                <KeybindRow keys={[MOD, "Z"]} description="Undo" />
-                <KeybindRow keys={[MOD, "Shift", "Z"]} description="Redo" />
-                <KeybindRow keys={["Del"]} description="Delete selected" />
               </KeybindGroup>
               <KeybindGroup title="Dock">
                 <KeybindRow keys={["1-9"]} description="Place dock item at cursor" />
               </KeybindGroup>
+
+              <Separator />
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => shell.resetAllKeyBinds()}
+              >
+                <RotateCcw className="w-3 h-3 mr-1.5" />
+                Reset All Key Binds
+              </Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -619,8 +642,6 @@ function PositionButton({
 
 // ── Key Binds helpers ──
 
-const MOD = navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
-
 function KeybindGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -630,6 +651,7 @@ function KeybindGroup({ title, children }: { title: string; children: React.Reac
   );
 }
 
+/** Static read-only keybind row (for mouse-based / non-customizable shortcuts). */
 function KeybindRow({ keys, description }: { keys: string[]; description: string }) {
   return (
     <div className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-muted/30">
@@ -643,6 +665,99 @@ function KeybindRow({ keys, description }: { keys: string[]; description: string
             </kbd>
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Interactive keybind row: click to record a new key, with reset support. */
+function EditableKeybindRow({
+  action,
+  currentKeys,
+  isCustomized,
+  onSave,
+  onReset,
+}: {
+  action: KeyBindAction;
+  currentKeys: string[];
+  isCustomized: boolean;
+  onSave: (keys: string[]) => void;
+  onReset: () => void;
+}) {
+  const [recording, setRecording] = useState(false);
+
+  useEffect(() => {
+    if (!recording) return;
+
+    const escHandler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setRecording(false);
+      }
+    };
+
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const combo = eventToCombo(e);
+      if (!combo) return; // bare modifier press, keep listening
+      onSave([combo]);
+      setRecording(false);
+    };
+
+    // Escape listener immediately; key listener after a brief delay
+    // so the click that started recording doesn't bleed through.
+    window.addEventListener("keydown", escHandler, { capture: true });
+    const timer = setTimeout(() => {
+      window.addEventListener("keydown", handler, { capture: true });
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handler, { capture: true });
+      window.removeEventListener("keydown", escHandler, { capture: true });
+    };
+  }, [recording, onSave]);
+
+  return (
+    <div className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-muted/30 group">
+      <span className="text-xs text-muted-foreground">{action.label}</span>
+      <div className="flex items-center gap-1">
+        {recording ? (
+          <kbd className="inline-flex items-center justify-center min-w-[60px] h-5 px-2 text-[10px] font-mono rounded border border-primary bg-primary/10 text-primary animate-pulse">
+            Press key…
+          </kbd>
+        ) : (
+          <button
+            onClick={() => setRecording(true)}
+            className="flex items-center gap-0.5"
+            title="Click to change"
+          >
+            {currentKeys.map((k, i) => (
+              <span key={i}>
+                {i > 0 && <span className="text-[10px] text-muted-foreground/40 mx-0.5">or</span>}
+                <kbd
+                  className={cn(
+                    "inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[10px] font-mono font-medium rounded border bg-muted/50 text-muted-foreground hover:border-primary/50 cursor-pointer transition-colors",
+                    isCustomized && "border-primary/30 text-primary",
+                  )}
+                >
+                  {formatCombo(k)}
+                </kbd>
+              </span>
+            ))}
+          </button>
+        )}
+        {isCustomized && !recording && (
+          <button
+            onClick={onReset}
+            className="opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+            title="Reset to default"
+          >
+            <RotateCcw className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
       </div>
     </div>
   );
