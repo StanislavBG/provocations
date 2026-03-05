@@ -120,6 +120,7 @@ interface DocumentListItem {
   title: string;
   docType?: string;
   folderId?: number | null;
+  updatedAt?: string;
 }
 
 interface FolderItem {
@@ -2028,7 +2029,7 @@ function FlowWorkspaceInner() {
     setCanvasTitle(trimmed);
     if (canvasDocumentId) {
       try {
-        await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, { title: trimmed });
+        await apiRequest("PATCH", `/api/documents/${canvasDocumentId}`, { title: trimmed });
       } catch {
         // silent — name is already set locally
       }
@@ -2167,16 +2168,16 @@ function FlowWorkspaceInner() {
         </span>
       )}
 
-      {/* File dropdown */}
+      {/* Canvas Manager dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
             <FileText className="w-3 h-3" />
-            File
+            Canvas
             <ChevronDown className="w-2.5 h-2.5 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuContent align="start" className="w-44">
           <DropdownMenuItem
             onClick={handleSaveCanvas}
             disabled={isSaving || state.nodes.length === 0}
@@ -2189,14 +2190,18 @@ function FlowWorkspaceInner() {
             <FolderUp className="w-3.5 h-3.5" />
             Open Canvas
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleNewCanvas} className="text-xs gap-2">
-            <FilePlus2 className="w-3.5 h-3.5" />
-            New Canvas
+          <DropdownMenuItem
+            onClick={() => setShareDialogOpen(true)}
+            disabled={!canvasDocumentId}
+            className="text-xs gap-2"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Share Canvas
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={addTab} className="text-xs gap-2">
-            <Plus className="w-3.5 h-3.5" />
-            New Tab
+            <FilePlus2 className="w-3.5 h-3.5" />
+            New Canvas
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -2300,59 +2305,16 @@ function FlowWorkspaceInner() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Share dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
-            <Share2 className="w-3 h-3" />
-            Share
-            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-44">
-          <DropdownMenuItem
-            onClick={() => setShareDialogOpen(true)}
-            disabled={!canvasDocumentId}
-            className="text-xs gap-2"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            Share Canvas
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setConnectionsDialogOpen(true)}
-            className="text-xs gap-2"
-          >
-            <Users className="w-3.5 h-3.5" />
-            Connections
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setIntegrationsDialogOpen(true)}
-            className="text-xs gap-2"
-          >
-            <Wifi className="w-3.5 h-3.5" />
-            Platform Integrations
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Settings dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
-            <Settings className="w-3 h-3" />
-            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-44">
-          <DropdownMenuItem
-            onClick={() => setReleaseNotesOpen(true)}
-            className="text-xs gap-2"
-          >
-            <ScrollText className="w-3.5 h-3.5" />
-            Release Notes
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* Release Notes button */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 gap-1 text-[10px] px-2"
+        onClick={() => setReleaseNotesOpen(true)}
+      >
+        <ScrollText className="w-3 h-3" />
+        v{APP_VERSION}
+      </Button>
 
       {/* Collaboration presence indicator */}
       {collabEnabled && (
@@ -2518,6 +2480,8 @@ function FlowWorkspaceInner() {
         onToggleDetails={() => setDetailsPanelOpen((v) => !v)}
         detailsOpen={detailsPanelOpen}
         onOpenActivityLogs={() => setLifecycleConsoleOpen(true)}
+        onOpenConnections={() => setConnectionsDialogOpen(true)}
+        onOpenIntegrations={() => setIntegrationsDialogOpen(true)}
       />
 
       {/* Workspace tabs */}
@@ -2925,7 +2889,14 @@ function FlowWorkspaceInner() {
                           onClick={() => handleOpenCanvas(doc.id, doc.title)}
                         >
                           <ScanLine className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                          <span className="text-xs truncate">{doc.title}</span>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs truncate block">{doc.title}</span>
+                            {doc.updatedAt && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            )}
+                          </div>
                         </button>
                       ))}
                     </div>
