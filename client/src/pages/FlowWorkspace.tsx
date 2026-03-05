@@ -62,7 +62,7 @@ import {
   X, Loader2, Save, Maximize, FileText, Folder, FolderOpen, FolderInput,
   ZoomIn, ZoomOut, Lock, Unlock, ChevronDown, ChevronRight, ScanLine,
   FolderUp, FilePlus2, Share2, Expand, Shrink, AlignJustify,
-  Lightbulb, Paintbrush2, PenLine, Users, Wifi, WifiOff,
+  Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate,
 } from "lucide-react";
@@ -366,7 +366,8 @@ function FlowWorkspaceInner() {
   const [connectionsDialogOpen, setConnectionsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [collabEnabled, setCollabEnabled] = useState(false);
+  // Canvas is always live — collab is on whenever a canvas ID exists
+  const collabEnabled = true;
   const [lifecycleConsoleOpen, setLifecycleConsoleOpen] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
 
@@ -2343,19 +2344,6 @@ function FlowWorkspaceInner() {
           >
             <Share2 className="w-3.5 h-3.5" />
             Share Canvas
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              if (!canvasDocumentId) {
-                toast({ title: "Save canvas first", description: "Save the canvas before collaborating" });
-                return;
-              }
-              setCollabEnabled((prev) => !prev);
-            }}
-            className="text-xs gap-2"
-          >
-            {collabEnabled ? <WifiOff className="w-3.5 h-3.5" /> : <Wifi className="w-3.5 h-3.5" />}
-            {collabEnabled ? "Stop Collaborating" : "Go Live"}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setConnectionsDialogOpen(true)}

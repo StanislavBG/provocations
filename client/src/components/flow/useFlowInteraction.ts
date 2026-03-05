@@ -79,6 +79,8 @@ interface UseFlowInteractionProps {
   onEdgeCreate?: (fromNodeId: string, toNodeId: string) => void;
   onDragStart?: () => void;
   nodes: FlowNode[];
+  /** Currently selected node IDs (for multi-select group drag) */
+  selectedNodeIds?: Set<string>;
   /** Customizable glide camera keys (default: WASD) */
   glideKeys?: { up: string; down: string; left: string; right: string };
 }
@@ -107,6 +109,7 @@ export function useFlowInteraction({
   onEdgeCreate,
   onDragStart,
   nodes,
+  selectedNodeIds,
   glideKeys,
 }: UseFlowInteractionProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -410,6 +413,14 @@ export function useFlowInteraction({
           .map((n) => n.id);
       }
 
+      // If the dragged node is part of a multi-selection, include other selected nodes
+      if (selectedNodeIds && selectedNodeIds.size > 1 && selectedNodeIds.has(nodeId)) {
+        const selectedOthers = Array.from(selectedNodeIds).filter((id) => id !== nodeId);
+        // Merge with any zone children (avoid duplicates)
+        const merged = new Set((groupIds ?? []).concat(selectedOthers));
+        groupIds = Array.from(merged);
+      }
+
       setDragState({
         type: "move-node",
         startX: pos.x,
@@ -422,7 +433,7 @@ export function useFlowInteraction({
         lastCanvasY: pos.y,
       });
     },
-    [nodes, screenToCanvas, onSelectNode, onToggleSelectNode],
+    [nodes, screenToCanvas, onSelectNode, onToggleSelectNode, selectedNodeIds],
   );
 
   const handleNodeDoubleClick = useCallback(
