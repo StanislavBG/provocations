@@ -81,18 +81,18 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-sm font-serif">Shell Settings</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="dock" className="mt-2">
-          <TabsList className="w-full">
-            <TabsTrigger value="dock" className="flex-1 text-xs">Dock</TabsTrigger>
-            <TabsTrigger value="statusbar" className="flex-1 text-xs">Status Bar</TabsTrigger>
-            <TabsTrigger value="tips" className="flex-1 text-xs">Tips</TabsTrigger>
-            <TabsTrigger value="appearance" className="flex-1 text-xs">Theme</TabsTrigger>
-            <TabsTrigger value="keybinds" className="flex-1 text-xs">Key Binds</TabsTrigger>
+          <TabsList className="w-full flex-wrap h-auto gap-0.5 p-0.5">
+            <TabsTrigger value="dock" className="flex-1 text-[11px] sm:text-xs min-w-[60px]">Dock</TabsTrigger>
+            <TabsTrigger value="statusbar" className="flex-1 text-[11px] sm:text-xs min-w-[70px]">Status Bar</TabsTrigger>
+            <TabsTrigger value="tips" className="flex-1 text-[11px] sm:text-xs min-w-[40px]">Tips</TabsTrigger>
+            <TabsTrigger value="appearance" className="flex-1 text-[11px] sm:text-xs min-w-[50px]">Theme</TabsTrigger>
+            <TabsTrigger value="keybinds" className="flex-1 text-[11px] sm:text-xs min-w-[70px]">Key Binds</TabsTrigger>
           </TabsList>
 
           {/* Dock settings */}
