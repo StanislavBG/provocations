@@ -1394,6 +1394,26 @@ function FlowWorkspaceInner() {
       updateNode(nodeId, { llmStatus: "running", snippet: "Running..." });
 
       try {
+        // ── Pre-process hook ──
+        let processedInput = contextContent;
+        if (node.preProcess?.trim()) {
+          updateNode(nodeId, { snippet: "Pre-processing..." });
+          try {
+            const preRes = await apiRequest("POST", "/api/write", {
+              document: processedInput,
+              instruction: node.preProcess,
+              appType: "write-a-prompt",
+            });
+            const preData = (await preRes.json()) as { document: string };
+            if (preData.document?.trim()) {
+              processedInput = preData.document;
+            }
+          } catch {
+            // Pre-process failed — continue with original input
+          }
+          updateNode(nodeId, { snippet: "Running..." });
+        }
+
         let outputText = "";
 
         if (node.type === "research") {
@@ -1402,7 +1422,7 @@ function FlowWorkspaceInner() {
           const countHint = oc?.outputCount ? `Provide exactly ${oc.outputCount} items/results.` : "";
           const customHint = oc?.customInstruction ? `\nAdditional instructions: ${oc.customInstruction}` : "";
           const templateHint = templateContent ? `\n\nFormat your output according to this template/schema:\n${templateContent}` : "";
-          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${combinedContent}${countHint ? `\n\n${countHint}` : ""}${customHint}${templateHint}`;
+          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${processedInput || combinedContent}${countHint ? `\n\n${countHint}` : ""}${customHint}${templateHint}`;
 
           // Stream research using SSE
           const res = await fetch("/api/chat/stream", {
@@ -1618,6 +1638,24 @@ function FlowWorkspaceInner() {
         if (!outputText.trim()) {
           updateNode(nodeId, { llmStatus: "error", snippet: "No output generated" });
           return;
+        }
+
+        // ── Post-process hook ──
+        if (node.postProcess?.trim()) {
+          updateNode(nodeId, { snippet: "Post-processing..." });
+          try {
+            const postRes = await apiRequest("POST", "/api/write", {
+              document: outputText,
+              instruction: node.postProcess,
+              appType: "write-a-prompt",
+            });
+            const postData = (await postRes.json()) as { document: string };
+            if (postData.document?.trim()) {
+              outputText = postData.document;
+            }
+          } catch {
+            // Post-process failed — use original output
+          }
         }
 
         // Update the source node
