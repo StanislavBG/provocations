@@ -30,6 +30,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "System-level chain propagation: reactive watcher auto-propagates when any node reaches done",
       "Post-processing routed by lifecyclePreset: media→image, social→multi-doc, api→status, coherence→pass/fail, text→split/consolidated",
       "Manual mode on compact trigger node with Zap fire button",
+      "Fix canvas rename persistence: use PATCH instead of PUT for title-only updates",
+      "Restructure menus: File→Canvas Manager with Save, Open, Share, New Canvas",
+      "Remove Share dropdown; move Connections and Platform Integrations to Settings gear",
+      "Unify New Canvas and New Tab into single New Canvas action",
+      "Show timestamps next to canvas names in Open Canvas dialog",
     ],
   },
   {

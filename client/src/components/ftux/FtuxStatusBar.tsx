@@ -24,6 +24,8 @@ import {
   Moon,
   Activity,
   Palette,
+  Users,
+  Wifi,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
@@ -81,9 +83,13 @@ interface FtuxStatusBarProps {
   canvasLoading?: boolean;
   /** Callback to open the Activity Logs overlay */
   onOpenActivityLogs?: () => void;
+  /** Callback to open the Connections dialog */
+  onOpenConnections?: () => void;
+  /** Callback to open the Platform Integrations dialog */
+  onOpenIntegrations?: () => void;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onToggleDetails, detailsOpen, canvasLoading, onOpenActivityLogs }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onToggleDetails, detailsOpen, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -408,6 +414,36 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                     <div className="text-[10px] text-muted-foreground">Lifecycle events, debug</div>
                   </div>
                 </button>
+                {onOpenConnections && (
+                  <button
+                    className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setGearDropdownOpen(false);
+                      onOpenConnections();
+                    }}
+                  >
+                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium">Connections</div>
+                      <div className="text-[10px] text-muted-foreground">Manage user connections</div>
+                    </div>
+                  </button>
+                )}
+                {onOpenIntegrations && (
+                  <button
+                    className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setGearDropdownOpen(false);
+                      onOpenIntegrations();
+                    }}
+                  >
+                    <Wifi className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium">Platform Integrations</div>
+                      <div className="text-[10px] text-muted-foreground">External services, APIs</div>
+                    </div>
+                  </button>
+                )}
               </div>
             </>
           )}
