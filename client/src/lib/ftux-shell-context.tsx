@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { type ThemePreference, type PaletteId, applyThemeToDOM, applyPaletteToDOM } from "./theme-utils";
+import type { KeyBindOverrides, KeyBindActionId } from "./keybind-actions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,6 +82,7 @@ export interface FtuxShellConfig {
   tourCompleted: boolean;
   theme: ThemePreference;
   palette: PaletteId;
+  keyBinds?: KeyBindOverrides;
 }
 
 export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
@@ -158,6 +160,9 @@ export interface FtuxShellContextValue extends FtuxShellConfig {
   setTourCompleted: (val: boolean) => void;
   setTheme: (val: ThemePreference) => void;
   setPalette: (val: PaletteId) => void;
+  setKeyBind: (actionId: KeyBindActionId, keys: string[]) => void;
+  resetKeyBind: (actionId: KeyBindActionId) => void;
+  resetAllKeyBinds: () => void;
 
   // Workflow actions
   startWorkflow: (outputType: OutputType, buildTool: ToolId) => void;
@@ -416,6 +421,26 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     [updateConfig],
   );
 
+  const setKeyBind = useCallback(
+    (actionId: KeyBindActionId, keys: string[]) =>
+      updateConfig((c) => ({ ...c, keyBinds: { ...c.keyBinds, [actionId]: keys } })),
+    [updateConfig],
+  );
+
+  const resetKeyBind = useCallback(
+    (actionId: KeyBindActionId) =>
+      updateConfig((c) => {
+        const { [actionId]: _, ...rest } = c.keyBinds ?? {};
+        return { ...c, keyBinds: Object.keys(rest).length > 0 ? (rest as KeyBindOverrides) : undefined };
+      }),
+    [updateConfig],
+  );
+
+  const resetAllKeyBinds = useCallback(
+    () => updateConfig((c) => ({ ...c, keyBinds: undefined })),
+    [updateConfig],
+  );
+
   // Apply theme/palette to DOM whenever config changes
   useEffect(() => {
     applyThemeToDOM(config.theme);
@@ -507,6 +532,9 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     setTourCompleted,
     setTheme,
     setPalette,
+    setKeyBind,
+    resetKeyBind,
+    resetAllKeyBinds,
     startWorkflow,
     nextStep,
     prevStep,
