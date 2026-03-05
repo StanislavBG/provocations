@@ -66,6 +66,39 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
     }
   }, [editing]);
 
+  const lockMode = getEffectiveLockMode(node);
+
+  // ── Shared inline Lock button ──
+  const lockButton = onToggleLock && (
+    <button
+      className={cn(
+        "w-4 h-4 rounded flex items-center justify-center transition-colors",
+        lockMode === "canvas" ? "text-yellow-500"
+          : lockMode === "screen" ? "text-blue-500"
+          : "text-muted-foreground/50 hover:text-muted-foreground opacity-0 group-hover:opacity-100",
+      )}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
+      title={lockMode === "none" ? "Lock to canvas" : lockMode === "canvas" ? "Lock to screen" : "Unlock"}
+    >
+      {lockMode === "none" && <Unlock className="w-2.5 h-2.5" />}
+      {lockMode === "canvas" && <Lock className="w-2.5 h-2.5" />}
+      {lockMode === "screen" && <Monitor className="w-2.5 h-2.5" />}
+    </button>
+  );
+
+  // ── Shared inline Delete button ──
+  const deleteButton = lockMode === "none" && (
+    <button
+      className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground/50 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+      title="Delete"
+    >
+      <Trash2 className="w-2.5 h-2.5" />
+    </button>
+  );
+
   // ── Label nodes: transparent text annotation ──
   if (node.type === "label") {
     return (
@@ -122,41 +155,11 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
           {node.label || "Label"}
         </div>
 
-        {/* Lock + Delete buttons on hover */}
-        {(() => {
-          const lm = getEffectiveLockMode(node);
-          return (
-            <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              {onToggleLock && (
-                <button
-                  className={cn(
-                    "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                    lm === "canvas" ? "bg-yellow-500 text-white"
-                      : lm === "screen" ? "bg-blue-500 text-white"
-                      : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-                  )}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
-                  title={lm === "none" ? "Lock to canvas" : lm === "canvas" ? "Lock to screen" : "Unlock"}
-                >
-                  {lm === "none" && <Unlock className="w-2.5 h-2.5" />}
-                  {lm === "canvas" && <Lock className="w-2.5 h-2.5" />}
-                  {lm === "screen" && <Monitor className="w-2.5 h-2.5" />}
-                </button>
-              )}
-              {lm === "none" && (
-                <button
-                  className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-                  title="Delete label"
-                >
-                  <Trash2 className="w-2.5 h-2.5" />
-                </button>
-              )}
-            </div>
-          );
-        })()}
+        {/* Action bar on hover — inline below the label */}
+        <div className="flex items-center justify-end gap-0.5 px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {lockButton}
+          {deleteButton}
+        </div>
       </div>
     );
   }
@@ -180,16 +183,19 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onDoubleClick={(e) => onDoubleClick(e, node.id)}
     >
-      {/* Header */}
+      {/* Header with Lock, Play/Badge, Delete all inline */}
       <div
         className={cn(
-          "flex items-center gap-1.5 px-2 py-1 border-b rounded-t-lg",
+          "flex items-center gap-1 px-2 py-1 border-b rounded-t-lg",
           style.headerBg,
           style.headerBorder,
         )}
       >
         <Icon className={cn("w-3.5 h-3.5 shrink-0", style.iconClass)} />
         <span className="text-[11px] font-medium truncate flex-1">{node.label}</span>
+
+        {/* Lock button */}
+        {lockButton}
 
         {/* Play button for executable nodes */}
         {isPlayable && onPlayNode && (
@@ -227,6 +233,9 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
             {style.badge}
           </span>
         )}
+
+        {/* Delete button */}
+        {deleteButton}
       </div>
 
       {/* Content snippet */}
@@ -249,49 +258,6 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-yellow-500/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm">
           <Pause className="w-2 h-2" />
           Paused
-        </div>
-      )}
-
-      {/* Lock + Delete buttons — visible on hover */}
-      {(() => {
-        const lockMode = getEffectiveLockMode(node);
-        return (
-          <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            {onToggleLock && (
-              <button
-                className={cn(
-                  "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                  lockMode === "canvas" ? "bg-yellow-500 text-white"
-                    : lockMode === "screen" ? "bg-blue-500 text-white"
-                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-                )}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
-                title={lockMode === "none" ? "Lock to canvas" : lockMode === "canvas" ? "Lock to screen" : "Unlock"}
-              >
-                {lockMode === "none" && <Unlock className="w-2.5 h-2.5" />}
-                {lockMode === "canvas" && <Lock className="w-2.5 h-2.5" />}
-                {lockMode === "screen" && <Monitor className="w-2.5 h-2.5" />}
-              </button>
-            )}
-            {lockMode === "none" && (
-              <button
-                className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-                title="Delete node"
-              >
-                <Trash2 className="w-2.5 h-2.5" />
-              </button>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Lock indicator */}
-      {getEffectiveLockMode(node) === "canvas" && (
-        <div className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-yellow-500/90 text-white flex items-center justify-center shadow-sm">
-          <Lock className="w-2.5 h-2.5" />
         </div>
       )}
     </div>

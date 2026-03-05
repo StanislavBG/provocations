@@ -21,8 +21,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { PaletteToggle } from "@/components/PaletteToggle";
 import { FTUX_TIPS } from "@/lib/ftux-tips";
 import {
   ArrowUp,
@@ -71,23 +69,6 @@ const COLOR_PRESETS = [
 
 const FONT_SIZE_PRESETS = [12, 14, 16, 18, 20];
 
-const FONT_COLOR_PRESETS: { label: string; value: string | null }[] = [
-  { label: "Default", value: null },
-  { label: "White", value: "#ffffff" },
-  { label: "Light Gray", value: "#c8c8c8" },
-  { label: "Warm", value: "#e8d5b7" },
-  { label: "Cool", value: "#b7d5e8" },
-  { label: "Dark", value: "#3a3a3a" },
-];
-
-const BG_COLOR_PRESETS: { label: string; value: string | null }[] = [
-  { label: "Default", value: null },
-  { label: "Dark", value: "#111118" },
-  { label: "Warm Dark", value: "#1a1510" },
-  { label: "Cool Dark", value: "#10151a" },
-  { label: "Midnight", value: "#0d0d1a" },
-  { label: "Forest", value: "#0d1a12" },
-];
 
 
 interface FtuxSettingsDialogProps {
@@ -485,16 +466,9 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
 
           {/* Appearance settings */}
           <TabsContent value="appearance" className="space-y-4 mt-4 max-h-[400px] overflow-y-auto pr-1">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Theme</Label>
-              <ThemeToggle value={shell.theme} onChange={shell.setTheme} />
+            <div className="text-[10px] text-muted-foreground">
+              Canvas style (theme, palette, dark/light) is controlled via the paintbrush button in the status bar.
             </div>
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Color Palette</Label>
-              <PaletteToggle value={shell.palette} onChange={shell.setPalette} />
-            </div>
-
-            <Separator />
 
             {/* Canvas Font Size */}
             <div className="space-y-1">
@@ -515,54 +489,6 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
                 ))}
               </div>
             </div>
-
-            {/* Canvas Font Color */}
-            <div className="space-y-2">
-              <Label className="text-xs">Canvas Font Color</Label>
-              <div className="flex items-center gap-2">
-                {FONT_COLOR_PRESETS.map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => shell.setCanvasFontColor(preset.value)}
-                    className={cn(
-                      "w-6 h-6 rounded-full border-2 transition-all",
-                      shell.canvasFontColor === preset.value
-                        ? "border-primary scale-110"
-                        : "border-border/50 hover:border-border",
-                    )}
-                    style={{
-                      background: preset.value ?? "hsl(var(--foreground))",
-                    }}
-                    title={preset.label}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Canvas Background Color */}
-            <div className="space-y-2">
-              <Label className="text-xs">Canvas Background</Label>
-              <div className="flex items-center gap-2">
-                {BG_COLOR_PRESETS.map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => shell.setCanvasBgColor(preset.value)}
-                    className={cn(
-                      "w-6 h-6 rounded-full border-2 transition-all",
-                      shell.canvasBgColor === preset.value
-                        ? "border-primary scale-110"
-                        : "border-border/50 hover:border-border",
-                    )}
-                    style={{
-                      background: preset.value ?? "hsl(var(--background))",
-                    }}
-                    title={preset.label}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Canvas Theme is now controlled via the status bar dropdown */}
           </TabsContent>
 
           {/* Key Binds */}

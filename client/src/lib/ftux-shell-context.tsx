@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { type ThemePreference, type PaletteId, applyThemeToDOM, applyPaletteToDOM } from "./theme-utils";
 import type { KeyBindOverrides, KeyBindActionId } from "./keybind-actions";
+import { CANVAS_STYLES } from "@/lib/canvas-styles";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -300,7 +301,21 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
   );
 
   const setCanvasTheme = useCallback(
-    (val: string) => updateConfig((c) => ({ ...c, canvasTheme: val })),
+    (val: string) => updateConfig((c) => {
+      const style = CANVAS_STYLES.find((s) => s.key === val);
+      if (style) {
+        // Auto-apply palette and dark/light mode from the style
+        applyThemeToDOM(style.isDark ? "dark" : "light");
+        applyPaletteToDOM(style.paletteId);
+        return {
+          ...c,
+          canvasTheme: val,
+          theme: style.isDark ? "dark" as ThemePreference : "light" as ThemePreference,
+          palette: style.paletteId,
+        };
+      }
+      return { ...c, canvasTheme: val };
+    }),
     [updateConfig],
   );
 
