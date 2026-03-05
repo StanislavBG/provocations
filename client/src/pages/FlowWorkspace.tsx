@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useRoute, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@clerk/clerk-react";
@@ -291,6 +292,9 @@ function FlowWorkspaceInner() {
   const { toast } = useToast();
   const { user } = useUser();
   const minimapState = useMinimapState();
+  const [routeMatch, routeParams] = useRoute("/canvas/:canvasId");
+  const [, setLocation] = useLocation();
+  const urlCanvasId = routeMatch && routeParams?.canvasId ? parseInt(routeParams.canvasId, 10) : null;
 
   // Fit all nodes into the viewport
   const fitToView = useCallback(() => {
@@ -394,12 +398,23 @@ function FlowWorkspaceInner() {
       hero.style.display = activeTheme.heroVisible ? "" : "none";
     }
   }, [activeTheme.heroVisible]);
-  const [canvasDocumentId, setCanvasDocumentId] = useState<number | null>(() => {
+  const [canvasDocumentId, setCanvasDocumentIdRaw] = useState<number | null>(() => {
+    // URL param takes priority over localStorage
+    if (urlCanvasId && !isNaN(urlCanvasId)) return urlCanvasId;
     try {
       const stored = localStorage.getItem("flow:lastCanvasId");
       return stored ? parseInt(stored, 10) : null;
     } catch { return null; }
   });
+  // Wrap setter to also sync the URL
+  const setCanvasDocumentId = useCallback((id: number | null) => {
+    setCanvasDocumentIdRaw(id);
+    if (id) {
+      setLocation(`/canvas/${id}`, { replace: true });
+    } else {
+      setLocation("/", { replace: true });
+    }
+  }, [setLocation]);
   const [canvasTitle, setCanvasTitle] = useState(() => {
     try { return localStorage.getItem("flow:lastCanvasTitle") || ""; } catch { return ""; }
   });
@@ -923,6 +938,10 @@ function FlowWorkspaceInner() {
         loadCanvas(parsed);
         setLoadProgress(100);
         setCanvasTitle(data.title || canvasTitle);
+        // Sync URL if loaded from localStorage (not already on /canvas/:id)
+        if (!urlCanvasId) {
+          setLocation(`/canvas/${canvasDocumentId}`, { replace: true });
+        }
       } catch {
         // Canvas no longer exists — clear the stored ID
         setCanvasDocumentId(null);
@@ -2084,7 +2103,7 @@ function FlowWorkspaceInner() {
     } finally {
       setIsSaving(false);
     }
-  }, [state.nodes, state.edges, state.viewport, canvasDocumentId, canvasTitle, toast]);
+  }, [state.nodes, state.edges, state.viewport, canvasDocumentId, canvasTitle, toast, setCanvasDocumentId]);
 
   // ── Open canvas from saved document ──
 
@@ -2112,7 +2131,7 @@ function FlowWorkspaceInner() {
         setLoadProgress(undefined);
       }
     },
-    [loadCanvas, toast],
+    [loadCanvas, toast, setCanvasDocumentId],
   );
 
   // ── Rename canvas ──
@@ -2137,7 +2156,7 @@ function FlowWorkspaceInner() {
     setCanvasDocumentId(null);
     setCanvasTitle("");
     toast({ title: "New canvas created" });
-  }, [resetCanvas, toast]);
+  }, [resetCanvas, toast, setCanvasDocumentId]);
 
   // ── Fit to screen ──
 
