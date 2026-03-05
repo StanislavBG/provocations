@@ -32,7 +32,12 @@ import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
 import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
 import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
+import type { LifecyclePreset } from "@/components/flow/FlowNodeRegistry";
 import { useLifecycleEngine } from "@/components/flow/useLifecycleEngine";
+import { getLifecycleHandlers } from "@/components/flow/lifecycles/index";
+import { gatherInputContentWithRoles, gatherChainContext } from "@/components/flow/useNodeLifecycle";
+import type { NodeProcessContext } from "@/components/flow/useNodeLifecycle";
+import { parsePainterOutput } from "@/components/flow/lifecycles/painter";
 import { ActivityLogsOverlay } from "@/components/flow/ActivityLogsOverlay";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import type { LifecyclePhase, LifecycleStatus } from "@/lib/lifecycleLog";
@@ -1377,22 +1382,38 @@ function FlowWorkspaceInner() {
       if (!node) return;
 
       const t0 = performance.now();
+      const def = FLOW_NODE_REGISTRY[node.type];
+      const preset: LifecyclePreset = def?.lifecyclePreset || "passive";
 
-      // ── PRE-PROCESS: Validate inputs ──
-      lcLog(node, "pre-process", "start", "Validating inputs");
-
-      // Gather connected input nodes (via edges pointing TO this node)
-      const inputEdges = stateRef.current.edges.filter((e) => e.toNodeId === nodeId);
-      const inputNodes = inputEdges
-        .map((e) => stateRef.current.nodes.find((n) => n.id === e.fromNodeId))
-        .filter(Boolean) as FlowNode[];
-
-      // Document nodes: no-op (they're static sources)
-      if (node.type === "document" || node.type === "context-doc") {
+      // ── Passive nodes: no-op ──
+      if (preset === "passive") {
         lcLog(node, "pre-process", "skipped", "Passive node — no execution needed");
-        toast({ title: "Already complete", description: "Document nodes are static sources" });
+        toast({ title: "Already complete", description: "This node is a static source" });
         return;
       }
+
+      // ── Timer/Trigger: source node — mark done (watcher propagates) ──
+      if (preset === "timer") {
+        const now = new Date();
+        const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const count = (node.timerPulseCount || 0) + 1;
+        const entry = `[${ts}] Manual fire #${count}`;
+        const content = (node.content || "") + (node.content ? "\n" : "") + entry;
+        updateNode(nodeId, {
+          timerPulseCount: count,
+          timerLastPulse: now.toISOString(),
+          content,
+          snippet: `Fired #${count} — ${ts}`,
+          llmStatus: "done",
+        });
+        lcLog(node, "process", "success", `Manual fire #${count}`);
+        return;
+      }
+
+      // ── Build context using shared lifecycle helpers ──
+      const { inputNodes, inputEdges, combinedContent, objectiveText, contextText, templateContent } =
+        gatherInputContentWithRoles(nodeId, stateRef.current.nodes, stateRef.current.edges);
+      const chainCtx = gatherChainContext(nodeId, stateRef.current.nodes, stateRef.current.edges);
 
       if (inputNodes.length === 0) {
         lcLog(node, "pre-process", "error", "No inputs connected", { error: "No upstream nodes" });
@@ -1400,42 +1421,31 @@ function FlowWorkspaceInner() {
         return;
       }
 
-      // Separate inputs by role
-      const getNodeText = (n: FlowNode) => n.documentContent || n.content || n.snippet || "";
+      // ── Get lifecycle handlers from registry ──
+      const handlers = getLifecycleHandlers(preset);
+      const abortController = new AbortController();
 
-      const objectiveTexts: string[] = [];
-      const contextTexts: string[] = [];
-      const plainTexts: string[] = [];
-      for (const e of inputEdges) {
-        const srcNode = stateRef.current.nodes.find((n) => n.id === e.fromNodeId);
-        if (!srcNode) continue;
-        if (e.role === "output-format") continue; // handled separately
-        const txt = getNodeText(srcNode);
-        if (!txt.trim()) continue;
-        if (e.role === "objective") objectiveTexts.push(txt);
-        else if (e.role === "context") contextTexts.push(txt);
-        else plainTexts.push(txt);
+      const ctx: NodeProcessContext = {
+        node, inputNodes, inputEdges,
+        combinedInputContent: combinedContent,
+        chainContext: chainCtx,
+        signal: abortController.signal,
+        objectiveText, contextText, templateContent,
+      };
+
+      // ── PRE-PROCESS: handler validation ──
+      lcLog(node, "pre-process", "start", "Validating inputs");
+      if (handlers.onPreProcess) {
+        const ok = await handlers.onPreProcess(ctx);
+        if (!ok) {
+          lcLog(node, "pre-process", "error", "Validation failed", { error: "Handler rejected" });
+          updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
+          toast({ title: "Cannot execute", description: "Check node configuration" });
+          return;
+        }
       }
 
-      // Gather output-format template content
-      const outputFormatEdges = inputEdges.filter((e) => e.role === "output-format");
-      const templateContent = outputFormatEdges
-        .map((e) => {
-          const srcNode = stateRef.current.nodes.find((n) => n.id === e.fromNodeId);
-          return srcNode?.documentContent || srcNode?.content || srcNode?.snippet || "";
-        })
-        .filter((s) => s.trim())
-        .join("\n\n");
-
-      // Build combined content: objective first, then plain, then context
-      const combinedContent = [...objectiveTexts, ...plainTexts, ...contextTexts]
-        .join("\n\n---\n\n");
-      // Separate objective text for the API's objective field
-      const objectiveText = objectiveTexts.join("\n\n") || plainTexts[0] || combinedContent.slice(0, 500);
-      // Context docs go into additionalContext
-      const additionalContextText = contextTexts.join("\n\n---\n\n");
-
-      if (!combinedContent.trim() && node.type !== "research") {
+      if (!combinedContent.trim() && preset !== "stream") {
         lcLog(node, "pre-process", "error", "Input nodes have no content", { error: "Empty input" });
         toast({ title: "No content", description: "Input nodes have no content" });
         return;
@@ -1445,375 +1455,148 @@ function FlowWorkspaceInner() {
 
       // Mark node as running
       updateNode(nodeId, { llmStatus: "running", snippet: "Running..." });
-
-      // Replace existing downstream document outputs if in "replace" mode
       replaceDownstreamOutputs(nodeId);
 
-      // ── PROCESS: Execute node-specific logic ──
-      lcLog(node, "process", "start", `Processing as ${node.type}`);
-
-      try {
-        // ── Pre-process hook ──
-        let processedInput = combinedContent;
-        if (node.preProcess?.trim()) {
-          updateNode(nodeId, { snippet: "Pre-processing..." });
-          try {
-            const preRes = await apiRequest("POST", "/api/write", {
-              document: processedInput,
-              instruction: node.preProcess,
-              appType: "write-a-prompt",
-            });
-            const preData = (await preRes.json()) as { document: string };
-            if (preData.document?.trim()) {
-              processedInput = preData.document;
-            }
-          } catch {
-            // Pre-process failed — continue with original input
-          }
-          updateNode(nodeId, { snippet: "Running..." });
-        }
-
-        let outputText = "";
-
-        if (node.type === "research") {
-          // Build output-aware research prompt from outputConfig
-          const oc = node.outputConfig;
-          const isInfiniteCount = oc?.outputMode === "split" && (oc?.outputCount === undefined || oc?.outputCount === null);
-          const explicitCount = oc?.outputMode === "split" && oc?.outputCount !== undefined && oc?.outputCount !== null
-            ? Math.min(oc.outputCount, 5) : undefined;
-
-          // Build split instructions for the LLM
-          let splitInstruction = "";
-          if (oc?.outputMode === "split") {
-            if (explicitCount && explicitCount > 0) {
-              splitInstruction = `\n\nIMPORTANT: Structure your response as exactly ${explicitCount} distinct sections. Separate each section with a line containing only "---". Each section should be self-contained and complete.`;
-            } else if (isInfiniteCount) {
-              splitInstruction = `\n\nIMPORTANT: Structure your response as multiple distinct sections — one section per logical item/topic. Separate each section with a line containing only "---". Each section should be self-contained and complete. Use as many sections as the content naturally requires (up to 5 maximum).`;
-            }
-          }
-          const customHint = oc?.customInstruction ? `\nAdditional instructions: ${oc.customInstruction}` : "";
-          const templateHint = templateContent ? `\n\nOUTPUT FORMAT INSTRUCTIONS:\n${templateContent}` : "";
-          // Use objective text as the primary query; fall back to combined content
-          const primaryQuery = processedInput || objectiveText || combinedContent;
-          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${primaryQuery}${splitInstruction}${customHint}${templateHint}`;
-
-          // Stream research using SSE
-          const res = await fetch("/api/chat/stream", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              message: researchPrompt,
-              objective: objectiveText.slice(0, 500) || combinedContent.slice(0, 500),
-              history: [],
-              researchFocus: oc?.focusMode || undefined,
-              additionalContext: additionalContextText || undefined,
-              responseConfig: (oc?.format || oc?.detail || oc?.audience || oc?.tone) ? {
-                format: oc?.format,
-                detail: oc?.detail,
-                audience: oc?.audience,
-                tone: oc?.tone,
-              } : undefined,
-            }),
-          });
-
-          if (!res.ok) {
-            let errMsg = `Research API failed (${res.status})`;
-            try { const body = await res.json(); errMsg = body?.error || errMsg; } catch { /* ignore */ }
-            throw new Error(errMsg);
-          }
-
-          const reader = res.body?.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let streamError = "";
-
-          if (reader) {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              buffer += decoder.decode(value, { stream: true });
-
-              // Parse SSE events
-              const lines = buffer.split("\n");
-              buffer = lines.pop() || "";
-
-              for (const line of lines) {
-                if (line.startsWith("data: ")) {
-                  try {
-                    const evt = JSON.parse(line.slice(6));
-                    if (evt.type === "content" && evt.content) {
-                      outputText += evt.content;
-                    } else if (evt.type === "error") {
-                      streamError = evt.error || "Stream error";
-                    }
-                  } catch {
-                    // Ignore malformed SSE
-                  }
-                }
-              }
-            }
-          }
-
-          if (!outputText.trim() && streamError) {
-            throw new Error(streamError);
-          }
-        } else if (node.type === "painter") {
-          // Create empty output image node immediately so the conveyor animation is visible
-          const imgNodeId = addNode("document", node.x + node.width + 60, node.y, {
-            label: "Painting...",
-            snippet: "Generating image...",
-            content: "",
-            documentContent: "",
-          });
-          addEdge(nodeId, imgNodeId);
-
-          // Painter: summarize for visual prompt, then generate image via Gemini
-          const summaryRes = await apiRequest("POST", "/api/summarize-intent", {
-            transcript: combinedContent.slice(0, 8000),
-            context: "visual",
-            mode: "clean",
-          });
-          const summaryData = (await summaryRes.json()) as { summary?: string };
-          const imagePrompt = summaryData.summary || combinedContent.slice(0, 500);
-
-          const imgRes = await apiRequest("POST", "/api/generate-imagen", {
-            prompt: imagePrompt,
-            style: "Illustration, Vibrant mood",
-            aspectRatio: "16:9",
-            numberOfImages: 1,
-          });
-          const imgData = (await imgRes.json()) as { images?: string[]; error?: string };
-
-          if (imgData.images && imgData.images.length > 0) {
-            const elapsed = Math.round(performance.now() - t0);
-            lcLog(node, "process", "success", `Image generated: ${imagePrompt.slice(0, 60)}...`, { durationMs: elapsed });
-
-            updateNode(nodeId, {
-              llmStatus: "done",
-              snippet: `Generated: ${imagePrompt.slice(0, 80)}...`,
-            });
-
-            // Fill the output image node with the generated image
-            updateNode(imgNodeId, {
-              label: `Image: ${imagePrompt.slice(0, 30)}${imagePrompt.length > 30 ? "..." : ""}`,
-              snippet: "Generated image",
-              imageUrl: imgData.images[0],
-              content: imagePrompt,
-              documentContent: imagePrompt,
-            });
-
-            lcLog(node, "post-process", "success", "Output image node created");
-            toast({ title: "Image generated" });
-          } else {
-            const errMsg = imgData.error || "Image generation failed";
-            lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
-            updateNode(nodeId, { llmStatus: "error", snippet: errMsg });
-            updateNode(imgNodeId, {
-              label: "Generation failed",
-              snippet: errMsg,
-            });
-            toast({ title: "Image generation failed", variant: "destructive" });
-          }
-
-          propagateDownstream(nodeId, node);
-          return;
-        } else if (node.type === "social-post") {
-          // Social Post: call LLM to generate platform-specific posts from upstream content
-          const platforms = node.socialPlatforms || {};
-          const enabledPlatforms = Object.entries(platforms).filter(([, v]) => v).map(([k]) => k);
-          if (enabledPlatforms.length === 0) {
-            lcLog(node, "pre-process", "error", "No platforms enabled", { error: "No platforms selected" });
-            updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
-            toast({ title: "No platforms enabled", description: "Double-click to enable platforms" });
-            return;
-          }
-          updateNode(nodeId, { socialGenStatus: "generating" });
-          try {
-            const res = await apiRequest("POST", "/api/social/generate", {
-              content: combinedContent,
-              platforms: enabledPlatforms,
-              intent: node.socialIntent || "marketing",
-              tone: node.socialTone || "professional",
-            });
-            const data = (await res.json()) as { posts: Record<string, { text: string; hashtags?: string[]; characterCount: number }> };
-            const generatedPosts: Record<string, { text: string; imageUrl?: string; charCount: number; status: string }> = {};
-            for (const [platform, post] of Object.entries(data.posts)) {
-              generatedPosts[platform] = {
-                text: post.text,
-                charCount: post.characterCount,
-                status: "draft",
-              };
-              // Create a child document node per platform
-              const childId = addNode("document", node.x + node.width + 60, node.y + Object.keys(generatedPosts).length * 80, {
-                label: `${platform} Post`,
-                documentContent: post.text,
-                snippet: post.text.slice(0, 120),
-              });
-              addEdge(nodeId, childId);
-            }
-            const elapsed = Math.round(performance.now() - t0);
-            lcLog(node, "process", "success", `Generated ${enabledPlatforms.length} posts`, { durationMs: elapsed });
-
-            updateNode(nodeId, {
-              socialGeneratedPosts: generatedPosts,
-              socialGenStatus: "done",
-              llmStatus: "done",
-              snippet: `Generated ${enabledPlatforms.length} posts`,
-            });
-
-            lcLog(node, "post-process", "success", `Created ${enabledPlatforms.length} platform document nodes`);
-            toast({ title: "Posts generated", description: `Created ${enabledPlatforms.length} platform posts` });
-          } catch (err) {
-            const errMsg = err instanceof Error ? err.message : "Generation failed";
-            lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
-            updateNode(nodeId, { socialGenStatus: "error", llmStatus: "error", snippet: "Generation failed" });
-            toast({ title: "Social post generation failed", variant: "destructive" });
-          }
-          propagateDownstream(nodeId, node);
-          return;
-        } else if (node.type === "api-connection") {
-          // API Connection: post content to connected platform
-          const platform = node.apiService;
-          if (!platform || platform === "webhook" || platform === "custom") {
-            lcLog(node, "pre-process", "error", "No platform configured", { error: "Missing platform" });
-            updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
-            toast({ title: "No platform configured", description: "Double-click to select a platform" });
-            return;
-          }
-          updateNode(nodeId, { llmStatus: "running", snippet: "Posting..." });
-          try {
-            const res = await apiRequest("POST", "/api/social/post", {
-              platform,
-              content: combinedContent,
-            });
-            const data = (await res.json()) as { success: boolean; externalPostId?: string; externalPostUrl?: string; error?: string };
-            const logEntry = {
-              platform,
-              status: data.success ? "success" : "failed",
-              message: data.success ? `Posted (${data.externalPostId || "ok"})` : (data.error || "Failed"),
-              timestamp: new Date().toISOString(),
-              externalId: data.externalPostId,
-            };
-            const elapsed = Math.round(performance.now() - t0);
-
-            updateNode(nodeId, {
-              llmStatus: data.success ? "done" : "error",
-              snippet: data.success ? `Posted to ${platform}` : (data.error || "Post failed"),
-              apiLastResult: logEntry,
-              apiPostLog: [...(node.apiPostLog || []), logEntry],
-            });
-
-            if (data.success) {
-              lcLog(node, "process", "success", `Posted to ${platform}`, { durationMs: elapsed });
-              lcLog(node, "post-process", "success", `Post log updated (${(node.apiPostLog?.length || 0) + 1} entries)`);
-            } else {
-              lcLog(node, "process", "error", data.error || "Post failed", { error: data.error, durationMs: elapsed });
-            }
-
-            toast({ title: data.success ? "Posted successfully" : "Post failed", variant: data.success ? "default" : "destructive" });
-          } catch (err) {
-            const errMsg = err instanceof Error ? err.message : "Post failed";
-            lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
-            updateNode(nodeId, { llmStatus: "error", snippet: "Post failed" });
-            toast({ title: "API post failed", variant: "destructive" });
-          }
-          propagateDownstream(nodeId, node);
-          return;
-        } else if (node.type === "llm") {
-          // LLM nodes already have their own Run button — delegate there
-          lcLog(node, "pre-process", "skipped", "LLM nodes use their own Run button");
-          toast({ title: "Use Run", description: "LLM nodes have their own Run button" });
-          updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
-          return;
-        } else if (node.type === "coherence-gate") {
-          // Coherence Gate: call /api/flow/coherence-eval
-          updateNode(nodeId, { snippet: "Evaluating quality..." });
-          const evalRes = await apiRequest("POST", "/api/flow/coherence-eval", {
-            content: combinedContent,
-            originalContext: node.coherencePrompt || "",
-            checks: node.coherenceChecks ?? { topicMatch: true, toneConsistency: true, factDrift: false, styleMatch: false },
-            customPrompt: node.coherencePrompt,
-            threshold: node.coherenceThreshold ?? 75,
-          });
-          const evalData = (await evalRes.json()) as { score: number; verdict: string; reasoning: string };
-          updateNode(nodeId, {
-            coherenceLastScore: evalData.score,
-            coherenceLastVerdict: evalData.verdict as "pass" | "fail",
-            coherenceFailCount: evalData.verdict === "fail" ? (node.coherenceFailCount ?? 0) + 1 : 0,
-          });
-
-          if (evalData.verdict === "pass") {
-            outputText = combinedContent; // pass content through
-            updateNode(nodeId, { snippet: `Pass: ${evalData.score}% — ${evalData.reasoning.slice(0, 80)}` });
-          } else {
-            // Retry logic
-            const maxRetries = node.coherenceRetryCount ?? 1;
-            let retried = false;
-            for (let i = 0; i < maxRetries; i++) {
-              updateNode(nodeId, { snippet: `Retry ${i + 1}/${maxRetries}...` });
-              const retryRes = await apiRequest("POST", "/api/flow/coherence-eval", {
-                content: combinedContent,
-                originalContext: node.coherencePrompt || "",
-                checks: node.coherenceChecks ?? { topicMatch: true, toneConsistency: true },
-                customPrompt: node.coherencePrompt,
-                threshold: node.coherenceThreshold ?? 75,
-              });
-              const retryData = (await retryRes.json()) as { score: number; verdict: string; reasoning: string };
-              updateNode(nodeId, {
-                coherenceLastScore: retryData.score,
-                coherenceLastVerdict: retryData.verdict as "pass" | "fail",
-              });
-              if (retryData.verdict === "pass") {
-                outputText = combinedContent;
-                updateNode(nodeId, { snippet: `Pass (retry ${i + 1}): ${retryData.score}%` });
-                retried = true;
-                break;
-              }
-            }
-            if (!retried) {
-              const fc = (node.coherenceFailCount ?? 0) + 1;
-              const pfThreshold = node.coherencePersistentFailThreshold ?? 5;
-              const driftWarning = fc >= pfThreshold ? " — Upstream drift likely" : "";
-              lcLog(node, "process", "error", `Failed: ${evalData.score}%${driftWarning}`, { error: evalData.reasoning });
-              updateNode(nodeId, {
-                llmStatus: "error",
-                snippet: `Failed: ${evalData.score}%${driftWarning}`,
-                coherenceFailCount: fc,
-              });
-              return;
-            }
-          }
-        } else if (node.type === "filter" || node.type === "gate" || node.type === "router" || node.type === "merge") {
-          // Logic nodes: pass-through content
-          if (node.type === "gate" && node.gateOpen === false) {
-            lcLog(node, "pre-process", "error", "Gate is closed", { error: "Gate closed" });
-            updateNode(nodeId, { llmStatus: "idle", snippet: "Gate closed" });
-            toast({ title: "Gate closed", description: "Open the gate to pass content through" });
-            return;
-          }
-
-          if (node.type === "filter" && node.logicRule) {
-            const lines = combinedContent.split("\n");
-            const filtered = lines.filter((l) => l.toLowerCase().includes(node.logicRule!.toLowerCase()));
-            outputText = filtered.length > 0 ? filtered.join("\n") : combinedContent;
-          } else {
-            outputText = combinedContent;
-          }
-        } else {
-          // Generic: use /api/write
-          const res = await apiRequest("POST", "/api/write", {
-            document: combinedContent,
-            instruction: `Process this content for the purpose: ${node.label}`,
+      // ── Generic pre-process hook (node.preProcess) ──
+      let processedInput = combinedContent;
+      if (node.preProcess?.trim()) {
+        updateNode(nodeId, { snippet: "Pre-processing..." });
+        try {
+          const preRes = await apiRequest("POST", "/api/write", {
+            document: processedInput,
+            instruction: node.preProcess,
             appType: "write-a-prompt",
           });
-          const data = (await res.json()) as { document: string };
-          outputText = data.document || "";
-        }
+          const preData = (await preRes.json()) as { document: string };
+          if (preData.document?.trim()) processedInput = preData.document;
+        } catch { /* continue with original */ }
+        updateNode(nodeId, { snippet: "Running..." });
+      }
+
+      // ── PROCESS: delegate to lifecycle handler ──
+      lcLog(node, "process", "start", `Processing as ${node.type} (${preset})`);
+
+      try {
+        const outputText = await handlers.onProcess({
+          ...ctx,
+          combinedInputContent: processedInput,
+        });
 
         const elapsed = Math.round(performance.now() - t0);
 
-        if (!outputText.trim()) {
+        // ── POST-PROCESS: type-specific output creation ──
+        lcLog(node, "post-process", "start", "Creating output");
+
+        // -- Painter: structured image output --
+        if (preset === "media") {
+          const { prompt, imageUrl } = parsePainterOutput(outputText);
+          updateNode(nodeId, { llmStatus: "done", snippet: `Generated: ${prompt.slice(0, 80)}...` });
+          const imgNodeId = addNode("document", node.x + node.width + 60, node.y, {
+            label: `Image: ${prompt.slice(0, 30)}${prompt.length > 30 ? "..." : ""}`,
+            snippet: "Generated image",
+            imageUrl,
+            content: prompt,
+            documentContent: prompt,
+          });
+          addEdge(nodeId, imgNodeId);
+          lcLog(node, "process", "success", `Image generated`, { durationMs: elapsed });
+          lcLog(node, "post-process", "success", "Output image node created");
+          toast({ title: "Image generated" });
+          return;
+        }
+
+        // -- Social post: per-platform document nodes --
+        if (preset === "social") {
+          const posts = JSON.parse(outputText) as Record<string, { text: string; characterCount?: number }>;
+          const generatedPosts: Record<string, { text: string; imageUrl?: string; charCount: number; status: string }> = {};
+          let idx = 0;
+          for (const [platform, post] of Object.entries(posts)) {
+            generatedPosts[platform] = { text: post.text, charCount: post.characterCount || post.text.length, status: "draft" };
+            idx++;
+            const childId = addNode("document", node.x + node.width + 60, node.y + idx * 80, {
+              label: `${platform} Post`,
+              documentContent: post.text,
+              snippet: post.text.slice(0, 120),
+            });
+            addEdge(nodeId, childId);
+          }
+          updateNode(nodeId, {
+            socialGeneratedPosts: generatedPosts,
+            socialGenStatus: "done",
+            llmStatus: "done",
+            snippet: `Generated ${idx} posts`,
+          });
+          lcLog(node, "process", "success", `Generated ${idx} posts`, { durationMs: elapsed });
+          lcLog(node, "post-process", "success", `Created ${idx} platform document nodes`);
+          toast({ title: "Posts generated", description: `Created ${idx} platform posts` });
+          return;
+        }
+
+        // -- API connection: status update only (no output docs) --
+        if (preset === "api") {
+          const data = JSON.parse(outputText) as { success: boolean; externalPostId?: string; error?: string };
+          const logEntry = {
+            platform: node.apiService || "unknown",
+            status: data.success ? "success" : "failed",
+            message: data.success ? `Posted (${data.externalPostId || "ok"})` : (data.error || "Failed"),
+            timestamp: new Date().toISOString(),
+            externalId: data.externalPostId,
+          };
+          updateNode(nodeId, {
+            llmStatus: data.success ? "done" : "error",
+            snippet: data.success ? `Posted to ${node.apiService}` : (data.error || "Post failed"),
+            apiLastResult: logEntry,
+            apiPostLog: [...(node.apiPostLog || []), logEntry],
+          });
+          if (data.success) {
+            lcLog(node, "process", "success", `Posted to ${node.apiService}`, { durationMs: elapsed });
+          } else {
+            lcLog(node, "process", "error", data.error || "Post failed", { error: data.error, durationMs: elapsed });
+          }
+          toast({ title: data.success ? "Posted successfully" : "Post failed", variant: data.success ? "default" : "destructive" });
+          return;
+        }
+
+        // -- Coherence: conditional pass/fail --
+        if (preset === "coherence") {
+          const result = JSON.parse(outputText) as { score: number; verdict: string; reasoning: string; content: string };
+          updateNode(nodeId, {
+            coherenceLastScore: result.score,
+            coherenceLastVerdict: result.verdict as "pass" | "fail",
+            coherenceFailCount: result.verdict === "fail" ? (node.coherenceFailCount ?? 0) + 1 : 0,
+          });
+          if (result.verdict === "pass") {
+            updateNode(nodeId, {
+              llmStatus: "done",
+              content: result.content,
+              snippet: `Pass: ${result.score}% — ${result.reasoning.slice(0, 80)}`,
+            });
+            const outputDocId = addNode("document", node.x + node.width + 60, node.y, {
+              label: `${node.label} Output`,
+              documentContent: result.content,
+              snippet: result.content.slice(0, 200),
+            });
+            addEdge(nodeId, outputDocId);
+            lcLog(node, "process", "success", `Pass: ${result.score}%`, { durationMs: elapsed });
+            lcLog(node, "post-process", "success", "Output document created");
+            toast({ title: "Quality check passed" });
+          } else {
+            const fc = (node.coherenceFailCount ?? 0) + 1;
+            const pfThreshold = node.coherencePersistentFailThreshold ?? 5;
+            const driftWarning = fc >= pfThreshold ? " — Upstream drift likely" : "";
+            updateNode(nodeId, {
+              llmStatus: "error",
+              snippet: `Failed: ${result.score}%${driftWarning}`,
+              coherenceFailCount: fc,
+            });
+            lcLog(node, "process", "error", `Failed: ${result.score}%${driftWarning}`, { error: result.reasoning, durationMs: elapsed });
+            toast({ title: "Quality check failed", variant: "destructive" });
+          }
+          return;
+        }
+
+        // -- All other presets (stream, llm, logic, interview, generic): text output --
+        if (!outputText?.trim()) {
           lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });
           updateNode(nodeId, { llmStatus: "error", snippet: "No output generated" });
           return;
@@ -1821,47 +1604,44 @@ function FlowWorkspaceInner() {
 
         lcLog(node, "process", "success", `${outputText.length} chars output`, { durationMs: elapsed });
 
-        // ── POST-PROCESS ──
-        lcLog(node, "post-process", "start", "Post-processing and creating output");
-
-        // Post-process hook
+        // Generic post-process hook (node.postProcess)
+        let finalOutput = outputText;
         if (node.postProcess?.trim()) {
           updateNode(nodeId, { snippet: "Post-processing..." });
           try {
             const postRes = await apiRequest("POST", "/api/write", {
-              document: outputText,
+              document: finalOutput,
               instruction: node.postProcess,
               appType: "write-a-prompt",
             });
             const postData = (await postRes.json()) as { document: string };
-            if (postData.document?.trim()) {
-              outputText = postData.document;
-            }
-          } catch {
-            // Post-process failed — use original output
-          }
+            if (postData.document?.trim()) finalOutput = postData.document;
+          } catch { /* use original */ }
         }
 
         // Update the source node
-        updateNode(nodeId, {
+        const nodeUpdate: Partial<FlowNode> = {
           llmStatus: "done",
-          content: outputText,
-          snippet: outputText.slice(0, 200),
-        });
+          content: finalOutput,
+          snippet: finalOutput.slice(0, 200),
+        };
+        // LLM nodes also store output for their compact UI
+        if (preset === "llm") {
+          nodeUpdate.llmOutput = finalOutput;
+        }
+        updateNode(nodeId, nodeUpdate);
 
-        // ── Split mode: create separate document nodes ──
-        const oc2 = node.outputConfig;
-        const isAnySplit = oc2?.outputMode === "split" && (oc2?.outputCount === undefined || oc2?.outputCount === null);
-        const fixedSplitCount = oc2?.outputMode === "split" && oc2?.outputCount !== undefined && oc2?.outputCount !== null
-          ? Math.min(oc2.outputCount, 5) : 0;
-        if (oc2?.outputMode === "split" && (isAnySplit || fixedSplitCount > 0)) {
-          // When ∞: split by natural --- delimiters from LLM output (capped at 5)
-          // When fixed count: use the specified count
+        // Create output document(s) — split or consolidated
+        const oc = node.outputConfig;
+        const isAnySplit = oc?.outputMode === "split" && (oc?.outputCount === undefined || oc?.outputCount === null);
+        const fixedSplitCount = oc?.outputMode === "split" && oc?.outputCount !== undefined && oc?.outputCount !== null
+          ? Math.min(oc.outputCount, 5) : 0;
+
+        if (oc?.outputMode === "split" && (isAnySplit || fixedSplitCount > 0)) {
           const sections = isAnySplit
-            ? splitOutputByDelimiters(outputText, 5)
-            : splitOutputIntoSections(outputText, fixedSplitCount);
+            ? splitOutputByDelimiters(finalOutput, 5)
+            : splitOutputIntoSections(finalOutput, fixedSplitCount);
           for (let i = 0; i < sections.length; i++) {
-            // Try to extract a meaningful label from the first heading in the section
             const headingMatch = sections[i].match(/^#{1,3}\s+(.+)$/m);
             const sectionLabel = headingMatch
               ? headingMatch[1].slice(0, 50)
@@ -1876,19 +1656,17 @@ function FlowWorkspaceInner() {
           lcLog(node, "post-process", "success", `Created ${sections.length} split output documents`);
           toast({ title: "Execution complete", description: `Created ${sections.length} output documents` });
         } else {
-          // Consolidated mode: single output document
           const outputDocId = addNode("document", node.x + node.width + 60, node.y, {
             label: `${node.label} Output`,
-            documentContent: outputText,
-            snippet: outputText.slice(0, 200),
+            documentContent: finalOutput,
+            snippet: finalOutput.slice(0, 200),
           });
           addEdge(nodeId, outputDocId);
           lcLog(node, "post-process", "success", "Output document created");
           toast({ title: "Execution complete", description: `Output document created` });
         }
 
-        // ── Chain propagation ──
-        propagateDownstream(nodeId, node);
+        // Chain propagation handled by the reactive watcher
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Execution failed";
         lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
@@ -1896,11 +1674,66 @@ function FlowWorkspaceInner() {
         toast({ title: "Execution failed", variant: "destructive" });
       }
     },
-    [addNode, addEdge, updateNode, toast, lcLog, propagateDownstream, replaceDownstreamOutputs],
+    [addNode, addEdge, updateNode, toast, lcLog, replaceDownstreamOutputs],
   );
 
   // Keep ref in sync for chain propagation
   handlePlayNodeRef.current = handlePlayNode;
+
+  // ── System-level chain propagation watcher ──
+  // When ANY node transitions to llmStatus "done", auto-propagate to downstream
+  // chain-executable nodes. This replaces all manual propagateDownstream() calls
+  // and ensures uniform chain behavior regardless of how a node was executed
+  // (via handlePlayNode, internal Run button, or lifecycle engine).
+  const chainPropagatedRef = useRef<Map<string, number>>(new Map());
+  const chainWatcherInitRef = useRef(false);
+
+  useEffect(() => {
+    if (!chainWatcherInitRef.current) {
+      // First render: seed tracking for already-done nodes (loaded from save)
+      for (const node of state.nodes) {
+        if (node.llmStatus === "done") {
+          const version = node.type === "timer-event" ? (node.timerPulseCount || 0) : 0;
+          chainPropagatedRef.current.set(node.id, version);
+        }
+      }
+      chainWatcherInitRef.current = true;
+      return;
+    }
+
+    const tracked = chainPropagatedRef.current;
+
+    for (const node of state.nodes) {
+      if (node.llmStatus !== "done") {
+        // Node is not done — clear tracking so next completion re-propagates
+        tracked.delete(node.id);
+        continue;
+      }
+
+      // Use pulse count as version for trigger nodes (supports repeated fires)
+      const version = node.type === "timer-event" ? (node.timerPulseCount || 0) : 0;
+      const lastVersion = tracked.get(node.id);
+
+      if (lastVersion === version) continue; // Already propagated this completion
+
+      // Mark as propagated
+      tracked.set(node.id, version);
+
+      // Check autoTriggerNext (default: true)
+      if (node.autoTriggerNext === false) continue;
+
+      // Find and execute downstream chain-executable nodes
+      propagateDownstream(node.id, node);
+    }
+
+    // Clean up deleted nodes
+    const trackedIds = Array.from(tracked.keys());
+    for (const id of trackedIds) {
+      if (!state.nodes.find((n) => n.id === id)) {
+        tracked.delete(id);
+      }
+    }
+  }, [state.nodes, propagateDownstream]);
 
   // ── Lifecycle engine: manages trigger intervals + automation watchers ──
 

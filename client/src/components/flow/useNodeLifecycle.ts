@@ -23,6 +23,12 @@ export interface NodeProcessContext {
   chainContext: string;
   /** AbortSignal for cancellation */
   signal: AbortSignal;
+  /** Objective text from edges with role="objective" (or first plain input) */
+  objectiveText: string;
+  /** Context text from edges with role="context" */
+  contextText: string;
+  /** Output-format template from edges with role="output-format" */
+  templateContent: string;
 }
 
 export interface NodeLifecycleHandlers {
@@ -79,6 +85,69 @@ export function gatherInputContent(
   }
 
   return { inputNodes, inputEdges, combinedContent: parts.join("\n\n---\n\n") };
+}
+
+// ── Helper: gather input content with role-based separation ──
+
+export function gatherInputContentWithRoles(
+  nodeId: string,
+  allNodes: FlowNode[],
+  allEdges: FlowEdge[],
+): {
+  inputNodes: FlowNode[];
+  inputEdges: FlowEdge[];
+  combinedContent: string;
+  objectiveText: string;
+  contextText: string;
+  templateContent: string;
+} {
+  const inputEdges = allEdges.filter((e) => e.toNodeId === nodeId);
+  const inputNodes = inputEdges
+    .map((e) => allNodes.find((n) => n.id === e.fromNodeId))
+    .filter(Boolean) as FlowNode[];
+
+  const objectiveTexts: string[] = [];
+  const contextTexts: string[] = [];
+  const plainTexts: string[] = [];
+
+  for (const edge of inputEdges) {
+    const srcNode = allNodes.find((n) => n.id === edge.fromNodeId);
+    if (!srcNode) continue;
+    if (edge.role === "output-format") continue; // handled separately
+    const txt = nodeContent(srcNode);
+    if (!txt.trim()) continue;
+
+    // Also gather child output nodes of this input
+    const childEdges = allEdges.filter((e) => e.fromNodeId === srcNode.id && e.toNodeId !== nodeId);
+    let fullTxt = txt;
+    for (const ce of childEdges) {
+      const child = allNodes.find((n) => n.id === ce.toNodeId);
+      if (child) {
+        const childText = nodeContent(child);
+        if (childText.trim()) fullTxt += "\n\n" + childText;
+      }
+    }
+
+    if (edge.role === "objective") objectiveTexts.push(fullTxt);
+    else if (edge.role === "context") contextTexts.push(fullTxt);
+    else plainTexts.push(fullTxt);
+  }
+
+  // Output-format template content
+  const outputFormatEdges = inputEdges.filter((e) => e.role === "output-format");
+  const templateContent = outputFormatEdges
+    .map((e) => {
+      const srcNode = allNodes.find((n) => n.id === e.fromNodeId);
+      return srcNode ? nodeContent(srcNode) : "";
+    })
+    .filter((s) => s.trim())
+    .join("\n\n");
+
+  const combinedContent = [...objectiveTexts, ...plainTexts, ...contextTexts].join("\n\n---\n\n");
+  const objectiveText = objectiveTexts.join("\n\n") || plainTexts[0] || combinedContent.slice(0, 500);
+  const contextText = contextTexts.join("\n\n---\n\n");
+
+  return { inputNodes, inputEdges, combinedContent, objectiveText, contextText, templateContent };
 }
 
 // ── Helper: gather full chain context walking backward from a node ──
@@ -138,12 +207,9 @@ export function useNodeLifecycle(handlers: NodeLifecycleHandlers): NodeLifecycle
       setOutput(null);
 
       try {
-        // Gather inputs
-        const { inputNodes, inputEdges, combinedContent } = gatherInputContent(
-          node.id,
-          allNodes,
-          allEdges,
-        );
+        // Gather inputs with role separation
+        const { inputNodes, inputEdges, combinedContent, objectiveText, contextText, templateContent } =
+          gatherInputContentWithRoles(node.id, allNodes, allEdges);
 
         const chainCtx = gatherChainContext(node.id, allNodes, allEdges);
 
@@ -154,6 +220,9 @@ export function useNodeLifecycle(handlers: NodeLifecycleHandlers): NodeLifecycle
           combinedInputContent: combinedContent,
           chainContext: chainCtx,
           signal: controller.signal,
+          objectiveText,
+          contextText,
+          templateContent,
         };
 
         // Pre-process
