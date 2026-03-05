@@ -7751,6 +7751,68 @@ Return ONLY valid JSON, no markdown fences.`;
     }
   });
 
+  // ─── PDF Export endpoint ──────────────────────────────────────────────────
+  app.post("/api/export/pdf", async (req, res) => {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { title, content, documentId, pageSize } = req.body as {
+      title?: string;
+      content?: string;
+      documentId?: number;
+      pageSize?: "letter" | "a4";
+    };
+
+    let docTitle = title || "document";
+    let docContent = content || "";
+
+    // If documentId provided, fetch and decrypt from DB
+    if (documentId && !content) {
+      try {
+        const key = getEncryptionKey();
+        const doc = await storage.getDocument(documentId);
+        if (!doc || doc.userId !== userId) {
+          return res.status(404).json({ error: "Document not found" });
+        }
+        if (doc.ciphertext && doc.salt && doc.iv) {
+          docContent = decrypt({ ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv }, key);
+        }
+        if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+          docTitle = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key);
+        } else if (doc.title) {
+          docTitle = doc.title;
+        }
+      } catch (err) {
+        console.error("PDF export — document fetch error:", err);
+        return res.status(500).json({ error: "Failed to fetch document" });
+      }
+    }
+
+    if (!docContent.trim()) {
+      return res.status(400).json({ error: "No content to export" });
+    }
+
+    try {
+      const { renderPdf } = await import("./export-pdf");
+      const pdfBuffer = await renderPdf({
+        title: docTitle,
+        content: docContent,
+        pageSize: pageSize || "letter",
+      });
+
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(docTitle)}.pdf"`,
+        "Content-Length": String(pdfBuffer.length),
+      });
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error("PDF export error:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      res.status(500).json({ error: "PDF generation failed", details: msg });
+    }
+  });
+
   // ── Message purge scheduler (runs every hour) ──
   setInterval(async () => {
     try {
