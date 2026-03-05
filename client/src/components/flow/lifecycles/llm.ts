@@ -1,7 +1,6 @@
 /**
  * LLM node lifecycle handlers.
- * LLM nodes have their own Run button in the FlowLlmNode component,
- * so chain execution delegates to the existing preset-based processing.
+ * Uses the preset system (Summarize, Clean Up, Expand, Custom) to process input.
  */
 
 import { apiRequest } from "@/lib/queryClient";
@@ -11,7 +10,11 @@ import { getPreset } from "../llm-presets";
 export function createLlmHandlers(): NodeLifecycleHandlers {
   return {
     onPreProcess: async (ctx: NodeProcessContext) => {
-      // LLM nodes need either input content or their own objective
+      const preset = getPreset(ctx.node.llmPresetId);
+      // Custom preset requires an objective
+      if (preset.id === "custom" && !(ctx.node.llmObjective?.trim())) {
+        return false;
+      }
       return (
         ctx.combinedInputContent.trim().length > 0 ||
         (ctx.node.llmObjective?.trim()?.length ?? 0) > 0
@@ -19,17 +22,14 @@ export function createLlmHandlers(): NodeLifecycleHandlers {
     },
 
     onProcess: async (ctx: NodeProcessContext) => {
-      const preset = getPreset(ctx.node.llmPresetId || "custom");
+      const preset = getPreset(ctx.node.llmPresetId);
       const objective = ctx.node.llmObjective || preset.defaultObjective || "Process this content";
       const inputText = ctx.combinedInputContent || ctx.node.content || "";
 
-      const res = await apiRequest("POST", "/api/write", {
-        document: inputText,
-        instruction: objective,
-        appType: "write-a-prompt",
-      });
-      const data = (await res.json()) as { document: string };
-      return data.document || "";
+      const body = preset.buildRequest(inputText, objective);
+      const res = await apiRequest("POST", preset.endpoint, body);
+      const data = await res.json();
+      return preset.extractOutput(data as Record<string, unknown>) || "";
     },
   };
 }

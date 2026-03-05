@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback } from "react";
-import { Timer, Play, Square, Trash2, Lock, Unlock, Monitor, Radio } from "lucide-react";
+import { Timer, Play, Square, Trash2, Lock, Unlock, Monitor, Radio, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -24,6 +24,8 @@ interface FlowTimerEventNodeProps {
   onDoubleClick?: (e: React.MouseEvent, nodeId: string) => void;
   /** Lifecycle engine toggle — activates or deactivates the trigger */
   onToggleTrigger: (nodeId: string) => void;
+  /** Fire chain manually (for manual mode) */
+  onPlayNode?: (nodeId: string) => void;
 }
 
 export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
@@ -36,17 +38,19 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
   onDoubleClick,
   onPortMouseDown,
   onToggleTrigger,
+  onPlayNode,
 }: FlowTimerEventNodeProps) {
   const isRunning = node.timerRunning ?? false;
   const mode = node.triggerMode || "timed";
   const interval = node.timerInterval || 5000;
 
   const handleModeChange = useCallback(
-    (newMode: "timed" | "automated") => {
+    (newMode: "manual" | "timed" | "automated") => {
       if (isRunning) onToggleTrigger(node.id);
+      const snippets = { manual: "Manual trigger — click to fire", timed: "Timed trigger ready", automated: "Auto trigger ready" };
       onUpdateNode(node.id, {
         triggerMode: newMode,
-        snippet: newMode === "timed" ? "Timed trigger ready" : "Auto trigger ready",
+        snippet: snippets[newMode],
       });
     },
     [node.id, isRunning, onUpdateNode, onToggleTrigger],
@@ -71,7 +75,9 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
         )}
         onMouseDown={(e) => onMouseDown(e, node.id)}
       >
-        {mode === "timed" ? (
+        {mode === "manual" ? (
+          <Zap className="w-3 h-3 shrink-0 text-emerald-500" />
+        ) : mode === "timed" ? (
           <Timer className={cn("w-3 h-3 shrink-0", isRunning ? "text-emerald-500 animate-pulse" : "text-emerald-500")} />
         ) : (
           <Radio className={cn("w-3 h-3 shrink-0", isRunning ? "text-emerald-500 animate-pulse" : "text-emerald-500")} />
@@ -81,7 +87,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
           "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
           isRunning ? "bg-emerald-500/30 text-emerald-600 dark:text-emerald-400" : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
         )}>
-          {isRunning ? "LIVE" : mode === "timed" ? "Timed" : "Auto"}
+          {isRunning ? "LIVE" : mode === "manual" ? "Manual" : mode === "timed" ? "Timed" : "Auto"}
         </span>
       </div>
 
@@ -117,28 +123,40 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
           </button>
         </div>
 
-        {/* Start/Stop toggle */}
+        {/* Start/Stop / Fire button */}
         <button
           className={cn(
             "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-            isRunning
-              ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-md shadow-emerald-500/30"
-              : "bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25",
+            mode === "manual"
+              ? "bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25"
+              : isRunning
+                ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-md shadow-emerald-500/30"
+                : "bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25",
           )}
-          onClick={() => onToggleTrigger(node.id)}
+          onClick={() => mode === "manual" ? onPlayNode?.(node.id) : onToggleTrigger(node.id)}
         >
-          {isRunning ? <Square className="w-4 h-4" /> : <Play className="w-5 h-5" />}
+          {mode === "manual" ? (
+            <Zap className="w-5 h-5" />
+          ) : isRunning ? (
+            <Square className="w-4 h-4" />
+          ) : (
+            <Play className="w-5 h-5" />
+          )}
         </button>
 
         {/* Status */}
         <p className="text-[8px] text-muted-foreground text-center leading-relaxed">
-          {isRunning
-            ? mode === "timed"
-              ? `Pulse #${node.timerPulseCount || 0}`
-              : `Listening... (${node.timerPulseCount || 0} fires)`
-            : node.timerPulseCount
-              ? `${node.timerPulseCount} ${mode === "timed" ? "pulses" : "fires"}`
-              : mode === "timed" ? "Click to start" : "Click to listen"}
+          {mode === "manual"
+            ? node.timerPulseCount
+              ? `${node.timerPulseCount} fires`
+              : "Click to fire"
+            : isRunning
+              ? mode === "timed"
+                ? `Pulse #${node.timerPulseCount || 0}`
+                : `Listening... (${node.timerPulseCount || 0} fires)`
+              : node.timerPulseCount
+                ? `${node.timerPulseCount} ${mode === "timed" ? "pulses" : "fires"}`
+                : mode === "timed" ? "Click to start" : "Click to listen"}
         </p>
 
         {/* Interval label (timed only) */}

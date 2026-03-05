@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.9.2";
+export const APP_VERSION = "0.10.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,20 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.10.0",
+    date: "2026-03-05",
+    changes: [
+      "Lifecycle-driven execution: handlePlayNode now delegates to lifecycle handlers for all node types",
+      "Extended NodeProcessContext with role-based inputs (objectiveText, contextText, templateContent)",
+      "Added gatherInputContentWithRoles for edge-role-aware input collection",
+      "Upgraded research handler with full outputConfig support (split, focus, responseConfig, templates)",
+      "Upgraded LLM handler to use preset system (Summarize, Clean Up, Expand, Custom)",
+      "System-level chain propagation: reactive watcher auto-propagates when any node reaches done",
+      "Post-processing routed by lifecyclePreset: media→image, social→multi-doc, api→status, coherence→pass/fail, text→split/consolidated",
+      "Manual mode on compact trigger node with Zap fire button",
+    ],
+  },
   {
     version: "0.9.2",
     date: "2026-03-05",
