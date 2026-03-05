@@ -24,6 +24,7 @@ import {
   MessageSquare,
   Video,
   Bell,
+  Blocks,
 } from "lucide-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
 import type { PanelLayoutConfig } from "@/hooks/use-panel-layout";
@@ -196,11 +197,23 @@ export function NotebookTopBar({
           <ThemeToggle />
 
           {isAdmin && (
-            <Link href="/admin">
-              <Button variant="ghost" size="sm" className="h-7">
-                <Shield className="w-3.5 h-3.5" />
-              </Button>
-            </Link>
+            <>
+              <Link href="/admin">
+                <Button variant="ghost" size="sm" className="h-7">
+                  <Shield className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href="/components">
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      <Blocks className="w-3.5 h-3.5" />
+                    </Button>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent>Component Library</TooltipContent>
+              </Tooltip>
+            </>
           )}
 
           <LlmTraceButton />

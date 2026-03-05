@@ -772,6 +772,19 @@ Voice capture, transcription, and media processing must use **browser-native API
 
 This applies to both desktop and mobile. As a web-powered app, always prefer the device's local hardware and built-in browser capabilities before reaching for a server-side API.
 
+### Maintain the Component Wiki
+
+The app has an in-app **Component Wiki** at `/components` (library) and `/components/:componentId` (individual pages). All component metadata lives in `client/src/lib/componentRegistry.ts`.
+
+**When creating a new component** or **making significant changes to an existing component** (new props, new hooks, new capabilities, renamed file), you MUST update the component registry:
+
+1. **New component**: Add a `ComponentEntry` to `COMPONENT_REGISTRY` in `componentRegistry.ts` with: id, name, filePath, category, description, props, hooks, capabilities, dependencies, and apiEndpoints.
+2. **Modified component**: Update the existing entry to reflect the changes (new/removed props, new hooks, changed description, etc.).
+3. **Deleted component**: Remove its entry from `COMPONENT_REGISTRY`.
+4. **Cross-references**: Update `dependencies` arrays in other entries if import relationships changed.
+
+This ensures new developers can browse the wiki and quickly understand every component's engineering, hooks, expectations, and capabilities.
+
 ## Not Yet Implemented
 
 - Testing framework (Jest/Vitest)
