@@ -55,9 +55,25 @@ function extractVideoId(url: string): string | null {
 
 export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewProps) {
   const { toast } = useToast();
-  const [mode, setMode] = useState<InputMode>(node.youtubeMode ?? "url");
-  const [url, setUrl] = useState(node.youtubeUrl || "");
-  const [searchQuery, setSearchQuery] = useState("");
+
+  // Auto-detect initial mode from upstream content if node hasn't been configured yet
+  const detectInitialMode = (): InputMode => {
+    if (node.youtubeMode) return node.youtubeMode;
+    const upstreamContent = node.youtubeUpstreamInput?.trim();
+    if (!upstreamContent) return "url";
+    // Check for playlist URL
+    if (/youtube\.com\/playlist\?list=/i.test(upstreamContent)) return "playlist";
+    // Check for video URL
+    if (/(?:youtube\.com|youtu\.be)\//i.test(upstreamContent)) return "url";
+    // Otherwise treat as search keywords
+    return "search";
+  };
+
+  const [mode, setMode] = useState<InputMode>(detectInitialMode());
+  const [url, setUrl] = useState(node.youtubeUrl || node.youtubeUpstreamInput?.trim() || "");
+  const [searchQuery, setSearchQuery] = useState(
+    detectInitialMode() === "search" ? (node.youtubeUpstreamInput?.trim() || "") : "",
+  );
   const [searchResults, setSearchResults] = useState<SearchResult[]>(node.youtubeSearchResults ?? []);
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set(node.youtubeSelectedVideos ?? []));
   const [topN, setTopN] = useState(node.youtubeTopN ?? 3);
@@ -69,6 +85,9 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const isFetching = node.youtubeFetchStatus === "fetching";
   const transcript = node.content || "";
+
+  // Track whether upstream content was detected for UI hints
+  const hasUpstreamInput = !!node.youtubeUpstreamInput?.trim();
 
   const lcLog = useCallback(
     (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
@@ -313,6 +332,15 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
       <div className="w-80 border-r flex flex-col shrink-0 bg-card/50">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
+            {/* Upstream input hint */}
+            {hasUpstreamInput && (
+              <div className="px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                  Auto-detected upstream input — mode set to <strong>{mode}</strong>
+                </p>
+              </div>
+            )}
+
             {/* Mode selector */}
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Input Mode</p>
