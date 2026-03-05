@@ -1200,6 +1200,21 @@ function FlowWorkspaceInner() {
         setDocEditorContent(node.documentContent || "");
       }
 
+      // Populate upstream input for YouTube nodes (for auto-mode detection)
+      if (node.type === "youtube" && !node.youtubeUpstreamInput) {
+        const inputEdges = state.edges.filter((e) => e.toNodeId === nodeId);
+        const inputNodes = inputEdges
+          .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
+          .filter(Boolean) as FlowNode[];
+        const upstreamText = inputNodes
+          .map((n) => n.documentContent || n.content || n.snippet || "")
+          .filter((s) => s.trim())
+          .join("\n");
+        if (upstreamText.trim()) {
+          updateNode(nodeId, { youtubeUpstreamInput: upstreamText.trim() });
+        }
+      }
+
       // Open unified overlay (sourceRect = null for now — FLIP animation
       // requires DOM refs which will be wired in FlowNodeContainer)
       setExpandSourceRect(null);
@@ -1508,15 +1523,25 @@ function FlowWorkspaceInner() {
 
         // -- Social post: per-platform document nodes --
         if (preset === "social") {
-          const posts = JSON.parse(outputText) as Record<string, { text: string; characterCount?: number }>;
+          // Parse enriched output: { posts: {...}, imageUrl?: string }
+          let parsedOutput: { posts: Record<string, { text: string; characterCount?: number }>; imageUrl?: string };
+          try {
+            const raw = JSON.parse(outputText);
+            // Support both old format (flat posts) and new format ({ posts, imageUrl })
+            parsedOutput = raw.posts ? raw : { posts: raw };
+          } catch {
+            parsedOutput = { posts: {} };
+          }
+          const { posts, imageUrl: socialImageUrl } = parsedOutput;
           const generatedPosts: Record<string, { text: string; imageUrl?: string; charCount: number; status: string }> = {};
           let idx = 0;
           for (const [platform, post] of Object.entries(posts)) {
-            generatedPosts[platform] = { text: post.text, charCount: post.characterCount || post.text.length, status: "draft" };
+            generatedPosts[platform] = { text: post.text, imageUrl: socialImageUrl, charCount: post.characterCount || post.text.length, status: "draft" };
             idx++;
             const childId = addNode("document", node.x + node.width + 60, node.y + idx * 80, {
               label: `${platform} Post`,
               documentContent: post.text,
+              imageUrl: socialImageUrl,
               snippet: post.text.slice(0, 120),
             });
             addEdge(nodeId, childId);

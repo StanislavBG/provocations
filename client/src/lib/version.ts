@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.11.1";
+export const APP_VERSION = "0.11.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.11.2",
+    date: "2026-03-05",
+    changes: [
+      "Interview: streaming TTS via ElevenLabs WebSocket — audio plays as question generates instead of waiting for full response, dramatically reducing dead air",
+      "Social node: images now propagate through chain execution — upstream images and generated images flow to per-platform output documents",
+      "YouTube node: auto-detects input mode (URL/Search/Playlist) from upstream content when expanded; pre-populates URL or search query",
+      "Edge connections: port dots enlarged to 16px with 20px hit areas, more visible at rest (scale 75%), stronger hover feedback (140% scale)",
+    ],
+  },
   {
     version: "0.11.1",
     date: "2026-03-05",

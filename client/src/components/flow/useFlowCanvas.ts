@@ -94,6 +94,8 @@ export interface FlowNode {
   youtubeThumbnailUrl?: string;
   /** YouTube node: video metadata */
   youtubeMetadata?: { duration?: string; viewCount?: string; channelTitle?: string; publishedAt?: string };
+  /** YouTube node: upstream input content (set when expanded view opens, for mode auto-detection) */
+  youtubeUpstreamInput?: string;
   /** Trigger node: sub-type — "manual" fires on button push, "timed" fires on interval, "automated" fires when upstream finishes */
   triggerMode?: "manual" | "timed" | "automated";
   /** Trigger node: whether the trigger is currently active */

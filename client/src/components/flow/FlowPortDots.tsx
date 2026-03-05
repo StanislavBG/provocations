@@ -41,7 +41,7 @@ export const FlowPortDots = React.memo(function FlowPortDots({
         const style: React.CSSProperties = {
           top: "50%",
           transform: "translateY(-50%)",
-          ...(port.side === "left" ? { left: -7 } : { right: -7 }),
+          ...(port.side === "left" ? { left: -8 } : { right: -8 }),
         };
 
         return (
@@ -52,7 +52,7 @@ export const FlowPortDots = React.memo(function FlowPortDots({
           >
             {/* Invisible larger hit area for easier grabbing */}
             <div
-              className="absolute inset-[-6px] cursor-crosshair"
+              className="absolute inset-[-10px] cursor-crosshair"
               onMouseDown={(e) => {
                 e.stopPropagation();
                 onPortMouseDown?.(e, node.id, port.type);
@@ -61,13 +61,13 @@ export const FlowPortDots = React.memo(function FlowPortDots({
             {/* Visible handle */}
             <div
               className={cn(
-                "w-[14px] h-[14px] rounded-full border-[2.5px] transition-all cursor-crosshair",
-                "shadow-sm hover:scale-125 hover:shadow-md",
+                "w-[16px] h-[16px] rounded-full border-[2.5px] transition-all cursor-crosshair",
+                "shadow-sm hover:scale-[1.4] hover:shadow-lg",
                 isOutput ? colors.fill : "bg-background",
                 colors.border,
                 isSelected
                   ? "opacity-100 scale-100"
-                  : "opacity-60 scale-90 group-hover:opacity-100 group-hover:scale-100",
+                  : "opacity-50 scale-75 group-hover:opacity-100 group-hover:scale-100",
               )}
               onMouseDown={(e) => {
                 e.stopPropagation();

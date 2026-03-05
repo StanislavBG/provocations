@@ -285,13 +285,140 @@ export function FlowInterviewOverlay({
     [node.id, node.type, node.label],
   );
 
-  // ── Question mutation ──
+  // ── Audio queue for streaming TTS chunks ──
+  const audioQueueRef = useRef<string[]>([]);
+  const isPlayingQueueRef = useRef(false);
+
+  const playAudioQueue = useCallback(async () => {
+    if (isPlayingQueueRef.current) return;
+    isPlayingQueueRef.current = true;
+    setIsSpeaking(true);
+    if (trueInterview) conversationTurn.startSpeaking();
+
+    while (audioQueueRef.current.length > 0) {
+      const base64Chunk = audioQueueRef.current.shift()!;
+      try {
+        const byteChars = atob(base64Chunk);
+        const byteArray = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+        const blob = new Blob([byteArray], { type: "audio/mp3" });
+        const url = URL.createObjectURL(blob);
+        const audio = mobileAudioRef.current ?? new Audio();
+        const prevSrc = audio.src;
+        if (prevSrc?.startsWith("blob:")) URL.revokeObjectURL(prevSrc);
+        audio.src = url;
+        ttsAudioRef.current = audio;
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => resolve();
+          audio.onerror = () => reject();
+          audio.play().catch(reject);
+        });
+        URL.revokeObjectURL(url);
+      } catch {
+        // Skip failed chunk, continue with next
+      }
+    }
+
+    isPlayingQueueRef.current = false;
+    setIsSpeaking(false);
+    if (trueInterview) conversationTurn.finishSpeaking();
+  }, [trueInterview, conversationTurn]);
+
+  // ── Streaming question generation (uses SSE with inline TTS audio) ──
+  const streamingQuestionRef = useRef(false);
   const questionMutation = useMutation({
     mutationFn: async (updatedEntries?: InterviewEntry[]) => {
       const t0 = performance.now();
-      lcLog("process", "start", "Generating next question");
+      lcLog("process", "start", "Generating next question (streaming)");
       const allEntries = updatedEntries ?? entries;
       const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
+
+      // Determine if we should use streaming (ElevenLabs voice available)
+      const useStreaming = ttsEnabled && (ttsProvider === "elevenlabs" || (ttsProvider === "auto" && elevenlabsAvailable));
+
+      if (useStreaming) {
+        // Use the streaming endpoint for low-latency TTS
+        streamingQuestionRef.current = true;
+        const res = await fetch("/api/interview/question/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            objective: effectiveObjective,
+            document: documentText,
+            previousEntries: allEntries.length > 0 ? allEntries : undefined,
+            directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" || stance === "autobiography" ? "advise" : undefined,
+            directionGuidance: buildGuidance(stance, focusText),
+            voiceId: selectedElevenVoiceId,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Stream request failed");
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let questionText = "";
+        let topic = "";
+        let audioStarted = false;
+
+        // Reset audio queue
+        audioQueueRef.current = [];
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.type === "question_text") {
+                questionText += evt.chunk;
+                // Show text progressively
+                setCurrentQuestion(questionText.replace(/[{}"]/g, "").replace(/question:\s*/i, "").trim());
+              } else if (evt.type === "audio") {
+                // Queue audio chunk for playback
+                audioQueueRef.current.push(evt.data);
+                if (!audioStarted) {
+                  audioStarted = true;
+                  // Start playing as soon as first chunk arrives
+                  playAudioQueue();
+                }
+              } else if (evt.type === "metadata") {
+                topic = evt.topic || "";
+              } else if (evt.type === "done") {
+                questionText = evt.question || questionText;
+              } else if (evt.type === "tts_error") {
+                // TTS failed mid-stream, will fall back to text-only
+                lcLog("process", "error", `TTS error: ${evt.message}`);
+              }
+            } catch { /* skip malformed SSE lines */ }
+          }
+        }
+
+        // Parse the final question text from JSON if needed
+        let finalQuestion = questionText;
+        try {
+          const jsonMatch = questionText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            finalQuestion = parsed.question || questionText;
+            topic = topic || parsed.topic || "";
+          }
+        } catch { /* use raw text */ }
+
+        streamingQuestionRef.current = false;
+        lcLog("process", "success", `Question: "${finalQuestion.slice(0, 60)}..."`, { durationMs: Math.round(performance.now() - t0) });
+        // Mark as streamed so onSuccess doesn't re-speak
+        return { question: finalQuestion, topic: topic || "General", reasoning: "", _streamed: true } as InterviewQuestionResponse & { _streamed?: boolean };
+      }
+
+      // Fallback: REST endpoint (no streaming TTS)
       const response = await apiRequest("POST", "/api/interview/question", {
         objective: effectiveObjective,
         document: documentText,
@@ -303,15 +430,19 @@ export function FlowInterviewOverlay({
       lcLog("process", "success", `Question: "${data.question.slice(0, 60)}..."`, { durationMs: Math.round(performance.now() - t0) });
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: InterviewQuestionResponse & { _streamed?: boolean }) => {
       setCurrentQuestion(data.question);
       setCurrentTopic(data.topic);
-      speakQuestion(data.question);
+      // Only speak via REST TTS if we didn't use streaming (which already played audio inline)
+      if (!data._streamed) {
+        speakQuestion(data.question);
+      }
     },
-    onError: (error) => {
+    onError: (error: Error) => {
+      streamingQuestionRef.current = false;
       const msg = error instanceof Error ? error.message : "Failed to generate question";
       lcLog("process", "error", msg, { error: msg });
-      errorLogStore.push({ step: "Interview Question", endpoint: "/api/interview/question", message: msg });
+      errorLogStore.push({ step: "Interview Question", endpoint: "/api/interview/question/stream", message: msg });
       toast({ title: "Question failed", description: msg, variant: "destructive" });
     },
   });
