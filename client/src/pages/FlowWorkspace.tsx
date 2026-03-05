@@ -1362,15 +1362,21 @@ function FlowWorkspaceInner() {
       }
 
       // Separate inputs by role
-      const contextContent = inputEdges
-        .map((e) => {
-          const srcNode = stateRef.current.nodes.find((n) => n.id === e.fromNodeId);
-          if (!srcNode) return "";
-          if (e.role === "output-format") return ""; // handled separately
-          return srcNode.documentContent || srcNode.content || srcNode.snippet || "";
-        })
-        .filter((s) => s.trim())
-        .join("\n\n---\n\n");
+      const getNodeText = (n: FlowNode) => n.documentContent || n.content || n.snippet || "";
+
+      const objectiveTexts: string[] = [];
+      const contextTexts: string[] = [];
+      const plainTexts: string[] = [];
+      for (const e of inputEdges) {
+        const srcNode = stateRef.current.nodes.find((n) => n.id === e.fromNodeId);
+        if (!srcNode) continue;
+        if (e.role === "output-format") continue; // handled separately
+        const txt = getNodeText(srcNode);
+        if (!txt.trim()) continue;
+        if (e.role === "objective") objectiveTexts.push(txt);
+        else if (e.role === "context") contextTexts.push(txt);
+        else plainTexts.push(txt);
+      }
 
       // Gather output-format template content
       const outputFormatEdges = inputEdges.filter((e) => e.role === "output-format");
@@ -1382,8 +1388,13 @@ function FlowWorkspaceInner() {
         .filter((s) => s.trim())
         .join("\n\n");
 
-      // Combined content for non-format inputs
-      const combinedContent = contextContent;
+      // Build combined content: objective first, then plain, then context
+      const combinedContent = [...objectiveTexts, ...plainTexts, ...contextTexts]
+        .join("\n\n---\n\n");
+      // Separate objective text for the API's objective field
+      const objectiveText = objectiveTexts.join("\n\n") || plainTexts[0] || combinedContent.slice(0, 500);
+      // Context docs go into additionalContext
+      const additionalContextText = contextTexts.join("\n\n---\n\n");
 
       if (!combinedContent.trim() && node.type !== "research") {
         toast({ title: "No content", description: "Input nodes have no content" });
@@ -1395,7 +1406,7 @@ function FlowWorkspaceInner() {
 
       try {
         // ── Pre-process hook ──
-        let processedInput = contextContent;
+        let processedInput = combinedContent;
         if (node.preProcess?.trim()) {
           updateNode(nodeId, { snippet: "Pre-processing..." });
           try {
@@ -1425,17 +1436,21 @@ function FlowWorkspaceInner() {
           const countHint = effectiveCount ? `Provide exactly ${effectiveCount} items/results.` : "";
           const customHint = oc?.customInstruction ? `\nAdditional instructions: ${oc.customInstruction}` : "";
           const templateHint = templateContent ? `\n\nFormat your output according to this template/schema:\n${templateContent}` : "";
-          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${processedInput || combinedContent}${countHint ? `\n\n${countHint}` : ""}${customHint}${templateHint}`;
+          // Use objective text as the primary query; fall back to combined content
+          const primaryQuery = processedInput || objectiveText || combinedContent;
+          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${primaryQuery}${countHint ? `\n\n${countHint}` : ""}${customHint}${templateHint}`;
 
           // Stream research using SSE
           const res = await fetch("/api/chat/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({
               message: researchPrompt,
-              objective: combinedContent.slice(0, 200),
+              objective: objectiveText.slice(0, 500) || combinedContent.slice(0, 500),
               history: [],
               researchFocus: oc?.focusMode || undefined,
+              additionalContext: additionalContextText || undefined,
               responseConfig: (oc?.format || oc?.detail || oc?.audience || oc?.tone) ? {
                 format: oc?.format,
                 detail: oc?.detail,
@@ -1445,11 +1460,16 @@ function FlowWorkspaceInner() {
             }),
           });
 
-          if (!res.ok) throw new Error("Research API failed");
+          if (!res.ok) {
+            let errMsg = `Research API failed (${res.status})`;
+            try { const body = await res.json(); errMsg = body?.error || errMsg; } catch { /* ignore */ }
+            throw new Error(errMsg);
+          }
 
           const reader = res.body?.getReader();
           const decoder = new TextDecoder();
           let buffer = "";
+          let streamError = "";
 
           if (reader) {
             while (true) {
@@ -1467,6 +1487,8 @@ function FlowWorkspaceInner() {
                     const evt = JSON.parse(line.slice(6));
                     if (evt.type === "content" && evt.content) {
                       outputText += evt.content;
+                    } else if (evt.type === "error") {
+                      streamError = evt.error || "Stream error";
                     }
                   } catch {
                     // Ignore malformed SSE
@@ -1474,6 +1496,10 @@ function FlowWorkspaceInner() {
                 }
               }
             }
+          }
+
+          if (!outputText.trim() && streamError) {
+            throw new Error(streamError);
           }
         } else if (node.type === "painter") {
           // Create empty output image node immediately so the conveyor animation is visible
