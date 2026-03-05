@@ -785,6 +785,28 @@ The app has an in-app **Component Wiki** at `/components` (library) and `/compon
 
 This ensures new developers can browse the wiki and quickly understand every component's engineering, hooks, expectations, and capabilities.
 
+### Versioning — Every Code Change Gets a Version Bump
+
+The project uses **semantic versioning** (`major.minor.patch`) tracked in `client/src/lib/version.ts`. The current version is displayed as a watermark on the canvas and in the Settings → Release Notes dialog.
+
+**Version file:** `client/src/lib/version.ts` contains `APP_VERSION` (the current version string) and `RELEASE_NOTES` (chronological list of all versions with their changes).
+
+**Versioning rules:**
+- **We are pre-1.0.** Major version stays at `0` until the product reaches a stable release milestone. Don't be aggressive with major bumps.
+- **Patch bump (0.x.Y):** Bug fixes, UI tweaks, copy changes, small improvements — anything that doesn't add a new user-visible feature.
+- **Minor bump (0.X.0):** New features, new node types, new capabilities, significant UI changes — anything a user would notice as "new."
+- **Major bump (X.0.0):** Reserved for breaking changes or major architectural shifts. We're not there yet.
+
+**Mandatory with every code change / git commit:**
+1. **Bump the version** in `APP_VERSION` in `client/src/lib/version.ts` (patch for fixes, minor for features).
+2. **Add a release note entry** at the top of the `RELEASE_NOTES` array with the new version, today's date, and a concise list of changes.
+3. **Include the version in the git commit message** — prefix or suffix with the version, e.g., `v0.9.1 — Fix research node edge rendering`.
+
+**Examples:**
+- Adding a new node type → minor bump → `0.10.0`
+- Fixing a bug in the LLM node → patch bump → `0.9.1`
+- Refactoring internals with no user-visible change → patch bump → `0.9.1`
+
 ## Not Yet Implemented
 
 - Testing framework (Jest/Vitest)
