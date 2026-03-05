@@ -68,12 +68,12 @@ function LandingPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: "transparent" }}>
       {/* Top bar — sign in top-right */}
-      <header className="flex items-center justify-between px-6 py-4 border-b bg-card/50">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-white/10" style={{ background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)" }}>
         <div className="flex items-center gap-2">
           <ProvoIcon className="w-5 h-5 text-primary" />
-          <span className="font-serif font-bold text-lg tracking-tight">Provocations</span>
+          <span className="font-serif font-bold text-lg tracking-tight text-white">Provocations</span>
         </div>
         <SignInButton mode="modal">
           <Button data-testid="button-sign-in" variant="default" size="sm" className="gap-2">
@@ -85,17 +85,20 @@ function LandingPage() {
 
       {/* Hero */}
       <section className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
+        {/* Large centered logo */}
+        <ProvoIcon className="w-20 h-20 text-primary mb-8 drop-shadow-lg" />
+
         <div className="max-w-2xl space-y-6">
-          <h1 className="text-4xl sm:text-5xl font-serif font-bold tracking-tight leading-tight">
+          <h1 className="text-4xl sm:text-5xl font-serif font-bold tracking-tight leading-tight text-white drop-shadow-md">
             Work smarter <span className="text-primary">with</span> AI,
             <br />not replaced by it
           </h1>
-          <p className="text-lg text-muted-foreground font-serif leading-relaxed max-w-xl mx-auto">
+          <p className="text-lg text-white/70 font-serif leading-relaxed max-w-xl mx-auto">
             Provocations is a productivity suite that enhances how you work with LLMs.
             It challenges your assumptions, stress-tests your ideas through expert personas,
             and helps you shape raw thinking into polished documents — together.
           </p>
-          <p className="text-base text-muted-foreground/80 font-serif italic">
+          <p className="text-base text-white/50 font-serif italic">
             You bring the ideas. AI brings the tough questions. Better work, together.
           </p>
 
@@ -111,26 +114,26 @@ function LandingPage() {
 
         {/* How it's different */}
         <div className="max-w-3xl w-full mt-20 grid grid-cols-1 sm:grid-cols-3 gap-6 text-left">
-          <div className="rounded-lg border bg-card p-5 space-y-2">
+          <div className="rounded-lg border border-white/10 p-5 space-y-2" style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(16px)" }}>
             <Brain className="w-6 h-6 text-primary" />
-            <h3 className="font-semibold text-sm">14 Expert Personas</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <h3 className="font-semibold text-sm text-white">14 Expert Personas</h3>
+            <p className="text-xs text-white/60 leading-relaxed">
               CEO, Architect, Security Engineer, UX Designer — each challenges a different
               dimension of your thinking. No generic feedback.
             </p>
           </div>
-          <div className="rounded-lg border bg-card p-5 space-y-2">
+          <div className="rounded-lg border border-white/10 p-5 space-y-2" style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(16px)" }}>
             <Mic className="w-6 h-6 text-primary" />
-            <h3 className="font-semibold text-sm">Think Out Loud</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <h3 className="font-semibold text-sm text-white">Think Out Loud</h3>
+            <p className="text-xs text-white/60 leading-relaxed">
               Speak your messy, unstructured thoughts. Provocations cleans your intent
               and weaves it into the document — no copy-pasting prompts.
             </p>
           </div>
-          <div className="rounded-lg border bg-card p-5 space-y-2">
+          <div className="rounded-lg border border-white/10 p-5 space-y-2" style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(16px)" }}>
             <MessageCircleQuestion className="w-6 h-6 text-primary" />
-            <h3 className="font-semibold text-sm">Challenges, Not Completions</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <h3 className="font-semibold text-sm text-white">Challenges, Not Completions</h3>
+            <p className="text-xs text-white/60 leading-relaxed">
               Instead of generating text you didn't write, Provocations asks the hard
               questions so the final document is authentically yours.
             </p>
@@ -139,27 +142,27 @@ function LandingPage() {
 
         {/* Testimonial */}
         <div className="max-w-2xl w-full mt-16">
-          <div className="rounded-lg border border-primary/20 bg-card/80 p-8 space-y-4">
+          <div className="rounded-lg border border-white/10 p-8 space-y-4" style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(16px)" }}>
             <div className="flex gap-3 items-start border-l-4 border-primary pl-4">
               <Quote className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-              <p className="text-base font-serif italic leading-relaxed text-foreground/90">
+              <p className="text-base font-serif italic leading-relaxed text-white/90">
                 It lets you think in a messy, unstructured way, and polishes your output
                 in any number of ways.
               </p>
             </div>
-            <p className="text-sm font-serif leading-relaxed text-muted-foreground">
+            <p className="text-sm font-serif leading-relaxed text-white/60">
               "Provo is a collaborator, not a dumb bot. It turned me from a lazy
               'please summarize this' user into someone who knows what they want but doesn't
               have to know exactly how to say it — and can continue to shape the direction
               collaboratively with AI."
             </p>
-            <div className="flex items-center gap-3 pt-2 border-t border-border/50">
-              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+            <div className="flex items-center gap-3 pt-2 border-t border-white/10">
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
                 <span className="text-xs font-bold text-primary">E</span>
               </div>
               <div>
-                <p className="text-xs font-medium">Early Adopter</p>
-                <p className="text-[10px] text-muted-foreground">Product Leader</p>
+                <p className="text-xs font-medium text-white/90">Early Adopter</p>
+                <p className="text-[10px] text-white/50">Product Leader</p>
               </div>
             </div>
           </div>
@@ -167,8 +170,8 @@ function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-6 text-center">
-        <p className="text-xs text-muted-foreground">
+      <footer className="border-t border-white/10 py-6 text-center">
+        <p className="text-xs text-white/40">
           A productivity suite designed to enhance how you work with LLMs.
         </p>
       </footer>
