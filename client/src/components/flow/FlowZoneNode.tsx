@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
+import { useNodeResize } from "./useNodeResize";
+import { ResizeHandles } from "./ResizeHandles";
 
 const ZONE_COLORS: Record<string, { border: string; bg: string; text: string; swatch: string }> = {
   blue: { border: "border-blue-400/50", bg: "bg-blue-400/8", text: "text-blue-400", swatch: "bg-blue-400" },
@@ -14,11 +16,6 @@ const ZONE_COLORS: Record<string, { border: string; bg: string; text: string; sw
 };
 
 const COLOR_KEYS = Object.keys(ZONE_COLORS);
-
-const MIN_ZONE_W = 150;
-const MIN_ZONE_H = 100;
-
-type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
 interface FlowZoneNodeProps {
   node: FlowNode;
@@ -43,16 +40,17 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
   const colorKey = node.zoneColor || "gray";
   const colors = ZONE_COLORS[colorKey] || ZONE_COLORS.gray;
 
-  // Resize state
-  const resizeRef = useRef<{
-    dir: ResizeDir;
-    startX: number;
-    startY: number;
-    origX: number;
-    origY: number;
-    origW: number;
-    origH: number;
-  } | null>(null);
+  const { handleResizeMouseDown } = useNodeResize({
+    nodeId: node.id,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    zoom,
+    minWidth: 150,
+    minHeight: 100,
+    onUpdateNode,
+  });
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -68,70 +66,6 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
     }
   };
 
-  // ── Resize handlers ──
-
-  const handleResizeMouseDown = useCallback(
-    (e: React.MouseEvent, dir: ResizeDir) => {
-      e.stopPropagation();
-      e.preventDefault();
-      resizeRef.current = {
-        dir,
-        startX: e.clientX,
-        startY: e.clientY,
-        origX: node.x,
-        origY: node.y,
-        origW: node.width,
-        origH: node.height,
-      };
-
-      const onMove = (ev: MouseEvent) => {
-        const r = resizeRef.current;
-        if (!r) return;
-        const dx = (ev.clientX - r.startX) / zoom;
-        const dy = (ev.clientY - r.startY) / zoom;
-
-        let newX = r.origX;
-        let newY = r.origY;
-        let newW = r.origW;
-        let newH = r.origH;
-
-        // Horizontal
-        if (r.dir.includes("e")) {
-          newW = Math.max(MIN_ZONE_W, r.origW + dx);
-        }
-        if (r.dir.includes("w")) {
-          const maxDx = r.origW - MIN_ZONE_W;
-          const clampedDx = Math.min(dx, maxDx);
-          newX = r.origX + clampedDx;
-          newW = r.origW - clampedDx;
-        }
-
-        // Vertical
-        if (r.dir.includes("s")) {
-          newH = Math.max(MIN_ZONE_H, r.origH + dy);
-        }
-        if (r.dir === "n" || r.dir === "ne" || r.dir === "nw") {
-          const maxDy = r.origH - MIN_ZONE_H;
-          const clampedDy = Math.min(dy, maxDy);
-          newY = r.origY + clampedDy;
-          newH = r.origH - clampedDy;
-        }
-
-        onUpdateNode(node.id, { x: newX, y: newY, width: newW, height: newH });
-      };
-
-      const onUp = () => {
-        resizeRef.current = null;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    },
-    [node.id, node.x, node.y, node.width, node.height, zoom, onUpdateNode],
-  );
-
   const handleColorClick = useCallback(
     (e: React.MouseEvent, ck: string) => {
       e.stopPropagation();
@@ -141,35 +75,13 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
     [node.id, onUpdateNode],
   );
 
-  // Cursor map for resize handles
-  const cursorMap: Record<ResizeDir, string> = {
-    n: "cursor-ns-resize",
-    s: "cursor-ns-resize",
-    e: "cursor-ew-resize",
-    w: "cursor-ew-resize",
-    ne: "cursor-nesw-resize",
-    nw: "cursor-nwse-resize",
-    se: "cursor-nwse-resize",
-    sw: "cursor-nesw-resize",
-  };
-
   // ── Zoom-aware level of detail ──
-  // Label font scales with zone size; details progressively fade at lower zoom
   const lod = useMemo(() => {
-    // Label font proportional to the smaller dimension, clamped
     const baseFontSize = Math.max(10, Math.min(32, Math.min(node.width, node.height) * 0.06));
-    // Effective pixel size on screen — determines what's legible
     const effectiveSize = baseFontSize * zoom;
-
-    // Opacity tiers for smooth progressive reveal
-    // labelOpacity:   visible when text is at least ~6px on screen
-    // controlsOpacity: visible when zone is large enough to interact with comfortably
-    // borderOpacity:  always somewhat visible, fades at extreme zoom-out
     const labelOpacity = Math.max(0, Math.min(1, (effectiveSize - 4) / 6));
     const controlsOpacity = Math.max(0, Math.min(1, (zoom - 0.25) / 0.25));
-    const borderOpacity = Math.max(0.15, Math.min(1, (zoom - 0.05) / 0.2));
-
-    return { baseFontSize, labelOpacity, controlsOpacity, borderOpacity };
+    return { baseFontSize, labelOpacity, controlsOpacity };
   }, [node.width, node.height, zoom]);
 
   const showLabel = lod.labelOpacity > 0.01;
@@ -193,13 +105,13 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
       }}
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onDoubleClick={(e) => {
-        if (!showControls) return; // no editing at extreme zoom-out
+        if (!showControls) return;
         e.stopPropagation();
         setEditLabel(node.zoneLabel || "");
         setEditing(true);
       }}
     >
-      {/* Zone label + color picker — scales with zone size, fades with zoom */}
+      {/* Zone label + color picker */}
       {showLabel && (
         <div
           className="absolute top-2 left-3 flex items-center gap-2"
@@ -258,44 +170,14 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
         </div>
       )}
 
-      {/* Resize handles — only shown when zoom allows comfortable interaction */}
+      {/* Resize handles + delete — via shared component */}
       {showControls && (
         <>
-          {/* Corner handles */}
-          {(["nw", "ne", "sw", "se"] as ResizeDir[]).map((dir) => (
-            <div
-              key={dir}
-              className={cn(
-                "absolute w-3 h-3 rounded-full border-2 border-primary bg-background opacity-0 group-hover:opacity-100 transition-opacity z-10",
-                isSelected && "opacity-100",
-                cursorMap[dir],
-                dir === "nw" && "-top-1.5 -left-1.5",
-                dir === "ne" && "-top-1.5 -right-1.5",
-                dir === "sw" && "-bottom-1.5 -left-1.5",
-                dir === "se" && "-bottom-1.5 -right-1.5",
-              )}
-              style={{ opacity: undefined }} // let className control, but scale down
-              onMouseDown={(e) => handleResizeMouseDown(e, dir)}
-            />
-          ))}
-          {/* Edge handles */}
-          {(["n", "s", "e", "w"] as ResizeDir[]).map((dir) => (
-            <div
-              key={dir}
-              className={cn(
-                "absolute opacity-0 group-hover:opacity-100 transition-opacity z-10",
-                isSelected && "opacity-100",
-                cursorMap[dir],
-                dir === "n" && "top-0 left-3 right-3 h-1.5 -translate-y-1/2",
-                dir === "s" && "bottom-0 left-3 right-3 h-1.5 translate-y-1/2",
-                dir === "e" && "right-0 top-3 bottom-3 w-1.5 translate-x-1/2",
-                dir === "w" && "left-0 top-3 bottom-3 w-1.5 -translate-x-1/2",
-              )}
-              onMouseDown={(e) => handleResizeMouseDown(e, dir)}
-            />
-          ))}
-
-          {/* Delete button */}
+          <ResizeHandles
+            isSelected={isSelected}
+            onResizeMouseDown={handleResizeMouseDown}
+            size="md"
+          />
           <button
             className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
             onMouseDown={(e) => e.stopPropagation()}

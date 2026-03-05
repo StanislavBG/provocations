@@ -20,6 +20,7 @@ export function FlowNodeFullscreen({ node, onClose, onUpdateNode }: FlowNodeFull
     <div
       className="fixed inset-0 z-50 flex flex-col bg-background animate-in fade-in duration-200"
       onKeyDown={(e) => e.key === "Escape" && onClose()}
+      onWheel={(e) => e.stopPropagation()}
     >
       {/* Accent subheader */}
       <div className={cn("flex items-center gap-2 px-4 py-2 text-white shrink-0", accentBg)}>

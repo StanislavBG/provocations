@@ -38,6 +38,8 @@ interface FlowCanvasProps {
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
   transparentBg?: boolean;
+  gridOpacity?: number;
+  gridColor?: string;
   minimapState?: ReturnType<typeof useMinimapState>;
   onFitToView?: () => void;
 }
@@ -89,6 +91,8 @@ export function FlowCanvas({
   onDropTool,
   onDragStart,
   transparentBg,
+  gridOpacity = 0.2,
+  gridColor = "currentColor",
   minimapState,
   onFitToView,
 }: FlowCanvasProps) {
@@ -220,7 +224,7 @@ export function FlowCanvas({
       <FlowLlmNode key={node.id} node={node} isSelected={sel} allNodes={state.nodes} selectedNodeIds={state.selectedNodeIds} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onCreateNote={onCreateNote} onPortMouseDown={handlePortMouseDown} />
     );
     if (node.type === "research") return (
-      <FlowResearchNode key={node.id} node={node} edges={state.edges} isSelected={sel} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onPlayNode={onPlayNode} />
+      <FlowResearchNode key={node.id} node={node} edges={state.edges} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onPlayNode={onPlayNode} />
     );
     if (node.type === "audio") return (
       <FlowAudioNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
@@ -247,12 +251,14 @@ export function FlowCanvas({
         key={node.id}
         node={node}
         isSelected={sel}
+        zoom={state.viewport.zoom}
         onMouseDown={handleNodeMouseDown}
         onDoubleClick={handleNodeDoubleClick}
         onDelete={onDeleteNode}
         onToggleLock={onToggleLock}
         onPortMouseDown={handlePortMouseDown}
         onPlayNode={onPlayNode}
+        onUpdateNode={onUpdateNode}
       />
     );
   }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote]);
@@ -281,27 +287,29 @@ export function FlowCanvas({
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Dot grid */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
-        <defs>
-          <pattern
-            id="flow-grid"
-            x={state.viewport.x % gridSize}
-            y={state.viewport.y % gridSize}
-            width={gridSize}
-            height={gridSize}
-            patternUnits="userSpaceOnUse"
-          >
-            <circle
-              cx={gridSize / 2}
-              cy={gridSize / 2}
-              r={0.8}
-              fill="currentColor"
-              className="text-muted-foreground/20"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#flow-grid)" />
-      </svg>
+      {gridOpacity > 0 && (
+        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          <defs>
+            <pattern
+              id="flow-grid"
+              x={state.viewport.x % gridSize}
+              y={state.viewport.y % gridSize}
+              width={gridSize}
+              height={gridSize}
+              patternUnits="userSpaceOnUse"
+            >
+              <circle
+                cx={gridSize / 2}
+                cy={gridSize / 2}
+                r={0.8}
+                fill={gridColor}
+                opacity={gridOpacity}
+              />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#flow-grid)" />
+        </svg>
+      )}
 
       {/* Viewport transform layer */}
       <div

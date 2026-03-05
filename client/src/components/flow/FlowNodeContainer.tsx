@@ -13,12 +13,15 @@ import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
 import { FLOW_NODE_REGISTRY, PLAYABLE_TYPES, type FlowNodeDefinition } from "./FlowNodeRegistry";
+import { useNodeResize } from "./useNodeResize";
+import { ResizeHandles } from "./ResizeHandles";
 
 // ── Props ──
 
 export interface FlowNodeContainerProps {
   node: FlowNode;
   isSelected: boolean;
+  zoom?: number;
 
   // Canvas interaction
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
@@ -50,6 +53,7 @@ export interface FlowNodeContainerProps {
 export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   node,
   isSelected,
+  zoom = 1,
   onMouseDown,
   onDoubleClick,
   onDelete,
@@ -69,6 +73,18 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   const isPlayable = PLAYABLE_TYPES.has(node.type);
   const isRunning = node.llmStatus === "running";
   const lockMode = getEffectiveLockMode(node);
+
+  const { handleResizeMouseDown } = useNodeResize({
+    nodeId: node.id,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    zoom,
+    minWidth: def.minWidth,
+    minHeight: def.minHeight,
+    onUpdateNode: onUpdateNode || (() => {}),
+  });
 
   // ── Label nodes: transparent text annotation with inline editing ──
   if (node.type === "label") {
@@ -204,6 +220,14 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
           <DeleteButton nodeId={node.id} onDelete={onDelete} />
         )}
       </div>
+
+      {/* Resize handles — hidden when locked */}
+      {lockMode === "none" && onUpdateNode && (
+        <ResizeHandles
+          isSelected={isSelected}
+          onResizeMouseDown={handleResizeMouseDown}
+        />
+      )}
 
       {/* Lock indicator */}
       {lockMode === "canvas" && (

@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
+import { useNodeResize } from "./useNodeResize";
+import { ResizeHandles } from "./ResizeHandles";
 
 // ── Output config options ──
 
@@ -44,6 +46,7 @@ interface FlowResearchNodeProps {
   node: FlowNode;
   edges: FlowEdge[];
   isSelected: boolean;
+  zoom: number;
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
   onDoubleClick: (e: React.MouseEvent, nodeId: string) => void;
   onDelete: (nodeId: string) => void;
@@ -57,6 +60,7 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
   node,
   edges,
   isSelected,
+  zoom,
   onMouseDown,
   onDoubleClick,
   onDelete,
@@ -69,9 +73,22 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
   const oc = node.outputConfig || DEFAULT_RESEARCH_OUTPUT_CONFIG;
   const lm = getEffectiveLockMode(node);
 
+  const { handleResizeMouseDown } = useNodeResize({
+    nodeId: node.id,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    zoom,
+    minWidth: 200,
+    minHeight: 200,
+    onUpdateNode,
+  });
+
   // Resolve connected inputs by role
   const objectiveEdges = edges.filter((e) => e.toNodeId === node.id && e.role === "objective");
   const contextEdges = edges.filter((e) => e.toNodeId === node.id && e.role === "context");
+  const outputFormatEdges = edges.filter((e) => e.toNodeId === node.id && e.role === "output-format");
   const plainEdges = edges.filter((e) => e.toNodeId === node.id && !e.role);
 
   const updateConfig = useCallback(
@@ -143,7 +160,41 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
         </div>
       </div>
 
-      {/* ── ZONE 3: CONFIG BODY (shows active settings) ── */}
+      {/* ── ZONE 3: OUTPUT FORMAT ── */}
+      <div className="px-2 py-1 border-b border-blue-500/20" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
+          <span className="text-[8px] font-semibold uppercase tracking-wider text-violet-400/70">Output Format</span>
+          {outputFormatEdges.length > 0 && (
+            <span className="text-[7px] text-violet-400/50">{outputFormatEdges.length} template</span>
+          )}
+          <div className="ml-auto flex items-center gap-0.5">
+            <button
+              className={cn(
+                "text-[7px] px-1 py-0.5 rounded transition-colors",
+                (oc.outputMode || "consolidated") === "consolidated"
+                  ? "bg-violet-500/30 text-violet-300 font-semibold"
+                  : "bg-muted/30 text-muted-foreground/50 hover:bg-muted/50",
+              )}
+              onClick={(e) => { e.stopPropagation(); updateConfig({ outputMode: "consolidated" }); }}
+            >
+              1 Doc
+            </button>
+            <button
+              className={cn(
+                "text-[7px] px-1 py-0.5 rounded transition-colors",
+                oc.outputMode === "split"
+                  ? "bg-violet-500/30 text-violet-300 font-semibold"
+                  : "bg-muted/30 text-muted-foreground/50 hover:bg-muted/50",
+              )}
+              onClick={(e) => { e.stopPropagation(); updateConfig({ outputMode: "split" }); }}
+            >
+              N Docs
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── ZONE 4: CONFIG BODY (shows active settings) ── */}
       <div className="px-2 py-1.5 flex-1 overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-1 mb-1">
           <Settings2 className="w-2.5 h-2.5 text-muted-foreground/50" />
@@ -270,6 +321,14 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
           </button>
         )}
       </div>
+
+      {/* Resize handles */}
+      {lm === "none" && (
+        <ResizeHandles
+          isSelected={isSelected}
+          onResizeMouseDown={handleResizeMouseDown}
+        />
+      )}
     </div>
   );
 });

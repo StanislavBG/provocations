@@ -180,6 +180,7 @@ export function FlowExpandedOverlay({
           top: statusBarPosition === "top" ? sbHeight : "0px",
           bottom: statusBarPosition === "bottom" ? sbHeight : "0px",
         }}
+        onWheel={(e) => e.stopPropagation()}
       >
         {/* Accent header bar */}
         <div

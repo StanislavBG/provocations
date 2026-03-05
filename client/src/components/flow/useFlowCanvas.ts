@@ -128,7 +128,12 @@ export interface FlowNode {
     focusMode?: "explore" | "verify" | "gather" | "analyze" | "synthesize" | "reason" | "deep-research";
     outputCount?: number;
     customInstruction?: string;
+    outputMode?: "consolidated" | "split";
   };
+  /** Pre-process hook: instruction text to transform input before execution */
+  preProcess?: string;
+  /** Post-process hook: instruction text to transform output after execution */
+  postProcess?: string;
   /** Interview node: persisted Q&A entries */
   interviewEntries?: Array<{ id: string; question: string; answer: string; topic: string; timestamp: number }>;
   /** Interview node: objective text */
@@ -171,7 +176,7 @@ export interface FlowEdge {
   fromNodeId: string;
   toNodeId: string;
   /** Role of the connection — how the source data is used by the target */
-  role?: "context" | "objective";
+  role?: "context" | "objective" | "output-format";
 }
 
 export interface FlowViewport {
@@ -305,7 +310,7 @@ export function useFlowCanvas() {
   }, []);
 
   const addEdge = useCallback(
-    (fromNodeId: string, toNodeId: string, role?: "context" | "objective"): string => {
+    (fromNodeId: string, toNodeId: string, role?: "context" | "objective" | "output-format"): string => {
       pushHistory();
       const id = generateId("edge");
       const edge: FlowEdge = { id, fromNodeId, toNodeId };
