@@ -39,6 +39,7 @@ interface FlowCanvasProps {
   onToggleLock?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
+  onToggleTrigger?: (nodeId: string) => void;
   transparentBg?: boolean;
   gridOpacity?: number;
   gridColor?: string;
@@ -92,6 +93,7 @@ export function FlowCanvas({
   onToggleLock,
   onDropTool,
   onDragStart,
+  onToggleTrigger,
   transparentBg,
   gridOpacity = 0.2,
   gridColor = "currentColor",
@@ -245,7 +247,7 @@ export function FlowCanvas({
       <FlowYoutubeNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
     );
     if (node.type === "timer-event") return (
-      <FlowTimerEventNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+      <FlowTimerEventNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onToggleTrigger={onToggleTrigger || (() => {})} />
     );
     if (node.type === "store") return (
       <FlowStoreNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
@@ -273,7 +275,7 @@ export function FlowCanvas({
         onUpdateNode={onUpdateNode}
       />
     );
-  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote]);
+  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote, onToggleTrigger]);
 
   const cursorClass = frozen
     ? "cursor-not-allowed"

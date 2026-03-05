@@ -1,5 +1,13 @@
-import React, { useCallback, useRef, useEffect, useState } from "react";
-import { Timer, Play, Square, Trash2, Lock, Unlock, Monitor, Zap, Radio } from "lucide-react";
+/**
+ * FlowTimerEventNode — Compact card for trigger nodes (presentational).
+ *
+ * All business logic (intervals, activation, deactivation, chain propagation)
+ * is handled by useLifecycleEngine. This component only renders state and
+ * delegates user actions via onToggleTrigger / onUpdateNode.
+ */
+
+import React, { useCallback } from "react";
+import { Timer, Play, Square, Trash2, Lock, Unlock, Monitor, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -13,6 +21,8 @@ interface FlowTimerEventNodeProps {
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
+  /** Lifecycle engine toggle — activates or deactivates the trigger */
+  onToggleTrigger: (nodeId: string) => void;
 }
 
 export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
@@ -23,79 +33,22 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
   onUpdateNode,
   onToggleLock,
   onPortMouseDown,
+  onToggleTrigger,
 }: FlowTimerEventNodeProps) {
-  const intervalRef = useRef<number | null>(null);
-  const [isRunning, setIsRunning] = useState(node.timerRunning ?? false);
-  const countRef = useRef(node.timerPulseCount || 0);
-  const contentRef = useRef(node.content || "");
+  const isRunning = node.timerRunning ?? false;
   const mode = node.triggerMode || "timed";
-
-  useEffect(() => {
-    setIsRunning(node.timerRunning ?? false);
-  }, [node.timerRunning]);
-
-  const startTimer = useCallback(() => {
-    countRef.current = node.timerPulseCount || 0;
-    contentRef.current = node.content || "";
-
-    onUpdateNode(node.id, {
-      timerRunning: true,
-      snippet: mode === "timed" ? "Timed trigger running..." : "Listening for input...",
-      label: node.label === "Trigger" || node.label === "Timer Event"
-        ? `Trigger — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-        : node.label,
-    });
-    setIsRunning(true);
-
-    // Only start interval for timed mode — automated mode is handled by FlowWorkspace
-    if (mode === "timed") {
-      intervalRef.current = window.setInterval(() => {
-        countRef.current++;
-        const now = new Date();
-        const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        const entry = `[${ts}] Pulse #${countRef.current}`;
-        contentRef.current += (contentRef.current ? "\n" : "") + entry;
-
-        onUpdateNode(node.id, {
-          timerPulseCount: countRef.current,
-          timerLastPulse: now.toISOString(),
-          content: contentRef.current,
-          snippet: `Pulse #${countRef.current} — ${ts}`,
-        });
-      }, node.timerInterval || 5000);
-    }
-  }, [node.id, node.label, node.timerInterval, node.timerPulseCount, node.content, onUpdateNode, mode]);
-
-  const stopTimer = useCallback(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    setIsRunning(false);
-    onUpdateNode(node.id, {
-      timerRunning: false,
-      snippet: mode === "timed"
-        ? `Stopped — ${countRef.current} pulses`
-        : `Stopped — ${countRef.current} fires`,
-    });
-  }, [node.id, onUpdateNode, mode]);
-
-  const toggleTimer = useCallback(() => {
-    if (isRunning) stopTimer();
-    else startTimer();
-  }, [isRunning, startTimer, stopTimer]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, []);
-
   const interval = node.timerInterval || 5000;
+
+  const handleModeChange = useCallback(
+    (newMode: "timed" | "automated") => {
+      if (isRunning) onToggleTrigger(node.id);
+      onUpdateNode(node.id, {
+        triggerMode: newMode,
+        snippet: newMode === "timed" ? "Timed trigger ready" : "Auto trigger ready",
+      });
+    },
+    [node.id, isRunning, onUpdateNode, onToggleTrigger],
+  );
 
   return (
     <div
@@ -143,10 +96,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
                 ? "bg-emerald-500/20 text-emerald-500"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            onClick={() => {
-              if (isRunning) stopTimer();
-              onUpdateNode(node.id, { triggerMode: "timed", snippet: "Timed trigger ready" });
-            }}
+            onClick={() => handleModeChange("timed")}
           >
             Timed
           </button>
@@ -157,10 +107,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
                 ? "bg-emerald-500/20 text-emerald-500"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            onClick={() => {
-              if (isRunning) stopTimer();
-              onUpdateNode(node.id, { triggerMode: "automated", snippet: "Auto trigger ready" });
-            }}
+            onClick={() => handleModeChange("automated")}
           >
             Auto
           </button>
@@ -174,7 +121,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
               ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-md shadow-emerald-500/30"
               : "bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25",
           )}
-          onClick={toggleTimer}
+          onClick={() => onToggleTrigger(node.id)}
         >
           {isRunning ? <Square className="w-4 h-4" /> : <Play className="w-5 h-5" />}
         </button>
@@ -227,7 +174,11 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
               <button
                 className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); if (isRunning) stopTimer(); onDelete(node.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isRunning) onToggleTrigger(node.id);
+                  onDelete(node.id);
+                }}
                 title="Delete node"
               >
                 <Trash2 className="w-2.5 h-2.5" />

@@ -31,6 +31,8 @@ import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
 import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
 import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
+import { useLifecycleEngine } from "@/components/flow/useLifecycleEngine";
+import { LifecycleConsole } from "@/components/flow/LifecycleConsole";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
 import { LlmExpandedView } from "@/components/flow/expanded/LlmExpandedView";
 import { AudioExpandedView } from "@/components/flow/expanded/AudioExpandedView";
@@ -404,6 +406,7 @@ function FlowWorkspaceInner() {
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [collabEnabled, setCollabEnabled] = useState(false);
+  const [lifecycleConsoleOpen, setLifecycleConsoleOpen] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
 
   // ── Workspace tabs ──
@@ -1739,6 +1742,18 @@ function FlowWorkspaceInner() {
     [addNode, addEdge, updateNode, toast],
   );
 
+  // ── Lifecycle engine: manages trigger intervals + automation watchers ──
+
+  const { toggleTrigger } = useLifecycleEngine({
+    nodes: state.nodes,
+    edges: state.edges,
+    updateNode,
+    addNode,
+    addEdge,
+    toast,
+    executeNode: handlePlayNode,
+  });
+
   // ── Drop tool from dock onto canvas ──
 
   const handleDropTool = useCallback(
@@ -1907,99 +1922,7 @@ function FlowWorkspaceInner() {
     }
   }, [state.nodes, addNode, addEdge]);
 
-  // ── Trigger: auto-create/append to document node on each timed pulse ──
-
-  const timerDocMapRef = useRef<Map<string, string>>(new Map());
-  const timerLastPulseRef = useRef<Map<string, number>>(new Map());
-
-  useEffect(() => {
-    for (const node of state.nodes) {
-      if (node.type !== "timer-event" || !node.timerRunning) continue;
-      // Only apply auto-document for timed mode
-      if (node.triggerMode === "automated") continue;
-      const pulseCount = node.timerPulseCount || 0;
-      const lastKnown = timerLastPulseRef.current.get(node.id) || 0;
-      if (pulseCount <= lastKnown) continue;
-      timerLastPulseRef.current.set(node.id, pulseCount);
-
-      const existingDocId = timerDocMapRef.current.get(node.id);
-      const existingDocNode = existingDocId ? state.nodes.find((n) => n.id === existingDocId) : null;
-
-      if (existingDocNode) {
-        const lastEntry = node.content?.split("\n").pop() || `Pulse #${pulseCount}`;
-        const updatedContent = (existingDocNode.documentContent || "") + "\n" + lastEntry;
-        updateNode(existingDocId!, {
-          documentContent: updatedContent,
-          content: updatedContent,
-          snippet: updatedContent.slice(-200),
-        });
-      } else {
-        const docX = node.x + node.width + 60;
-        const docY = node.y;
-        const docId = addNode("document", docX, docY, {
-          label: `Trigger Log — ${new Date().toLocaleDateString()}`,
-          snippet: node.content?.slice(-200) || "Trigger events",
-          content: node.content || "",
-          documentContent: node.content || "",
-        });
-        addEdge(node.id, docId);
-        timerDocMapRef.current.set(node.id, docId);
-      }
-    }
-  }, [state.nodes, addNode, addEdge, updateNode]);
-
-  // ── Trigger (automated mode): watch for upstream node completion ──
-  // When an input node's llmStatus transitions to "done", fire downstream chain.
-
-  const automatedTriggerLastSeenRef = useRef<Map<string, string>>(new Map());
-
-  useEffect(() => {
-    for (const node of state.nodes) {
-      if (node.type !== "timer-event" || node.triggerMode !== "automated" || !node.timerRunning) continue;
-
-      // Find input nodes connected to this trigger
-      const inputEdges = state.edges.filter((e) => e.toNodeId === node.id);
-      for (const edge of inputEdges) {
-        const inputNode = state.nodes.find((n) => n.id === edge.fromNodeId);
-        if (!inputNode) continue;
-
-        const status = inputNode.llmStatus || inputNode.socialGenStatus || "idle";
-        const key = `${node.id}:${inputNode.id}`;
-        const lastSeen = automatedTriggerLastSeenRef.current.get(key);
-
-        // Fire when status transitions to "done" and we haven't already fired for this completion
-        if (status === "done" && lastSeen !== "done") {
-          automatedTriggerLastSeenRef.current.set(key, "done");
-
-          // Log the trigger fire
-          const now = new Date();
-          const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-          const count = (node.timerPulseCount || 0) + 1;
-          const entry = `[${ts}] Triggered by "${inputNode.label}" completion`;
-          const newContent = (node.content || "") + (node.content ? "\n" : "") + entry;
-
-          updateNode(node.id, {
-            timerPulseCount: count,
-            timerLastPulse: now.toISOString(),
-            content: newContent,
-            snippet: `Fired #${count} — ${inputNode.label}`,
-          });
-
-          // Propagate to downstream nodes
-          const downstreamEdges = state.edges.filter((e) => e.fromNodeId === node.id);
-          for (const de of downstreamEdges) {
-            const downstream = state.nodes.find((n) => n.id === de.toNodeId);
-            if (downstream && ["research", "interview", "painter", "timeline", "llm", "social-post", "api-connection"].includes(downstream.type)) {
-              setTimeout(() => handlePlayNode(de.toNodeId), 300);
-            }
-          }
-        } else if (status !== "done") {
-          // Reset tracking when node goes back to non-done state
-          automatedTriggerLastSeenRef.current.set(key, status);
-        }
-      }
-    }
-  }, [state.nodes, state.edges, updateNode, handlePlayNode]);
+  // Trigger lifecycle is now managed by useLifecycleEngine above.
 
   // ── Context Store: Load File from dialog ──
 
@@ -2626,6 +2549,7 @@ function FlowWorkspaceInner() {
           onCreateEdge={handleCreateEdge}
           onDeleteEdge={deleteEdge}
           onPlayNode={handlePlayNode}
+          onToggleTrigger={toggleTrigger}
           onToggleLock={(nodeId) => {
             const node = state.nodes.find((n) => n.id === nodeId);
             if (!node) return;
@@ -2654,6 +2578,27 @@ function FlowWorkspaceInner() {
 
         {!dockHidden && <FtuxDock />}
         <FlowLoadingBar active={canvasLoading || isSaving} progress={canvasLoading ? loadProgress : undefined} />
+
+        {/* Lifecycle Console toggle button */}
+        <button
+          className={cn(
+            "absolute bottom-2 right-2 z-30 w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold transition-all shadow-sm border",
+            lifecycleConsoleOpen
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-card/80 text-muted-foreground border-border/50 hover:bg-card hover:text-foreground",
+          )}
+          onClick={() => setLifecycleConsoleOpen((v) => !v)}
+          title="Toggle Lifecycle Console"
+        >
+          LC
+        </button>
+
+        {/* Lifecycle Console panel */}
+        {lifecycleConsoleOpen && (
+          <div className="absolute bottom-0 left-0 right-0 z-30 h-52 border-t shadow-lg">
+            <LifecycleConsole onClose={() => setLifecycleConsoleOpen(false)} />
+          </div>
+        )}
       </div>
 
       {/* Context Store: Load/Save choice dialog */}
@@ -3289,6 +3234,7 @@ function FlowWorkspaceInner() {
                   node={activeExpandedNode}
                   onUpdateNode={updateNode}
                   onPlayNode={handlePlayNode}
+                  onToggleTrigger={toggleTrigger}
                   allNodes={state.nodes}
                   allEdges={state.edges}
                 />
