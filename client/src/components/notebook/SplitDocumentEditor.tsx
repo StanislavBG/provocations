@@ -13,9 +13,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { generateId, cn } from "@/lib/utils";
+import { ExportMenu } from "./ExportMenu";
 import {
   Eye,
-  Download,
   Target,
   ChevronDown,
   ChevronRight,
@@ -473,16 +473,6 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
     toast({ title: "Feedback sent", description: "Remixing your feedback into the selected area..." });
   }, [selectionEditText, onWriterFeedback, selectionPopover, toast]);
 
-  const handleDownload = () => {
-    const blob = new Blob([text], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${templateName || "document"}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const documentHeaderActions = (
     <div className="flex items-center gap-1">
       {onSaveToContext && (
@@ -518,16 +508,11 @@ export const SplitDocumentEditor = forwardRef<SplitDocumentEditorHandle, SplitDo
           <TooltipContent>Version History ({versions.length})</TooltipContent>
         </Tooltip>
       )}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6"
-        onClick={handleDownload}
+      <ExportMenu
+        text={text}
+        title={templateName || activeTab?.title || "document"}
         disabled={!text.trim()}
-        title="Download as .md"
-      >
-        <Download className="w-3.5 h-3.5" />
-      </Button>
+      />
     </div>
   );
 
