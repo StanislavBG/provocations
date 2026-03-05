@@ -33,6 +33,8 @@ import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import { useLifecycleEngine } from "@/components/flow/useLifecycleEngine";
 import { LifecycleConsole } from "@/components/flow/LifecycleConsole";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
+import type { LifecyclePhase, LifecycleStatus } from "@/lib/lifecycleLog";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
 import { LlmExpandedView } from "@/components/flow/expanded/LlmExpandedView";
 import { AudioExpandedView } from "@/components/flow/expanded/AudioExpandedView";
@@ -1340,12 +1342,59 @@ function FlowWorkspaceInner() {
     [addEdge, state.edges, state.nodes],
   );
 
+  // ── Lifecycle logging helper ──
+
+  const lcLog = useCallback(
+    (node: FlowNode, phase: LifecyclePhase, status: LifecycleStatus, message: string, extra?: { durationMs?: number; downstreamIds?: string[]; error?: string }) => {
+      lifecycleLogStore.push({
+        phase,
+        status,
+        nodeId: node.id,
+        nodeType: node.type,
+        nodeLabel: node.label || node.type,
+        message,
+        ...extra,
+      });
+    },
+    [],
+  );
+
+  // ── Chain propagation helper (uses handlePlayNodeRef to avoid circular dep) ──
+
+  const handlePlayNodeRef = useRef<(nodeId: string) => Promise<void>>(async () => {});
+
+  const propagateDownstream = useCallback(
+    (nodeId: string, node: FlowNode) => {
+      const downstreamEdges = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
+      const downstreamIds: string[] = [];
+      for (const edge of downstreamEdges) {
+        const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
+        if (!downstream) continue;
+        const def = FLOW_NODE_REGISTRY[downstream.type];
+        if (def?.supportsChainExecution) {
+          downstreamIds.push(edge.toNodeId);
+          const toId = edge.toNodeId;
+          setTimeout(() => handlePlayNodeRef.current(toId), 500);
+        }
+      }
+      if (downstreamIds.length > 0) {
+        lcLog(node, "chain", "start", `Propagating to ${downstreamIds.length} downstream node(s)`, { downstreamIds });
+      }
+    },
+    [lcLog],
+  );
+
   // ── Play node: auto-execute a node using its inputs ──
 
   const handlePlayNode = useCallback(
     async (nodeId: string) => {
       const node = stateRef.current.nodes.find((n) => n.id === nodeId);
       if (!node) return;
+
+      const t0 = performance.now();
+
+      // ── PRE-PROCESS: Validate inputs ──
+      lcLog(node, "pre-process", "start", "Validating inputs");
 
       // Gather connected input nodes (via edges pointing TO this node)
       const inputEdges = stateRef.current.edges.filter((e) => e.toNodeId === nodeId);
@@ -1355,11 +1404,13 @@ function FlowWorkspaceInner() {
 
       // Document nodes: no-op (they're static sources)
       if (node.type === "document" || node.type === "context-doc") {
+        lcLog(node, "pre-process", "skipped", "Passive node — no execution needed");
         toast({ title: "Already complete", description: "Document nodes are static sources" });
         return;
       }
 
       if (inputNodes.length === 0) {
+        lcLog(node, "pre-process", "error", "No inputs connected", { error: "No upstream nodes" });
         toast({ title: "No inputs connected", description: "Connect document nodes first" });
         return;
       }
@@ -1400,12 +1451,18 @@ function FlowWorkspaceInner() {
       const additionalContextText = contextTexts.join("\n\n---\n\n");
 
       if (!combinedContent.trim() && node.type !== "research") {
+        lcLog(node, "pre-process", "error", "Input nodes have no content", { error: "Empty input" });
         toast({ title: "No content", description: "Input nodes have no content" });
         return;
       }
 
+      lcLog(node, "pre-process", "success", `${inputNodes.length} input(s), ${combinedContent.length} chars`);
+
       // Mark node as running
       updateNode(nodeId, { llmStatus: "running", snippet: "Running..." });
+
+      // ── PROCESS: Execute node-specific logic ──
+      lcLog(node, "process", "start", `Processing as ${node.type}`);
 
       try {
         // ── Pre-process hook ──
@@ -1532,6 +1589,9 @@ function FlowWorkspaceInner() {
           const imgData = (await imgRes.json()) as { images?: string[]; error?: string };
 
           if (imgData.images && imgData.images.length > 0) {
+            const elapsed = Math.round(performance.now() - t0);
+            lcLog(node, "process", "success", `Image generated: ${imagePrompt.slice(0, 60)}...`, { durationMs: elapsed });
+
             updateNode(nodeId, {
               llmStatus: "done",
               snippet: `Generated: ${imagePrompt.slice(0, 80)}...`,
@@ -1545,30 +1605,28 @@ function FlowWorkspaceInner() {
               content: imagePrompt,
               documentContent: imagePrompt,
             });
+
+            lcLog(node, "post-process", "success", "Output image node created");
             toast({ title: "Image generated" });
           } else {
-            updateNode(nodeId, { llmStatus: "error", snippet: imgData.error || "Image generation failed" });
+            const errMsg = imgData.error || "Image generation failed";
+            lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
+            updateNode(nodeId, { llmStatus: "error", snippet: errMsg });
             updateNode(imgNodeId, {
               label: "Generation failed",
-              snippet: imgData.error || "Image generation failed",
+              snippet: errMsg,
             });
             toast({ title: "Image generation failed", variant: "destructive" });
           }
 
-          // Chain propagation for painter
-          const downstreamEdges2 = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
-          for (const edge of downstreamEdges2) {
-            const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
-            if (downstream && ["research", "interview", "painter", "timeline", "llm", "social-post", "api-connection"].includes(downstream.type)) {
-              setTimeout(() => handlePlayNode(edge.toNodeId), 500);
-            }
-          }
+          propagateDownstream(nodeId, node);
           return;
         } else if (node.type === "social-post") {
           // Social Post: call LLM to generate platform-specific posts from upstream content
           const platforms = node.socialPlatforms || {};
           const enabledPlatforms = Object.entries(platforms).filter(([, v]) => v).map(([k]) => k);
           if (enabledPlatforms.length === 0) {
+            lcLog(node, "pre-process", "error", "No platforms enabled", { error: "No platforms selected" });
             updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
             toast({ title: "No platforms enabled", description: "Double-click to enable platforms" });
             return;
@@ -1597,30 +1655,31 @@ function FlowWorkspaceInner() {
               });
               addEdge(nodeId, childId);
             }
+            const elapsed = Math.round(performance.now() - t0);
+            lcLog(node, "process", "success", `Generated ${enabledPlatforms.length} posts`, { durationMs: elapsed });
+
             updateNode(nodeId, {
               socialGeneratedPosts: generatedPosts,
               socialGenStatus: "done",
               llmStatus: "done",
               snippet: `Generated ${enabledPlatforms.length} posts`,
             });
+
+            lcLog(node, "post-process", "success", `Created ${enabledPlatforms.length} platform document nodes`);
             toast({ title: "Posts generated", description: `Created ${enabledPlatforms.length} platform posts` });
-          } catch {
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : "Generation failed";
+            lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
             updateNode(nodeId, { socialGenStatus: "error", llmStatus: "error", snippet: "Generation failed" });
             toast({ title: "Social post generation failed", variant: "destructive" });
           }
-          // Chain propagation
-          const downstreamEdges3 = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
-          for (const edge of downstreamEdges3) {
-            const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
-            if (downstream && downstream.type === "api-connection") {
-              setTimeout(() => handlePlayNode(edge.toNodeId), 500);
-            }
-          }
+          propagateDownstream(nodeId, node);
           return;
         } else if (node.type === "api-connection") {
           // API Connection: post content to connected platform
           const platform = node.apiService;
           if (!platform || platform === "webhook" || platform === "custom") {
+            lcLog(node, "pre-process", "error", "No platform configured", { error: "Missing platform" });
             updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
             toast({ title: "No platform configured", description: "Double-click to select a platform" });
             return;
@@ -1639,23 +1698,53 @@ function FlowWorkspaceInner() {
               timestamp: new Date().toISOString(),
               externalId: data.externalPostId,
             };
+            const elapsed = Math.round(performance.now() - t0);
+
             updateNode(nodeId, {
               llmStatus: data.success ? "done" : "error",
               snippet: data.success ? `Posted to ${platform}` : (data.error || "Post failed"),
               apiLastResult: logEntry,
               apiPostLog: [...(node.apiPostLog || []), logEntry],
             });
+
+            if (data.success) {
+              lcLog(node, "process", "success", `Posted to ${platform}`, { durationMs: elapsed });
+              lcLog(node, "post-process", "success", `Post log updated (${(node.apiPostLog?.length || 0) + 1} entries)`);
+            } else {
+              lcLog(node, "process", "error", data.error || "Post failed", { error: data.error, durationMs: elapsed });
+            }
+
             toast({ title: data.success ? "Posted successfully" : "Post failed", variant: data.success ? "default" : "destructive" });
-          } catch {
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : "Post failed";
+            lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
             updateNode(nodeId, { llmStatus: "error", snippet: "Post failed" });
             toast({ title: "API post failed", variant: "destructive" });
           }
+          propagateDownstream(nodeId, node);
           return;
         } else if (node.type === "llm") {
           // LLM nodes already have their own Run button — delegate there
+          lcLog(node, "pre-process", "skipped", "LLM nodes use their own Run button");
           toast({ title: "Use Run", description: "LLM nodes have their own Run button" });
           updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
           return;
+        } else if (node.type === "filter" || node.type === "gate" || node.type === "router" || node.type === "merge") {
+          // Logic nodes: pass-through content
+          if (node.type === "gate" && node.gateOpen === false) {
+            lcLog(node, "pre-process", "error", "Gate is closed", { error: "Gate closed" });
+            updateNode(nodeId, { llmStatus: "idle", snippet: "Gate closed" });
+            toast({ title: "Gate closed", description: "Open the gate to pass content through" });
+            return;
+          }
+
+          if (node.type === "filter" && node.logicRule) {
+            const lines = combinedContent.split("\n");
+            const filtered = lines.filter((l) => l.toLowerCase().includes(node.logicRule!.toLowerCase()));
+            outputText = filtered.length > 0 ? filtered.join("\n") : combinedContent;
+          } else {
+            outputText = combinedContent;
+          }
         } else {
           // Generic: use /api/write
           const res = await apiRequest("POST", "/api/write", {
@@ -1667,12 +1756,20 @@ function FlowWorkspaceInner() {
           outputText = data.document || "";
         }
 
+        const elapsed = Math.round(performance.now() - t0);
+
         if (!outputText.trim()) {
+          lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });
           updateNode(nodeId, { llmStatus: "error", snippet: "No output generated" });
           return;
         }
 
-        // ── Post-process hook ──
+        lcLog(node, "process", "success", `${outputText.length} chars output`, { durationMs: elapsed });
+
+        // ── POST-PROCESS ──
+        lcLog(node, "post-process", "start", "Post-processing and creating output");
+
+        // Post-process hook
         if (node.postProcess?.trim()) {
           updateNode(nodeId, { snippet: "Post-processing..." });
           try {
@@ -1712,6 +1809,7 @@ function FlowWorkspaceInner() {
             });
             addEdge(nodeId, docId);
           }
+          lcLog(node, "post-process", "success", `Created ${sections.length} split output documents`);
           toast({ title: "Execution complete", description: `Created ${sections.length} output documents` });
         } else {
           // Consolidated mode: single output document
@@ -1721,26 +1819,24 @@ function FlowWorkspaceInner() {
             snippet: outputText.slice(0, 200),
           });
           addEdge(nodeId, outputDocId);
+          lcLog(node, "post-process", "success", "Output document created");
           toast({ title: "Execution complete", description: `Output document created` });
         }
 
-        // ── Chain propagation: auto-trigger downstream playable nodes ──
-        // Find nodes that receive input from this node (edges from nodeId → downstream)
-        const downstreamEdges = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
-        for (const edge of downstreamEdges) {
-          const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
-          if (downstream && ["research", "interview", "painter", "timeline", "llm", "social-post", "api-connection"].includes(downstream.type)) {
-            // Delay slightly to let state update propagate
-            setTimeout(() => handlePlayNode(edge.toNodeId), 500);
-          }
-        }
-      } catch {
+        // ── Chain propagation ──
+        propagateDownstream(nodeId, node);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Execution failed";
+        lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
         updateNode(nodeId, { llmStatus: "error", snippet: "Execution failed" });
         toast({ title: "Execution failed", variant: "destructive" });
       }
     },
-    [addNode, addEdge, updateNode, toast],
+    [addNode, addEdge, updateNode, toast, lcLog, propagateDownstream],
   );
+
+  // Keep ref in sync for chain propagation
+  handlePlayNodeRef.current = handlePlayNode;
 
   // ── Lifecycle engine: manages trigger intervals + automation watchers ──
 

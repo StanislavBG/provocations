@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { SOCIAL_PLATFORMS, type PlatformId } from "@/lib/social-platforms";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 interface SocialPostExpandedViewProps {
   node: FlowNode;
@@ -91,18 +92,30 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
     }
   }, [platforms, node.id, onUpdateNode, activeTab]);
 
+  const lcLog = useCallback(
+    (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
+      lifecycleLogStore.push({ phase, status, nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "Social Post", message, ...extra });
+    },
+    [node.id, node.type, node.label],
+  );
+
   const handleGenerate = useCallback(async () => {
+    const t0 = performance.now();
     if (enabledPlatforms.length === 0) {
+      lcLog("pre-process", "error", "No platforms enabled", { error: "No platforms" });
       toast({ title: "No platforms enabled", description: "Toggle at least one platform" });
       return;
     }
     if (!inputContent.trim()) {
+      lcLog("pre-process", "error", "No input content", { error: "Empty input" });
       toast({ title: "No input content", description: "Connect content nodes first" });
       return;
     }
 
+    lcLog("pre-process", "success", `${enabledPlatforms.length} platform(s), ${inputContent.length} chars`);
     setIsGenerating(true);
     onUpdateNode(node.id, { socialGenStatus: "generating" });
+    lcLog("process", "start", `Generating for: ${enabledPlatforms.join(", ")}`);
 
     try {
       const res = await apiRequest("POST", "/api/social/generate", {
@@ -122,6 +135,9 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
         };
       }
 
+      const elapsed = Math.round(performance.now() - t0);
+      lcLog("process", "success", `Generated ${Object.keys(posts).length} posts`, { durationMs: elapsed });
+
       onUpdateNode(node.id, {
         socialGeneratedPosts: posts,
         socialGenStatus: "done",
@@ -132,14 +148,17 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
         setActiveTab(Object.keys(posts)[0]);
       }
 
+      lcLog("post-process", "success", "Posts saved to node");
       toast({ title: "Posts generated" });
-    } catch {
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Generation failed";
+      lcLog("process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
       onUpdateNode(node.id, { socialGenStatus: "error" });
       toast({ title: "Generation failed", variant: "destructive" });
     } finally {
       setIsGenerating(false);
     }
-  }, [enabledPlatforms, inputContent, intent, tone, node.id, onUpdateNode, toast, activeTab]);
+  }, [enabledPlatforms, inputContent, intent, tone, node.id, onUpdateNode, toast, activeTab, lcLog]);
 
   const currentPost = activeTab ? generatedPosts[activeTab] : null;
   const currentPlatform = activeTab ? SOCIAL_PLATFORMS[activeTab] : null;

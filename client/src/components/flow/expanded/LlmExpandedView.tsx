@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { LLM_PRESETS, getPreset } from "../llm-presets";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 interface LlmExpandedViewProps {
   node: FlowNode;
@@ -40,34 +41,51 @@ export function LlmExpandedView({ node, nodes, edges, onUpdateNode }: LlmExpande
       .join("\n\n---\n\n");
   }, [node.id, nodes, edges]);
 
+  const lcLog = useCallback(
+    (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
+      lifecycleLogStore.push({ phase, status, nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "Text Mods", message, ...extra });
+    },
+    [node.id, node.type, node.label],
+  );
+
   const handleRun = useCallback(async () => {
+    const t0 = performance.now();
     if (!inputContent.trim()) {
+      lcLog("pre-process", "error", "No inputs connected", { error: "Empty input" });
       toast({ title: "No inputs", description: "Connect input nodes first", variant: "destructive" });
       return;
     }
 
+    lcLog("pre-process", "success", `${inputContent.length} chars input, preset: ${preset.label}`);
     setIsRunning(true);
     onUpdateNode(node.id, { llmStatus: "running" });
+    lcLog("process", "start", `Running ${preset.label}`);
 
     try {
       const objective = node.llmObjective || preset.defaultObjective;
       const res = await apiRequest("POST", preset.endpoint, preset.buildRequest(inputContent, objective));
       const data = await res.json();
       const output = preset.extractOutput(data as Record<string, unknown>);
+      const elapsed = Math.round(performance.now() - t0);
+
+      lcLog("process", "success", `${output.length} chars output`, { durationMs: elapsed });
 
       onUpdateNode(node.id, {
         llmStatus: "done",
         llmOutput: output,
         snippet: output.slice(0, 200),
       });
+      lcLog("post-process", "success", "Output updated on node");
       toast({ title: "Complete" });
-    } catch {
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Execution failed";
+      lcLog("process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
       onUpdateNode(node.id, { llmStatus: "error", llmError: "Execution failed" });
       toast({ title: "Failed", variant: "destructive" });
     } finally {
       setIsRunning(false);
     }
-  }, [node.id, node.llmObjective, inputContent, preset, onUpdateNode, toast]);
+  }, [node.id, node.llmObjective, inputContent, preset, onUpdateNode, toast, lcLog]);
 
   const status = node.llmStatus ?? "idle";
 

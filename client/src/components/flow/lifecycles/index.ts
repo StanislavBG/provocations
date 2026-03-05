@@ -11,6 +11,10 @@ import { createLlmHandlers } from "./llm";
 import { createPainterHandlers } from "./painter";
 import { createGenericHandlers } from "./generic";
 import { createTimerHandlers } from "./timer";
+import { createSocialPostHandlers } from "./social-post";
+import { createApiConnectionHandlers } from "./api-connection";
+import { createLogicHandlers } from "./logic";
+import { createInterviewHandlers } from "./interview";
 
 /** No-op handlers for passive nodes (document, context-doc, store, audio, label, zone) */
 function createPassiveHandlers(): NodeLifecycleHandlers {
@@ -25,6 +29,10 @@ const LIFECYCLE_FACTORIES: Record<LifecyclePreset, () => NodeLifecycleHandlers> 
   media: createPainterHandlers,
   timer: createTimerHandlers,
   passive: createPassiveHandlers,
+  social: createSocialPostHandlers,
+  api: createApiConnectionHandlers,
+  logic: createLogicHandlers,
+  interview: createInterviewHandlers,
 };
 
 /** Get lifecycle handlers for a given lifecycle preset */
@@ -38,3 +46,7 @@ export { createLlmHandlers } from "./llm";
 export { createPainterHandlers, parsePainterOutput } from "./painter";
 export { createGenericHandlers } from "./generic";
 export { createTimerHandlers } from "./timer";
+export { createSocialPostHandlers } from "./social-post";
+export { createApiConnectionHandlers } from "./api-connection";
+export { createLogicHandlers } from "./logic";
+export { createInterviewHandlers } from "./interview";

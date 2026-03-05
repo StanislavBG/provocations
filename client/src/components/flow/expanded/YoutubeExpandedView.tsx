@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProvokeText } from "@/components/ProvokeText";
 import { useToast } from "@/hooks/use-toast";
 import type { FlowNode } from "../useFlowCanvas";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 interface YoutubeExpandedViewProps {
   node: FlowNode;
@@ -25,8 +26,18 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
   const isFetching = node.youtubeFetchStatus === "fetching";
   const transcript = node.content || "";
 
+  const lcLog = useCallback(
+    (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
+      lifecycleLogStore.push({ phase, status, nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "YouTube", message, ...extra });
+    },
+    [node.id, node.type, node.label],
+  );
+
   const handleFetch = useCallback(async () => {
     if (!url.trim()) return;
+    const t0 = performance.now();
+
+    lcLog("pre-process", "success", `URL: ${url.slice(0, 60)}`);
 
     onUpdateNode(node.id, {
       youtubeUrl: url,
@@ -34,6 +45,8 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
       snippet: "Fetching transcript...",
       youtubeError: undefined,
     });
+
+    lcLog("process", "start", "Fetching transcript via SSE");
 
     try {
       const res = await fetch("/api/youtube/process-video", {
@@ -83,6 +96,9 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
         }
       }
 
+      const elapsed = Math.round(performance.now() - t0);
+      lcLog("process", "success", `${fullTranscript.length} chars transcript`, { durationMs: elapsed });
+
       onUpdateNode(node.id, {
         youtubeFetchStatus: "done",
         youtubeTitle: title,
@@ -91,9 +107,12 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
         snippet: fullTranscript.slice(0, 200),
         label: title ? `YouTube: ${title.slice(0, 30)}` : node.label,
       });
+
+      lcLog("post-process", "success", `Title: ${title || "(none)"}`);
       toast({ title: "Transcript fetched" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed";
+      lcLog("process", "error", msg, { error: msg, durationMs: Math.round(performance.now() - t0) });
       onUpdateNode(node.id, {
         youtubeFetchStatus: "error",
         youtubeError: msg,
@@ -101,7 +120,7 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
       });
       toast({ title: "Fetch failed", description: msg, variant: "destructive" });
     }
-  }, [url, node.id, node.label, onUpdateNode, toast]);
+  }, [url, node.id, node.label, onUpdateNode, toast, lcLog]);
 
   return (
     <div className="flex h-full overflow-hidden">
