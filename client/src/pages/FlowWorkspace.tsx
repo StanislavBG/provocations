@@ -231,6 +231,39 @@ const DOC_TOOLS = [
   { id: "correct", label: "Correct", icon: PenLine, instruction: "Fix grammar, spelling, logic errors, and inconsistencies" },
 ];
 
+/**
+ * Split output by natural --- delimiters (as instructed to the LLM).
+ * Falls back to heading-based splitting. Cap at maxSections.
+ */
+function splitOutputByDelimiters(text: string, maxSections: number): string[] {
+  // Primary: split by horizontal rule delimiters (--- on its own line)
+  const hrParts = text.split(/\n-{3,}\n/).map(s => s.trim()).filter(Boolean);
+  if (hrParts.length > 1) {
+    return hrParts.slice(0, maxSections);
+  }
+
+  // Fallback: split by top-level markdown headings (## )
+  const headingSections: string[] = [];
+  const headingRegex = /^#{1,2}\s+.+$/gm;
+  let match: RegExpExecArray | null;
+  const indices: number[] = [];
+  while ((match = headingRegex.exec(text)) !== null) {
+    indices.push(match.index);
+  }
+  if (indices.length > 1) {
+    for (let i = 0; i < indices.length; i++) {
+      const start = indices[i];
+      const end = i + 1 < indices.length ? indices[i + 1] : text.length;
+      const section = text.slice(start, end).trim();
+      if (section) headingSections.push(section);
+    }
+    return headingSections.slice(0, maxSections);
+  }
+
+  // Last resort: return as single section
+  return [text.trim()];
+}
+
 /** Split output text into N sections by markdown headings, falling back to equal chunks */
 function splitOutputIntoSections(text: string, count: number): string[] {
   // Try splitting by markdown headings (## or #)
@@ -1509,15 +1542,24 @@ function FlowWorkspaceInner() {
         if (node.type === "research") {
           // Build output-aware research prompt from outputConfig
           const oc = node.outputConfig;
-          const effectiveCount = oc?.outputMode === "split"
-            ? (oc?.outputCount === undefined || oc?.outputCount === null ? 5 : Math.min(oc.outputCount, 5))
-            : undefined;
-          const countHint = effectiveCount ? `Provide exactly ${effectiveCount} items/results.` : "";
+          const isInfiniteCount = oc?.outputMode === "split" && (oc?.outputCount === undefined || oc?.outputCount === null);
+          const explicitCount = oc?.outputMode === "split" && oc?.outputCount !== undefined && oc?.outputCount !== null
+            ? Math.min(oc.outputCount, 5) : undefined;
+
+          // Build split instructions for the LLM
+          let splitInstruction = "";
+          if (oc?.outputMode === "split") {
+            if (explicitCount && explicitCount > 0) {
+              splitInstruction = `\n\nIMPORTANT: Structure your response as exactly ${explicitCount} distinct sections. Separate each section with a line containing only "---". Each section should be self-contained and complete.`;
+            } else if (isInfiniteCount) {
+              splitInstruction = `\n\nIMPORTANT: Structure your response as multiple distinct sections — one section per logical item/topic. Separate each section with a line containing only "---". Each section should be self-contained and complete. Use as many sections as the content naturally requires (up to 5 maximum).`;
+            }
+          }
           const customHint = oc?.customInstruction ? `\nAdditional instructions: ${oc.customInstruction}` : "";
-          const templateHint = templateContent ? `\n\nFormat your output according to this template/schema:\n${templateContent}` : "";
+          const templateHint = templateContent ? `\n\nOUTPUT FORMAT INSTRUCTIONS:\n${templateContent}` : "";
           // Use objective text as the primary query; fall back to combined content
           const primaryQuery = processedInput || objectiveText || combinedContent;
-          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${primaryQuery}${countHint ? `\n\n${countHint}` : ""}${customHint}${templateHint}`;
+          const researchPrompt = `Research the following topic thoroughly and provide a comprehensive analysis:\n\n${primaryQuery}${splitInstruction}${customHint}${templateHint}`;
 
           // Stream research using SSE
           const res = await fetch("/api/chat/stream", {
@@ -1813,16 +1855,25 @@ function FlowWorkspaceInner() {
           snippet: outputText.slice(0, 200),
         });
 
-        // ── Split mode: create N separate document nodes ──
+        // ── Split mode: create separate document nodes ──
         const oc2 = node.outputConfig;
-        const splitCount = oc2?.outputMode === "split"
-          ? (oc2?.outputCount === undefined || oc2?.outputCount === null ? 5 : Math.min(oc2.outputCount, 5))
-          : 0;
-        if (oc2?.outputMode === "split" && splitCount > 0) {
-          const sections = splitOutputIntoSections(outputText, splitCount);
+        const isAnySplit = oc2?.outputMode === "split" && (oc2?.outputCount === undefined || oc2?.outputCount === null);
+        const fixedSplitCount = oc2?.outputMode === "split" && oc2?.outputCount !== undefined && oc2?.outputCount !== null
+          ? Math.min(oc2.outputCount, 5) : 0;
+        if (oc2?.outputMode === "split" && (isAnySplit || fixedSplitCount > 0)) {
+          // When ∞: split by natural --- delimiters from LLM output (capped at 5)
+          // When fixed count: use the specified count
+          const sections = isAnySplit
+            ? splitOutputByDelimiters(outputText, 5)
+            : splitOutputIntoSections(outputText, fixedSplitCount);
           for (let i = 0; i < sections.length; i++) {
+            // Try to extract a meaningful label from the first heading in the section
+            const headingMatch = sections[i].match(/^#{1,3}\s+(.+)$/m);
+            const sectionLabel = headingMatch
+              ? headingMatch[1].slice(0, 50)
+              : `${node.label} [${i + 1}/${sections.length}]`;
             const docId = addNode("document", node.x + node.width + 60, node.y + i * 160, {
-              label: `${node.label} [${i + 1}/${sections.length}]`,
+              label: sectionLabel,
               documentContent: sections[i],
               snippet: sections[i].slice(0, 200),
             });
