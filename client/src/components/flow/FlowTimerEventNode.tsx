@@ -21,6 +21,7 @@ interface FlowTimerEventNodeProps {
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
+  onDoubleClick?: (e: React.MouseEvent, nodeId: string) => void;
   /** Lifecycle engine toggle — activates or deactivates the trigger */
   onToggleTrigger: (nodeId: string) => void;
 }
@@ -32,6 +33,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
   onDelete,
   onUpdateNode,
   onToggleLock,
+  onDoubleClick,
   onPortMouseDown,
   onToggleTrigger,
 }: FlowTimerEventNodeProps) {
@@ -67,6 +69,7 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
           isRunning ? "bg-emerald-500/20 border-emerald-500/30" : "bg-emerald-500/10 border-emerald-500/20",
         )}
         onMouseDown={(e) => onMouseDown(e, node.id)}
+        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         {mode === "timed" ? (
           <Timer className={cn("w-3 h-3 shrink-0", isRunning ? "text-emerald-500 animate-pulse" : "text-emerald-500")} />

@@ -16,6 +16,7 @@ interface FlowYoutubeNodeProps {
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
   onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
+  onDoubleClick?: (e: React.MouseEvent, nodeId: string) => void;
 }
 
 /** Extract YouTube video ID from various URL formats */
@@ -32,6 +33,7 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
   onUpdateNode,
   onToggleLock,
   onPortMouseDown,
+  onDoubleClick,
 }: FlowYoutubeNodeProps) {
   const { toast } = useToast();
   const status = node.youtubeFetchStatus ?? "idle";
@@ -155,6 +157,7 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
       <div
         className="flex items-center gap-1.5 px-2 py-1 border-b bg-red-600/15 border-red-600/40 rounded-t-lg cursor-grab shrink-0"
         onMouseDown={(e) => onMouseDown(e, node.id)}
+        onDoubleClick={onDoubleClick ? (e) => onDoubleClick(e, node.id) : undefined}
       >
         <Youtube className="w-3 h-3 text-red-600 shrink-0" />
         <span className="text-[10px] font-medium truncate flex-1">{node.label || "YouTube"}</span>
