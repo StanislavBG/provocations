@@ -161,7 +161,7 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
       </div>
 
       {/* ── ZONE 3: OUTPUT FORMAT ── */}
-      <div className="px-2 py-1 border-b border-blue-500/20" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="px-2 py-1 border-b border-blue-500/20" onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-1">
           <span className="text-[8px] font-semibold uppercase tracking-wider text-violet-400/70">Output Format</span>
           {outputFormatEdges.length > 0 && (
@@ -192,7 +192,7 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
             </button>
             {/* Count — only shown when "Any" (split) mode is active */}
             {oc.outputMode === "split" && (
-              <div className="flex items-center gap-0.5 ml-1">
+              <div className="flex items-center gap-0.5 ml-1" onDoubleClick={(e) => e.stopPropagation()}>
                 <button
                   className={cn(
                     "text-[7px] w-4 h-4 flex items-center justify-center rounded transition-colors",
@@ -251,7 +251,7 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
       </div>
 
       {/* ── ZONE 4: CONFIG BODY (shows active settings) ── */}
-      <div className="px-2 py-1.5 flex-1 overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="px-2 py-1.5 flex-1 overflow-hidden" onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-1 mb-1">
           <Settings2 className="w-2.5 h-2.5 text-muted-foreground/50" />
           <span className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground/50">Config</span>

@@ -2,7 +2,7 @@
  * ShareDialog — Share a document or folder with a connected user.
  * Shows list of accepted connections as potential recipients.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -29,6 +29,23 @@ import {
 } from "lucide-react";
 import type { ConnectionItem, ShareItemType, SharePermission } from "@shared/schema";
 
+/** Extract a human-readable error from the API response */
+function parseApiError(err: unknown): string {
+  if (!err || typeof err !== "object") return "Failed to share";
+  const msg = (err as any).message ?? "";
+  // apiRequest throws "STATUS: BODY" — try to parse the JSON body
+  const colonIdx = msg.indexOf(": ");
+  if (colonIdx > 0) {
+    const body = msg.slice(colonIdx + 2);
+    try {
+      const json = JSON.parse(body);
+      if (json?.error) return json.error;
+    } catch { /* not JSON, use raw */ }
+    return body || msg;
+  }
+  return msg || "Failed to share";
+}
+
 interface ShareDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -51,10 +68,26 @@ export function ShareDialog({ open, onOpenChange, itemType, itemId, itemTitle }:
 
   const acceptedConnections = connectionsList.filter(c => c.status === "accepted");
 
+  // Auto-select the only available connection
+  useEffect(() => {
+    if (acceptedConnections.length === 1 && !selectedUserId) {
+      setSelectedUserId(acceptedConnections[0].userId);
+    }
+  }, [acceptedConnections, selectedUserId]);
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setSelectedUserId(null);
+      setNote("");
+      setPermission("read");
+    }
+  }, [open]);
+
   const shareMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedUserId) throw new Error("Select a recipient");
-      await apiRequest("POST", "/api/share", {
+      if (!selectedUserId) throw new Error("Please select a recipient first");
+      return apiRequest("POST", "/api/share", {
         recipientId: selectedUserId,
         itemType,
         itemId,
@@ -66,12 +99,9 @@ export function ShareDialog({ open, onOpenChange, itemType, itemId, itemTitle }:
       queryClient.invalidateQueries({ queryKey: ["/api/shared-by-me"] });
       toast({ title: "Shared successfully", description: `${itemType === "folder" ? "Folder" : "Document"} shared with your connection` });
       onOpenChange(false);
-      setSelectedUserId(null);
-      setNote("");
-      setPermission("read");
     },
-    onError: (err: any) => {
-      const message = err?.message || "Failed to share";
+    onError: (err: unknown) => {
+      const message = parseApiError(err);
       toast({ title: "Share failed", description: message, variant: "destructive" });
     },
   });
@@ -192,7 +222,7 @@ export function ShareDialog({ open, onOpenChange, itemType, itemId, itemTitle }:
             ) : (
               <Send className="w-4 h-4 mr-2" />
             )}
-            Share
+            {!selectedUserId ? "Select a recipient" : "Share"}
           </Button>
         </div>
       </DialogContent>

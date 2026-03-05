@@ -7018,12 +7018,6 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
         }
       }
 
-      // Check for existing share
-      const existing = await storage.findExistingShare(userId, recipientId, itemType, itemId);
-      if (existing && existing.status !== "revoked" && existing.status !== "declined") {
-        return res.status(409).json({ error: "Item already shared with this user" });
-      }
-
       // Encrypt optional note
       let noteCiphertext: string | undefined;
       let noteSalt: string | undefined;
@@ -7035,7 +7029,8 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
         noteIv = enc.iv;
       }
 
-      // If there was a previously revoked/declined share, delete it and create fresh
+      // Check for existing share — delete old and create fresh regardless of status
+      const existing = await storage.findExistingShare(userId, recipientId, itemType, itemId);
       if (existing) {
         await storage.deleteSharedItem(existing.id);
       }
