@@ -1,8 +1,9 @@
 /**
  * ActivityLogsOverlay — Full-screen overlay for browsing lifecycle activity logs.
  *
- * Opened from the settings gear menu. Displays a filter panel on the left
- * and a table of log entries on the right.
+ * Two view modes:
+ *   Flat   — Original table view with all entries in chronological order
+ *   Grouped — Entries grouped by node, collapsible, with click-to-navigate
  */
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
@@ -32,6 +33,11 @@ import {
   Play,
   ArrowDown,
   Download,
+  ChevronRight,
+  ChevronDown,
+  Crosshair,
+  List,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -64,17 +70,33 @@ const ALL_PHASES: LifecyclePhase[] = [
 ];
 const ALL_STATUSES: LifecycleStatus[] = ["start", "success", "error", "skipped"];
 
+type ViewMode = "flat" | "grouped";
+
 interface ActivityLogsOverlayProps {
   onClose: () => void;
+  /** Navigate the canvas to center on a specific node */
+  onNavigateToNode?: (nodeId: string) => void;
 }
 
-export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
+interface NodeGroup {
+  nodeId: string;
+  nodeLabel: string;
+  nodeType: FlowNodeType;
+  entries: LifecycleLogEntry[];
+  errorCount: number;
+  totalDurationMs: number;
+  avgDurationMs: number;
+}
+
+export function ActivityLogsOverlay({ onClose, onNavigateToNode }: ActivityLogsOverlayProps) {
   const { entries, clear, getNodeTypes, getNodeIds } = useLifecycleLog();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [paused, setPaused] = useState(false);
   const [pausedSnapshot, setPausedSnapshot] = useState<LifecycleLogEntry[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>("grouped");
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   // Filters
   const [filter, setFilter] = useState<LifecycleFilter>({});
@@ -88,13 +110,11 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
   const filtered = useMemo(() => {
     let result = displayEntries;
 
-    // Standard lifecycle filters
     const hasFilter = filter.nodeId || filter.nodeType || filter.phase || filter.status;
     if (hasFilter) {
       result = result.filter((e) => matchesFilter(e, filter));
     }
 
-    // Keyword search
     if (keyword.trim()) {
       const kw = keyword.toLowerCase();
       result = result.filter(
@@ -106,17 +126,15 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
       );
     }
 
-    // Date range
     if (dateFrom) {
       const from = new Date(dateFrom).getTime();
       result = result.filter((e) => e.timestamp >= from);
     }
     if (dateTo) {
-      const to = new Date(dateTo).getTime() + 86400000; // end of day
+      const to = new Date(dateTo).getTime() + 86400000;
       result = result.filter((e) => e.timestamp < to);
     }
 
-    // Initiator filter (heuristic: chain/tick/activate/deactivate = system, process = user)
     if (initiatorFilter === "user") {
       result = result.filter((e) => e.phase === "process" || e.phase === "pre-process" || e.phase === "post-process");
     } else if (initiatorFilter === "system") {
@@ -125,6 +143,35 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
 
     return result;
   }, [displayEntries, filter, keyword, dateFrom, dateTo, initiatorFilter]);
+
+  // Grouped view data
+  const nodeGroups = useMemo((): NodeGroup[] => {
+    const map = new Map<string, NodeGroup>();
+    for (const entry of filtered) {
+      let group = map.get(entry.nodeId);
+      if (!group) {
+        group = {
+          nodeId: entry.nodeId,
+          nodeLabel: entry.nodeLabel,
+          nodeType: entry.nodeType as FlowNodeType,
+          entries: [],
+          errorCount: 0,
+          totalDurationMs: 0,
+          avgDurationMs: 0,
+        };
+        map.set(entry.nodeId, group);
+      }
+      group.entries.push(entry);
+      if (entry.status === "error") group.errorCount++;
+      if (entry.durationMs !== undefined) group.totalDurationMs += entry.durationMs;
+    }
+    // Compute averages
+    for (const group of Array.from(map.values())) {
+      const withDuration = group.entries.filter((e: LifecycleLogEntry) => e.durationMs !== undefined);
+      group.avgDurationMs = withDuration.length > 0 ? Math.round(group.totalDurationMs / withDuration.length) : 0;
+    }
+    return Array.from(map.values());
+  }, [filtered]);
 
   // Auto-scroll
   useEffect(() => {
@@ -163,6 +210,27 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
     setPausedSnapshot([]);
   }, [clear]);
 
+  const toggleNodeExpanded = useCallback((nodeId: string) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setExpandedNodes(new Set(nodeGroups.map((g) => g.nodeId)));
+  }, [nodeGroups]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedNodes(new Set());
+  }, []);
+
+  const handleNavigate = useCallback((nodeId: string) => {
+    onNavigateToNode?.(nodeId);
+  }, [onNavigateToNode]);
+
   const nodeTypes = useMemo(() => getNodeTypes(), [displayEntries.length]);
   const nodeIds = useMemo(() => getNodeIds(), [displayEntries.length]);
 
@@ -192,6 +260,26 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
           {filtered.length}
           {filtered.length !== displayEntries.length ? `/${displayEntries.length}` : ""} events
         </Badge>
+
+        {/* View mode toggle */}
+        <div className="flex gap-0.5 bg-muted/40 rounded p-0.5">
+          <button
+            className={cn("px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+              viewMode === "grouped" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+            onClick={() => setViewMode("grouped")}
+            title="Group by node"
+          >
+            <Layers className="w-3 h-3" />
+          </button>
+          <button
+            className={cn("px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+              viewMode === "flat" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+            onClick={() => setViewMode("flat")}
+            title="Flat list"
+          >
+            <List className="w-3 h-3" />
+          </button>
+        </div>
 
         {/* Toolbar */}
         <Button
@@ -226,7 +314,7 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
         </Button>
       </div>
 
-      {/* Body: filters left, table right */}
+      {/* Body: filters left, content right */}
       <div className="flex flex-1 min-h-0">
         {/* Left filter panel */}
         <div className="w-56 sm:w-64 shrink-0 border-r bg-muted/10 p-3 space-y-4 overflow-y-auto">
@@ -274,7 +362,6 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
             </div>
           </div>
 
-          {/* Node type */}
           <FilterSelect
             label="Node Type"
             value={filter.nodeType || ""}
@@ -285,7 +372,6 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
             onChange={(v) => setFilter((f) => ({ ...f, nodeType: (v || undefined) as FlowNodeType | undefined }))}
           />
 
-          {/* Specific node */}
           <FilterSelect
             label="Node"
             value={filter.nodeId || ""}
@@ -296,7 +382,6 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
             onChange={(v) => setFilter((f) => ({ ...f, nodeId: v || undefined }))}
           />
 
-          {/* Phase */}
           <FilterSelect
             label="Phase"
             value={filter.phase || ""}
@@ -304,7 +389,6 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
             onChange={(v) => setFilter((f) => ({ ...f, phase: (v || undefined) as LifecyclePhase | undefined }))}
           />
 
-          {/* Status */}
           <FilterSelect
             label="Status"
             value={filter.status || ""}
@@ -312,54 +396,76 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
             onChange={(v) => setFilter((f) => ({ ...f, status: (v || undefined) as LifecycleStatus | undefined }))}
           />
 
-          {/* Date range */}
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Date From</Label>
-            <Input
-              type="date"
-              className="h-7 text-xs"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
+            <Input type="date" className="h-7 text-xs" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Date To</Label>
-            <Input
-              type="date"
-              className="h-7 text-xs"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
+            <Input type="date" className="h-7 text-xs" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
+
+          {/* Grouped view controls */}
+          {viewMode === "grouped" && nodeGroups.length > 0 && (
+            <div className="flex gap-1 pt-2 border-t">
+              <button className="text-[10px] text-primary hover:underline" onClick={expandAll}>Expand all</button>
+              <span className="text-[10px] text-muted-foreground/40">|</span>
+              <button className="text-[10px] text-primary hover:underline" onClick={collapseAll}>Collapse all</button>
+            </div>
+          )}
         </div>
 
-        {/* Right: table */}
+        {/* Right: content area */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Table header */}
-          <div className="flex items-center gap-2 px-4 py-1.5 border-b bg-muted/20 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
-            <span className="w-20">Time</span>
-            <span className="w-20">Phase</span>
-            <span className="w-14">Status</span>
-            <span className="w-16">Initiator</span>
-            <span className="w-32">Node</span>
-            <span className="flex-1">Message</span>
-            <span className="w-16 text-right">Duration</span>
-          </div>
+          {viewMode === "flat" ? (
+            <>
+              {/* Flat table header */}
+              <div className="flex items-center gap-2 px-4 py-1.5 border-b bg-muted/20 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
+                <span className="w-20">Time</span>
+                <span className="w-20">Phase</span>
+                <span className="w-14">Status</span>
+                <span className="w-16">Initiator</span>
+                <span className="w-32">Node</span>
+                <span className="flex-1">Message</span>
+                <span className="w-16 text-right">Duration</span>
+              </div>
 
-          {/* Table rows */}
-          <div ref={scrollRef} className="flex-1 overflow-auto min-h-0">
-            {filtered.length === 0 ? (
-              <div className="flex items-center justify-center py-16 text-muted-foreground/50 text-xs">
-                {entries.length === 0 ? "No lifecycle events yet" : "No events match filters"}
+              <div ref={scrollRef} className="flex-1 overflow-auto min-h-0">
+                {filtered.length === 0 ? (
+                  <div className="flex items-center justify-center py-16 text-muted-foreground/50 text-xs">
+                    {entries.length === 0 ? "No lifecycle events yet" : "No events match filters"}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/20">
+                    {filtered.map((entry) => (
+                      <LogTableRow key={entry.id} entry={entry} onNavigate={handleNavigate} />
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="divide-y divide-border/20">
-                {filtered.map((entry) => (
-                  <LogTableRow key={entry.id} entry={entry} />
-                ))}
-              </div>
-            )}
-          </div>
+            </>
+          ) : (
+            /* Grouped view */
+            <div ref={scrollRef} className="flex-1 overflow-auto min-h-0">
+              {nodeGroups.length === 0 ? (
+                <div className="flex items-center justify-center py-16 text-muted-foreground/50 text-xs">
+                  {entries.length === 0 ? "No lifecycle events yet" : "No events match filters"}
+                </div>
+              ) : (
+                <div className="divide-y divide-border/30">
+                  {nodeGroups.map((group) => (
+                    <NodeGroupRow
+                      key={group.nodeId}
+                      group={group}
+                      expanded={expandedNodes.has(group.nodeId)}
+                      onToggle={() => toggleNodeExpanded(group.nodeId)}
+                      onNavigate={() => handleNavigate(group.nodeId)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Paused indicator */}
           {paused && (
@@ -373,7 +479,129 @@ export function ActivityLogsOverlay({ onClose }: ActivityLogsOverlayProps) {
   );
 }
 
-function LogTableRow({ entry }: { entry: LifecycleLogEntry }) {
+// ── Node Group Row (grouped view) ──
+
+function NodeGroupRow({
+  group,
+  expanded,
+  onToggle,
+  onNavigate,
+}: {
+  group: NodeGroup;
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate: () => void;
+}) {
+  const nodeStyle = FLOW_NODE_REGISTRY[group.nodeType]?.style;
+  const Icon = FLOW_NODE_REGISTRY[group.nodeType]?.icon;
+
+  // Group entries by phase for expanded view
+  const phaseGroups = useMemo(() => {
+    const map = new Map<LifecyclePhase, LifecycleLogEntry[]>();
+    for (const entry of group.entries) {
+      let arr = map.get(entry.phase);
+      if (!arr) { arr = []; map.set(entry.phase, arr); }
+      arr.push(entry);
+    }
+    return map;
+  }, [group.entries]);
+
+  return (
+    <div>
+      {/* Group header */}
+      <button
+        className="w-full flex items-center gap-2 px-4 py-2 hover:bg-muted/20 transition-colors text-left"
+        onClick={onToggle}
+      >
+        {expanded ? (
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        )}
+
+        {Icon && <Icon className={cn("w-4 h-4 shrink-0", nodeStyle?.iconClass)} />}
+
+        <span className={cn("text-xs font-medium truncate", nodeStyle?.iconClass || "text-foreground")}>
+          {group.nodeLabel}
+        </span>
+
+        <Badge variant="outline" className={cn("text-[8px] px-1 py-0 h-3.5 shrink-0", nodeStyle?.badgeBg, nodeStyle?.badgeText)}>
+          {nodeStyle?.badge || group.nodeType}
+        </Badge>
+
+        <span className="flex-1" />
+
+        {/* Stats */}
+        <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+          {group.entries.length} events
+        </span>
+        {group.errorCount > 0 && (
+          <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 text-red-500 border-red-500/30 shrink-0">
+            {group.errorCount} errors
+          </Badge>
+        )}
+        {group.avgDurationMs > 0 && (
+          <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
+            avg {group.avgDurationMs}ms
+          </span>
+        )}
+
+        {/* Navigate to node button */}
+        <button
+          className="p-1 rounded hover:bg-muted/50 text-muted-foreground/50 hover:text-primary transition-colors shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate();
+          }}
+          title="Locate on canvas"
+        >
+          <Crosshair className="w-3.5 h-3.5" />
+        </button>
+      </button>
+
+      {/* Expanded entries grouped by phase */}
+      {expanded && (
+        <div className="bg-muted/5 border-t border-border/20">
+          {ALL_PHASES.map((phase) => {
+            const phaseEntries = phaseGroups.get(phase);
+            if (!phaseEntries || phaseEntries.length === 0) return null;
+            return (
+              <div key={phase}>
+                <div className="flex items-center gap-2 px-8 py-1 bg-muted/10">
+                  <Badge variant="outline" className={cn("text-[8px] px-1 py-0 h-3.5 font-semibold", PHASE_COLORS[phase])}>
+                    {getPhaseLabel(phase)}
+                  </Badge>
+                  <span className="text-[9px] text-muted-foreground/50">{phaseEntries.length}</span>
+                </div>
+                {phaseEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-center gap-2 px-10 py-1 text-[10px] hover:bg-muted/10 font-mono">
+                    <span className="text-muted-foreground/50 shrink-0 w-16 tabular-nums">
+                      {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </span>
+                    <span className={cn("shrink-0 font-semibold uppercase text-[8px] w-12", STATUS_COLORS[entry.status])}>
+                      {entry.status}
+                    </span>
+                    <span className="text-muted-foreground flex-1 min-w-0 truncate">
+                      {entry.message}
+                      {entry.error && <span className="text-red-400 ml-1">{entry.error}</span>}
+                    </span>
+                    <span className="text-muted-foreground/40 shrink-0 w-14 text-right tabular-nums">
+                      {entry.durationMs !== undefined ? `${entry.durationMs}ms` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Flat view row ──
+
+function LogTableRow({ entry, onNavigate }: { entry: LifecycleLogEntry; onNavigate: (nodeId: string) => void }) {
   const time = new Date(entry.timestamp).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
@@ -423,12 +651,16 @@ function LogTableRow({ entry }: { entry: LifecycleLogEntry }) {
         </Badge>
       </span>
 
-      <span className="flex items-center gap-1 shrink-0 w-32 min-w-0">
+      <button
+        className="flex items-center gap-1 shrink-0 w-32 min-w-0 hover:underline"
+        onClick={() => onNavigate(entry.nodeId)}
+        title="Locate on canvas"
+      >
         {Icon && <Icon className={cn("w-3 h-3 shrink-0", nodeStyle?.iconClass)} />}
         <span className={cn("font-medium truncate", nodeStyle?.iconClass || "text-foreground")}>
           {entry.nodeLabel}
         </span>
-      </span>
+      </button>
 
       <span className="text-muted-foreground flex-1 min-w-0 truncate">
         {entry.message}

@@ -4,7 +4,7 @@ import { getAuth, clerkClient } from "@clerk/express";
 import { storage } from "./storage";
 import { encrypt, decrypt, encryptAsync, decryptAsync, decryptFieldAsync, decryptFieldsBatch } from "./crypto";
 import { llm } from "./llm";
-import { FLOW_TEMPLATES, getFlowTemplate } from "./flow-templates";
+import { BLUEPRINTS, getBlueprint } from "./blueprints";
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -7907,13 +7907,13 @@ Return ONLY valid JSON, no markdown fences.`;
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // Flow Chain Template API
+  // Blueprint API
   // ═══════════════════════════════════════════════════════════════
 
-  /** List all available flow chain templates (demos + future user-created) */
-  app.get("/api/flow/templates", (_req, res) => {
+  /** List all available blueprints (prebuilt chain templates) */
+  app.get("/api/blueprints", (_req, res) => {
     res.json(
-      FLOW_TEMPLATES.map(({ id, label, description, icon, category, nodes, edges }) => ({
+      BLUEPRINTS.map(({ id, label, description, icon, category, nodes, edges }) => ({
         id,
         label,
         description,
@@ -7925,13 +7925,29 @@ Return ONLY valid JSON, no markdown fences.`;
     );
   });
 
-  /** Get a single flow template by ID (full node/edge data for instantiation) */
-  app.get("/api/flow/templates/:templateId", (req, res) => {
-    const template = getFlowTemplate(req.params.templateId);
-    if (!template) {
-      return res.status(404).json({ error: "Template not found" });
+  /** Get a single blueprint by ID (full node/edge data for instantiation) */
+  app.get("/api/blueprints/:blueprintId", (req, res) => {
+    const blueprint = getBlueprint(req.params.blueprintId);
+    if (!blueprint) {
+      return res.status(404).json({ error: "Blueprint not found" });
     }
-    res.json(template);
+    res.json(blueprint);
+  });
+
+  // Backward-compat aliases for old /api/flow/templates endpoints
+  app.get("/api/flow/templates", (_req, res) => {
+    res.json(
+      BLUEPRINTS.map(({ id, label, description, icon, category, nodes, edges }) => ({
+        id, label, description, icon, category,
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+      })),
+    );
+  });
+  app.get("/api/flow/templates/:templateId", (req, res) => {
+    const blueprint = getBlueprint(req.params.templateId);
+    if (!blueprint) return res.status(404).json({ error: "Blueprint not found" });
+    res.json(blueprint);
   });
 
   // ── Message purge scheduler (runs every hour) ──

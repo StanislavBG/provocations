@@ -1,17 +1,17 @@
 /**
- * Flow Chain Templates — Server-side seed data for demo/quick-start chains.
+ * Blueprints — Server-side seed data for prebuilt chain blueprints.
  *
- * These templates are served via GET /api/flow/templates and can be
- * instantiated on the client canvas. Each template defines nodes and edges
+ * These blueprints are served via GET /api/blueprints and can be
+ * instantiated on the client canvas. Each blueprint defines nodes and edges
  * using stable placeholder IDs that get remapped to real IDs on instantiation.
  *
- * This is the single source of truth for prebuilt chains.
+ * This is the single source of truth for prebuilt chain blueprints.
  * The client never defines chain structure — it only renders what the API returns.
  */
 
 // ── Types ──
 
-export interface FlowTemplateNode {
+export interface BlueprintNode {
   id: string;
   type: string;
   x: number;
@@ -24,20 +24,20 @@ export interface FlowTemplateNode {
   [key: string]: unknown;
 }
 
-export interface FlowTemplateEdge {
+export interface BlueprintEdge {
   fromNodeId: string;
   toNodeId: string;
   role?: "context" | "objective" | "output-format";
 }
 
-export interface FlowTemplate {
+export interface Blueprint {
   id: string;
   label: string;
   description: string;
   icon: string;
   category: "creative" | "business" | "research";
-  nodes: FlowTemplateNode[];
-  edges: FlowTemplateEdge[];
+  nodes: BlueprintNode[];
+  edges: BlueprintEdge[];
 }
 
 // ── Layout helpers ──
@@ -46,7 +46,7 @@ const COL_GAP = 280;
 
 function n(
   partial: { id: string; type: string; label: string; col: number; row?: number } & Record<string, unknown>,
-): FlowTemplateNode {
+): BlueprintNode {
   const { col, row = 0, ...rest } = partial;
   return {
     x: col * COL_GAP,
@@ -54,14 +54,14 @@ function n(
     width: 200,
     height: 130,
     ...rest,
-  } as FlowTemplateNode;
+  } as BlueprintNode;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Chain A: Meme Machine
+// Blueprint A: Meme Machine
 // ═══════════════════════════════════════════════════════════════
 
-const memeTemplate: FlowTemplate = {
+const memeBlueprint: Blueprint = {
   id: "meme-machine",
   label: "Meme Machine",
   description: "Generate viral memes: caption writing, quality check, image creation",
@@ -135,10 +135,10 @@ const memeTemplate: FlowTemplate = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// Chain B: Product PRD Generator
+// Blueprint B: Product PRD Generator
 // ═══════════════════════════════════════════════════════════════
 
-const prdTemplate: FlowTemplate = {
+const prdBlueprint: Blueprint = {
   id: "prd-generator",
   label: "Product PRD Generator",
   description: "Full PRD pipeline: research, draft, quality gate, wireframes, polish",
@@ -233,10 +233,10 @@ const prdTemplate: FlowTemplate = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// Chain C: Deep Dive Research
+// Blueprint C: Deep Dive Research
 // ═══════════════════════════════════════════════════════════════
 
-const researchTemplate: FlowTemplate = {
+const researchBlueprint: Blueprint = {
   id: "deep-dive-research",
   label: "Deep Dive Research",
   description: "Comprehensive research: topic analysis, gap finding, infographic, exec summary",
@@ -346,17 +346,17 @@ const researchTemplate: FlowTemplate = {
   ],
 };
 
-// ── All templates ──
+// ── All blueprints ──
 
-export const FLOW_TEMPLATES: FlowTemplate[] = [
-  memeTemplate,
-  prdTemplate,
-  researchTemplate,
+export const BLUEPRINTS: Blueprint[] = [
+  memeBlueprint,
+  prdBlueprint,
+  researchBlueprint,
 ];
 
 /**
- * Get a template by ID. Returns null if not found.
+ * Get a blueprint by ID. Returns null if not found.
  */
-export function getFlowTemplate(id: string): FlowTemplate | null {
-  return FLOW_TEMPLATES.find((t) => t.id === id) ?? null;
+export function getBlueprint(id: string): Blueprint | null {
+  return BLUEPRINTS.find((t) => t.id === id) ?? null;
 }

@@ -104,12 +104,19 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
       if (result !== null) {
         onStatusChange?.(nodeId, "done");
 
-        // Find and trigger downstream nodes after a delay
-        const downstream = getExecutableDownstream(nodeId);
-        if (downstream.length > 0) {
-          await new Promise((resolve) => setTimeout(resolve, CHAIN_DELAY_MS));
-          if (!abortedRef.current) {
-            await Promise.all(downstream.map((id) => executeAndPropagate(id)));
+        // Check if this node allows auto-propagation (default: true)
+        const { nodes } = getState();
+        const currentNode = nodes.find((n) => n.id === nodeId);
+        const autoTrigger = currentNode?.autoTriggerNext !== false; // default true
+
+        if (autoTrigger) {
+          // Find and trigger downstream nodes after a delay
+          const downstream = getExecutableDownstream(nodeId);
+          if (downstream.length > 0) {
+            await new Promise((resolve) => setTimeout(resolve, CHAIN_DELAY_MS));
+            if (!abortedRef.current) {
+              await Promise.all(downstream.map((id) => executeAndPropagate(id)));
+            }
           }
         }
       } else {

@@ -36,9 +36,6 @@ import {
   Layers,
   Pin,
   PinOff,
-  Boxes,
-  Save,
-  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
 import { FtuxSettingsDialog } from "./FtuxSettingsDialog";
@@ -108,7 +105,7 @@ export function FtuxDock() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gatewayOpen, setGatewayOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; toolId: string; label: string } | null>(null);
-  const [blueprintMenuOpen, setBlueprintMenuOpen] = useState(false);
+  // (blueprintMenuOpen state removed — blueprints now in top menu bar)
   const hideTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   // Grid slots: each slot is a DockItem or null
@@ -399,25 +396,7 @@ export function FtuxDock() {
               Workspace Tools
             </TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Blueprints"
-                className="w-8 h-8 rounded-lg text-muted-foreground/50 hover:text-muted-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setBlueprintMenuOpen((v) => !v);
-                }}
-              >
-                <Boxes className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
-              Blueprints
-            </TooltipContent>
-          </Tooltip>
+          {/* Blueprints button removed — now in top menu bar */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -437,34 +416,7 @@ export function FtuxDock() {
         </div>
       </div>
 
-      {/* Blueprint menu */}
-      {blueprintMenuOpen && (
-        <>
-          <div className="fixed inset-0 z-50" onClick={() => setBlueprintMenuOpen(false)} />
-          <div className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100 bottom-20 right-4">
-            <button
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("flow:save-blueprint"));
-                setBlueprintMenuOpen(false);
-              }}
-            >
-              <Save className="w-3.5 h-3.5 text-muted-foreground" />
-              Save Blueprint
-            </button>
-            <button
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("flow:load-blueprint"));
-                setBlueprintMenuOpen(false);
-              }}
-            >
-              <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
-              Load Blueprint
-            </button>
-          </div>
-        </>
-      )}
+      {/* Blueprint menu removed — blueprints are now in the top Blueprints menu */}
 
       {/* Dock item context menu */}
       {contextMenu && (

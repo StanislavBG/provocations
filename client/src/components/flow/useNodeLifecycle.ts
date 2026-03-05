@@ -17,8 +17,10 @@ export interface NodeProcessContext {
   node: FlowNode;
   inputNodes: FlowNode[];
   inputEdges: FlowEdge[];
-  /** Combined text content gathered from upstream connected nodes */
+  /** Combined text content gathered from immediately connected upstream nodes (+ their child outputs) */
   combinedInputContent: string;
+  /** Full chain context: all content from all nodes in the execution chain up to this point */
+  chainContext: string;
   /** AbortSignal for cancellation */
   signal: AbortSignal;
 }
@@ -41,7 +43,13 @@ export interface NodeLifecycleReturn {
   reset: () => void;
 }
 
-// ── Helper: gather input content from connected upstream nodes ──
+// ── Helper: extract text content from a node ──
+
+function nodeContent(n: FlowNode): string {
+  return n.documentContent || n.content || n.llmOutput || n.snippet || "";
+}
+
+// ── Helper: gather input content from connected upstream nodes (+ their child outputs) ──
 
 export function gatherInputContent(
   nodeId: string,
@@ -53,12 +61,62 @@ export function gatherInputContent(
     .map((e) => allNodes.find((n) => n.id === e.fromNodeId))
     .filter(Boolean) as FlowNode[];
 
-  const combinedContent = inputNodes
-    .map((n) => n.documentContent || n.content || n.llmOutput || n.snippet || "")
-    .filter((s) => s.trim())
-    .join("\n\n---\n\n");
+  // Collect content from each input node AND its child output nodes
+  const parts: string[] = [];
+  for (const inputNode of inputNodes) {
+    const main = nodeContent(inputNode);
+    if (main.trim()) parts.push(main);
 
-  return { inputNodes, inputEdges, combinedContent };
+    // Find child nodes connected FROM this input (output children)
+    const childEdges = allEdges.filter((e) => e.fromNodeId === inputNode.id && e.toNodeId !== nodeId);
+    for (const ce of childEdges) {
+      const child = allNodes.find((n) => n.id === ce.toNodeId);
+      if (child) {
+        const childText = nodeContent(child);
+        if (childText.trim()) parts.push(childText);
+      }
+    }
+  }
+
+  return { inputNodes, inputEdges, combinedContent: parts.join("\n\n---\n\n") };
+}
+
+// ── Helper: gather full chain context walking backward from a node ──
+
+export function gatherChainContext(
+  nodeId: string,
+  allNodes: FlowNode[],
+  allEdges: FlowEdge[],
+): string {
+  const visited = new Set<string>();
+  const parts: string[] = [];
+
+  // BFS backward through edges
+  const queue = [nodeId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    // Don't include the target node itself in chain context
+    if (current !== nodeId) {
+      const node = allNodes.find((n) => n.id === current);
+      if (node) {
+        const text = nodeContent(node);
+        if (text.trim()) parts.push(text);
+      }
+    }
+
+    // Walk upstream
+    const upstreamEdges = allEdges.filter((e) => e.toNodeId === current);
+    for (const edge of upstreamEdges) {
+      if (!visited.has(edge.fromNodeId)) {
+        queue.push(edge.fromNodeId);
+      }
+    }
+  }
+
+  return parts.join("\n\n---\n\n");
 }
 
 // ── Hook ──
@@ -87,11 +145,14 @@ export function useNodeLifecycle(handlers: NodeLifecycleHandlers): NodeLifecycle
           allEdges,
         );
 
+        const chainCtx = gatherChainContext(node.id, allNodes, allEdges);
+
         const ctx: NodeProcessContext = {
           node,
           inputNodes,
           inputEdges,
           combinedInputContent: combinedContent,
+          chainContext: chainCtx,
           signal: controller.signal,
         };
 

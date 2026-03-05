@@ -66,7 +66,7 @@ import {
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
-  Rocket, Search, Zap,
+  Search, Zap,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 
@@ -276,17 +276,7 @@ function FlowWorkspaceInner() {
     return () => window.removeEventListener("mousemove", handler);
   }, []);
 
-  // Listen for blueprint events from dock
-  useEffect(() => {
-    const onSave = () => handleSaveBlueprintRef.current();
-    const onLoad = () => handleLoadBlueprintRef.current();
-    window.addEventListener("flow:save-blueprint", onSave);
-    window.addEventListener("flow:load-blueprint", onLoad);
-    return () => {
-      window.removeEventListener("flow:save-blueprint", onSave);
-      window.removeEventListener("flow:load-blueprint", onLoad);
-    };
-  }, []);
+  // (Blueprint events removed — blueprints are now loaded via the Blueprints menu)
 
   // Listen for label settings event (gear button on label nodes)
   useEffect(() => {
@@ -445,8 +435,7 @@ function FlowWorkspaceInner() {
 
   // Ref to handleDropTool so keyboard shortcuts can call it (declared later)
   const handleDropToolRef = useRef<(toolId: string, cx: number, cy: number) => void>(() => {});
-  const handleSaveBlueprintRef = useRef<() => void>(() => {});
-  const handleLoadBlueprintRef = useRef<() => void>(() => {});
+  // (Blueprint refs removed — blueprints use the API menu now)
 
   // ── Real-time collaboration ──
 
@@ -792,87 +781,20 @@ function FlowWorkspaceInner() {
     };
   }, []);
 
-  // ── Blueprint save/load (localStorage) ──
-
-  const handleSaveBlueprint = useCallback(() => {
-    const selected = state.nodes.filter((n) => state.selectedNodeIds.has(n.id));
-    if (selected.length === 0) {
-      toast({ title: "Select nodes first", description: "Select nodes to save as a blueprint" });
-      return;
-    }
-    const selectedIds = new Set(selected.map((n) => n.id));
-    const internalEdges = state.edges.filter(
-      (e) => selectedIds.has(e.fromNodeId) && selectedIds.has(e.toNodeId),
-    );
-    const name = prompt("Blueprint name:");
-    if (!name) return;
-
-    // Normalize positions relative to top-left of selection
-    const minX = Math.min(...selected.map((n) => n.x));
-    const minY = Math.min(...selected.map((n) => n.y));
-    const normalizedNodes = selected.map((n) => ({ ...n, x: n.x - minX, y: n.y - minY }));
-
-    const blueprints = JSON.parse(localStorage.getItem("flow-blueprints") || "{}");
-    blueprints[name] = { nodes: normalizedNodes, edges: internalEdges };
-    localStorage.setItem("flow-blueprints", JSON.stringify(blueprints));
-    toast({ title: "Blueprint saved", description: `"${name}" — ${selected.length} nodes` });
-  }, [state.nodes, state.edges, state.selectedNodeIds, toast]);
-
-  const handleLoadBlueprint = useCallback(() => {
-    const blueprints = JSON.parse(localStorage.getItem("flow-blueprints") || "{}");
-    const names = Object.keys(blueprints);
-    if (names.length === 0) {
-      toast({ title: "No blueprints", description: "Save a selection as a blueprint first" });
-      return;
-    }
-    const name = prompt(`Load blueprint:\n${names.map((n, i) => `${i + 1}. ${n}`).join("\n")}\n\nEnter name:`);
-    if (!name || !blueprints[name]) return;
-
-    const { nodes: srcNodes, edges: srcEdges } = blueprints[name];
-    const pos = getCenter();
-    const idMap = new Map<string, string>();
-
-    for (const src of srcNodes as FlowNode[]) {
-      const newId = addNode(src.type, pos.x + src.x, pos.y + src.y, {
-        label: src.label,
-        snippet: src.snippet,
-        content: src.content,
-        documentContent: src.documentContent,
-        zoneLabel: src.zoneLabel,
-        zoneColor: src.zoneColor,
-        llmPresetId: src.llmPresetId,
-        llmObjective: src.llmObjective,
-        llmStatus: "idle",
-      });
-      idMap.set(src.id, newId);
-    }
-
-    for (const edge of srcEdges as FlowEdge[]) {
-      const newFrom = idMap.get(edge.fromNodeId);
-      const newTo = idMap.get(edge.toNodeId);
-      if (newFrom && newTo) addEdge(newFrom, newTo);
-    }
-
-    toast({ title: "Blueprint loaded", description: `"${name}" placed on canvas` });
-  }, [addNode, addEdge, getCenter, toast]);
-
-  handleSaveBlueprintRef.current = handleSaveBlueprint;
-  handleLoadBlueprintRef.current = handleLoadBlueprint;
-
-  // ── Load demo chain template via API ──
-  const handleLoadDemoTemplate = useCallback(async (templateId: string) => {
+  // ── Load blueprint from API ──
+  const handleLoadBlueprint = useCallback(async (blueprintId: string) => {
     try {
-      const res = await fetch(`/api/flow/templates/${templateId}`);
+      const res = await fetch(`/api/blueprints/${blueprintId}`);
       if (!res.ok) {
-        toast({ title: "Failed to load template", variant: "destructive" });
+        toast({ title: "Failed to load blueprint", variant: "destructive" });
         return;
       }
-      const template = await res.json();
+      const blueprint = await res.json();
       const pos = getCenter();
       const idMap = new Map<string, string>();
 
       // Create nodes with remapped IDs
-      for (const src of template.nodes) {
+      for (const src of blueprint.nodes) {
         const newId = addNode(src.type, pos.x + src.x, pos.y + src.y, {
           label: src.label,
           snippet: src.snippet,
@@ -897,15 +819,15 @@ function FlowWorkspaceInner() {
       }
 
       // Create edges with remapped IDs
-      for (const edge of template.edges) {
+      for (const edge of blueprint.edges) {
         const newFrom = idMap.get(edge.fromNodeId);
         const newTo = idMap.get(edge.toNodeId);
         if (newFrom && newTo) addEdge(newFrom, newTo, edge.role);
       }
 
-      toast({ title: "Template loaded", description: `"${template.label}" placed on canvas` });
+      toast({ title: "Blueprint loaded", description: `"${blueprint.label}" placed on canvas` });
     } catch (err) {
-      toast({ title: "Error loading template", description: String(err), variant: "destructive" });
+      toast({ title: "Error loading blueprint", description: String(err), variant: "destructive" });
     }
   }, [addNode, addEdge, getCenter, toast]);
 
@@ -933,9 +855,18 @@ function FlowWorkspaceInner() {
       setCanvasLoading(true);
       setLoadProgress(20);
       try {
-        const res = await apiRequest("GET", `/api/documents/${canvasDocumentId}`);
-        setLoadProgress(60);
-        const data = (await res.json()) as { title: string; content: string };
+        // Try owned document first, fall back to shared endpoint
+        let data: { title: string; content: string };
+        try {
+          const res = await apiRequest("GET", `/api/documents/${canvasDocumentId}`);
+          setLoadProgress(60);
+          data = (await res.json()) as { title: string; content: string };
+        } catch {
+          // May be a shared canvas — try shared endpoint
+          const res = await apiRequest("GET", `/api/shared/document/${canvasDocumentId}`);
+          setLoadProgress(60);
+          data = (await res.json()) as { title: string; content: string };
+        }
         setLoadProgress(80);
         const parsed = JSON.parse(data.content);
         setLoadProgress(90);
@@ -1094,7 +1025,21 @@ function FlowWorkspaceInner() {
 
   const docs = docsData?.documents ?? [];
   const allFolders = foldersData ?? [];
-  const canvasDocs = docs.filter((d) => d.docType === "chart");
+  const canvasDocs = docs.filter((d) => d.docType === "chart" && !d.title?.startsWith("[5min]") && !d.title?.startsWith("[Hourly]"));
+
+  // Shared canvases (from other users)
+  interface SharedCanvasItem { shareId: number; docId: number; title: string; ownerName?: string; permission: string }
+  const { data: sharedCanvases = [] } = useQuery<SharedCanvasItem[]>({
+    queryKey: ["/api/shared-with-me/canvases"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/shared-with-me");
+      const items = await res.json();
+      return (items as Array<{ id: number; itemType: string; itemId: number; itemTitle?: string; ownerName?: string; permission: string; status: string }>)
+        .filter((s) => s.status === "accepted" && s.itemType === "document")
+        .map((s) => ({ shareId: s.id, docId: s.itemId, title: s.itemTitle || "Shared Canvas", ownerName: s.ownerName, permission: s.permission }));
+    },
+    staleTime: 30_000,
+  });
 
   // Tree helpers for document picker and folder picker dialogs
   const pickerRootFolders = allFolders.filter((f) => f.parentFolderId === null);
@@ -2206,13 +2151,21 @@ function FlowWorkspaceInner() {
   // ── Open canvas from saved document ──
 
   const handleOpenCanvas = useCallback(
-    async (docId: number, docTitle: string) => {
+    async (docId: number, docTitle: string, isShared?: boolean) => {
       setCanvasLoading(true);
       setLoadProgress(20);
       try {
-        const res = await apiRequest("GET", `/api/documents/${docId}`);
-        setLoadProgress(60);
-        const data = (await res.json()) as { title: string; content: string };
+        // Try owned document first, fall back to shared endpoint
+        let data: { title: string; content: string };
+        if (isShared) {
+          const res = await apiRequest("GET", `/api/shared/document/${docId}`);
+          setLoadProgress(60);
+          data = (await res.json()) as { title: string; content: string };
+        } else {
+          const res = await apiRequest("GET", `/api/documents/${docId}`);
+          setLoadProgress(60);
+          data = (await res.json()) as { title: string; content: string };
+        }
         setLoadProgress(80);
         const parsed = JSON.parse(data.content);
         setLoadProgress(90);
@@ -2413,18 +2366,18 @@ function FlowWorkspaceInner() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Demos dropdown */}
+      {/* Blueprints dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
-            <Rocket className="w-3 h-3" />
-            Demos
+            <LayoutTemplate className="w-3 h-3" />
+            Blueprints
             <ChevronDown className="w-2.5 h-2.5 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuItem
-            onClick={() => handleLoadDemoTemplate("meme-machine")}
+            onClick={() => handleLoadBlueprint("meme-machine")}
             className="text-xs gap-2"
           >
             <Zap className="w-3.5 h-3.5 text-yellow-500" />
@@ -2434,7 +2387,7 @@ function FlowWorkspaceInner() {
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => handleLoadDemoTemplate("prd-generator")}
+            onClick={() => handleLoadBlueprint("prd-generator")}
             className="text-xs gap-2"
           >
             <FileText className="w-3.5 h-3.5 text-blue-500" />
@@ -2444,7 +2397,7 @@ function FlowWorkspaceInner() {
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => handleLoadDemoTemplate("deep-dive-research")}
+            onClick={() => handleLoadBlueprint("deep-dive-research")}
             className="text-xs gap-2"
           >
             <Search className="w-3.5 h-3.5 text-emerald-500" />
@@ -2828,7 +2781,25 @@ function FlowWorkspaceInner() {
 
         {/* Activity Logs overlay (full screen) */}
         {lifecycleConsoleOpen && (
-          <ActivityLogsOverlay onClose={() => setLifecycleConsoleOpen(false)} />
+          <ActivityLogsOverlay
+            onClose={() => setLifecycleConsoleOpen(false)}
+            onNavigateToNode={(nodeId) => {
+              // Find node, select it, and pan viewport to center on it
+              const node = stateRef.current.nodes.find((n) => n.id === nodeId);
+              if (!node) return;
+              selectNode(nodeId);
+              const el = canvasContainerRef.current;
+              const W = el?.clientWidth ?? 800;
+              const H = el?.clientHeight ?? 600;
+              const zoom = stateRef.current.viewport.zoom;
+              setViewport(
+                W / 2 - (node.x + node.width / 2) * zoom,
+                H / 2 - (node.y + node.height / 2) * zoom,
+                zoom,
+              );
+              setLifecycleConsoleOpen(false);
+            }}
+          />
         )}
       </div>
 
@@ -3041,20 +3012,48 @@ function FlowWorkspaceInner() {
             <DialogTitle className="text-sm">Open Canvas</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-auto -mx-6 px-6">
-            {canvasDocs.length === 0 ? (
+            {/* My canvases */}
+            {canvasDocs.length === 0 && sharedCanvases.length === 0 ? (
               <p className="text-xs text-muted-foreground py-4 text-center">No saved canvases</p>
             ) : (
-              <div className="space-y-0.5">
-                {canvasDocs.map((doc) => (
-                  <button
-                    key={doc.id}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
-                    onClick={() => handleOpenCanvas(doc.id, doc.title)}
-                  >
-                    <ScanLine className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span className="text-xs truncate">{doc.title}</span>
-                  </button>
-                ))}
+              <div className="space-y-2">
+                {canvasDocs.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">My Canvases</p>
+                    <div className="space-y-0.5">
+                      {canvasDocs.map((doc) => (
+                        <button
+                          key={doc.id}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
+                          onClick={() => handleOpenCanvas(doc.id, doc.title)}
+                        >
+                          <ScanLine className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          <span className="text-xs truncate">{doc.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {sharedCanvases.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">Shared with Me</p>
+                    <div className="space-y-0.5">
+                      {sharedCanvases.map((sc) => (
+                        <button
+                          key={`shared-${sc.shareId}`}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
+                          onClick={() => handleOpenCanvas(sc.docId, sc.title, true)}
+                        >
+                          <Users className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs truncate block">{sc.title}</span>
+                            {sc.ownerName && <span className="text-[10px] text-muted-foreground">from {sc.ownerName}</span>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
