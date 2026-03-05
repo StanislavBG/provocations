@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 interface FlowYoutubeNodeProps {
   node: FlowNode;
@@ -51,18 +52,29 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
     [node.id, onUpdateNode],
   );
 
+  const lcLog = useCallback(
+    (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
+      lifecycleLogStore.push({ phase, status, nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "YouTube", message, ...extra });
+    },
+    [node.id, node.type, node.label],
+  );
+
   const handleFetchTranscript = useCallback(async () => {
     const url = localUrl.trim();
     if (!url) return;
+    const t0 = performance.now();
 
     const videoId = extractVideoId(url);
     if (!videoId) {
+      lcLog("pre-process", "error", "Invalid YouTube URL", { error: "Bad URL" });
       onUpdateNode(node.id, { youtubeFetchStatus: "error", youtubeError: "Invalid YouTube URL" });
       toast({ title: "Invalid URL", description: "Paste a valid YouTube video URL", variant: "destructive" });
       return;
     }
 
+    lcLog("pre-process", "success", `Video ID: ${videoId}`);
     onUpdateNode(node.id, { youtubeFetchStatus: "fetching", youtubeError: undefined, snippet: "Fetching transcript…" });
+    lcLog("process", "start", "Fetching transcript via SSE");
 
     try {
       // Use SSE streaming for progressive transcript delivery
@@ -102,6 +114,8 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
                 snippet: `${evt.progress}% — ${accumulated.length.toLocaleString()} chars`,
               });
             } else if (evt.type === "done") {
+              const elapsed = Math.round(performance.now() - t0);
+              lcLog("process", "success", `${evt.totalChars?.toLocaleString() || "?"} chars, ${evt.totalSegments || "?"} segments`, { durationMs: elapsed });
               onUpdateNode(node.id, {
                 youtubeFetchStatus: "done",
                 youtubeTitle: evt.videoTitle,
@@ -109,6 +123,7 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
                 snippet: evt.transcript.slice(0, 150),
                 label: `YT: ${(evt.videoTitle || "Video").slice(0, 25)}`,
               });
+              lcLog("post-process", "success", `Title: ${evt.videoTitle || "(none)"}`);
               toast({ title: "Transcript ready", description: `${evt.totalSegments} segments, ${evt.totalChars.toLocaleString()} chars` });
             } else if (evt.type === "error") {
               throw new Error(evt.message);
@@ -121,10 +136,11 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Fetch failed";
+      lcLog("process", "error", msg, { error: msg, durationMs: Math.round(performance.now() - t0) });
       onUpdateNode(node.id, { youtubeFetchStatus: "error", youtubeError: msg, snippet: "Error fetching transcript" });
       toast({ title: "Transcript fetch failed", description: msg, variant: "destructive" });
     }
-  }, [node.id, localUrl, onUpdateNode, toast]);
+  }, [node.id, localUrl, onUpdateNode, toast, lcLog]);
 
   return (
     <div

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 interface FlowAudioNodeProps {
   node: FlowNode;
@@ -85,7 +86,8 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
       snippet: "Recording...",
       label: node.label === "Capture Audio" ? `Recording — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : node.label,
     });
-  }, [node.id, node.label, onUpdateNode]);
+    lifecycleLogStore.push({ phase: "activate", status: "success", nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "Audio", message: "Recording started" });
+  }, [node.id, node.label, node.type, onUpdateNode]);
 
   const stopRecording = useCallback(() => {
     if (recognitionRef.current) {
@@ -105,7 +107,8 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
         ? `Audio: ${transcript.slice(0, 30)}${transcript.length > 30 ? "..." : ""}`
         : node.label,
     });
-  }, [node.id, node.label, onUpdateNode]);
+    lifecycleLogStore.push({ phase: "deactivate", status: "success", nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "Audio", message: `Recording stopped — ${transcript.length} chars captured` });
+  }, [node.id, node.label, node.type, onUpdateNode]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {

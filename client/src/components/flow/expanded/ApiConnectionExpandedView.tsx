@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { SOCIAL_PLATFORMS } from "@/lib/social-platforms";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 interface ApiConnectionExpandedViewProps {
   node: FlowNode;
@@ -121,14 +122,25 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
     }
   }, [node.id, onUpdateNode, toast]);
 
+  const lcLog = useCallback(
+    (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
+      lifecycleLogStore.push({ phase, status, nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "API Connection", message, ...extra });
+    },
+    [node.id, node.type, node.label],
+  );
+
   const handlePost = useCallback(async () => {
+    const t0 = performance.now();
     if (!service || !inputContent.trim()) {
+      lcLog("pre-process", "error", "No platform or content", { error: "Missing platform or content" });
       toast({ title: "Nothing to post", description: "Select a platform and connect content" });
       return;
     }
 
+    lcLog("pre-process", "success", `Platform: ${SOCIAL_PLATFORMS[service]?.name || service}, ${inputContent.length} chars`);
     setIsPosting(true);
     onUpdateNode(node.id, { llmStatus: "running" });
+    lcLog("process", "start", `Posting to ${SOCIAL_PLATFORMS[service]?.name || service}`);
 
     try {
       const res = await apiRequest("POST", "/api/social/post", {
@@ -145,6 +157,8 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
         externalId: data.externalPostId,
       };
 
+      const elapsed = Math.round(performance.now() - t0);
+
       onUpdateNode(node.id, {
         llmStatus: data.success ? "done" : "error",
         snippet: data.success ? `Posted to ${SOCIAL_PLATFORMS[service]?.name || service}` : (data.error || "Failed"),
@@ -152,12 +166,21 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
         apiPostLog: [...postLog, logEntry],
       });
 
+      if (data.success) {
+        lcLog("process", "success", `Posted (${data.externalPostId || "ok"})`, { durationMs: elapsed });
+        lcLog("post-process", "success", `Post log updated (${postLog.length + 1} entries)`);
+      } else {
+        lcLog("process", "error", data.error || "Post failed", { error: data.error, durationMs: elapsed });
+      }
+
       toast({
         title: data.success ? "Posted successfully" : "Post failed",
         description: data.success ? data.externalPostUrl : data.error,
         variant: data.success ? "default" : "destructive",
       });
-    } catch {
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Network error";
+      lcLog("process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
       const logEntry = {
         platform: service,
         status: "failed",
@@ -173,7 +196,7 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
     } finally {
       setIsPosting(false);
     }
-  }, [service, inputContent, node.id, onUpdateNode, postLog, toast]);
+  }, [service, inputContent, node.id, onUpdateNode, postLog, toast, lcLog]);
 
   const serviceConn = service ? connectionStatus[service] : null;
 

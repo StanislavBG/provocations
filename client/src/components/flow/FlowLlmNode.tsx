@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LLM_PRESETS, getPreset, type LlmPreset } from "./llm-presets";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import { FlowPortDots } from "./FlowPortDots";
 
 interface FlowLlmNodeProps {
@@ -122,18 +123,42 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
     [node.id, onUpdateNode],
   );
 
+  // ── Lifecycle logging helper ──
+  const lcLog = useCallback(
+    (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error" | "skipped", message: string, extra?: { durationMs?: number; error?: string }) => {
+      lifecycleLogStore.push({
+        phase,
+        status,
+        nodeId: node.id,
+        nodeType: node.type,
+        nodeLabel: node.label || "Text Mods",
+        message,
+        ...extra,
+      });
+    },
+    [node.id, node.type, node.label],
+  );
+
   // ── Run ──
   const handleRun = useCallback(async () => {
+    const t0 = performance.now();
+    lcLog("pre-process", "start", "Validating inputs");
+
     if (inputNodes.length === 0) {
+      lcLog("pre-process", "error", "No inputs connected", { error: "No inputs" });
       toast({ title: "No inputs", description: "Add some notes or documents first" });
       return;
     }
     if (currentPreset.id === "custom" && !node.llmObjective?.trim()) {
+      lcLog("pre-process", "error", "No objective for custom preset", { error: "No objective" });
       toast({ title: "No objective", description: "Type an objective for the custom LLM node" });
       return;
     }
 
+    lcLog("pre-process", "success", `${inputNodes.length} input(s), preset: ${currentPreset.label}`);
+
     onUpdateNode(node.id, { llmStatus: "running", llmError: undefined });
+    lcLog("process", "start", `Running ${currentPreset.label}`);
 
     try {
       const combined = inputNodes
@@ -144,6 +169,9 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
       const res = await apiRequest("POST", currentPreset.endpoint, body);
       const data = await res.json();
       const output = currentPreset.extractOutput(data as Record<string, unknown>);
+      const elapsed = Math.round(performance.now() - t0);
+
+      lcLog("process", "success", `${output.length} chars output`, { durationMs: elapsed });
 
       // Mark LLM node as done (keep output for display but primary result goes to new document node)
       onUpdateNode(node.id, {
@@ -155,15 +183,18 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
       // Create output document node downstream (positioned by FlowWorkspace)
       onCreateNote(output, `${currentPreset.label} output`, node.id);
 
+      lcLog("post-process", "success", "Output document node created");
       toast({ title: `${currentPreset.label} complete`, description: `Output created as document node` });
-    } catch {
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "LLM call failed";
+      lcLog("process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
       onUpdateNode(node.id, {
         llmStatus: "error",
         llmError: "LLM call failed",
       });
       toast({ title: `${currentPreset.label} failed`, variant: "destructive" });
     }
-  }, [inputNodes, currentPreset, node.id, node.llmObjective, onUpdateNode, toast]);
+  }, [inputNodes, currentPreset, node.id, node.llmObjective, onUpdateNode, toast, lcLog]);
 
   // ── Copy output ──
   const handleCopy = useCallback(async () => {

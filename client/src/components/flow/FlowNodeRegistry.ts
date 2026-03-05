@@ -45,7 +45,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview";
 
 // ── Registry definition ──
 
@@ -238,7 +238,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: true,
     supportsChainExecution: true,
-    lifecyclePreset: "stream",
+    lifecyclePreset: "interview",
     minWidth: 180,
     minHeight: 100,
     inputDescription: "Objective text and context documents that define the interview topic. Supports journalist stance configuration.",
@@ -420,7 +420,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: false,
     supportsChainExecution: true,
-    lifecyclePreset: "passive",
+    lifecyclePreset: "logic",
     minWidth: 160,
     minHeight: 90,
     inputDescription: "Content from upstream nodes. The filter evaluates a condition rule to decide what passes through.",
@@ -446,7 +446,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: false,
     supportsChainExecution: true,
-    lifecyclePreset: "passive",
+    lifecyclePreset: "logic",
     minWidth: 130,
     minHeight: 80,
     inputDescription: "Content from upstream nodes. The gate blocks or allows content based on its open/closed state.",
@@ -472,7 +472,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: false,
     supportsChainExecution: true,
-    lifecyclePreset: "passive",
+    lifecyclePreset: "logic",
     minWidth: 160,
     minHeight: 100,
     inputDescription: "Content from upstream nodes. Routes to different output branches based on configured rules or labels.",
@@ -498,7 +498,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: false,
     supportsChainExecution: true,
-    lifecyclePreset: "passive",
+    lifecyclePreset: "logic",
     minWidth: 140,
     minHeight: 80,
     inputDescription: "Multiple input connections from different branches. Combines all incoming content into a single output.",
@@ -524,7 +524,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: true,
     supportsChainExecution: true,
-    lifecyclePreset: "llm",
+    lifecyclePreset: "social",
     minWidth: 180,
     minHeight: 120,
     inputDescription: "Text content to adapt for social media. Accepts intent, tone, and platform selection to guide generation.",
@@ -550,7 +550,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: true,
     supportsChainExecution: true,
-    lifecyclePreset: "llm",
+    lifecyclePreset: "api",
     minWidth: 160,
     minHeight: 100,
     inputDescription: "Content from upstream social post nodes or documents. Publishes to configured external API (X, LinkedIn, etc.).",

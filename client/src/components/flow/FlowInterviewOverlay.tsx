@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import type { FlowNode } from "./useFlowCanvas";
 import type { InterviewEntry, InterviewQuestionResponse } from "@shared/schema";
+import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 // ── Interview stance ──
 
@@ -250,9 +251,19 @@ export function FlowInterviewOverlay({
   // ── Input content from connected nodes ──
   const documentText = connectionContext?.inputContent ?? "";
 
+  // ── Lifecycle logging helper ──
+  const lcLog = useCallback(
+    (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
+      lifecycleLogStore.push({ phase, status, nodeId: node.id, nodeType: node.type, nodeLabel: node.label || "Interview", message, ...extra });
+    },
+    [node.id, node.type, node.label],
+  );
+
   // ── Question mutation ──
   const questionMutation = useMutation({
     mutationFn: async (updatedEntries?: InterviewEntry[]) => {
+      const t0 = performance.now();
+      lcLog("process", "start", "Generating next question");
       const allEntries = updatedEntries ?? entries;
       const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
       const response = await apiRequest("POST", "/api/interview/question", {
@@ -262,7 +273,9 @@ export function FlowInterviewOverlay({
         directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" || stance === "autobiography" ? "advise" : undefined,
         directionGuidance: buildGuidance(stance, focusText),
       });
-      return (await response.json()) as InterviewQuestionResponse;
+      const data = (await response.json()) as InterviewQuestionResponse;
+      lcLog("process", "success", `Question: "${data.question.slice(0, 60)}..."`, { durationMs: Math.round(performance.now() - t0) });
+      return data;
     },
     onSuccess: (data) => {
       setCurrentQuestion(data.question);
@@ -271,6 +284,7 @@ export function FlowInterviewOverlay({
     },
     onError: (error) => {
       const msg = error instanceof Error ? error.message : "Failed to generate question";
+      lcLog("process", "error", msg, { error: msg });
       errorLogStore.push({ step: "Interview Question", endpoint: "/api/interview/question", message: msg });
       toast({ title: "Question failed", description: msg, variant: "destructive" });
     },
@@ -279,20 +293,26 @@ export function FlowInterviewOverlay({
   // ── Summary mutation ──
   const summaryMutation = useMutation({
     mutationFn: async () => {
+      const t0 = performance.now();
+      lcLog("process", "start", `Summarizing ${entries.length} entries`);
       const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
       const response = await apiRequest("POST", "/api/interview/summary", {
         objective: effectiveObjective,
         entries,
         document: documentText,
       });
-      return (await response.json()) as { instruction: string };
+      const data = (await response.json()) as { instruction: string };
+      lcLog("process", "success", `Summary: ${data.instruction.length} chars`, { durationMs: Math.round(performance.now() - t0) });
+      return data;
     },
     onSuccess: (data) => {
+      lcLog("post-process", "success", "Summary exported as document node");
       onExportTranscript(data.instruction, "Interview Summary");
       toast({ title: "Summary exported", description: "Interview summary created as document node" });
     },
     onError: (error) => {
       const msg = error instanceof Error ? error.message : "Failed to generate summary";
+      lcLog("process", "error", msg, { error: msg });
       errorLogStore.push({ step: "Interview Summary", endpoint: "/api/interview/summary", message: msg });
       toast({ title: "Summary failed", description: msg, variant: "destructive" });
     },
