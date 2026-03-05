@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { Play, Square, Timer, Zap, Radio, ArrowDownToLine } from "lucide-react";
+import { Play, Square, Timer, Zap, Radio, ArrowDownToLine, Hand } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -68,7 +68,7 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
     });
   }, [node.id, onUpdateNode, mode]);
 
-  const handleSetMode = useCallback((newMode: "timed" | "automated") => {
+  const handleSetMode = useCallback((newMode: "manual" | "timed" | "automated") => {
     if (isRunning) {
       if (onToggleTrigger) {
         onToggleTrigger(node.id);
@@ -76,9 +76,10 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
         onUpdateNode(node.id, { timerRunning: false });
       }
     }
+    const snippets = { manual: "Manual trigger — click to fire", timed: "Timed trigger ready", automated: "Auto trigger ready" };
     onUpdateNode(node.id, {
       triggerMode: newMode,
-      snippet: newMode === "timed" ? "Timed trigger ready" : "Auto trigger ready",
+      snippet: snippets[newMode],
     });
   }, [node.id, isRunning, onUpdateNode, onToggleTrigger]);
 
@@ -91,7 +92,19 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
           <div className="flex gap-1 bg-muted/40 rounded-lg p-1">
             <button
               className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors",
+                mode === "manual"
+                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => handleSetMode("manual")}
+            >
+              <Hand className="w-3.5 h-3.5" />
+              Manual
+            </button>
+            <button
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors",
                 mode === "timed"
                   ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -103,7 +116,7 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
             </button>
             <button
               className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors",
                 mode === "automated"
                   ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -111,7 +124,7 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
               onClick={() => handleSetMode("automated")}
             >
               <Radio className="w-3.5 h-3.5" />
-              Automated
+              Auto
             </button>
           </div>
 
@@ -120,23 +133,29 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
             <div className={`relative w-20 h-20 rounded-full border-4 flex items-center justify-center ${
               isRunning ? "border-emerald-500 bg-emerald-500/10" : "border-border bg-muted/30"
             }`}>
-              {isRunning && (
+              {isRunning && mode !== "manual" && (
                 <div className="absolute inset-0 rounded-full border-4 border-emerald-500/30 animate-ping" />
               )}
-              {mode === "timed" ? (
+              {mode === "manual" ? (
+                <Hand className={`w-8 h-8 ${pulseCount > 0 ? "text-emerald-500" : "text-muted-foreground"}`} />
+              ) : mode === "timed" ? (
                 <Timer className={`w-8 h-8 ${isRunning ? "text-emerald-500" : "text-muted-foreground"}`} />
               ) : (
                 <Radio className={`w-8 h-8 ${isRunning ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
               )}
             </div>
             <Badge className={`text-xs ${isRunning ? "bg-emerald-500/20 text-emerald-600" : "bg-muted text-muted-foreground"}`}>
-              {isRunning
-                ? mode === "timed"
-                  ? `Pulse #${pulseCount}`
-                  : `Listening... (${pulseCount} fires)`
-                : pulseCount > 0
-                  ? `${pulseCount} ${mode === "timed" ? "pulses" : "fires"} sent`
-                  : "Ready"}
+              {mode === "manual"
+                ? pulseCount > 0
+                  ? `${pulseCount} fires`
+                  : "Click to fire"
+                : isRunning
+                  ? mode === "timed"
+                    ? `Pulse #${pulseCount}`
+                    : `Listening... (${pulseCount} fires)`
+                  : pulseCount > 0
+                    ? `${pulseCount} ${mode === "timed" ? "pulses" : "fires"} sent`
+                    : "Ready"}
             </Badge>
           </div>
 
@@ -203,25 +222,36 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
             </div>
           )}
 
-          {/* Start/Stop */}
-          <Button
-            size="sm"
-            className={`w-full gap-1.5 ${isRunning ? "" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
-            variant={isRunning ? "destructive" : "default"}
-            onClick={handleToggle}
-          >
-            {isRunning ? (
-              <>
-                <Square className="w-3.5 h-3.5" />
-                {mode === "timed" ? "Stop Timer" : "Stop Listening"}
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5" />
-                {mode === "timed" ? "Start Timer" : "Start Listening"}
-              </>
-            )}
-          </Button>
+          {/* Start/Stop / Fire */}
+          {mode === "manual" ? (
+            <Button
+              size="sm"
+              className="w-full gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => onPlayNode?.(node.id)}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Fire Chain
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className={`w-full gap-1.5 ${isRunning ? "" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
+              variant={isRunning ? "destructive" : "default"}
+              onClick={handleToggle}
+            >
+              {isRunning ? (
+                <>
+                  <Square className="w-3.5 h-3.5" />
+                  {mode === "timed" ? "Stop Timer" : "Stop Listening"}
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5" />
+                  {mode === "timed" ? "Start Timer" : "Start Listening"}
+                </>
+              )}
+            </Button>
+          )}
 
           {/* Clear log */}
           {pulseCount > 0 && !isRunning && (
@@ -259,18 +289,22 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
             ) : (
               <div className="flex-1 flex items-center justify-center py-20">
                 <div className="text-center space-y-2">
-                  {mode === "timed" ? (
+                  {mode === "manual" ? (
+                    <Hand className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+                  ) : mode === "timed" ? (
                     <Timer className="w-10 h-10 text-muted-foreground/30 mx-auto" />
                   ) : (
                     <Radio className="w-10 h-10 text-muted-foreground/30 mx-auto" />
                   )}
                   <p className="text-sm text-muted-foreground/50 font-sans">
-                    {mode === "timed" ? "No pulses yet" : "No fires yet"}
+                    {mode === "manual" ? "No fires yet" : mode === "timed" ? "No pulses yet" : "No fires yet"}
                   </p>
                   <p className="text-[11px] text-muted-foreground/40 font-sans">
-                    {mode === "timed"
-                      ? "Start the timer to begin sending pulses"
-                      : "Start listening to fire when upstream nodes complete"}
+                    {mode === "manual"
+                      ? "Click 'Fire Chain' to manually trigger the chain"
+                      : mode === "timed"
+                        ? "Start the timer to begin sending pulses"
+                        : "Start listening to fire when upstream nodes complete"}
                   </p>
                 </div>
               </div>

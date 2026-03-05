@@ -80,8 +80,8 @@ export interface FlowNode {
   youtubeFetchStatus?: "idle" | "fetching" | "done" | "error";
   /** YouTube node: error message */
   youtubeError?: string;
-  /** Trigger node: sub-type — "timed" fires on interval, "automated" fires when upstream finishes */
-  triggerMode?: "timed" | "automated";
+  /** Trigger node: sub-type — "manual" fires on button push, "timed" fires on interval, "automated" fires when upstream finishes */
+  triggerMode?: "manual" | "timed" | "automated";
   /** Trigger node: whether the trigger is currently active */
   timerRunning?: boolean;
   /** Trigger node (timed): interval in milliseconds (default 5000) */
@@ -209,6 +209,8 @@ export interface FlowNode {
   statusColorFailure?: string;
   /** Visual config: whether failure has been acknowledged */
   failureAcknowledged?: boolean;
+  /** Chain execution: auto-trigger next node on completion (default true) */
+  autoTriggerNext?: boolean;
 }
 
 export interface FlowEdge {
