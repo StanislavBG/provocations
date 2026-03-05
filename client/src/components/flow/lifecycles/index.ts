@@ -16,6 +16,7 @@ import { createApiConnectionHandlers } from "./api-connection";
 import { createLogicHandlers } from "./logic";
 import { createInterviewHandlers } from "./interview";
 import { createCoherenceHandlers } from "./coherence";
+import { createYoutubeHandlers } from "./youtube";
 
 /** No-op handlers for passive nodes (document, context-doc, store, audio, label, zone) */
 function createPassiveHandlers(): NodeLifecycleHandlers {
@@ -35,6 +36,7 @@ const LIFECYCLE_FACTORIES: Record<LifecyclePreset, () => NodeLifecycleHandlers> 
   logic: createLogicHandlers,
   interview: createInterviewHandlers,
   coherence: createCoherenceHandlers,
+  youtube: createYoutubeHandlers,
 };
 
 /** Get lifecycle handlers for a given lifecycle preset */

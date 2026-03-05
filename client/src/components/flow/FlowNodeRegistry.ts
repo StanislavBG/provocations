@@ -46,7 +46,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube";
 
 // ── Registry definition ──
 
@@ -369,7 +369,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     expandMode: "overlay",
     playable: true,
     supportsChainExecution: true,
-    lifecyclePreset: "stream",
+    lifecyclePreset: "youtube",
     minWidth: 180,
     minHeight: 120,
     inputDescription: "YouTube URL, search keywords, or playlist URL. Can receive keywords from upstream context nodes for automated search.",

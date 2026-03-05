@@ -66,6 +66,7 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
   const [chapters, setChapters] = useState<Chapter[]>(node.youtubeChapters ?? []);
   const [expandedChapterIdx, setExpandedChapterIdx] = useState<number | null>(null);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const isFetching = node.youtubeFetchStatus === "fetching";
   const transcript = node.content || "";
 
@@ -411,29 +412,49 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
                       {searchResults.map((r) => {
                         const isSelected = selectedVideoIds.has(r.videoId);
                         return (
-                          <button
+                          <div
                             key={r.videoId}
-                            className={`w-full flex items-start gap-2 p-2 rounded-lg border text-left transition-colors ${
+                            className={`flex items-start gap-2 p-1.5 rounded-lg border text-left transition-colors ${
                               isSelected
                                 ? "border-red-600/40 bg-red-600/5"
                                 : "border-border/50 hover:bg-muted/30"
                             }`}
-                            onClick={() => toggleVideoSelection(r.videoId)}
                           >
-                            {isSelected ? (
-                              <CheckSquare className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
-                            ) : (
-                              <Square className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0 mt-0.5" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[11px] font-medium leading-tight truncate">{r.title}</p>
-                              <div className="flex items-center gap-2 mt-0.5 text-[9px] text-muted-foreground">
-                                <span className="flex items-center gap-0.5"><User className="w-2.5 h-2.5" />{r.channelTitle}</span>
-                                {r.duration && <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{r.duration}</span>}
-                                {r.viewCount && <span className="flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" />{r.viewCount}</span>}
+                            {/* Thumbnail — click to preview */}
+                            <button
+                              className="relative shrink-0 w-16 h-10 rounded overflow-hidden group/thumb"
+                              onClick={() => setPreviewVideoId(r.videoId)}
+                              title="Preview video"
+                            >
+                              <img
+                                src={r.thumbnailUrl || `https://i.ytimg.com/vi/${r.videoId}/default.jpg`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover/thumb:opacity-100 transition-opacity">
+                                <Play className="w-4 h-4 text-white" />
                               </div>
-                            </div>
-                          </button>
+                            </button>
+                            {/* Selection checkbox + info */}
+                            <button
+                              className="flex-1 flex items-start gap-1.5 min-w-0 text-left"
+                              onClick={() => toggleVideoSelection(r.videoId)}
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                              ) : (
+                                <Square className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0 mt-0.5" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] font-medium leading-tight truncate">{r.title}</p>
+                                <div className="flex items-center gap-2 mt-0.5 text-[9px] text-muted-foreground">
+                                  <span className="flex items-center gap-0.5"><User className="w-2.5 h-2.5" />{r.channelTitle}</span>
+                                  {r.duration && <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{r.duration}</span>}
+                                  {r.viewCount && <span className="flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" />{r.viewCount}</span>}
+                                </div>
+                              </div>
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -644,18 +665,27 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
 
       {/* Right: Transcript / Player */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Embedded player */}
-        {showPlayer && videoId && (
-          <div className="border-b bg-black">
+        {/* Embedded player — from URL mode thumbnail click or search result preview */}
+        {(showPlayer && videoId || previewVideoId) && (
+          <div className="border-b bg-black relative">
             <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
               <iframe
                 className="absolute inset-0 w-full h-full"
-                src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0`}
+                src={`https://www.youtube-nocookie.com/embed/${previewVideoId || videoId}?rel=0&autoplay=1`}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 title="YouTube player"
               />
             </div>
+            {previewVideoId && (
+              <button
+                className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors z-10"
+                onClick={() => setPreviewVideoId(null)}
+                title="Close preview"
+              >
+                <span className="text-xs font-bold">&times;</span>
+              </button>
+            )}
           </div>
         )}
 

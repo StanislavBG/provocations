@@ -104,6 +104,8 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
       audioRecording: false,
       audioTranscript: transcript,
       content: transcript,
+      documentContent: transcript,
+      llmStatus: "done",
       snippet: transcript ? transcript.slice(0, 200) : "No transcript captured",
       label: transcript
         ? `Audio: ${transcript.slice(0, 30)}${transcript.length > 30 ? "..." : ""}`
