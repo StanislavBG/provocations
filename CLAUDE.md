@@ -22,8 +22,8 @@ The AIQA QA overlay is embedded in `client/index.html`. Environment variables ar
 ### Fetch bugs and feature requests
 
 ```bash
-curl -H "X-API-Key: 3b03bd31-93b9-4efe-9c3d-4d6a54db97f0" \
-  "https://aiqastudio.replit.app/api/bugs?project_id=0681dd20-4cec-4a1a-8280-7c7b33fdaee7"
+curl -H "X-API-Key: aiq_425865884d0ef800ba96bab750fc43f6" \
+  "https://aiqastudio.replit.app/api/bugs?project_id=eacc71c9-f5f5-4d1b-a798-3f47b99a04da"
 ```
 
 Filter options: `&submission_type=bug_report`, `&submission_type=feature_request`, `&status=open`, `&urgency=high`.
@@ -32,13 +32,13 @@ Filter options: `&submission_type=bug_report`, `&submission_type=feature_request
 
 ```bash
 # Check test results
-GET https://aiqastudio.replit.app/api/projects/0681dd20-4cec-4a1a-8280-7c7b33fdaee7/results
+GET https://aiqastudio.replit.app/api/projects/eacc71c9-f5f5-4d1b-a798-3f47b99a04da/results
 
 # List test cases
-GET https://aiqastudio.replit.app/api/test-cases?project_id=0681dd20-4cec-4a1a-8280-7c7b33fdaee7
+GET https://aiqastudio.replit.app/api/test-cases?project_id=eacc71c9-f5f5-4d1b-a798-3f47b99a04da
 
 # Stats overview
-GET https://aiqastudio.replit.app/api/stats/overview?project_id=0681dd20-4cec-4a1a-8280-7c7b33fdaee7
+GET https://aiqastudio.replit.app/api/stats/overview?project_id=eacc71c9-f5f5-4d1b-a798-3f47b99a04da
 ```
 
 All endpoints require `X-API-Key: {AIQA_API_KEY}` header.

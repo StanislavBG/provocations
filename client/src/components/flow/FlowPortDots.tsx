@@ -41,26 +41,40 @@ export const FlowPortDots = React.memo(function FlowPortDots({
         const style: React.CSSProperties = {
           top: "50%",
           transform: "translateY(-50%)",
-          ...(port.side === "left" ? { left: -5 } : { right: -5 }),
+          ...(port.side === "left" ? { left: -7 } : { right: -7 }),
         };
 
         return (
           <div
             key={`${port.side}-${port.type}`}
-            className={cn(
-              "absolute w-[10px] h-[10px] rounded-full border-2 transition-all cursor-crosshair z-10",
-              isOutput ? colors.fill : "bg-background",
-              colors.border,
-              isSelected
-                ? "opacity-100 scale-100"
-                : "opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100",
-            )}
+            className="absolute z-10"
             style={style}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              onPortMouseDown?.(e, node.id, port.type);
-            }}
-          />
+          >
+            {/* Invisible larger hit area for easier grabbing */}
+            <div
+              className="absolute inset-[-6px] cursor-crosshair"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onPortMouseDown?.(e, node.id, port.type);
+              }}
+            />
+            {/* Visible handle */}
+            <div
+              className={cn(
+                "w-[14px] h-[14px] rounded-full border-[2.5px] transition-all cursor-crosshair",
+                "shadow-sm hover:scale-125 hover:shadow-md",
+                isOutput ? colors.fill : "bg-background",
+                colors.border,
+                isSelected
+                  ? "opacity-100 scale-100"
+                  : "opacity-60 scale-90 group-hover:opacity-100 group-hover:scale-100",
+              )}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onPortMouseDown?.(e, node.id, port.type);
+              }}
+            />
+          </div>
         );
       })}
     </>

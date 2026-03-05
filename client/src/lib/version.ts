@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.11.0";
+export const APP_VERSION = "0.11.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,20 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.11.1",
+    date: "2026-03-05",
+    changes: [
+      "Social node: upstream images from painter nodes auto-attached to posts; generate images toggle now calls /api/generate-image",
+      "Connection handles: port dots enlarged (14px), always partially visible, larger hit area for easier grabbing, hover scale effect",
+      "YouTube node: search results now show thumbnails with click-to-preview video player on right side",
+      "YouTube node: dedicated lifecycle handler — auto-detects URL vs search keywords from upstream audio/text nodes in chain execution",
+      "Audio node: now sets llmStatus=done and documentContent on recording stop for proper chain propagation to downstream nodes",
+      "Interview: mode selector changed to mutually exclusive 'Conversation' vs 'One at a Time' toggle (no longer two independent switches)",
+      "Interview: trueInterview mode now defaults to ON and persists to node config (survives overlay close/reopen)",
+      "Interview: fixed conversation continuation — re-entrant handleAnswer guard + conversation turn state machine fix (transition to PROCESSING before callback)",
+    ],
+  },
   {
     version: "0.11.0",
     date: "2026-03-05",

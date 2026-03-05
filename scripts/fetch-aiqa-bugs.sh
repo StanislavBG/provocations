@@ -2,8 +2,8 @@
 # Fetch all bugs and feature requests from AIQA Studio
 # Usage: ./scripts/fetch-aiqa-bugs.sh [--status open|closed|all]
 
-API_KEY="${AIQA_API_KEY:-3b03bd31-93b9-4efe-9c3d-4d6a54db97f0}"
-PROJECT_ID="${AIQA_PROJECT_ID:-0681dd20-4cec-4a1a-8280-7c7b33fdaee7}"
+API_KEY="${AIQA_API_KEY:-aiq_425865884d0ef800ba96bab750fc43f6}"
+PROJECT_ID="${AIQA_PROJECT_ID:-eacc71c9-f5f5-4d1b-a798-3f47b99a04da}"
 BASE_URL="${AIQA_URL:-https://aiqastudio.replit.app}"
 
 echo "Fetching AIQA bugs for project: $PROJECT_ID"

@@ -161,6 +161,7 @@ export interface FlowNode {
     journalistDescription: string;
     voiceEnabled: boolean;
     ttsEnabled: boolean;
+    trueInterview?: boolean;
   };
   /** Social Post node: enabled platforms */
   socialPlatforms?: Record<string, boolean>;

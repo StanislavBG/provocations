@@ -115,8 +115,8 @@ export function FlowInterviewOverlay({
     node.interviewConfig?.stance ?? "investigative",
   );
   const [focusText, setFocusText] = useState(node.interviewConfig?.journalistDescription ?? "");
-  const [ttsEnabled, setTtsEnabled] = useState(node.interviewConfig?.ttsEnabled ?? false);
-  const [trueInterview, setTrueInterview] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(node.interviewConfig?.ttsEnabled ?? true);
+  const [trueInterview, setTrueInterview] = useState(node.interviewConfig?.trueInterview ?? true);
 
   // ── TTS state ──
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -196,6 +196,7 @@ export function FlowInterviewOverlay({
           journalistDescription: focusText,
           voiceEnabled: true,
           ttsEnabled,
+          trueInterview,
         },
         label: entries.length > 0
           ? `Interview (${entries.length} Q&A)`
@@ -208,7 +209,7 @@ export function FlowInterviewOverlay({
     return () => {
       if (persistTimeoutRef.current) clearTimeout(persistTimeoutRef.current);
     };
-  }, [entries, objective, stance, focusText, ttsEnabled, node.id, onUpdateNode]);
+  }, [entries, objective, stance, focusText, ttsEnabled, trueInterview, node.id, onUpdateNode]);
 
   // ── Unlock mobile audio ──
   const unlockMobileAudio = useCallback(() => {
@@ -370,9 +371,14 @@ export function FlowInterviewOverlay({
     trackEvent("interview_ended", { metadata: { entryCount: String(entries.length) } });
   }, [entries.length, trueInterview, conversationTurn]);
 
+  // Guard to prevent re-entrant handleAnswer calls from conversation turn
+  const answeringRef = useRef(false);
+
   const handleAnswer = useCallback(
     (answer: string) => {
-      if (!currentQuestion || !answer.trim()) return;
+      if (!currentQuestion || !answer.trim() || answeringRef.current) return;
+      answeringRef.current = true;
+
       const entry: InterviewEntry = {
         id: generateId("iv"),
         question: currentQuestion,
@@ -392,13 +398,14 @@ export function FlowInterviewOverlay({
         setObjective(answer.trim());
       }
 
-      // In true interview mode, transition back to PROCESSING for next question
-      if (trueInterview && conversationTurn.state === "LISTENING") {
-        conversationTurn.submitAnswer();
-      }
+      // Generate next question — the mutation's onSuccess will speak it,
+      // which triggers the full conversation turn cycle again
       questionMutation.mutate(nextEntries);
+
+      // Allow next answer after a tick (React state updates are async)
+      setTimeout(() => { answeringRef.current = false; }, 100);
     },
-    [currentQuestion, currentTopic, questionMutation, entries, objective, stance, trueInterview, conversationTurn],
+    [currentQuestion, currentTopic, questionMutation, entries, objective, stance],
   );
 
   // Keep handleAnswerRef in sync for conversation turn callback
@@ -574,47 +581,45 @@ export function FlowInterviewOverlay({
                 </p>
               </div>
 
-              {/* Mode toggles */}
-              <div className="space-y-2">
-                {/* True Interview — continuous dialog */}
-                <button
-                  onClick={() => {
-                    const next = !trueInterview;
-                    setTrueInterview(next);
-                    if (next) { setTtsEnabled(true); unlockMobileAudio(); }
-                  }}
-                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-md border text-xs transition-colors ${
-                    trueInterview
-                      ? "border-emerald-500/60 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
-                      : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
-                  }`}
-                >
-                  <Radio className="w-3.5 h-3.5 shrink-0" />
-                  <div className="text-left flex-1">
-                    <span className="font-medium">True Interview</span>
-                    <span className="text-[10px] opacity-70 ml-1.5">continuous voice dialog</span>
-                  </div>
-                </button>
-
-                {/* Voice Conversation toggle */}
-                <button
-                  onClick={() => {
-                    const next = !ttsEnabled;
-                    setTtsEnabled(next);
-                    if (next) unlockMobileAudio();
-                  }}
-                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs transition-colors ${
-                    ttsEnabled
-                      ? "border-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400"
-                      : "border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/20"
-                  }`}
-                >
-                  {ttsEnabled ? <Volume2 className="w-3.5 h-3.5 shrink-0" /> : <VolumeX className="w-3.5 h-3.5 shrink-0" />}
-                  <div className="text-left">
-                    <span className="font-medium">Voice Conversation</span>
-                    <span className="text-[10px] opacity-70 ml-1.5">questions read aloud</span>
-                  </div>
-                </button>
+              {/* Interview Mode — mutually exclusive */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Mode</p>
+                <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 border">
+                  <button
+                    onClick={() => {
+                      setTrueInterview(true);
+                      setTtsEnabled(true);
+                      unlockMobileAudio();
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-[10px] font-medium transition-colors ${
+                      trueInterview
+                        ? "bg-emerald-600 text-white"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Radio className="w-3 h-3" />
+                    Conversation
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTrueInterview(false);
+                      setTtsEnabled(true);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-[10px] font-medium transition-colors ${
+                      !trueInterview
+                        ? "bg-violet-600 text-white"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Volume2 className="w-3 h-3" />
+                    One at a Time
+                  </button>
+                </div>
+                <p className="text-[9px] text-muted-foreground/60">
+                  {trueInterview
+                    ? "Hands-free voice dialog — questions spoken aloud, mic auto-listens"
+                    : "Questions read aloud one at a time — type or speak your answers manually"}
+                </p>
               </div>
 
               {/* Voice selection (visible when TTS enabled) */}

@@ -54,16 +54,21 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
   const tone = node.socialTone || "professional";
   const generatedPosts = node.socialGeneratedPosts || {};
 
-  // Gather input content from connected nodes
-  const inputContent = useMemo(() => {
+  // Gather input content and images from connected nodes
+  const { inputContent, upstreamImages } = useMemo(() => {
     const inputEdges = edges.filter((e) => e.toNodeId === node.id);
     const inputNodes = inputEdges
       .map((e) => nodes.find((n) => n.id === e.fromNodeId))
       .filter(Boolean) as FlowNode[];
-    return inputNodes
+    const text = inputNodes
       .map((n) => n.documentContent || n.content || n.snippet || "")
       .filter((s) => s.trim())
       .join("\n\n---\n\n");
+    // Collect image URLs from upstream painter or image-bearing nodes
+    const images = inputNodes
+      .map((n) => n.imageUrl)
+      .filter((url): url is string => !!url);
+    return { inputContent: text, upstreamImages: images };
   }, [node.id, nodes, edges]);
 
   const enabledPlatforms = Object.entries(platforms).filter(([, v]) => v).map(([k]) => k);
@@ -127,9 +132,28 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
       const data = (await res.json()) as { posts: Record<string, { text: string; hashtags?: string[]; characterCount: number }> };
 
       const posts: Record<string, { text: string; imageUrl?: string; charCount: number; status: string }> = {};
+
+      // When generateImages is ON, try to generate an image for each platform
+      // When OFF but upstream images exist, attach the first upstream image
+      let generatedImageUrl: string | undefined;
+      if (node.socialGenerateImages) {
+        try {
+          const imgRes = await apiRequest("POST", "/api/generate-image", {
+            prompt: `Social media image for: ${inputContent.slice(0, 500)}`,
+          });
+          const imgData = (await imgRes.json()) as { imageUrl?: string };
+          generatedImageUrl = imgData.imageUrl;
+        } catch {
+          // Image generation is best-effort
+        }
+      }
+
+      const imageToAttach = generatedImageUrl || (upstreamImages.length > 0 ? upstreamImages[0] : undefined);
+
       for (const [platform, post] of Object.entries(data.posts)) {
         posts[platform] = {
           text: post.text,
+          imageUrl: imageToAttach,
           charCount: post.characterCount,
           status: "draft",
         };
@@ -158,7 +182,7 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
     } finally {
       setIsGenerating(false);
     }
-  }, [enabledPlatforms, inputContent, intent, tone, node.id, onUpdateNode, toast, activeTab, lcLog]);
+  }, [enabledPlatforms, inputContent, upstreamImages, intent, tone, node.id, node.socialGenerateImages, onUpdateNode, toast, activeTab, lcLog]);
 
   const currentPost = activeTab ? generatedPosts[activeTab] : null;
   const currentPlatform = activeTab ? SOCIAL_PLATFORMS[activeTab] : null;

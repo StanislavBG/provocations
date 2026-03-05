@@ -123,15 +123,18 @@ export function useConversationTurn(options: ConversationTurnOptions) {
     clearSilenceTimer();
     const transcript = finalTranscriptRef.current;
 
-    // Notify parent with the final transcript
-    if (transcript.trim()) {
-      onTranscriptRef.current(transcript, true);
-    }
-
+    // Stop recognition and transition to PROCESSING first,
+    // so that when the parent processes the answer and triggers
+    // the next question cycle, the state machine is ready.
     stopRecognition();
     setCurrentTranscript("");
     finalTranscriptRef.current = "";
     transition("PROCESSING");
+
+    // Notify parent with the final transcript after state transition
+    if (transcript.trim()) {
+      onTranscriptRef.current(transcript, true);
+    }
   }, [clearSilenceTimer, stopRecognition, transition]);
 
   const startRecognition = useCallback(() => {
