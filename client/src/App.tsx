@@ -1,5 +1,5 @@
 import { Switch, Route } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -58,6 +58,15 @@ function Router() {
 }
 
 function LandingPage() {
+  // Ensure the BG Aurora hero animation is visible on the landing page
+  useLayoutEffect(() => {
+    const hero = document.getElementById("hero");
+    if (hero) hero.style.display = "";
+    return () => {
+      // Don't hide on unmount — FlowWorkspace manages visibility based on theme
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Top bar — sign in top-right */}
