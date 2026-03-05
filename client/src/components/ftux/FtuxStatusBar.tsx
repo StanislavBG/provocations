@@ -22,7 +22,10 @@ import {
   Info,
   Sun,
   Moon,
+  Activity,
+  Palette,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { FlowNodeType } from "@/components/flow/useFlowCanvas";
 import { CANVAS_STYLES } from "@/lib/canvas-styles";
@@ -76,13 +79,16 @@ interface FtuxStatusBarProps {
   detailsOpen?: boolean;
   /** Whether a canvas is currently loading */
   canvasLoading?: boolean;
+  /** Callback to open the Activity Logs overlay */
+  onOpenActivityLogs?: () => void;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onToggleDetails, detailsOpen, canvasLoading }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onToggleDetails, detailsOpen, canvasLoading, onOpenActivityLogs }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [gearDropdownOpen, setGearDropdownOpen] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const shell = useFtuxShell();
@@ -355,19 +361,57 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
             )}
           </div>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-7 h-7 rounded text-muted-foreground hover:text-foreground"
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Settings className="w-3.5 h-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs z-[60]">Settings</TooltipContent>
-        </Tooltip>
+        <div className="relative">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("w-7 h-7 rounded", gearDropdownOpen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => setGearDropdownOpen((v) => !v)}
+              >
+                <Settings className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            {!gearDropdownOpen && (
+              <TooltipContent side="bottom" className="text-xs z-[60]">Settings</TooltipContent>
+            )}
+          </Tooltip>
+
+          {gearDropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-50" onClick={() => setGearDropdownOpen(false)} />
+              <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[180px] animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                  onClick={() => {
+                    setGearDropdownOpen(false);
+                    setSettingsOpen(true);
+                  }}
+                >
+                  <Palette className="w-3.5 h-3.5 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium">UX Configuration</div>
+                    <div className="text-[10px] text-muted-foreground">Dock, theme, keybinds</div>
+                  </div>
+                </button>
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                  onClick={() => {
+                    setGearDropdownOpen(false);
+                    onOpenActivityLogs?.();
+                  }}
+                >
+                  <Activity className="w-3.5 h-3.5 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium">Activity Logs</div>
+                    <div className="text-[10px] text-muted-foreground">Lifecycle events, debug</div>
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <UserButton
           appearance={{
             elements: {

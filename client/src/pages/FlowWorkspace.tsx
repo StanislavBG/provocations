@@ -33,7 +33,7 @@ import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
 import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import { useLifecycleEngine } from "@/components/flow/useLifecycleEngine";
-import { LifecycleConsole } from "@/components/flow/LifecycleConsole";
+import { ActivityLogsOverlay } from "@/components/flow/ActivityLogsOverlay";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import type { LifecyclePhase, LifecycleStatus } from "@/lib/lifecycleLog";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
@@ -2550,6 +2550,7 @@ function FlowWorkspaceInner() {
         canvasLoading={canvasLoading}
         onToggleDetails={() => setDetailsPanelOpen((v) => !v)}
         detailsOpen={detailsPanelOpen}
+        onOpenActivityLogs={() => setLifecycleConsoleOpen(true)}
       />
 
       {/* Workspace tabs */}
@@ -2665,25 +2666,9 @@ function FlowWorkspaceInner() {
         {!dockHidden && <FtuxDock />}
         <FlowLoadingBar active={canvasLoading || isSaving} progress={canvasLoading ? loadProgress : undefined} />
 
-        {/* Lifecycle Console toggle button */}
-        <button
-          className={cn(
-            "absolute bottom-2 right-2 z-30 w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold transition-all shadow-sm border",
-            lifecycleConsoleOpen
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card/80 text-muted-foreground border-border/50 hover:bg-card hover:text-foreground",
-          )}
-          onClick={() => setLifecycleConsoleOpen((v) => !v)}
-          title="Toggle Lifecycle Console"
-        >
-          LC
-        </button>
-
-        {/* Lifecycle Console panel */}
+        {/* Activity Logs overlay (full screen) */}
         {lifecycleConsoleOpen && (
-          <div className="absolute bottom-0 left-0 right-0 z-30 h-52 border-t shadow-lg">
-            <LifecycleConsole onClose={() => setLifecycleConsoleOpen(false)} />
-          </div>
+          <ActivityLogsOverlay onClose={() => setLifecycleConsoleOpen(false)} />
         )}
       </div>
 
