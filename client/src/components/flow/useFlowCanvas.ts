@@ -130,6 +130,8 @@ export interface FlowNode {
     customInstruction?: string;
     outputMode?: "consolidated" | "split";
   };
+  /** Output creation mode: "replace" deletes existing downstream document outputs before creating new; "new" keeps them */
+  outputReplaceMode?: "replace" | "new";
   /** Pre-process hook: instruction text to transform input before execution */
   preProcess?: string;
   /** Post-process hook: instruction text to transform output after execution */
@@ -338,6 +340,23 @@ export function useFlowCanvas() {
     });
   }, [pushHistory]);
 
+  /** Delete multiple nodes in a single undo snapshot (for batch operations like replacing outputs) */
+  const deleteNodes = useCallback((nodeIds: string[]) => {
+    if (nodeIds.length === 0) return;
+    pushHistory();
+    const idSet = new Set(nodeIds);
+    setState((s) => {
+      const next = new Set(s.selectedNodeIds);
+      for (const id of Array.from(idSet)) next.delete(id);
+      return {
+        ...s,
+        nodes: s.nodes.filter((n) => !idSet.has(n.id)),
+        edges: s.edges.filter((e) => !idSet.has(e.fromNodeId) && !idSet.has(e.toNodeId)),
+        selectedNodeIds: next,
+      };
+    });
+  }, [pushHistory]);
+
   const selectNode = useCallback((nodeId: string | null) => {
     setState((s) => ({
       ...s,
@@ -435,6 +454,7 @@ export function useFlowCanvas() {
     moveNode,
     moveNodes,
     deleteNode,
+    deleteNodes,
     deleteEdge,
     selectNode,
     selectNodes,

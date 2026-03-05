@@ -4,13 +4,14 @@ import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { LLM_PRESETS, getPreset, type LlmPreset } from "./llm-presets";
-import type { FlowNode } from "./useFlowCanvas";
+import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import { FlowPortDots } from "./FlowPortDots";
 
 interface FlowLlmNodeProps {
   node: FlowNode;
+  edges: FlowEdge[];
   isSelected: boolean;
   allNodes: FlowNode[];
   selectedNodeIds: Set<string>;
@@ -31,6 +32,7 @@ const PRESET_COLORS: Record<string, { chip: string; active: string }> = {
 
 export const FlowLlmNode = React.memo(function FlowLlmNode({
   node,
+  edges,
   isSelected,
   allNodes,
   selectedNodeIds,
@@ -49,14 +51,20 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
   const currentPreset = getPreset(node.llmPresetId);
   const status = node.llmStatus ?? "idle";
 
-  // ── Determine input nodes ──
+  // ── Determine input nodes (from connected edges) ──
   const inputNodes = React.useMemo(() => {
+    const incomingIds = new Set(
+      edges.filter((e) => e.toNodeId === node.id).map((e) => e.fromNodeId),
+    );
+    if (incomingIds.size > 0) {
+      return allNodes.filter((n) => incomingIds.has(n.id));
+    }
+    // Fallback: if nothing connected, use multi-selected nodes
     const otherSelected = allNodes.filter(
       (n) => selectedNodeIds.has(n.id) && n.id !== node.id && n.type !== "store" && n.type !== "llm",
     );
-    if (otherSelected.length > 0) return otherSelected;
-    return allNodes.filter((n) => n.type === "document" || n.type === "context-doc");
-  }, [allNodes, selectedNodeIds, node.id]);
+    return otherSelected;
+  }, [allNodes, edges, selectedNodeIds, node.id]);
 
   // ── Preset change ──
   const handlePresetChange = useCallback(

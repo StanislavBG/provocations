@@ -236,7 +236,7 @@ export function FlowCanvas({
 
     // Specialized nodes with complex interactive bodies (keep dedicated components)
     if (node.type === "llm") return (
-      <FlowLlmNode key={node.id} node={node} isSelected={sel} allNodes={state.nodes} selectedNodeIds={state.selectedNodeIds} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onCreateNote={onCreateNote} onPortMouseDown={handlePortMouseDown} />
+      <FlowLlmNode key={node.id} node={node} edges={state.edges} isSelected={sel} allNodes={state.nodes} selectedNodeIds={state.selectedNodeIds} onMouseDown={handleNodeMouseDown} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onCreateNote={onCreateNote} onPortMouseDown={handlePortMouseDown} />
     );
     if (node.type === "research") return (
       <FlowResearchNode key={node.id} node={node} edges={state.edges} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onPlayNode={onPlayNode} />
