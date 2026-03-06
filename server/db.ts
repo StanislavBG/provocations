@@ -4,9 +4,9 @@ import * as schema from "../shared/models/chat";
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  min: 5,
-  max: 20,
-  idleTimeoutMillis: 30_000,
+  min: 2,
+  max: 10,
+  idleTimeoutMillis: 15_000,
   connectionTimeoutMillis: 5_000,
 });
 

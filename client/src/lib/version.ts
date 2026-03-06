@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.0";
+export const APP_VERSION = "0.14.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.14.1",
+    date: "2026-03-06",
+    changes: [
+      "Reduce database connection pool size for better resource usage on Replit",
+    ],
+  },
   {
     version: "0.14.0",
     date: "2026-03-06",
