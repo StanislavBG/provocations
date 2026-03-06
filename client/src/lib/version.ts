@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.3";
+export const APP_VERSION = "0.14.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.14.4",
+    date: "2026-03-06",
+    changes: [
+      "Fix painter node not storing imageUrl — now persists on the node for both overlay and lifecycle chain generation",
+      "Fix social post not receiving upstream painter image — lifecycle now checks direct imageUrl and parses painter output format",
+      "Add ImageCustomizer to ImagePreviewDialog with Edit Image toggle for pan/scale/crop/metadata tools",
+    ],
+  },
   {
     version: "0.14.3",
     date: "2026-03-06",

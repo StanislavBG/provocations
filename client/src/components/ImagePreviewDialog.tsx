@@ -7,7 +7,8 @@ import {
 } from "@/components/ui/dialog";
 import { Download, Copy, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
+import { ImageCustomizer } from "@/components/ImageCustomizer";
 
 interface ImagePreviewDialogProps {
   open: boolean;
@@ -25,6 +26,7 @@ export function ImagePreviewDialog({
   title = "Generated Image",
 }: ImagePreviewDialogProps) {
   const { toast } = useToast();
+  const [customizerOpen, setCustomizerOpen] = useState(false);
 
   const handleDownload = useCallback(() => {
     if (!imageUrl) return;
@@ -57,6 +59,14 @@ export function ImagePreviewDialog({
           <DialogTitle className="flex items-center gap-2">
             {title}
             <div className="flex-1" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setCustomizerOpen(!customizerOpen)}
+            >
+              {customizerOpen ? "Simple View" : "Edit Image"}
+            </Button>
             <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleCopy}>
               <Copy className="w-3.5 h-3.5" />
             </Button>
@@ -65,9 +75,19 @@ export function ImagePreviewDialog({
             </Button>
           </DialogTitle>
         </DialogHeader>
-        <div className="rounded-lg overflow-hidden border bg-muted/20">
-          <img src={imageUrl} alt="Generated visual" className="w-full h-auto" />
-        </div>
+        {customizerOpen ? (
+          <ImageCustomizer
+            src={imageUrl}
+            showMeta
+            showCrop
+            showUpload={false}
+            showGenerate={false}
+          />
+        ) : (
+          <div className="rounded-lg overflow-hidden border bg-muted/20">
+            <img src={imageUrl} alt="Generated visual" className="w-full h-auto" />
+          </div>
+        )}
         {prompt && (
           <p className="text-xs text-muted-foreground italic mt-2">
             Prompt: {prompt}

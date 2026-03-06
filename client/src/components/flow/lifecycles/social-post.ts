@@ -7,6 +7,22 @@
 import { apiRequest } from "@/lib/queryClient";
 import type { NodeLifecycleHandlers, NodeProcessContext } from "../useNodeLifecycle";
 
+/** Extract an image URL from upstream nodes, checking both direct imageUrl fields
+ *  and painter-format output text (IMAGE:url lines in combinedInputContent). */
+function findUpstreamImage(ctx: NodeProcessContext): string | undefined {
+  // 1. Check direct imageUrl on input nodes (works for painter nodes and image documents)
+  const directImages = (ctx.inputNodes || [])
+    .map((n) => n.imageUrl)
+    .filter((url): url is string => !!url);
+  if (directImages.length > 0) return directImages[0];
+
+  // 2. Parse combinedInputContent for IMAGE: prefix (painter lifecycle output format)
+  const imageMatch = ctx.combinedInputContent.match(/^IMAGE:(.+)/m);
+  if (imageMatch?.[1]) return imageMatch[1].trim();
+
+  return undefined;
+}
+
 export function createSocialPostHandlers(): NodeLifecycleHandlers {
   return {
     onPreProcess: async (ctx: NodeProcessContext) => {
@@ -42,15 +58,12 @@ export function createSocialPostHandlers(): NodeLifecycleHandlers {
           const imgData = (await imgRes.json()) as { imageUrl?: string };
           if (imgData.imageUrl) imageUrl = imgData.imageUrl;
         } catch {
-          // Image generation is best-effort
+          // Image generation is best-effort — fall through to upstream image
         }
       }
+      // Always fall back to upstream image if no generated image
       if (!imageUrl) {
-        // Check upstream nodes for images
-        const upstreamImages = (ctx.inputNodes || [])
-          .map((n) => n.imageUrl)
-          .filter((url): url is string => !!url);
-        if (upstreamImages.length > 0) imageUrl = upstreamImages[0];
+        imageUrl = findUpstreamImage(ctx);
       }
 
       // Return posts + imageUrl as enriched JSON
