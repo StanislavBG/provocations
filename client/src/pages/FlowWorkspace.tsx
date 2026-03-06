@@ -76,9 +76,10 @@ import {
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
-  Search, Zap, Settings, ScrollText, Trash2,
+  Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench,
 } from "lucide-react";
-import type { ChatMessageWithMeta } from "@shared/schema";
+import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
+import { ProvoThread } from "@/components/notebook/ProvoThread";
 import { APP_VERSION, RELEASE_NOTES } from "@/lib/version";
 
 // ── Dock config ──
@@ -338,6 +339,8 @@ function FlowWorkspaceInner() {
   const [pendingEdgeRole, setPendingEdgeRole] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [docEditorContent, setDocEditorContent] = useState("");
+  const [docLeftTab, setDocLeftTab] = useState<"tools" | "provo">("tools");
+  const [docActivePersonas, setDocActivePersonas] = useState<Set<ProvocationType>>(new Set());
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
@@ -1022,7 +1025,7 @@ function FlowWorkspaceInner() {
         // Also update the main canvas document if we have one
         if (canvasDocumentId) {
           await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, {
-            title: canvasTitle || "Flow Canvas",
+            title: canvasTitle || "Untitled Canvas",
             content: JSON.stringify(canvasData),
           }).catch(() => {});
         }
@@ -1067,7 +1070,7 @@ function FlowWorkspaceInner() {
       try {
         const contentNodes = stateRef.current.nodes.filter((n) => n.type !== "store");
         const canvasData = { nodes: contentNodes, edges: stateRef.current.edges, viewport: stateRef.current.viewport };
-        const title = canvasTitleRef.current || "Flow Canvas";
+        const title = canvasTitleRef.current || `Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
         if (canvasDocIdRef.current) {
           await apiRequest("PUT", `/api/documents/${canvasDocIdRef.current}`, {
@@ -1083,6 +1086,10 @@ function FlowWorkspaceInner() {
           });
           const data = (await res.json()) as { id: number };
           setCanvasDocumentId(data.id);
+          // Persist the generated title so subsequent saves and auto-saves use it
+          if (!canvasTitleRef.current) {
+            setCanvasTitle(title);
+          }
           queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
         }
       } catch {
@@ -1121,7 +1128,7 @@ function FlowWorkspaceInner() {
       if (!docId) return;
       const contentNodes = s.nodes.filter((n) => n.type !== "store");
       const canvasData = { nodes: contentNodes, edges: s.edges, viewport: s.viewport };
-      const title = canvasTitleRef.current || "Flow Canvas";
+      const title = canvasTitleRef.current || "Untitled Canvas";
       // Use sendBeacon for reliability — it fires even as the page unloads
       const blob = new Blob(
         [JSON.stringify({ title, content: JSON.stringify(canvasData) })],
@@ -2182,7 +2189,7 @@ function FlowWorkspaceInner() {
     try {
       const contentNodes = state.nodes.filter((n) => n.type !== "store");
       const canvasData = { nodes: contentNodes, edges: state.edges, viewport: state.viewport };
-      const title = canvasTitle || `Flow Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const title = canvasTitle || `Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
       if (canvasDocumentId) {
         // Update existing
@@ -2429,6 +2436,7 @@ function FlowWorkspaceInner() {
       }
     }
     setDocEditorContent("");
+    setDocLeftTab("tools");
   }, [activeExpandedNodeId, docEditorContent, updateNode]);
 
   // ── Header actions for status bar ──
@@ -3183,10 +3191,12 @@ function FlowWorkspaceInner() {
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">My Canvases</p>
                     <div className="space-y-0.5">
-                      {canvasDocs.map((doc) => (
+                      {canvasDocs.map((doc) => {
+                        const isActive = doc.id === canvasDocumentId;
+                        return (
                         <div
                           key={doc.id}
-                          className="group w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors"
+                          className={`group w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors ${isActive ? "ring-1 ring-blue-500/50 bg-muted/30" : ""}`}
                         >
                           <button
                             className="flex items-center gap-2 min-w-0 flex-1 text-left"
@@ -3195,11 +3205,10 @@ function FlowWorkspaceInner() {
                             <ScanLine className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                             <div className="min-w-0 flex-1">
                               <span className="text-xs truncate block">{doc.title}</span>
-                              {doc.updatedAt && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  {new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                              )}
+                              <span className="text-[10px] text-muted-foreground">
+                                #{doc.id}
+                                {doc.updatedAt && (<> &middot; {new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</>)}
+                              </span>
                             </div>
                           </button>
                           <button
@@ -3213,7 +3222,8 @@ function FlowWorkspaceInner() {
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -3518,62 +3528,119 @@ function FlowWorkspaceInner() {
               // Document editor with tools panel
               return (
                 <div className="flex-1 flex overflow-hidden">
-                  <div className="w-1/3 max-w-[320px] border-r bg-card/50 flex flex-col overflow-auto">
-                    <div className="p-3 border-b">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <div className="w-1/3 max-w-[320px] border-r bg-card/50 flex flex-col min-h-0 overflow-hidden">
+                    {/* Tab bar */}
+                    <div className="flex border-b">
+                      <button
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
+                          docLeftTab === "tools"
+                            ? "text-foreground border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() => setDocLeftTab("tools")}
+                      >
+                        <Wrench className="w-3.5 h-3.5" />
                         Tools
-                      </h3>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {DOC_TOOLS.map((tool) => (
-                          <button
-                            key={tool.id}
-                            className="flex items-center gap-1.5 px-2.5 py-2 rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
-                            disabled={docToolRunning !== null}
-                            onClick={() => handleDocTool(tool.instruction, tool.id)}
-                          >
-                            {docToolRunning === tool.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
-                            ) : (
-                              <tool.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            )}
-                            <span className="text-[11px] font-medium">{tool.label}</span>
-                          </button>
-                        ))}
-                      </div>
+                      </button>
+                      <button
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
+                          docLeftTab === "provo"
+                            ? "text-foreground border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() => setDocLeftTab("provo")}
+                      >
+                        <Swords className="w-3.5 h-3.5" />
+                        Provo
+                      </button>
                     </div>
-                    <div className="p-3 flex-1">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                        Connected Inputs
-                      </h3>
-                      {(() => {
-                        const inputEdges = state.edges.filter((e) => e.toNodeId === activeExpandedNodeId);
-                        const inputNodes = inputEdges
-                          .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
-                          .filter(Boolean);
-                        if (inputNodes.length === 0) {
-                          return (
-                            <p className="text-[10px] text-muted-foreground/60 italic">
-                              No connected inputs. Drag edges from other nodes to this document.
-                            </p>
-                          );
-                        }
-                        return (
-                          <div className="space-y-1.5">
-                            {inputNodes.map((n) => n && (
-                              <div key={n.id} className="px-2 py-1.5 rounded border border-border/50 bg-muted/30">
-                                <p className="text-[10px] font-medium">{n.label}</p>
-                                <p className="text-[9px] text-muted-foreground line-clamp-2 mt-0.5">
-                                  {n.content || n.snippet || "No content"}
-                                </p>
-                              </div>
-                            ))}
+
+                    {/* Tab content */}
+                    <div className="flex-1 min-h-0 overflow-auto">
+                      {docLeftTab === "tools" ? (
+                        <>
+                          <div className="p-3 border-b">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                              Tools
+                            </h3>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {DOC_TOOLS.map((tool) => (
+                                <button
+                                  key={tool.id}
+                                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
+                                  disabled={docToolRunning !== null}
+                                  onClick={() => handleDocTool(tool.instruction, tool.id)}
+                                >
+                                  {docToolRunning === tool.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+                                  ) : (
+                                    <tool.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                  )}
+                                  <span className="text-[11px] font-medium">{tool.label}</span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        );
-                      })()}
+                          <div className="p-3 flex-1">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                              Connected Inputs
+                            </h3>
+                            {(() => {
+                              const inputEdges = state.edges.filter((e) => e.toNodeId === activeExpandedNodeId);
+                              const inputNodes = inputEdges
+                                .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
+                                .filter(Boolean);
+                              if (inputNodes.length === 0) {
+                                return (
+                                  <p className="text-[10px] text-muted-foreground/60 italic">
+                                    No connected inputs. Drag edges from other nodes to this document.
+                                  </p>
+                                );
+                              }
+                              return (
+                                <div className="space-y-1.5">
+                                  {inputNodes.map((n) => n && (
+                                    <div key={n.id} className="px-2 py-1.5 rounded border border-border/50 bg-muted/30">
+                                      <p className="text-[10px] font-medium">{n.label}</p>
+                                      <p className="text-[9px] text-muted-foreground line-clamp-2 mt-0.5">
+                                        {n.content || n.snippet || "No content"}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </>
+                      ) : (
+                        <ProvoThread
+                          documentText={docEditorContent}
+                          objective={activeExpandedNode?.label || ""}
+                          activePersonas={docActivePersonas}
+                          onTogglePersona={(id) =>
+                            setDocActivePersonas((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(id)) next.delete(id);
+                              else next.add(id);
+                              return next;
+                            })
+                          }
+                          onCaptureToContext={(text, label) => {
+                            setDocEditorContent((prev) =>
+                              prev
+                                ? `${prev}\n\n---\n\n### ${label}\n\n${text}`
+                                : `### ${label}\n\n${text}`,
+                            );
+                          }}
+                          hasDocument={!!docEditorContent.trim()}
+                        />
+                      )}
                     </div>
                   </div>
-                  <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-auto p-4">
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div className="flex-1 min-h-0 overflow-auto p-4">
                       <ProvokeText
                         value={docEditorContent}
                         onChange={setDocEditorContent}
@@ -3792,7 +3859,7 @@ function FlowWorkspaceInner() {
           onOpenChange={setShareDialogOpen}
           itemType="document"
           itemId={canvasDocumentId}
-          itemTitle={canvasTitle || "Flow Canvas"}
+          itemTitle={canvasTitle || "Untitled Canvas"}
         />
       )}
     </FtuxShell>

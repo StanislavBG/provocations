@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.13.1";
+export const APP_VERSION = "0.13.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,23 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.13.3",
+    date: "2026-03-06",
+    changes: [
+      "Improve canvas naming — auto-saved canvases now use timestamped names instead of generic 'Flow Canvas'",
+      "Show canvas ID in Open Canvas dialog for easy identification",
+      "Highlight the currently active canvas in the Open Canvas list",
+    ],
+  },
+  {
+    version: "0.13.2",
+    date: "2026-03-06",
+    changes: [
+      "Fix document scroll in expanded view — long documents now scroll properly instead of overflowing",
+      "Add Provo tab to document expanded view — generate persona challenges and accept advice directly into the document",
+    ],
+  },
   {
     version: "0.13.1",
     date: "2026-03-06",
