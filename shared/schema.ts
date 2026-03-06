@@ -1542,6 +1542,7 @@ export const notificationTypes = [
   "connection_accepted",   // your connection request was accepted
   "item_shared",           // someone shared a doc/folder with you
   "share_accepted",        // recipient accepted your share
+  "chain_notification",    // flow chain notification node triggered
 ] as const;
 export type NotificationType = typeof notificationTypes[number];
 

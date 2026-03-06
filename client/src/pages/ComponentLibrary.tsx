@@ -17,6 +17,8 @@ import {
   Code2,
   Plug,
   ChevronRight,
+  Box,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -24,10 +26,11 @@ import {
   getCategories,
   getCategoryCounts,
   type ComponentEntry,
+  type ComponentCategory,
 } from "@/lib/componentRegistry";
 
 const CATEGORY_META: Record<
-  ComponentEntry["category"],
+  ComponentCategory,
   { label: string; icon: typeof Blocks; color: string; description: string }
 > = {
   shared: {
@@ -66,6 +69,18 @@ const CATEGORY_META: Record<
     color: "text-cyan-500",
     description: "First-time user experience shell and dock",
   },
+  "canvas-node": {
+    label: "Canvas Nodes",
+    icon: Box,
+    color: "text-orange-500",
+    description: "All 17 node types available on the flow canvas — their purpose, ports, lifecycle, and chain behavior",
+  },
+  "canvas-feature": {
+    label: "Canvas Features",
+    icon: Wrench,
+    color: "text-teal-500",
+    description: "Canvas-level capabilities: camera controls, selection, undo/redo, themes, collaboration, and more",
+  },
 };
 
 function ComponentCard({ component }: { component: ComponentEntry }) {
@@ -95,22 +110,41 @@ function ComponentCard({ component }: { component: ComponentEntry }) {
         </p>
 
         {/* Stats row */}
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground/70">
-          <span className="flex items-center gap-1">
-            <Code2 className="w-3 h-3" />
-            {component.props.length} props
-          </span>
-          {component.hooks.length > 0 && (
-            <span className="flex items-center gap-1">
-              <Cable className="w-3 h-3" />
-              {component.hooks.length} hooks
-            </span>
-          )}
-          {component.apiEndpoints.length > 0 && (
-            <span className="flex items-center gap-1">
-              <Plug className="w-3 h-3" />
-              {component.apiEndpoints.length} APIs
-            </span>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground/70 flex-wrap">
+          {component.nodeMeta ? (
+            <>
+              <span className="flex items-center gap-1">
+                {component.nodeMeta.ports.length} ports
+              </span>
+              <span className="flex items-center gap-1">
+                {component.nodeMeta.lifecyclePreset}
+              </span>
+              {component.nodeMeta.playable && (
+                <span className="text-emerald-500">playable</span>
+              )}
+              {component.nodeMeta.supportsChainExecution && (
+                <span className="text-blue-500">chainable</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1">
+                <Code2 className="w-3 h-3" />
+                {component.props.length} props
+              </span>
+              {component.hooks.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <Cable className="w-3 h-3" />
+                  {component.hooks.length} hooks
+                </span>
+              )}
+              {component.apiEndpoints.length > 0 && (
+                <span className="flex items-center gap-1">
+                  <Plug className="w-3 h-3" />
+                  {component.apiEndpoints.length} APIs
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>

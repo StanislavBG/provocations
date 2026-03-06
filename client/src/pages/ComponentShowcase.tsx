@@ -22,17 +22,26 @@ import {
   ExternalLink,
   Layers,
   Zap,
+  Box,
+  Wrench,
+  ArrowRight,
+  ArrowLeftRight,
+  Circle,
+  Play,
+  Link2,
+  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   COMPONENT_REGISTRY,
   getComponent,
   type ComponentEntry,
+  type ComponentCategory,
   type PropEntry,
 } from "@/lib/componentRegistry";
 
 const CATEGORY_META: Record<
-  ComponentEntry["category"],
+  ComponentCategory,
   { label: string; icon: typeof Blocks; color: string; bgColor: string }
 > = {
   shared: { label: "Shared", icon: Package, color: "text-blue-500", bgColor: "bg-blue-500/10" },
@@ -41,6 +50,8 @@ const CATEGORY_META: Record<
   bschart: { label: "BS Chart", icon: BarChart3, color: "text-amber-500", bgColor: "bg-amber-500/10" },
   timeline: { label: "Timeline", icon: Clock, color: "text-rose-500", bgColor: "bg-rose-500/10" },
   ftux: { label: "FTUX Shell", icon: Sparkles, color: "text-cyan-500", bgColor: "bg-cyan-500/10" },
+  "canvas-node": { label: "Canvas Node", icon: Box, color: "text-orange-500", bgColor: "bg-orange-500/10" },
+  "canvas-feature": { label: "Canvas Feature", icon: Wrench, color: "text-teal-500", bgColor: "bg-teal-500/10" },
 };
 
 function PropRow({ prop }: { prop: PropEntry }) {
@@ -95,7 +106,12 @@ function SectionHeader({
 function TOCSidebar({ component }: { component: ComponentEntry }) {
   const sections = [
     { id: "overview", label: "Overview" },
-    { id: "props", label: `Props (${component.props.length})` },
+    ...(component.nodeMeta
+      ? [{ id: "node-spec", label: "Node Specification" }]
+      : []),
+    ...(component.props.length > 0
+      ? [{ id: "props", label: `Props (${component.props.length})` }]
+      : []),
     ...(component.hooks.length > 0
       ? [{ id: "hooks", label: `Hooks (${component.hooks.length})` }]
       : []),
@@ -251,6 +267,117 @@ export default function ComponentShowcase() {
                 )}
               </div>
             </section>
+
+            {/* Node Specification (canvas-node only) */}
+            {component.nodeMeta && (
+              <section id="node-spec" className="mb-8">
+                <SectionHeader icon={Cpu} title="Node Specification" />
+
+                {/* Identity row */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Type</p>
+                    <code className="text-xs font-mono font-medium">{component.nodeMeta.nodeType}</code>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Badge</p>
+                    <span className="text-xs font-medium">{component.nodeMeta.badge}</span>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Accent</p>
+                    <span className="text-xs font-medium">{component.nodeMeta.accent}</span>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Expand</p>
+                    <span className="text-xs font-medium">{component.nodeMeta.expandMode}</span>
+                  </div>
+                </div>
+
+                {/* Behavior flags */}
+                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                  <Badge variant={component.nodeMeta.playable ? "default" : "secondary"} className="text-[10px] gap-1">
+                    <Play className="w-2.5 h-2.5" />
+                    {component.nodeMeta.playable ? "Playable" : "Not Playable"}
+                  </Badge>
+                  <Badge variant={component.nodeMeta.supportsChainExecution ? "default" : "secondary"} className="text-[10px] gap-1">
+                    <Link2 className="w-2.5 h-2.5" />
+                    {component.nodeMeta.supportsChainExecution ? "Chain Execution" : "No Chain"}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] gap-1">
+                    <Cpu className="w-2.5 h-2.5" />
+                    {component.nodeMeta.lifecyclePreset}
+                  </Badge>
+                  {component.nodeMeta.dockGroup && (
+                    <Badge variant="outline" className="text-[10px] gap-1">
+                      <Box className="w-2.5 h-2.5" />
+                      Dock: {component.nodeMeta.dockGroup}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Ports */}
+                <div className="mb-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Ports</p>
+                  {component.nodeMeta.ports.length > 0 ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {component.nodeMeta.ports.map((port, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs",
+                            port.type === "input"
+                              ? "border-blue-500/40 bg-blue-500/5 text-blue-600 dark:text-blue-400"
+                              : "border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400",
+                          )}
+                        >
+                          {port.type === "input" ? (
+                            <ArrowRight className="w-3 h-3" />
+                          ) : (
+                            <ArrowLeftRight className="w-3 h-3" />
+                          )}
+                          {port.side} {port.type}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Circle className="w-3 h-3" />
+                      No ports — does not participate in data flow
+                    </div>
+                  )}
+                </div>
+
+                {/* Input / Output descriptions */}
+                <div className="space-y-3">
+                  <div className="rounded-lg border bg-blue-500/5 border-blue-500/20 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-1">Input</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{component.nodeMeta.inputDescription}</p>
+                  </div>
+                  <div className="rounded-lg border bg-emerald-500/5 border-emerald-500/20 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">Output</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{component.nodeMeta.outputDescription}</p>
+                  </div>
+                </div>
+
+                {/* File references */}
+                {(component.nodeMeta.expandedView || component.nodeMeta.lifecycleHandler) && (
+                  <div className="mt-4 flex items-center gap-3 flex-wrap text-[10px] text-muted-foreground">
+                    {component.nodeMeta.expandedView && (
+                      <span className="flex items-center gap-1 font-mono">
+                        <FileCode className="w-3 h-3" />
+                        Expanded: {component.nodeMeta.expandedView}
+                      </span>
+                    )}
+                    {component.nodeMeta.lifecycleHandler && (
+                      <span className="flex items-center gap-1 font-mono">
+                        <Cpu className="w-3 h-3" />
+                        Lifecycle: {component.nodeMeta.lifecycleHandler}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* Props */}
             <section id="props" className="mb-8">

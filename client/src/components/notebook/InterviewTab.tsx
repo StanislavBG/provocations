@@ -204,10 +204,10 @@ export function InterviewTab({
   useEffect(() => {
     apiRequest("GET", "/api/tts/elevenlabs/voices")
       .then((res) => res.json())
-      .then((data: { voices: { voice_id: string; name: string }[]; available: boolean }) => {
+      .then((data: { voices: { voice_id: string; name: string }[]; available: boolean; defaultVoiceId?: string }) => {
         if (data.available && data.voices.length > 0) {
           setAvailableVoices(data.voices);
-          if (!selectedVoiceId) setSelectedVoiceId(data.voices[0].voice_id);
+          if (!selectedVoiceId) setSelectedVoiceId(data.defaultVoiceId ?? data.voices[0].voice_id);
         }
       })
       .catch(() => {}); // Non-critical

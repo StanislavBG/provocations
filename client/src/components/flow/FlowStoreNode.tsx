@@ -55,22 +55,31 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
         </span>
       </div>
 
-      {/* Content: folder path or empty state */}
-      <div className="px-2 py-2 flex-1 flex items-center gap-1.5 min-w-0">
+      {/* Content: folder path + doc name or empty state */}
+      <div className="px-2 py-1.5 flex-1 flex flex-col gap-1 min-w-0 justify-center">
         {hasFolder ? (
           <>
-            <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span className="text-[10px] text-foreground/80 truncate">
-              {node.storeFolderPath || node.storeFolderName}
-            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="text-[10px] text-foreground/80 truncate">
+                {node.storeFolderPath || node.storeFolderName}
+              </span>
+            </div>
+            {node.storeName && (
+              <div className="flex items-center gap-1.5 min-w-0 pl-0.5">
+                <span className="text-[9px] text-muted-foreground truncate">
+                  {node.storeName}
+                </span>
+              </div>
+            )}
           </>
         ) : (
-          <>
+          <div className="flex items-center gap-1.5 min-w-0">
             <Folder className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
             <span className="text-[10px] text-muted-foreground/50 italic">
-              Double-click to pick folder
+              Double-click to configure
             </span>
-          </>
+          </div>
         )}
       </div>
 

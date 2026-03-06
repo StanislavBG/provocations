@@ -7,7 +7,8 @@
  */
 
 import { useState, useRef, useCallback } from "react";
-import type { FlowNode, FlowEdge, FlowNodeType } from "./useFlowCanvas";
+import type { FlowNode, FlowEdge, FlowNodeType, EdgeRole } from "./useFlowCanvas";
+import { edgeHasRole, edgeRoles } from "./useFlowCanvas";
 
 // ── Types ──
 
@@ -24,8 +25,8 @@ export interface ChainContextEntry {
   status: "done" | "running" | "error" | "idle";
   /** Topological distance from the current node (1 = direct parent, 2 = grandparent, ...) */
   depth: number;
-  /** Edge role connecting this node to its downstream neighbor toward the current node */
-  edgeRole?: "context" | "objective" | "output-format";
+  /** Edge role(s) connecting this node to its downstream neighbor toward the current node */
+  edgeRole?: EdgeRole | EdgeRole[];
   /** For logic nodes (filter/gate/router/merge): whether content was passed or blocked */
   verdict?: "pass" | "fail";
   /** For coherence-gate nodes: the quality score */
@@ -141,7 +142,9 @@ export function gatherInputContentWithRoles(
   for (const edge of inputEdges) {
     const srcNode = allNodes.find((n) => n.id === edge.fromNodeId);
     if (!srcNode) continue;
-    if (edge.role === "output-format") continue; // handled separately
+    const roles = edgeRoles(edge);
+    // If ONLY output-format (no other roles), skip in main loop — handled separately
+    if (roles.length > 0 && roles.every((r) => r === "output-format")) continue;
     const txt = nodeContent(srcNode);
     if (!txt.trim()) continue;
 
@@ -156,13 +159,14 @@ export function gatherInputContentWithRoles(
       }
     }
 
-    if (edge.role === "objective") objectiveTexts.push(fullTxt);
-    else if (edge.role === "context") contextTexts.push(fullTxt);
-    else plainTexts.push(fullTxt);
+    // Multi-role: a single edge can contribute to multiple buckets
+    if (edgeHasRole(edge, "objective")) objectiveTexts.push(fullTxt);
+    if (edgeHasRole(edge, "context")) contextTexts.push(fullTxt);
+    if (roles.length === 0) plainTexts.push(fullTxt);
   }
 
   // Output-format template content
-  const outputFormatEdges = inputEdges.filter((e) => e.role === "output-format");
+  const outputFormatEdges = inputEdges.filter((e) => edgeHasRole(e, "output-format"));
   const templateContent = outputFormatEdges
     .map((e) => {
       const srcNode = allNodes.find((n) => n.id === e.fromNodeId);
@@ -240,7 +244,7 @@ function extractLogicMeta(n: FlowNode): Pick<ChainContextEntry, "verdict" | "sco
 function toChainEntry(
   n: FlowNode,
   depth: number,
-  edgeRole?: "context" | "objective" | "output-format",
+  edgeRole?: EdgeRole | EdgeRole[],
 ): ChainContextEntry {
   return {
     nodeId: n.id,
@@ -272,7 +276,7 @@ export function gatherStructuredChainContext(
   const visited = new Set<string>();
 
   // BFS backward with depth tracking
-  const queue: Array<{ id: string; depth: number; edgeRole?: "context" | "objective" | "output-format" }> = [];
+  const queue: Array<{ id: string; depth: number; edgeRole?: EdgeRole | EdgeRole[] }> = [];
 
   // Seed with direct parents at depth 1
   const directEdges = allEdges.filter((e) => e.toNodeId === nodeId);

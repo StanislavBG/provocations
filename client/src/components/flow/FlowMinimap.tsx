@@ -159,7 +159,12 @@ export function FlowMinimap({
           y1: (from.y + from.height / 2 - offsetY) * scale,
           x2: (to.x + to.width / 2 - offsetX) * scale,
           y2: (to.y + to.height / 2 - offsetY) * scale,
-          color: (e.role && EDGE_ROLE_COLORS[e.role]) || EDGE_DEFAULT_COLOR,
+          color: (() => {
+            const r = e.role;
+            if (!r) return EDGE_DEFAULT_COLOR;
+            const primary = Array.isArray(r) ? r[0] : r;
+            return EDGE_ROLE_COLORS[primary] || EDGE_DEFAULT_COLOR;
+          })(),
         };
       })
       .filter(Boolean) as Array<{ id: string; x1: number; y1: number; x2: number; y2: number; color: string }>;

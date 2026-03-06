@@ -23,7 +23,8 @@ export type FlowNodeType =
   | "label"
   | "social-post"
   | "api-connection"
-  | "coherence-gate";
+  | "coherence-gate"
+  | "notification";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -118,6 +119,10 @@ export interface FlowNode {
   storeFolderName?: string;
   /** Store node: full path string like "Projects > Subfolder" */
   storeFolderPath?: string;
+  /** Store node: document title/name when saving */
+  storeName?: string;
+  /** Store node: auto-save when chain completes (default false) */
+  storeAutoSave?: boolean;
   /** Pause flag: when true, automation stops at this node and waits */
   paused?: boolean;
   /** Lock flag: when true, node cannot be moved or deleted (legacy — use lockMode) */
@@ -231,15 +236,47 @@ export interface FlowNode {
   /** Multi-input mode: "wait-all" waits for every input to complete before running (default);
    *  "fire-each" runs the node independently for each input as it arrives */
   inputMode?: "wait-all" | "fire-each";
+  /** Notification: message template (supports {output}, {label}, {time} placeholders) */
+  notifyMessage?: string;
+  /** Notification: target user IDs to notify */
+  notifyUserIds?: string[];
+  /** Notification: delivery channels */
+  notifyChannels?: ("in-app" | "email")[];
+  /** Notification: whether to include link to canvas */
+  notifyIncludeLink?: boolean;
+  /** Notification: last sent timestamp */
+  notifyLastSent?: string;
+  /** Notification: status */
+  notifyStatus?: "idle" | "sending" | "sent" | "error";
 }
+
+/** Named edge roles — how source data is used by the target node */
+export type EdgeRole = "context" | "objective" | "output-format";
 
 export interface FlowEdge {
   id: string;
   fromNodeId: string;
   toNodeId: string;
-  /** Role of the connection — how the source data is used by the target */
-  role?: "context" | "objective" | "output-format";
+  /** Role(s) of the connection. Single string (legacy) or array (multi-select). */
+  role?: EdgeRole | EdgeRole[];
 }
+
+/** Check whether an edge carries a specific role (handles both string and array) */
+export function edgeHasRole(edge: FlowEdge, role: EdgeRole): boolean {
+  if (!edge.role) return false;
+  return Array.isArray(edge.role) ? edge.role.includes(role) : edge.role === role;
+}
+
+/** Normalize edge role to an array (handles legacy single-string values) */
+export function edgeRoles(edge: FlowEdge): EdgeRole[] {
+  if (!edge.role) return [];
+  return Array.isArray(edge.role) ? edge.role : [edge.role];
+}
+
+/** Node types that benefit from role-typed input edges */
+export const ROLE_AWARE_TARGETS = new Set([
+  "research", "interview", "llm", "painter", "social-post", "coherence-gate",
+]);
 
 export interface FlowViewport {
   x: number;
@@ -372,7 +409,7 @@ export function useFlowCanvas() {
   }, []);
 
   const addEdge = useCallback(
-    (fromNodeId: string, toNodeId: string, role?: "context" | "objective" | "output-format"): string => {
+    (fromNodeId: string, toNodeId: string, role?: EdgeRole | EdgeRole[]): string => {
       pushHistory();
       const id = generateId("edge");
       const edge: FlowEdge = { id, fromNodeId, toNodeId };

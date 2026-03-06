@@ -26,6 +26,7 @@ import {
   Share2,
   Wifi,
   ShieldCheck,
+  Bell,
 } from "lucide-react";
 import type { FlowNodeType, PortDef } from "./useFlowCanvas";
 
@@ -46,7 +47,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification";
 
 // ── Registry definition ──
 
@@ -184,13 +185,13 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     defaultWidth: 200,
     defaultHeight: 100,
     ports: [{ side: "left", type: "input" }],
-    expandMode: "dialog",
+    expandMode: "overlay",
     playable: false,
     supportsChainExecution: false,
     lifecyclePreset: "passive",
     minWidth: 140,
     minHeight: 70,
-    inputDescription: "Receives content from upstream nodes to be saved. The destination folder is configured on the node.",
+    inputDescription: "Receives content from upstream nodes to be saved. The destination folder and document name are configured on the node.",
     outputDescription: "No output — this is a terminal node. Content is persisted to the Context Store.",
   },
   painter: {
@@ -582,6 +583,32 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     minHeight: 100,
     inputDescription: "Content from upstream social post nodes or documents. Publishes to configured external API (X, LinkedIn, etc.).",
     outputDescription: "Post result status (success/failure, external ID). Logs all publish attempts with timestamps.",
+  },
+  notification: {
+    type: "notification",
+    style: {
+      border: "border-pink-500/60",
+      bg: "bg-card",
+      headerBg: "bg-pink-500/15",
+      headerBorder: "border-pink-500/40",
+      iconClass: "text-pink-500",
+      badgeBg: "bg-pink-500/25",
+      badgeText: "text-pink-600 dark:text-pink-400",
+      badge: "Notify",
+      accent: "pink",
+    },
+    icon: Bell,
+    defaultWidth: 220,
+    defaultHeight: 140,
+    ports: [{ side: "left", type: "input" }],
+    expandMode: "overlay",
+    playable: true,
+    supportsChainExecution: true,
+    lifecyclePreset: "notification",
+    minWidth: 160,
+    minHeight: 100,
+    inputDescription: "Content from upstream nodes. When triggered, sends a notification with a summary of the input to assigned users.",
+    outputDescription: "Notification delivery status (sent/failed). Terminal node — no downstream output.",
   },
   label: {
     type: "label",

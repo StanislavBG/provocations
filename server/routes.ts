@@ -4360,7 +4360,8 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&
         return res.json({ voices: [], available: false });
       }
       const voices = await elevenlabs.listVoices();
-      res.json({ voices, available: true });
+      const defaultVoiceId = process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM";
+      res.json({ voices, available: true, defaultVoiceId });
     } catch (error) {
       console.error("ElevenLabs voices error:", error);
       res.status(500).json({ error: "Failed to list voices" });
@@ -7483,6 +7484,62 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
   // (Existing connection invite endpoint already exists — we add notification creation
   //  by modifying the connection invite and respond endpoints above to also create notifications.)
 
+  // ── Chain Notification: Send notifications from flow canvas notification nodes ──
+  app.post("/api/notifications/send", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { message, recipientIds, channels, sourceNodeLabel, contentPreview } = req.body;
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ error: "Message is required" });
+      }
+
+      const targets: string[] = Array.isArray(recipientIds) ? recipientIds : [];
+      let sent = 0;
+      let failed = 0;
+
+      for (const recipientId of targets) {
+        try {
+          await storage.createNotification({
+            userId: recipientId,
+            notificationType: "chain_notification",
+            fromUserId: userId,
+            metadata: JSON.stringify({
+              message,
+              sourceNodeLabel: sourceNodeLabel || "Notification",
+              contentPreview: contentPreview || "",
+              channels: channels || ["in-app"],
+            }),
+          });
+          sent++;
+        } catch {
+          failed++;
+        }
+      }
+
+      // If no specific recipients, notify the sender themselves
+      if (targets.length === 0) {
+        await storage.createNotification({
+          userId,
+          notificationType: "chain_notification",
+          fromUserId: userId,
+          metadata: JSON.stringify({
+            message,
+            sourceNodeLabel: sourceNodeLabel || "Notification",
+            contentPreview: contentPreview || "",
+          }),
+        });
+        sent = 1;
+      }
+
+      res.json({ sent, failed });
+    } catch (error) {
+      console.error("Send chain notification error:", error);
+      res.status(500).json({ error: "Failed to send notifications" });
+    }
+  });
+
   // ── Timeline: Transform notes into structured timeline events ──
   app.post("/api/timeline/transform", async (req, res) => {
     try {
@@ -8022,10 +8079,11 @@ Return ONLY valid JSON, no markdown fences.`;
   // Blueprint API
   // ═══════════════════════════════════════════════════════════════
 
-  /** List all available blueprints (prebuilt chain templates) */
-  app.get("/api/blueprints", (_req, res) => {
-    res.json(
-      BLUEPRINTS.map(({ id, label, description, icon, category, nodes, edges }) => ({
+  /** List all available blueprints (prebuilt + user-created + shared) */
+  app.get("/api/blueprints", async (req, res) => {
+    try {
+      // Built-in blueprints
+      const builtIn = BLUEPRINTS.map(({ id, label, description, icon, category, nodes, edges }) => ({
         id,
         label,
         description,
@@ -8033,17 +8091,202 @@ Return ONLY valid JSON, no markdown fences.`;
         category,
         nodeCount: nodes.length,
         edgeCount: edges.length,
-      })),
-    );
+        source: "built-in" as const,
+      }));
+
+      // User-created blueprints (stored as encrypted documents with docType "blueprint")
+      const { userId } = getAuth(req);
+      const key = getEncryptionKey();
+      let userBlueprints: Array<any> = [];
+      let sharedBlueprints: Array<any> = [];
+
+      if (userId) {
+        const userDocs = await storage.listDocuments(userId);
+        const bpDocs = userDocs.filter((d: any) => d.docType === "blueprint");
+        for (const d of bpDocs) {
+          // Decrypt title
+          let label = d.title || "Untitled Blueprint";
+          if (d.titleCiphertext && d.titleSalt && d.titleIv) {
+            try { label = decrypt({ ciphertext: d.titleCiphertext, salt: d.titleSalt, iv: d.titleIv }, key); } catch { /* fallback */ }
+          }
+          // Fetch full doc to decrypt content for metadata
+          let meta: any = {};
+          try {
+            const fullDoc = await storage.getDocument(d.id) as any;
+            if (fullDoc?.ciphertext && fullDoc?.salt && fullDoc?.iv) {
+              const raw = decrypt({ ciphertext: fullDoc.ciphertext, salt: fullDoc.salt, iv: fullDoc.iv }, key);
+              const parsed = JSON.parse(raw);
+              meta = parsed.meta || {};
+            }
+          } catch { /* ignore */ }
+          userBlueprints.push({
+            id: `user:${d.id}`,
+            label,
+            description: meta.description || "",
+            icon: meta.icon || "LayoutTemplate",
+            category: meta.category || "custom",
+            nodeCount: meta.nodeCount || 0,
+            edgeCount: meta.edgeCount || 0,
+            source: "user" as const,
+            documentId: d.id,
+            ownerId: userId,
+          });
+        }
+
+        // Shared blueprints
+        try {
+          const sharedItems = await storage.listSharedWithMe(userId);
+          const sharedBpItems = sharedItems.filter(
+            (si: any) => si.itemType === "document" && si.status === "accepted"
+          );
+          for (const si of sharedBpItems) {
+            try {
+              const doc = await storage.getDocument(si.itemId);
+              if (doc && (doc as any).docType === "blueprint") {
+                let label = "Shared Blueprint";
+                if ((doc as any).titleCiphertext && (doc as any).titleSalt && (doc as any).titleIv) {
+                  try { label = decrypt({ ciphertext: (doc as any).titleCiphertext, salt: (doc as any).titleSalt, iv: (doc as any).titleIv }, key); } catch { /* fallback */ }
+                }
+                let meta: any = {};
+                if ((doc as any).ciphertext && (doc as any).salt && (doc as any).iv) {
+                  try {
+                    const content = decrypt({ ciphertext: (doc as any).ciphertext, salt: (doc as any).salt, iv: (doc as any).iv }, key);
+                    const parsed = JSON.parse(content);
+                    meta = parsed.meta || {};
+                  } catch { /* ignore */ }
+                }
+                sharedBlueprints.push({
+                  id: `shared:${doc.id}`,
+                  label,
+                  description: meta.description || "",
+                  icon: meta.icon || "LayoutTemplate",
+                  category: meta.category || "custom",
+                  nodeCount: meta.nodeCount || 0,
+                  edgeCount: meta.edgeCount || 0,
+                  source: "shared" as const,
+                  documentId: doc.id,
+                  ownerId: si.ownerId,
+                });
+              }
+            } catch { /* skip inaccessible shared items */ }
+          }
+        } catch { /* shared items not available */ }
+      }
+
+      res.json([...builtIn, ...userBlueprints, ...sharedBlueprints]);
+    } catch (error) {
+      console.error("List blueprints error:", error);
+      // Fallback to built-in only
+      res.json(
+        BLUEPRINTS.map(({ id, label, description, icon, category, nodes, edges }) => ({
+          id, label, description, icon, category,
+          nodeCount: nodes.length, edgeCount: edges.length,
+          source: "built-in" as const,
+        })),
+      );
+    }
   });
 
-  /** Get a single blueprint by ID (full node/edge data for instantiation) */
-  app.get("/api/blueprints/:blueprintId", (req, res) => {
-    const blueprint = getBlueprint(req.params.blueprintId);
+  /** Get a single blueprint by ID (built-in or user document) */
+  app.get("/api/blueprints/:blueprintId", async (req, res) => {
+    const bpId = req.params.blueprintId;
+
+    // Check if it's a user or shared blueprint (format: "user:123" or "shared:123")
+    const userMatch = bpId.match(/^(?:user|shared):(\d+)$/);
+    if (userMatch) {
+      try {
+        const docId = parseInt(userMatch[1]);
+        const doc = await storage.getDocument(docId) as any;
+        if (!doc || doc.docType !== "blueprint") {
+          return res.status(404).json({ error: "Blueprint not found" });
+        }
+        const key = getEncryptionKey();
+        // Decrypt title
+        let label = "Untitled Blueprint";
+        if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
+          try { label = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* fallback */ }
+        }
+        // Decrypt content
+        let blueprintData: any = { nodes: [], edges: [] };
+        if (doc.ciphertext && doc.salt && doc.iv) {
+          try {
+            const content = decrypt({ ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv }, key);
+            blueprintData = JSON.parse(content);
+          } catch { /* fallback */ }
+        }
+        return res.json({
+          id: bpId,
+          label,
+          description: blueprintData.meta?.description || "",
+          icon: blueprintData.meta?.icon || "LayoutTemplate",
+          category: blueprintData.meta?.category || "custom",
+          nodes: blueprintData.nodes || [],
+          edges: blueprintData.edges || [],
+        });
+      } catch (error) {
+        console.error("Get user blueprint error:", error);
+        return res.status(500).json({ error: "Failed to load blueprint" });
+      }
+    }
+
+    // Built-in blueprint
+    const blueprint = getBlueprint(bpId);
     if (!blueprint) {
       return res.status(404).json({ error: "Blueprint not found" });
     }
     res.json(blueprint);
+  });
+
+  /** Save current canvas as a user blueprint */
+  app.post("/api/blueprints", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { label, description, icon, category, nodes, edges } = req.body;
+      if (!label || !Array.isArray(nodes)) {
+        return res.status(400).json({ error: "Label and nodes array required" });
+      }
+
+      // Blueprint data: nodes + edges + metadata
+      const blueprintContent = JSON.stringify({
+        nodes,
+        edges: edges || [],
+        meta: {
+          description: description || "",
+          icon: icon || "LayoutTemplate",
+          category: category || "custom",
+          nodeCount: nodes.length,
+          edgeCount: (edges || []).length,
+        },
+      });
+
+      // Encrypt and store as a document with docType "blueprint"
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(blueprintContent, key);
+      const encryptedTitle = encrypt(label, key);
+
+      const doc = await storage.saveDocument({
+        userId,
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
+        docType: "blueprint",
+      });
+
+      res.status(201).json({
+        id: `user:${doc.id}`,
+        documentId: doc.id,
+        label,
+      });
+    } catch (error) {
+      console.error("Save blueprint error:", error);
+      res.status(500).json({ error: "Failed to save blueprint" });
+    }
   });
 
   // Backward-compat aliases for old /api/flow/templates endpoints

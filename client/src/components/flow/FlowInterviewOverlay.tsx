@@ -134,10 +134,13 @@ export function FlowInterviewOverlay({
   useEffect(() => {
     fetch("/api/tts/elevenlabs/voices")
       .then((r) => r.json())
-      .then((data: { voices?: { voice_id: string; name: string; category: string }[]; available?: boolean }) => {
+      .then((data: { voices?: { voice_id: string; name: string; category: string }[]; available?: boolean; defaultVoiceId?: string }) => {
         if (data.available && data.voices?.length) {
           setElevenlabsVoices(data.voices);
           setElevenlabsAvailable(true);
+          if (data.defaultVoiceId && !selectedElevenVoiceId) {
+            setSelectedElevenVoiceId(data.defaultVoiceId);
+          }
         }
       })
       .catch(() => {});
