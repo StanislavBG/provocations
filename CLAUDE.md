@@ -479,6 +479,7 @@ App-specific components are documented in each app's `apps/<templateId>/CLAUDE.m
 | `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
 | `CLERK_PUBLISHABLE_KEY` | Clerk frontend authentication |
 | `CLERK_SECRET_KEY` | Clerk backend secret key |
+| `YOUTUBE_API_KEY` | YouTube Data API v3 key (for search, playlist, channel endpoints) |
 | `PLAYWRIGHT_CHROMIUM_PATH` | Path to Chromium for screenshots |
 
 ### Replit AI Integrations

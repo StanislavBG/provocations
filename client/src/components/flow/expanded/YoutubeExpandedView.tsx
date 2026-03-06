@@ -81,8 +81,9 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
   const [searchText, setSearchText] = useState("");
   const [chapters, setChapters] = useState<Chapter[]>(node.youtubeChapters ?? []);
   const [expandedChapterIdx, setExpandedChapterIdx] = useState<number | null>(null);
-  const [showPlayer, setShowPlayer] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(true);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
+  const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; errors: number } | null>(null);
   const isFetching = node.youtubeFetchStatus === "fetching";
   const transcript = node.content || "";
 
@@ -282,6 +283,8 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
 
     let allTranscripts = "";
     let processedCount = 0;
+    let errorCount = 0;
+    setFetchProgress({ current: 0, total: ids.length, errors: 0 });
 
     for (const videoId of ids) {
       const result = searchResults.find((r) => r.videoId === videoId);
@@ -291,18 +294,24 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ videoId, videoUrl: `https://youtube.com/watch?v=${videoId}`, videoTitle: result?.title || "" }),
         });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          errorCount++;
+          setFetchProgress({ current: processedCount + errorCount, total: ids.length, errors: errorCount });
+          continue;
+        }
         const data = await res.json() as { transcript: string; videoTitle: string };
         allTranscripts += `\n\n--- ${data.videoTitle || result?.title || videoId} ---\n\n${data.transcript}`;
         processedCount++;
-        onUpdateNode(node.id, {
-          snippet: `Processed ${processedCount}/${ids.length} videos...`,
-        });
       } catch {
-        // Skip failed videos
+        errorCount++;
       }
+      setFetchProgress({ current: processedCount + errorCount, total: ids.length, errors: errorCount });
+      onUpdateNode(node.id, {
+        snippet: `Fetched ${processedCount}/${ids.length}${errorCount > 0 ? ` (${errorCount} failed)` : ""}...`,
+      });
     }
 
+    setFetchProgress(null);
     onUpdateNode(node.id, {
       youtubeFetchStatus: "done",
       llmStatus: "done",
@@ -311,7 +320,10 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
       snippet: `${processedCount} videos — ${allTranscripts.length.toLocaleString()} chars`,
       label: `YT: ${processedCount} videos`,
     });
-    toast({ title: `Fetched ${processedCount} transcripts` });
+    toast({
+      title: `Fetched ${processedCount} transcripts`,
+      description: errorCount > 0 ? `${errorCount} video(s) had no captions available` : undefined,
+    });
   }, [selectedVideoIds, searchResults, node.id, onUpdateNode, toast]);
 
   // Persist mode changes
@@ -496,6 +508,24 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
                       {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Youtube className="w-3.5 h-3.5" />}
                       {isFetching ? "Fetching..." : `Get ${selectedVideoIds.size} Transcript${selectedVideoIds.size !== 1 ? "s" : ""}`}
                     </Button>
+
+                    {/* Multi-video fetch progress */}
+                    {fetchProgress && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                          <span>{fetchProgress.current}/{fetchProgress.total} processed</span>
+                          {fetchProgress.errors > 0 && (
+                            <span className="text-amber-500">{fetchProgress.errors} failed</span>
+                          )}
+                        </div>
+                        <div className="w-full h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-red-600 rounded-full transition-all duration-300"
+                            style={{ width: `${(fetchProgress.current / fetchProgress.total) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -586,6 +616,24 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
                       {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Youtube className="w-3.5 h-3.5" />}
                       {isFetching ? "Fetching..." : `Get ${selectedVideoIds.size} Transcript${selectedVideoIds.size !== 1 ? "s" : ""}`}
                     </Button>
+
+                    {/* Multi-video fetch progress */}
+                    {fetchProgress && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                          <span>{fetchProgress.current}/{fetchProgress.total} processed</span>
+                          {fetchProgress.errors > 0 && (
+                            <span className="text-amber-500">{fetchProgress.errors} failed</span>
+                          )}
+                        </div>
+                        <div className="w-full h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-red-600 rounded-full transition-all duration-300"
+                            style={{ width: `${(fetchProgress.current / fetchProgress.total) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
