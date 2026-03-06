@@ -12,7 +12,8 @@ import { FtuxStatusBar } from "@/components/ftux/FtuxStatusBar";
 import { FtuxDock } from "@/components/ftux/FtuxDock";
 import { FlowCanvas } from "@/components/flow/FlowCanvas";
 import { useFlowCanvas } from "@/components/flow/useFlowCanvas";
-import type { FlowNode, FlowEdge, FlowViewport } from "@/components/flow/useFlowCanvas";
+import type { FlowNode, FlowEdge, FlowViewport, EdgeRole } from "@/components/flow/useFlowCanvas";
+import { ROLE_AWARE_TARGETS } from "@/components/flow/useFlowCanvas";
 import { useMinimapState } from "@/components/flow/useMinimapState";
 import { NotebookResearchChat } from "@/components/notebook/NotebookResearchChat";
 import { DEFAULT_SHELL_CONFIG } from "@/lib/ftux-shell-context";
@@ -50,6 +51,10 @@ import { LogicExpandedView } from "@/components/flow/expanded/LogicExpandedView"
 import { SocialPostExpandedView } from "@/components/flow/expanded/SocialPostExpandedView";
 import { ApiConnectionExpandedView } from "@/components/flow/expanded/ApiConnectionExpandedView";
 import { CoherenceGateExpandedView } from "@/components/flow/expanded/CoherenceGateExpandedView";
+import { NotificationExpandedView } from "@/components/flow/expanded/NotificationExpandedView";
+import { StoreExpandedView } from "@/components/flow/expanded/StoreExpandedView";
+import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
+import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { PlatformIntegrations } from "@/components/PlatformIntegrations";
 import {
   Dialog,
@@ -93,6 +98,7 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "logic", label: "Logic", icon: "CircuitBoard", group: "build" },
   { toolId: "social-post", label: "Social Post", icon: "Share2", group: "build" },
   { toolId: "api-connection", label: "API Post", icon: "Wifi", group: "build" },
+  { toolId: "notification", label: "Notify", icon: "Bell", group: "build" },
 ];
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -1184,11 +1190,6 @@ function FlowWorkspaceInner() {
       if (!node) return;
       const def = FLOW_NODE_REGISTRY[node.type];
 
-      // Dialog-based overlays (not full-screen)
-      if (node.type === "store") {
-        setStoreFolderPickerNodeId(nodeId);
-        return;
-      }
       // Labels use inline editing on double-click (handled by FlowNodeRenderer)
       if (node.type === "label") return;
 
@@ -1314,16 +1315,10 @@ function FlowWorkspaceInner() {
       );
       if (exists) return;
 
-      // Check if this is a doc/context-doc → research connection that needs role assignment
+      // Show role picker for connections TO role-aware node types
       const fromNode = state.nodes.find((n) => n.id === fromNodeId);
       const toNode = state.nodes.find((n) => n.id === toNodeId);
-      if (
-        fromNode &&
-        toNode &&
-        (fromNode.type === "document" || fromNode.type === "context-doc") &&
-        (toNode.type === "research" || toNode.type === "interview")
-      ) {
-        // Show role picker dialog
+      if (fromNode && toNode && ROLE_AWARE_TARGETS.has(toNode.type)) {
         setPendingEdgeRole({ fromNodeId, toNodeId });
         return;
       }
@@ -1927,6 +1922,18 @@ function FlowWorkspaceInner() {
         });
         return;
       }
+      if (toolId === "notification") {
+        addNode("notification", canvasX, canvasY, {
+          label: "Notify",
+          snippet: "Sends notification when chain completes",
+          notifyMessage: "Chain completed: {label} at {time}",
+          notifyUserIds: [],
+          notifyChannels: ["in-app"],
+          notifyIncludeLink: true,
+          notifyStatus: "idle",
+        });
+        return;
+      }
     },
     [addNode],
   );
@@ -2252,48 +2259,37 @@ function FlowWorkspaceInner() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Blueprints dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
-            <LayoutTemplate className="w-3 h-3" />
-            Blueprints
-            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuItem
-            onClick={() => handleLoadBlueprint("meme-machine")}
-            className="text-xs gap-2"
-          >
-            <Zap className="w-3.5 h-3.5 text-yellow-500" />
-            <div>
-              <div className="font-medium">Meme Machine</div>
-              <div className="text-[10px] text-muted-foreground">Caption + quality check + image</div>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => handleLoadBlueprint("prd-generator")}
-            className="text-xs gap-2"
-          >
-            <FileText className="w-3.5 h-3.5 text-blue-500" />
-            <div>
-              <div className="font-medium">Product PRD Generator</div>
-              <div className="text-[10px] text-muted-foreground">Research + draft + wireframes + polish</div>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => handleLoadBlueprint("deep-dive-research")}
-            className="text-xs gap-2"
-          >
-            <Search className="w-3.5 h-3.5 text-emerald-500" />
-            <div>
-              <div className="font-medium">Deep Dive Research</div>
-              <div className="text-[10px] text-muted-foreground">Analysis + gaps + infographic + summary</div>
-            </div>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* Blueprints dropdown — dynamic from API */}
+      <BlueprintsMenu
+        onLoadBlueprint={handleLoadBlueprint}
+        onSaveBlueprint={async (label: string, description: string) => {
+          // Snapshot current canvas as blueprint
+          const nodes = state.nodes
+            .filter((n) => n.type !== "zone" && n.type !== "label")
+            .map((n) => {
+              const { id, type, x: nx, y: ny, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt } = n;
+              return { id, type, x: nx - state.nodes[0].x, y: ny - state.nodes[0].y, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt };
+            });
+          const edges = state.edges.map((e) => ({
+            fromNodeId: e.fromNodeId,
+            toNodeId: e.toNodeId,
+            role: e.role,
+          }));
+          try {
+            const res = await apiRequest("POST", "/api/blueprints", {
+              label,
+              description,
+              nodes,
+              edges,
+            });
+            const data = await res.json();
+            toast({ title: "Blueprint saved", description: `"${label}" saved successfully` });
+            return data;
+          } catch (err) {
+            toast({ title: "Failed to save blueprint", variant: "destructive" });
+          }
+        }}
+      />
 
       {/* View dropdown */}
       <DropdownMenu>
@@ -2995,59 +2991,17 @@ function FlowWorkspaceInner() {
       })()}
 
       {/* Logic node type picker — lightweight popover, no overlay dimming */}
-      {/* Edge role picker dialog: Context or Objective */}
+      {/* Edge role picker dialog: multi-select roles */}
       {pendingEdgeRole && (
-        <Dialog open onOpenChange={() => setPendingEdgeRole(null)}>
-          <DialogContent className="max-w-xs">
-            <DialogHeader>
-              <DialogTitle className="text-sm">Connection Role</DialogTitle>
-            </DialogHeader>
-            <p className="text-xs text-muted-foreground mb-3">
-              How should the Research node use this document?
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-left"
-                onClick={() => {
-                  addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, "context");
-                  setPendingEdgeRole(null);
-                }}
-              >
-                <BookOpenCheck className="w-4 h-4 text-amber-500 shrink-0" />
-                <div>
-                  <div className="text-xs font-medium">Context</div>
-                  <div className="text-[10px] text-muted-foreground">Background information for the research</div>
-                </div>
-              </button>
-              <button
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-left"
-                onClick={() => {
-                  addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, "objective");
-                  setPendingEdgeRole(null);
-                }}
-              >
-                <Target className="w-4 h-4 text-blue-500 shrink-0" />
-                <div>
-                  <div className="text-xs font-medium">Objective / Starting Prompt</div>
-                  <div className="text-[10px] text-muted-foreground">Sets the research topic and direction</div>
-                </div>
-              </button>
-              <button
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-left"
-                onClick={() => {
-                  addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, "output-format");
-                  setPendingEdgeRole(null);
-                }}
-              >
-                <LayoutTemplate className="w-4 h-4 text-violet-500 shrink-0" />
-                <div>
-                  <div className="text-xs font-medium">Output Format / Template</div>
-                  <div className="text-[10px] text-muted-foreground">Schema or template the output must follow</div>
-                </div>
-              </button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <EdgeRolePickerDialog
+          pendingEdge={pendingEdgeRole}
+          targetNode={state.nodes.find((n) => n.id === pendingEdgeRole.toNodeId)}
+          onConfirm={(roles) => {
+            addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, roles.length > 0 ? roles : undefined);
+            setPendingEdgeRole(null);
+          }}
+          onCancel={() => setPendingEdgeRole(null)}
+        />
       )}
 
       {pendingLogicAction && (
@@ -3425,6 +3379,23 @@ function FlowWorkspaceInner() {
                   node={activeExpandedNode}
                   nodes={state.nodes}
                   edges={state.edges}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
+                />
+              );
+
+            case "store":
+              return (
+                <StoreExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                />
+              );
+
+            case "notification":
+              return (
+                <NotificationExpandedView
+                  node={activeExpandedNode}
                   onUpdateNode={updateNode}
                   onPlayNode={handlePlayNode}
                 />

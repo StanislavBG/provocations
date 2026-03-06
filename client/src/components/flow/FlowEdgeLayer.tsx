@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from "react";
-import type { FlowEdge, FlowNode } from "./useFlowCanvas";
+import type { FlowEdge, FlowNode, EdgeRole } from "./useFlowCanvas";
+import { edgeRoles } from "./useFlowCanvas";
 import type { PreviewEdge } from "./useFlowInteraction";
 
 interface FlowEdgeLayerProps {
@@ -19,14 +20,15 @@ const RESEARCH_ZONE_Y: Record<string, number> = {
   "output-format": 0.65,
 };
 
-function computeEndpoints(from: FlowNode, to: FlowNode, role?: string) {
+function computeEndpoints(from: FlowNode, to: FlowNode, role?: EdgeRole | EdgeRole[]) {
   const fromCx = from.x + from.width / 2;
   const fromCy = from.y + from.height / 2;
 
-  // For research nodes with a known role, target a specific vertical zone
+  // For research nodes with a known role, target a specific vertical zone (use first role)
+  const primaryRole = Array.isArray(role) ? role[0] : role;
   let toCy = to.y + to.height / 2;
-  if (to.type === "research" && role && RESEARCH_ZONE_Y[role] !== undefined) {
-    toCy = to.y + to.height * RESEARCH_ZONE_Y[role];
+  if (to.type === "research" && primaryRole && RESEARCH_ZONE_Y[primaryRole] !== undefined) {
+    toCy = to.y + to.height * RESEARCH_ZONE_Y[primaryRole];
   }
   const toCx = to.x + to.width / 2;
 
@@ -256,30 +258,52 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
               }}
             />
 
-            {/* Role label on edge */}
-            {edge.role && !isHovered && (
-              <g>
-                <rect
-                  x={mx - 24}
-                  y={my - 8}
-                  width={48}
-                  height={16}
-                  rx={4}
-                  fill={edge.role === "objective" ? "rgba(59,130,246,0.85)" : edge.role === "output-format" ? "rgba(139,92,246,0.85)" : "rgba(217,119,6,0.85)"}
-                />
-                <text
-                  x={mx}
-                  y={my + 3}
-                  textAnchor="middle"
-                  fill="white"
-                  fontSize="8"
-                  fontWeight="600"
-                  style={{ textTransform: "uppercase", letterSpacing: "0.05em", userSelect: "none" }}
-                >
-                  {edge.role}
-                </text>
-              </g>
-            )}
+            {/* Role label(s) on edge */}
+            {edge.role && !isHovered && (() => {
+              const roles = edgeRoles(edge);
+              if (roles.length === 0) return null;
+              const ROLE_COLORS: Record<string, string> = {
+                objective: "rgba(59,130,246,0.85)",
+                "output-format": "rgba(139,92,246,0.85)",
+                context: "rgba(217,119,6,0.85)",
+              };
+              const ROLE_SHORT: Record<string, string> = {
+                objective: "OBJ",
+                context: "CTX",
+                "output-format": "FMT",
+              };
+              const pillW = 32;
+              const gap = 3;
+              const totalW = roles.length * pillW + (roles.length - 1) * gap;
+              const startX = mx - totalW / 2;
+              return (
+                <g>
+                  {roles.map((r, i) => (
+                    <g key={r}>
+                      <rect
+                        x={startX + i * (pillW + gap)}
+                        y={my - 8}
+                        width={pillW}
+                        height={16}
+                        rx={4}
+                        fill={ROLE_COLORS[r] || "rgba(100,100,100,0.85)"}
+                      />
+                      <text
+                        x={startX + i * (pillW + gap) + pillW / 2}
+                        y={my + 3}
+                        textAnchor="middle"
+                        fill="white"
+                        fontSize="7"
+                        fontWeight="600"
+                        style={{ textTransform: "uppercase", letterSpacing: "0.05em", userSelect: "none" }}
+                      >
+                        {ROLE_SHORT[r] || r}
+                      </text>
+                    </g>
+                  ))}
+                </g>
+              );
+            })()}
 
             {/* Delete X button at midpoint on hover */}
             {isHovered && onDeleteEdge && (

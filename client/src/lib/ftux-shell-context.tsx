@@ -26,7 +26,8 @@ export type ToolId =
   | "logic"
   | "label"
   | "social-post"
-  | "api-connection";
+  | "api-connection"
+  | "notification";
 
 export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";

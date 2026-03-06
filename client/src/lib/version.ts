@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.11.3";
+export const APP_VERSION = "0.12.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,27 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.12.1",
+    date: "2026-03-05",
+    changes: [
+      "Component Wiki expanded: two new categories — Canvas Nodes (all 17 node types with specs, ports, lifecycle, chain behavior) and Canvas Features (WASD glide, marquee select, undo/redo, freeze, minimap, edge roles, chain execution, themes, collaboration, and more)",
+      "Node showcase pages show full Node Specification section: type identity, behavior flags (playable, chainable, lifecycle preset), port diagram, input/output descriptions, and file references (expanded view, lifecycle handler)",
+      "Canvas feature entries document hidden capabilities with hooks, key bindings, and how-to-access details",
+      "Library cards show node-specific stats (ports, lifecycle, playable/chainable badges) instead of props/hooks for canvas-node entries",
+    ],
+  },
+  {
+    version: "0.12.0",
+    date: "2026-03-05",
+    changes: [
+      "Multi-select typed connectors: edge roles now support multiple selections (e.g., both Context + Objective). Role picker shows for all role-aware target nodes (research, interview, LLM, painter, social post, coherence gate)",
+      "New Notification node: sends in-app notifications to connected users when chain completes. Configurable message templates with {output}, {label}, {time} placeholders. Recipient picker, delivery channels, canvas link inclusion",
+      "Store node upgraded to full citizen: double-click opens expanded overlay with folder picker, document name configuration, and auto-save toggle (previously was a minimal dialog-only picker)",
+      "User blueprints: save any canvas as a reusable blueprint. Dynamic Blueprints menu shows built-in, user-created, and shared blueprints. Blueprints stored as encrypted documents and shareable via existing connection system",
+      "Edge role badges now show compact abbreviated pills (OBJ/CTX/FMT) that stack horizontally for multi-role edges",
+    ],
+  },
   {
     version: "0.11.3",
     date: "2026-03-05",

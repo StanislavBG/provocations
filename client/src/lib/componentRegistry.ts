@@ -28,6 +28,50 @@ export interface ApiEndpoint {
   purpose: string;
 }
 
+export type ComponentCategory =
+  | "notebook"
+  | "flow"
+  | "bschart"
+  | "shared"
+  | "ftux"
+  | "timeline"
+  | "canvas-node"
+  | "canvas-feature";
+
+export interface PortInfo {
+  side: "left" | "right" | "top" | "bottom";
+  type: "input" | "output";
+}
+
+export interface NodeMeta {
+  /** FlowNodeType string from useFlowCanvas */
+  nodeType: string;
+  /** Badge label shown on compact card */
+  badge: string;
+  /** Tailwind accent color name */
+  accent: string;
+  /** Lifecycle processing category */
+  lifecyclePreset: string;
+  /** Whether the node shows a Play button */
+  playable: boolean;
+  /** Whether chain execution can auto-trigger this node */
+  supportsChainExecution: boolean;
+  /** How it opens on double-click */
+  expandMode: "overlay" | "dialog" | "none";
+  /** Port definitions */
+  ports: PortInfo[];
+  /** What it accepts as input */
+  inputDescription: string;
+  /** What it produces as output */
+  outputDescription: string;
+  /** Expanded view component (if any) */
+  expandedView?: string;
+  /** Lifecycle handler file (if any) */
+  lifecycleHandler?: string;
+  /** Dock group this node belongs to */
+  dockGroup?: string;
+}
+
 export interface ComponentEntry {
   /** Unique identifier (kebab-case) */
   id: string;
@@ -36,7 +80,7 @@ export interface ComponentEntry {
   /** File path relative to client/src/ */
   filePath: string;
   /** Category for grouping */
-  category: "notebook" | "flow" | "bschart" | "shared" | "ftux" | "timeline";
+  category: ComponentCategory;
   /** Short description */
   description: string;
   /** Key props */
@@ -49,6 +93,8 @@ export interface ComponentEntry {
   dependencies: string[];
   /** API endpoints called */
   apiEndpoints: ApiEndpoint[];
+  /** Node-specific metadata (canvas-node category only) */
+  nodeMeta?: NodeMeta;
 }
 
 // ── Registry ──
@@ -1103,6 +1149,1130 @@ export const COMPONENT_REGISTRY: ComponentEntry[] = [
       "Active tool indicator dot",
     ],
     dependencies: ["FtuxSettingsDialog", "AleComponentGateway"],
+    apiEndpoints: [],
+  },
+  // ════════════════════════════════════════════
+  // CANVAS NODE TYPES
+  // ════════════════════════════════════════════
+
+  {
+    id: "node-context-doc",
+    name: "Context Document",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "A loaded document from the Context Store. Read-only source node that provides text content to downstream processors. Double-click opens an inline document viewer/editor.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Loads encrypted documents from Context Store",
+      "Displays document title and content snippet on compact card",
+      "Double-click opens full document viewer/editor overlay",
+      "Output port feeds content to downstream nodes (research, LLM, etc.)",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "GET", endpoint: "/api/documents/:id", purpose: "Load document content" },
+    ],
+    nodeMeta: {
+      nodeType: "context-doc",
+      badge: "Context",
+      accent: "amber",
+      lifecyclePreset: "passive",
+      playable: false,
+      supportsChainExecution: false,
+      expandMode: "overlay",
+      ports: [{ side: "right", type: "output" }],
+      inputDescription: "No input — loaded from Context Store. Contains the document title, content, and metadata.",
+      outputDescription: "Full document text content. Connected downstream nodes receive the document body as context.",
+      dockGroup: "Context",
+    },
+  },
+
+  {
+    id: "node-research",
+    name: "Research",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "AI research chat node with streaming SSE responses. Supports three edge roles (objective, context, output-format) for structured input. Produces consolidated or split output documents.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Streaming research chat via /api/chat/stream (SSE)",
+      "Three edge roles: objective (top zone), context (middle), output-format (bottom)",
+      "Persistent conversation history across sessions",
+      "Output modes: consolidated (1 doc) or split (N docs, max 5 sections)",
+      "Focus modes: explore, gather, analyze, synthesize, deep-research",
+      "Response config: format (prose/structured/outline/academic), detail, audience, tone",
+      "Template content injection from upstream output-format edges",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/chat/stream", purpose: "Streaming research chat (SSE)" },
+    ],
+    nodeMeta: {
+      nodeType: "research",
+      badge: "Research",
+      accent: "blue",
+      lifecyclePreset: "stream",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Accepts three edge roles: Objective (what to research), Context (background documents), and Output Format (schema/template for structuring results).",
+      outputDescription: "Produces a research document based on the objective, context, and output format. Can output 1 consolidated doc or N split docs depending on output mode.",
+      expandedView: "FlowResearchNode (inline in FlowWorkspace)",
+      lifecycleHandler: "lifecycles/research.ts",
+      dockGroup: "Research",
+    },
+  },
+
+  {
+    id: "node-llm",
+    name: "Text Mods (LLM)",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Text transformation node with 4 built-in presets: Summarize, Clean Up, Expand, and Custom. Each preset routes to the appropriate API endpoint. Custom mode accepts freeform instructions.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "4 built-in presets: Summarize, Clean Up, Expand, Custom",
+      "Summarize and Clean route through /api/summarize-intent",
+      "Expand and Custom route through /api/write",
+      "Preset chips selectable on compact card",
+      "Custom instruction text input in expanded view",
+      "Chain execution auto-applies selected preset to upstream content",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer", "FlowLlmNode"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/summarize-intent", purpose: "Summarize and Clean presets" },
+      { method: "POST", endpoint: "/api/write", purpose: "Expand and Custom presets" },
+    ],
+    nodeMeta: {
+      nodeType: "llm",
+      badge: "Text Mods",
+      accent: "violet",
+      lifecyclePreset: "llm",
+      playable: false,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Text content from connected source nodes. Applies a selected preset transformation (Summarize, Clean, Expand, or Custom instruction).",
+      outputDescription: "Transformed text after applying the selected preset. The output replaces or appends to the node's content.",
+      expandedView: "expanded/LlmExpandedView.tsx",
+      lifecycleHandler: "lifecycles/llm.ts",
+      dockGroup: "Text Mods",
+    },
+  },
+
+  {
+    id: "node-store",
+    name: "Store (Save File)",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Terminal node that saves upstream content to the Context Store. Double-click opens a folder picker dialog to choose the destination folder. No output port.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Saves content to Context Store as encrypted documents",
+      "Folder picker dialog on double-click",
+      "Embedded ContextSidebar for folder browsing",
+      "Terminal node — no downstream output",
+    ],
+    dependencies: ["FlowStoreNode", "ContextSidebar"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/documents", purpose: "Save new document to store" },
+    ],
+    nodeMeta: {
+      nodeType: "store",
+      badge: "Store",
+      accent: "primary",
+      lifecyclePreset: "passive",
+      playable: false,
+      supportsChainExecution: false,
+      expandMode: "dialog",
+      ports: [{ side: "left", type: "input" }],
+      inputDescription: "Receives content from upstream nodes to be saved. The destination folder is configured on the node.",
+      outputDescription: "No output — this is a terminal node. Content is persisted to the Context Store.",
+      expandedView: "FlowStoreNode.tsx (folder picker dialog)",
+      dockGroup: "Context",
+    },
+  },
+
+  {
+    id: "node-painter",
+    name: "Painter (Image Generation)",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Image generation node using Gemini Imagen. Accepts text prompts or upstream context to generate images. Output includes both the generated image URL and the prompt used.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Image generation via Gemini Imagen API",
+      "Accepts text description or upstream context as prompt",
+      "Displays generated image thumbnail on compact card",
+      "Structured output parsing (PROMPT:... IMAGE:... format)",
+      "Chain execution creates downstream image document nodes",
+      "Save generated images to Context Store",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/generate-image", purpose: "Generate image from text prompt" },
+    ],
+    nodeMeta: {
+      nodeType: "painter",
+      badge: "Painter",
+      accent: "rose",
+      lifecyclePreset: "media",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Text description or prompt that guides the image generation. Connected documents provide subject matter context.",
+      outputDescription: "Generated image (PNG). The image URL is stored on the node and can be saved to Context Store.",
+      lifecycleHandler: "lifecycles/painter.ts",
+      dockGroup: "Painter",
+    },
+  },
+
+  {
+    id: "node-interview",
+    name: "Interview",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Guided interview session node. AI asks probing questions based on objective/context, user responds via voice or text. Supports streaming TTS (ElevenLabs), journalist stance config, and auto-summarization for chain output.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "AI-driven Q&A interview sessions",
+      "Streaming TTS via ElevenLabs WebSocket (with REST fallback)",
+      "Journalist stance: investigative, exploratory, balanced, autobiography",
+      "Auto-start without objective (infers from first answer)",
+      "Voice input via Web Speech API",
+      "Q&A entry storage with timestamps",
+      "Auto-summarization on chain execution via /api/interview/summary",
+      "Voice selection UI for ElevenLabs voices",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/interview/question/stream", purpose: "Streaming interview question (SSE + TTS audio)" },
+      { method: "POST", endpoint: "/api/interview/question", purpose: "REST fallback for question generation" },
+      { method: "POST", endpoint: "/api/interview/summary", purpose: "Synthesize interview entries into document" },
+      { method: "POST", endpoint: "/api/tts", purpose: "Text-to-speech (ElevenLabs preferred, browser fallback)" },
+    ],
+    nodeMeta: {
+      nodeType: "interview",
+      badge: "Interview",
+      accent: "cyan",
+      lifecyclePreset: "interview",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Objective text and context documents that define the interview topic. Supports journalist stance configuration.",
+      outputDescription: "Interview transcript (Q&A entries). Can be summarized into a structured document for downstream nodes.",
+      expandedView: "FlowInterviewOverlay (in FlowWorkspace)",
+      lifecycleHandler: "lifecycles/interview.ts",
+      dockGroup: "Interview",
+    },
+  },
+
+  {
+    id: "node-timeline",
+    name: "Timeline",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Visual timeline creation node. Accepts text describing events and produces a structured chronological timeline document. Uses the generic LLM lifecycle for processing.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Chronological event organization",
+      "LLM-powered timeline extraction from unstructured text",
+      "Timeline era discovery via /api/timeline/discover-era",
+      "Timeline transformation via /api/timeline/transform",
+      "Structured output with dated entries",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/write", purpose: "Process content into timeline format" },
+      { method: "POST", endpoint: "/api/timeline/discover-era", purpose: "Discover timeline eras" },
+      { method: "POST", endpoint: "/api/timeline/transform", purpose: "Transform timeline data" },
+    ],
+    nodeMeta: {
+      nodeType: "timeline",
+      badge: "Timeline",
+      accent: "orange",
+      lifecyclePreset: "llm",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Text content describing events, milestones, or items to arrange chronologically.",
+      outputDescription: "Structured timeline document with dated entries. Can feed into downstream document or store nodes.",
+      dockGroup: "Timeline",
+    },
+  },
+
+  {
+    id: "node-document",
+    name: "Document",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Editable document node created as output from other nodes (research, LLM, interview). Contains markdown text that can be edited inline and fed to downstream nodes.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Inline markdown editing on double-click",
+      "Auto-created by upstream node processing (research output, interview summary)",
+      "Content snippet preview on compact card",
+      "Output port for downstream chain processing",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "document",
+      badge: "Document",
+      accent: "indigo",
+      lifecyclePreset: "passive",
+      playable: false,
+      supportsChainExecution: false,
+      expandMode: "overlay",
+      ports: [{ side: "right", type: "output" }],
+      inputDescription: "No automatic input — content is edited directly or created by upstream nodes (e.g., research output).",
+      outputDescription: "Markdown text content. Connected downstream nodes receive the full document text.",
+      dockGroup: "Context",
+    },
+  },
+
+  {
+    id: "node-zone",
+    name: "Zone",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Visual grouping container. Zones are transparent rectangles that organize nodes spatially on the canvas. No data flow participation. Supports 7 color options and zoom-responsive LOD rendering.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Visual-only grouping container (no data flow)",
+      "7 color options: blue, green, amber, rose, violet, cyan, gray",
+      "Custom label editing",
+      "Zoom-responsive LOD: labels/controls fade below 0.25 zoom",
+      "Dragging a zone moves all contained nodes",
+      "No ports, no expand, no play button",
+    ],
+    dependencies: ["FlowZoneNode"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "zone",
+      badge: "Zone",
+      accent: "primary",
+      lifecyclePreset: "passive",
+      playable: false,
+      supportsChainExecution: false,
+      expandMode: "none",
+      ports: [],
+      inputDescription: "No input — zones are visual grouping containers. They don't participate in data flow.",
+      outputDescription: "No output — zones organize nodes visually but don't produce data.",
+    },
+  },
+
+  {
+    id: "node-audio",
+    name: "Audio (Voice Capture)",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Voice recording node using Web Speech API for real-time transcription. Records audio and produces text transcripts that can feed into LLM, research, or document nodes.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Real-time voice transcription via Web Speech API",
+      "Microphone recording with browser-native APIs",
+      "Transcript output as text content",
+      "Output port for feeding transcripts to downstream processors",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "audio",
+      badge: "Audio",
+      accent: "red",
+      lifecyclePreset: "passive",
+      playable: false,
+      supportsChainExecution: false,
+      expandMode: "overlay",
+      ports: [{ side: "right", type: "output" }],
+      inputDescription: "No input — records audio directly via microphone using Web Speech API for real-time transcription.",
+      outputDescription: "Transcribed text from voice recording. Can be connected to LLM, Research, or Document nodes for processing.",
+      expandedView: "expanded/AudioExpandedView.tsx",
+      dockGroup: "Audio",
+    },
+  },
+
+  {
+    id: "node-youtube",
+    name: "YouTube",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "YouTube video transcript extraction with 3 input modes: URL (direct), Search (keyword), and Playlist. Supports multi-video transcript fetching, chapter detection, embedded player, and thumbnail display on compact card.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "3 input modes: URL, Search (keyword), Playlist",
+      "Multi-video transcript fetching with topN limiting",
+      "Automatic chapter detection",
+      "Video metadata preservation (duration, views, channel, date)",
+      "Embedded YouTube player in expanded view",
+      "Thumbnail display on compact card",
+      "Auto-mode detection from upstream input content",
+      "Chain propagation sets llmStatus=done for downstream triggers",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/youtube/transcript", purpose: "Fetch video transcript" },
+      { method: "POST", endpoint: "/api/youtube/search", purpose: "Search YouTube by keyword" },
+      { method: "POST", endpoint: "/api/youtube/playlist", purpose: "Fetch playlist videos" },
+    ],
+    nodeMeta: {
+      nodeType: "youtube",
+      badge: "YouTube",
+      accent: "red",
+      lifecyclePreset: "youtube",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "YouTube URL, search keywords, or playlist URL. Can receive keywords from upstream context nodes for automated search.",
+      outputDescription: "Extracted video transcript(s) with chapters and metadata. Multi-video mode merges all transcripts.",
+      expandedView: "expanded/YoutubeExpandedView.tsx",
+      lifecycleHandler: "lifecycles/youtube.ts",
+      dockGroup: "YouTube",
+    },
+  },
+
+  {
+    id: "node-timer-event",
+    name: "Trigger (Timer Event)",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Chain trigger node with 3 modes: Manual (fire button), Timed (interval-based), and Automated (fires when upstream completes). Drives chain execution by sending pulse signals downstream.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "3 trigger modes: Manual, Timed, Automated",
+      "Manual mode: shows 'Fire Chain' button on compact card",
+      "Timed mode: configurable interval in milliseconds (default 5000ms)",
+      "Automated mode: fires when upstream node completes",
+      "Pulse tracking: timerPulseCount and timerLastPulse timestamp",
+      "Auto-creates/appends to 'Trigger Log' document node",
+      "Lifecycle engine runs triggers outside render cycle (immune to viewport culling)",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "timer-event",
+      badge: "Trigger",
+      accent: "emerald",
+      lifecyclePreset: "timer",
+      playable: false,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Trigger signal from upstream nodes or timer configuration. Can be timed (interval) or automated (on upstream completion).",
+      outputDescription: "Fires a pulse signal to connected downstream nodes, triggering their execution in sequence.",
+      expandedView: "expanded/TimerExpandedView.tsx",
+      lifecycleHandler: "lifecycles/timer.ts",
+      dockGroup: "Trigger",
+    },
+  },
+
+  {
+    id: "node-filter",
+    name: "Filter",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Logic node that evaluates a condition rule to filter content. Only items matching the rule pass through to downstream nodes. Part of the Logic dock group with gate, router, merge, and coherence-gate.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Line-based content filtering with string-contains matching",
+      "Configurable logicRule text",
+      "Passes matching content, blocks non-matching",
+      "Part of Logic dock group (shared picker popup)",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "filter",
+      badge: "Filter",
+      accent: "emerald",
+      lifecyclePreset: "logic",
+      playable: false,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Content from upstream nodes. The filter evaluates a condition rule to decide what passes through.",
+      outputDescription: "Filtered content — only items matching the condition rule are forwarded to downstream nodes.",
+      expandedView: "expanded/LogicExpandedView.tsx",
+      lifecycleHandler: "lifecycles/logic.ts",
+      dockGroup: "Logic",
+    },
+  },
+
+  {
+    id: "node-gate",
+    name: "Gate",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Logic node with a simple open/closed toggle. When open, passes all content through unchanged. When closed, blocks all downstream propagation. Part of the Logic dock group.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Binary open/closed toggle (gateOpen boolean)",
+      "Open: passes content unchanged",
+      "Closed: blocks all downstream propagation",
+      "Visual indicator of gate state on compact card",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "gate",
+      badge: "Gate",
+      accent: "amber",
+      lifecyclePreset: "logic",
+      playable: false,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Content from upstream nodes. The gate blocks or allows content based on its open/closed state.",
+      outputDescription: "When open, passes content through unchanged. When closed, blocks all downstream propagation.",
+      expandedView: "expanded/LogicExpandedView.tsx",
+      lifecycleHandler: "lifecycles/logic.ts",
+      dockGroup: "Logic",
+    },
+  },
+
+  {
+    id: "node-coherence-gate",
+    name: "Coherence Gate",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "AI-powered quality gate that scores content against configurable checks (topic match, tone consistency, fact drift, style match). Passes content above threshold, blocks below. Supports retries and strictness presets.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "4 quality checks: topic match, tone consistency, fact drift, style match",
+      "Configurable threshold score (0-100)",
+      "3 strictness presets: Loose (50%), Medium (75%), Strict (90%)",
+      "Automatic retry on failure (0-5 retries)",
+      "Custom evaluation prompt for domain-specific rules",
+      "Test evaluation UI in expanded view",
+      "Persistent fail tracking (coherenceFailCount)",
+      "Pass: forwards content with score. Fail: blocks or retries",
+      "Renders as circle shape on canvas (special FlowNodeContainer handling)",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/flow/coherence-eval", purpose: "Evaluate content coherence" },
+    ],
+    nodeMeta: {
+      nodeType: "coherence-gate",
+      badge: "Coherence",
+      accent: "emerald",
+      lifecyclePreset: "coherence",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Content from upstream nodes to evaluate for quality. Scores against configured checks and threshold.",
+      outputDescription: "Pass: content forwarded with confidence score. Fail: blocks propagation or routes to retry branch.",
+      expandedView: "expanded/CoherenceGateExpandedView.tsx",
+      lifecycleHandler: "lifecycles/coherence.ts",
+      dockGroup: "Logic",
+    },
+  },
+
+  {
+    id: "node-router",
+    name: "Router",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Logic node that distributes content to specific downstream nodes based on configured output labels. Routes content to matching branches for parallel processing paths.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Configurable output branch labels (routerOutputs array)",
+      "Routes content to matching downstream connections",
+      "Enables parallel processing paths from single input",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "router",
+      badge: "Router",
+      accent: "violet",
+      lifecyclePreset: "logic",
+      playable: false,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Content from upstream nodes. Routes to different output branches based on configured rules or labels.",
+      outputDescription: "Distributes content to specific downstream nodes based on matching output labels.",
+      expandedView: "expanded/LogicExpandedView.tsx",
+      lifecycleHandler: "lifecycles/logic.ts",
+      dockGroup: "Logic",
+    },
+  },
+
+  {
+    id: "node-merge",
+    name: "Merge",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Logic node that consolidates multiple input branches into a single output. Combines all incoming content for unified downstream processing.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Accepts multiple input connections",
+      "Concatenates or interleaves content from all sources",
+      "Produces single unified output for downstream nodes",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "merge",
+      badge: "Merge",
+      accent: "blue",
+      lifecyclePreset: "logic",
+      playable: false,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Multiple input connections from different branches. Combines all incoming content into a single output.",
+      outputDescription: "Merged content from all input sources, concatenated or interleaved based on arrival order.",
+      expandedView: "expanded/LogicExpandedView.tsx",
+      lifecycleHandler: "lifecycles/logic.ts",
+      dockGroup: "Logic",
+    },
+  },
+
+  {
+    id: "node-social-post",
+    name: "Social Post",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Multi-platform social media content generator. Adapts upstream text for selected platforms (X, LinkedIn, Facebook, Instagram, Reddit) with per-platform character limits, intent, tone, and optional image generation.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Per-platform toggle and customization",
+      "Intent options: marketing, blog, announcement, etc.",
+      "Tone options: professional, casual, witty, etc.",
+      "Automatic image generation toggle (socialGenerateImages)",
+      "Upstream image passthrough (from painter nodes)",
+      "Per-platform output with text, imageUrl, charCount, status",
+      "Chain execution creates per-platform document nodes",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/write", purpose: "Generate platform-adapted social content" },
+      { method: "POST", endpoint: "/api/generate-image", purpose: "Generate social post images" },
+    ],
+    nodeMeta: {
+      nodeType: "social-post",
+      badge: "Social",
+      accent: "pink",
+      lifecyclePreset: "social",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+      inputDescription: "Text content to adapt for social media. Accepts intent, tone, and platform selection to guide generation.",
+      outputDescription: "Platform-specific social posts (text + optional images). Each platform gets tailored content respecting character limits.",
+      expandedView: "expanded/SocialPostExpandedView.tsx",
+      lifecycleHandler: "lifecycles/social-post.ts",
+      dockGroup: "Social",
+    },
+  },
+
+  {
+    id: "node-api-connection",
+    name: "API Connection",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "External API publishing node. Connects to services (X, LinkedIn, Facebook, Instagram, Reddit, webhook, custom) to publish content. Tracks auth status and logs all publish attempts.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "7 service types: X, LinkedIn, Facebook, Instagram, Reddit, webhook, custom",
+      "Auth status tracking: connected, expired, pending, error, none",
+      "Detailed publish logging (platform, status, message, timestamp, externalId)",
+      "Custom webhook support with URL and headers (JSON)",
+      "Terminal node for publishing workflows",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "api-connection",
+      badge: "API",
+      accent: "green",
+      lifecyclePreset: "api",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }],
+      inputDescription: "Content from upstream social post nodes or documents. Publishes to configured external API (X, LinkedIn, etc.).",
+      outputDescription: "Post result status (success/failure, external ID). Logs all publish attempts with timestamps.",
+      expandedView: "expanded/ApiConnectionExpandedView.tsx",
+      lifecycleHandler: "lifecycles/api-connection.ts",
+      dockGroup: "API",
+    },
+  },
+
+  {
+    id: "node-notification",
+    name: "Notification",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Notification node that sends alerts when triggered in a chain. Summarizes upstream content and delivers notifications to assigned users. Terminal node with no downstream output.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Sends notifications to assigned users on chain trigger",
+      "Summarizes upstream content for notification body",
+      "Delivery status tracking (sent/failed)",
+      "Terminal node — no downstream propagation",
+    ],
+    dependencies: ["FlowNodeRenderer", "FlowNodeContainer"],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "notification",
+      badge: "Notify",
+      accent: "pink",
+      lifecyclePreset: "notification",
+      playable: true,
+      supportsChainExecution: true,
+      expandMode: "overlay",
+      ports: [{ side: "left", type: "input" }],
+      inputDescription: "Content from upstream nodes. When triggered, sends a notification with a summary of the input to assigned users.",
+      outputDescription: "Notification delivery status (sent/failed). Terminal node — no downstream output.",
+      expandedView: "expanded/NotificationExpandedView.tsx",
+      lifecycleHandler: "lifecycles/notification.ts",
+      dockGroup: "Notify",
+    },
+  },
+
+  {
+    id: "node-label",
+    name: "Label",
+    filePath: "components/flow/FlowNodeRegistry.ts",
+    category: "canvas-node",
+    description:
+      "Text annotation node for canvas organization. Transparent background, no ports, no data flow. Double-click opens a formatting dialog with font size (12-48px), bold/italic, and 7 color presets.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Text annotation with transparent background",
+      "Formatting dialog: font size (12-48px presets), bold, italic",
+      "7 color presets including white",
+      "Inline editing on double-click",
+      "No ports — purely visual annotation",
+      "Renders with special transparent styling in FlowNodeContainer",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+    nodeMeta: {
+      nodeType: "label",
+      badge: "Label",
+      accent: "stone",
+      lifecyclePreset: "passive",
+      playable: false,
+      supportsChainExecution: false,
+      expandMode: "dialog",
+      ports: [],
+      inputDescription: "No input — labels are text annotations placed on the canvas for organizational purposes.",
+      outputDescription: "No output — labels don't participate in data flow. They are visual-only elements.",
+    },
+  },
+
+  // ════════════════════════════════════════════
+  // CANVAS WRAPPER FEATURES
+  // ════════════════════════════════════════════
+
+  {
+    id: "feature-wasd-glide",
+    name: "WASD Glide Camera",
+    filePath: "components/flow/useFlowInteraction.ts",
+    category: "canvas-feature",
+    description:
+      "Game-style smooth camera panning using W/A/S/D keys. Physics-based with acceleration (1.8 px/frame²), max speed (18 px/frame), friction (0.88), and momentum. Camera continues gliding after key release until friction stops it.",
+    props: [],
+    hooks: [
+      { name: "useRef", source: "react", purpose: "Track velocity, active keys, and animation frame" },
+      { name: "requestAnimationFrame", source: "browser", purpose: "Smooth 60fps physics loop" },
+    ],
+    capabilities: [
+      "W/A/S/D keys for directional panning",
+      "Physics-based acceleration (1.8 px/frame²)",
+      "Max speed cap at 18 px/frame",
+      "Friction multiplier (0.88) for smooth deceleration",
+      "Stop threshold at 0.3 px/frame (snaps to zero)",
+      "Momentum — camera continues moving after key release",
+      "Customizable via glideKeys prop",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-marquee-selection",
+    name: "Marquee Selection",
+    filePath: "components/flow/useFlowInteraction.ts",
+    category: "canvas-feature",
+    description:
+      "Shift + left-click drag on canvas background creates a selection rectangle. All nodes whose bounds overlap the marquee are selected. Minimum 5px size threshold prevents accidental selections.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Shift + left-click drag to create selection rectangle",
+      "Selects all nodes overlapping the marquee bounds",
+      "5px minimum size to prevent accidental clicks",
+      "Visual selection rectangle overlay",
+      "Works with multi-select group drag",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-undo-redo",
+    name: "Undo / Redo History",
+    filePath: "components/flow/useFlowCanvas.ts",
+    category: "canvas-feature",
+    description:
+      "100-snapshot deep undo/redo history for all canvas operations. Auto-clears redo stack on new mutations. Snapshots capture full node + edge state. Explicit snapshot push before drag operations.",
+    props: [],
+    hooks: [
+      { name: "useRef", source: "react", purpose: "History stack and pointer tracking" },
+    ],
+    capabilities: [
+      "100-snapshot deep history",
+      "Ctrl+Z / Cmd+Z for undo",
+      "Ctrl+Shift+Z / Cmd+Y for redo",
+      "Auto-clears redo stack on any new mutation",
+      "Explicit pushSnapshot() before drag operations",
+      "Batch deletion in single undo snapshot (deleteNodesSnapshot)",
+      "Full node + edge state captured per snapshot",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-copy-paste",
+    name: "Copy / Paste Nodes",
+    filePath: "pages/FlowWorkspace.tsx",
+    category: "canvas-feature",
+    description:
+      "Copy selected nodes (Ctrl+C) serializes nodes and internal edges to JSON. Paste (Ctrl+V) deserializes with 50px position offset and auto-selects pasted nodes. Preserves all node fields including conversation history and settings.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Ctrl+C / Cmd+C to copy selected nodes",
+      "Ctrl+V / Cmd+V to paste with 50px offset",
+      "Copies all node fields (content, settings, conversations)",
+      "Preserves internal edges between copied nodes",
+      "Auto-selects pasted nodes",
+      "New unique IDs assigned to pasted nodes",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-canvas-freeze",
+    name: "Canvas Freeze",
+    filePath: "pages/FlowWorkspace.tsx",
+    category: "canvas-feature",
+    description:
+      "Toggle in the zoom dropdown menu that disables ALL canvas interactions — wheel, mouse, drag, drop. Locks the canvas from accidental edits while preserving visual state. Useful for presentation or review mode.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Toggle via zoom dropdown → 'Freeze Canvas'",
+      "Disables: wheel zoom, mouse down/move/up, drag-over, drop",
+      "Preserves visual state (nodes stay visible)",
+      "Prevents accidental edits during presentation/review",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-minimap",
+    name: "Minimap",
+    filePath: "components/flow/FlowMinimap.tsx",
+    category: "canvas-feature",
+    description:
+      "Persistent minimap overlay showing all nodes at a reduced scale. Toggled with 'M' key or Settings menu. Draggable, resizable, collapsible, and pinnable. State persists to localStorage across page reloads.",
+    props: [],
+    hooks: [
+      { name: "useMinimapState", source: "components/flow/useMinimapState.ts", purpose: "Persistent minimap state (position, size, zoom, pinned, collapsed)" },
+    ],
+    capabilities: [
+      "Toggle with 'M' key or Settings menu",
+      "Draggable position on canvas overlay",
+      "Resizable: 150-600px width, 100-400px height",
+      "Zoom range: 0.5x - 4x",
+      "Collapsible (minimize to bar)",
+      "Pinnable (prevent accidental moves)",
+      "State persisted to localStorage with 50ms debounce",
+      "Shows all nodes as colored dots/rectangles at scale",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-edge-roles",
+    name: "Edge Roles (Semantic Connections)",
+    filePath: "components/flow/FlowEdgeLayer.tsx",
+    category: "canvas-feature",
+    description:
+      "Edges can carry semantic roles: objective, context, or output-format. Research nodes accept inputs in vertical zones that assign roles automatically. Edge labels and colors reflect the role. Enables structured data routing beyond simple content flow.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "3 edge roles: objective (blue), context (amber), output-format (purple)",
+      "Research node input zones: top 25% = objective, middle 50% = context, bottom 75% = output-format",
+      "Role labels rendered on edge curves",
+      "Color-coded edge rendering by role",
+      "gatherInputContentWithRoles() separates inputs by role for processing",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-chain-execution",
+    name: "Chain Execution Engine",
+    filePath: "components/flow/useChainExecutor.ts",
+    category: "canvas-feature",
+    description:
+      "Automated multi-node processing pipeline. When a node completes, downstream nodes auto-execute with 500ms delay. Supports two input modes (wait-all, fire-each), auto-trigger control per node, and reactive completion watching.",
+    props: [],
+    hooks: [
+      { name: "useRef", source: "react", purpose: "Abort controller and running state" },
+      { name: "useCallback", source: "react", purpose: "Memoized execute and abort functions" },
+    ],
+    capabilities: [
+      "500ms delay between consecutive node executions",
+      "Input modes: wait-all (default) and fire-each",
+      "wait-all: downstream fires only after ALL inputs complete",
+      "fire-each: downstream fires immediately on any single input",
+      "autoTriggerNext per-node control (default true)",
+      "Reactive watcher: detects llmStatus → 'done' transitions",
+      "chainPropagatedRef prevents duplicate propagation",
+      "abortChain() to cancel in-progress execution",
+      "executeChain(startNodeId) for full chain from start",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-keyboard-shortcuts",
+    name: "Keyboard Shortcuts",
+    filePath: "lib/keybind-actions.ts",
+    category: "canvas-feature",
+    description:
+      "Comprehensive keyboard shortcut system with user-overridable bindings. Covers canvas navigation (WASD, zoom, minimap), editing (copy, paste, undo, redo, delete), and selection (select all, deselect). Number keys 1-9 quick-place dock items.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Canvas: W/A/S/D glide, +/- zoom, M minimap",
+      "Edit: Ctrl+C copy, Ctrl+V paste, Ctrl+Z undo, Ctrl+Shift+Z redo, Delete/Backspace delete",
+      "Selection: Ctrl+A select all, Escape deselect",
+      "Number keys 1-9: quick-place dock items at cursor",
+      "Space + click: temporary pan without clearing selection",
+      "Middle mouse button: always pans",
+      "Shift + click: toggle individual node selection",
+      "User-overridable via keybinding settings",
+      "Platform-aware: Cmd on Mac, Ctrl on Windows",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-canvas-themes",
+    name: "Canvas Themes",
+    filePath: "lib/canvas-styles.ts",
+    category: "canvas-feature",
+    description:
+      "8 built-in visual themes for the canvas background: Aurora (dark, particles), Paper (light), Daylight (light), Blueprint (technical grid), Midnight (dark), Forest (dark), Void (minimal dark). Each theme defines background gradient, grid opacity/color, hero animation visibility, and color palette.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "8 themes: Aurora, Paper, Daylight, Blueprint, Midnight, Forest, Void",
+      "Per-theme: background CSS, grid opacity (0-35%), grid color",
+      "Hero particle animation (Aurora theme)",
+      "Associated color palettes: ember, ocean, slate, dusk, forest",
+      "Selectable via shell settings",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-activity-logs",
+    name: "Activity Logs (Lifecycle Console)",
+    filePath: "components/flow/ActivityLogsOverlay.tsx",
+    category: "canvas-feature",
+    description:
+      "Full lifecycle audit trail for all node executions. Two view modes: flat (chronological) and grouped (by node with expand/collapse). Supports filtering by node, type, phase, status, date range, and keyword search. Click-to-navigate pans canvas to the relevant node.",
+    props: [],
+    hooks: [
+      { name: "useLifecycleLog", source: "lib/lifecycleLog.ts", purpose: "Subscribe to lifecycle log entries" },
+    ],
+    capabilities: [
+      "Two views: flat (chronological) and grouped (by node)",
+      "6 phases: pre-process, process, post-process, activate, deactivate, tick, chain",
+      "4 statuses: start, success, error, skipped",
+      "Filtering: node ID, node type, phase, status, date range, keyword",
+      "Click-to-navigate: pans canvas to source node",
+      "Pause/resume log capture",
+      "Export logs as text file",
+      "Copy filtered logs to clipboard",
+      "Max 500 entries (rolling buffer)",
+      "Per-node statistics: error count, total/average duration",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-multi-select-drag",
+    name: "Multi-Select & Group Drag",
+    filePath: "components/flow/useFlowInteraction.ts",
+    category: "canvas-feature",
+    description:
+      "Shift + click toggles individual node selection. Selected nodes move together as a group when dragged. Zone-aware: dragging a zone automatically moves all nodes contained within it.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Shift + click: toggle node in/out of selection",
+      "Group drag: all selected nodes move together",
+      "Zone-aware: dragging a zone moves contained nodes",
+      "Works with marquee selection for bulk operations",
+      "Selected nodes highlight with visual indicator",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-workspace-tabs",
+    name: "Workspace Tabs (Multi-Canvas)",
+    filePath: "pages/FlowWorkspace.tsx",
+    category: "canvas-feature",
+    description:
+      "Multiple independent canvas workspaces within a single session. Each tab maintains its own node/edge/viewport state as snapshots. Switch tabs to save current state and load another. Rename, duplicate, or close tabs.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Multiple named canvas tabs (Canvas 1, Canvas 2, ...)",
+      "Independent node/edge/viewport state per tab",
+      "Auto-save on tab switch",
+      "Right-click to rename tabs",
+      "Close tabs (must keep at least one)",
+      "Tab state stored as snapshots in memory",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-collab",
+    name: "Real-Time Collaboration",
+    filePath: "hooks/use-canvas-collab.ts",
+    category: "canvas-feature",
+    description:
+      "WebSocket-based real-time canvas collaboration. Always enabled when a canvas ID exists. Syncs node add/move/delete, edge operations, and full state for late joiners. Shows presence indicator with online member count.",
+    props: [],
+    hooks: [
+      { name: "useCanvasCollab", source: "hooks/use-canvas-collab.ts", purpose: "WebSocket connection, operation send/receive, presence tracking" },
+    ],
+    capabilities: [
+      "WebSocket connection to /ws/canvas",
+      "Operation sync: add-node, move-node, delete-node, add-edge, update-node",
+      "Full state sync for late joiners",
+      "Presence tracking with online member count badge",
+      "Self-echo filtering (ignores own operations)",
+      "Always enabled when canvas ID exists (collabEnabled = true)",
+    ],
+    dependencies: [],
+    apiEndpoints: [],
+  },
+
+  {
+    id: "feature-auto-save",
+    name: "Auto-Save & Session Persistence",
+    filePath: "pages/FlowWorkspace.tsx",
+    category: "canvas-feature",
+    description:
+      "Automatic canvas saving on configurable intervals. Creates [5min] and [Hourly] auto-save documents. Last canvas ID and title persist to localStorage for cross-session resume. URL params take priority over localStorage.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Auto-save timer runs every 30-60 seconds",
+      "Creates [5min] and [Hourly] auto-save snapshots",
+      "Last canvas ID saved to localStorage (flow:lastCanvasId)",
+      "Last canvas title saved to localStorage (flow:lastCanvasTitle)",
+      "URL param takes priority over localStorage on load",
+      "Auto-save documents excluded from Open Canvas dialog",
+    ],
+    dependencies: [],
+    apiEndpoints: [
+      { method: "POST", endpoint: "/api/documents", purpose: "Save canvas state as encrypted document" },
+      { method: "PUT", endpoint: "/api/documents/:id", purpose: "Update existing canvas save" },
+    ],
+  },
+
+  {
+    id: "feature-fit-to-screen",
+    name: "Fit to Screen",
+    filePath: "pages/FlowWorkspace.tsx",
+    category: "canvas-feature",
+    description:
+      "Auto-frames all canvas nodes within the viewport. Computes bounding box of all nodes plus 40px padding and adjusts zoom + offset to fit. Available in the zoom dropdown menu.",
+    props: [],
+    hooks: [],
+    capabilities: [
+      "Computes bounding box of all nodes",
+      "40px padding around the bounding box",
+      "Adjusts zoom and offset to fit all nodes in viewport",
+      "Available in zoom dropdown menu",
+    ],
+    dependencies: [],
     apiEndpoints: [],
   },
 ];
