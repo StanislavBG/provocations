@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.2";
+export const APP_VERSION = "0.14.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.14.3",
+    date: "2026-03-06",
+    changes: [
+      "Fix root cause of 'is not iterable' TypeError: StoreExpandedView queryFn normalized /api/documents to bare array, poisoning shared cache for all other components",
+      "Normalize all /api/documents and /api/folders consumers to handle both wrapped and bare cache shapes",
+      "Fix auto-save purge to handle wrapped API response shape",
+    ],
+  },
   {
     version: "0.14.2",
     date: "2026-03-06",
