@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type ComponentPropsWithoutRef } from "react";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
-import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X, ExternalLink, Copy, Check, Link2, Maximize2, Minimize2, Youtube } from "lucide-react";
+import { Send, Bot, User, BookmarkPlus, Loader2, Sparkles, Trash2, Compass, ShieldCheck, Database, FlaskConical, Layers, BrainCircuit, Microscope, FileText, Target, MessageSquare, SlidersHorizontal, ChevronDown, ChevronRight, AlignLeft, List, GraduationCap, BookOpen, Users, Code2, Zap, MessageCircle, Shield, Search as SearchIcon, Square, Clock, Cpu, ArrowRight, Globe, FolderOpen, ListChecks, Pencil, Play, X, ExternalLink, Copy, Check, Link2, Maximize2, Minimize2, Youtube, PanelLeftClose } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -263,7 +263,7 @@ const researchMarkdownComponents = {
 
 /** Connection context passed from Flow Canvas */
 export interface ResearchConnectionContext {
-  inputNodes: Array<{ type: string; label: string; content?: string; documentContent?: string; snippet?: string; role?: "context" | "objective" }>;
+  inputNodes: Array<{ type: string; label: string; content?: string; documentContent?: string; snippet?: string; role?: "context" | "objective" | "output-format" }>;
   outputNodes: Array<{ id: string; type: string; label: string }>;
 }
 
@@ -315,6 +315,7 @@ export function NotebookResearchChat({
   const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showContextPanel, setShowContextPanel] = useState(true);
   const fsBottomRef = useRef<HTMLDivElement>(null);
 
   // ── Connection-aware YouTube mode ──
@@ -323,15 +324,17 @@ export function NotebookResearchChat({
   ) ?? false;
 
   // Role-aware input parsing
-  const { objectiveFromInputs, contextFromInputs, topicFromInputs } = useMemo(() => {
-    if (!connectionContext?.inputNodes.length) return { objectiveFromInputs: "", contextFromInputs: "", topicFromInputs: "" };
+  const { objectiveFromInputs, contextFromInputs, formatFromInputs, topicFromInputs } = useMemo(() => {
+    if (!connectionContext?.inputNodes.length) return { objectiveFromInputs: "", contextFromInputs: "", formatFromInputs: "", topicFromInputs: "" };
     const objectiveNodes = connectionContext.inputNodes.filter((n) => n.role === "objective");
     const contextNodes = connectionContext.inputNodes.filter((n) => n.role === "context");
+    const formatNodes = connectionContext.inputNodes.filter((n) => n.role === "output-format");
     const allNodes = connectionContext.inputNodes;
     const getText = (n: typeof allNodes[0]) => n.documentContent || n.content || n.snippet || "";
     return {
       objectiveFromInputs: objectiveNodes.map(getText).filter(Boolean).join("; "),
       contextFromInputs: contextNodes.map(getText).filter(Boolean).join("\n\n"),
+      formatFromInputs: formatNodes.map(getText).filter(Boolean).join("\n\n"),
       topicFromInputs: allNodes.map(getText).filter(Boolean).join("; "),
     };
   }, [connectionContext?.inputNodes]);
@@ -604,10 +607,103 @@ export function NotebookResearchChat({
   );
 
   const hasMessages = messages.length > 0;
+  const hasConnectionInputs = !!(connectionContext?.inputNodes.length && (objectiveFromInputs || contextFromInputs || formatFromInputs));
 
   return (
     <>
-    <div className="h-full flex flex-col">
+    <div className="h-full flex overflow-hidden">
+      {/* ── Left context panel — shows objective, context, format from connected nodes ── */}
+      {hasConnectionInputs && showContextPanel && (
+        <div className="w-64 border-r flex flex-col shrink-0 bg-card/50">
+          <div className="flex items-center justify-between px-3 py-2 border-b">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Connected Inputs</span>
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setShowContextPanel(false)}>
+              <PanelLeftClose className="w-3 h-3" />
+            </Button>
+          </div>
+          <ScrollArea className="flex-1">
+            <div className="p-3 space-y-3">
+              {/* Objective section */}
+              {objectiveFromInputs && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Target className="w-3 h-3 text-blue-500" />
+                    <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Objective</span>
+                    <span className="text-[9px] text-muted-foreground ml-auto">
+                      {connectionContext?.inputNodes.filter((n) => n.role === "objective").length} source{connectionContext?.inputNodes.filter((n) => n.role === "objective").length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="text-xs text-foreground/80 bg-blue-500/5 border border-blue-500/20 rounded-md p-2 whitespace-pre-wrap max-h-[200px] overflow-auto">
+                    {objectiveFromInputs}
+                  </div>
+                </div>
+              )}
+
+              {/* Context section */}
+              {contextFromInputs && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <FolderOpen className="w-3 h-3 text-amber-500" />
+                    <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Context</span>
+                    <span className="text-[9px] text-muted-foreground ml-auto">
+                      {connectionContext?.inputNodes.filter((n) => n.role === "context").length} source{connectionContext?.inputNodes.filter((n) => n.role === "context").length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="text-xs text-foreground/80 bg-amber-500/5 border border-amber-500/20 rounded-md p-2 whitespace-pre-wrap max-h-[300px] overflow-auto">
+                    {contextFromInputs.length > 500 ? contextFromInputs.slice(0, 500) + "..." : contextFromInputs}
+                  </div>
+                </div>
+              )}
+
+              {/* Output Format section */}
+              {formatFromInputs && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="w-3 h-3 text-violet-500" />
+                    <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider">Output Format</span>
+                    <span className="text-[9px] text-muted-foreground ml-auto">
+                      {connectionContext?.inputNodes.filter((n) => n.role === "output-format").length} template{connectionContext?.inputNodes.filter((n) => n.role === "output-format").length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="text-xs text-foreground/80 bg-violet-500/5 border border-violet-500/20 rounded-md p-2 whitespace-pre-wrap max-h-[200px] overflow-auto">
+                    {formatFromInputs.length > 500 ? formatFromInputs.slice(0, 500) + "..." : formatFromInputs}
+                  </div>
+                </div>
+              )}
+
+              {/* Source node list */}
+              <div className="space-y-1 pt-2 border-t">
+                <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Sources</span>
+                {connectionContext?.inputNodes.map((n, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <span className={cn(
+                      "w-1.5 h-1.5 rounded-full shrink-0",
+                      n.role === "objective" ? "bg-blue-500" : n.role === "context" ? "bg-amber-500" : n.role === "output-format" ? "bg-violet-500" : "bg-muted-foreground",
+                    )} />
+                    <span className="truncate">{n.label}</span>
+                    {n.role && <span className="text-[8px] uppercase tracking-wider opacity-60 ml-auto shrink-0">{n.role}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      {/* ── Main chat area ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+      {/* Toggle left panel button (when collapsed) */}
+      {hasConnectionInputs && !showContextPanel && (
+        <button
+          type="button"
+          onClick={() => setShowContextPanel(true)}
+          className="flex items-center gap-1 px-2 py-1 border-b text-[9px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors shrink-0"
+        >
+          <ChevronRight className="w-3 h-3" />
+          <span>Show inputs ({connectionContext?.inputNodes.length})</span>
+        </button>
+      )}
+
       {/* Connection-aware banner */}
       {(hasYoutubeDownstream || connectionContext?.inputNodes.some((n) => n.role)) && (
         <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-blue-500/10 shrink-0 flex-wrap">
@@ -1056,7 +1152,8 @@ export function NotebookResearchChat({
           />
         </div>
       </div>
-    </div>
+    </div>{/* close main chat area flex-col */}
+    </div>{/* close outer h-full flex */}
 
     {/* ══════ Full-Screen Research Experience ══════ */}
     {isFullScreen && createPortal(

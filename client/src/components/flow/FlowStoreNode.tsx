@@ -77,7 +77,7 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
           <div className="flex items-center gap-1.5 min-w-0">
             <Folder className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
             <span className="text-[10px] text-muted-foreground/50 italic">
-              Double-click to configure
+              Save to Context Store — double-click to choose destination folder and file name
             </span>
           </div>
         )}

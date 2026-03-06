@@ -9,7 +9,12 @@ import type { NodeLifecycleHandlers, NodeProcessContext } from "../useNodeLifecy
 export function createResearchHandlers(): NodeLifecycleHandlers {
   return {
     onPreProcess: async (ctx: NodeProcessContext) => {
-      return ctx.combinedInputContent.trim().length > 0;
+      return (
+        ctx.combinedInputContent.trim().length > 0 ||
+        ctx.objectiveText.trim().length > 0 ||
+        ctx.contextText.trim().length > 0 ||
+        ctx.templateContent.trim().length > 0
+      );
     },
 
     onProcess: async (ctx: NodeProcessContext) => {

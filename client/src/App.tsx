@@ -23,6 +23,7 @@ import ContextStore from "@/pages/ContextStore";
 import Pricing from "@/pages/Pricing";
 import ComponentLibrary from "@/pages/ComponentLibrary";
 import ComponentShowcase from "@/pages/ComponentShowcase";
+import ProjectOverview from "@/pages/ProjectOverview";
 import NotFound from "@/pages/not-found";
 import { trackEvent } from "@/lib/tracking";
 import { VerboseProvider } from "@/components/VerboseProvider";
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/store" component={ContextStore} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/admin" component={Admin} />
+      <Route path="/project-overview" component={ProjectOverview} />
       <Route path="/components/:componentId" component={ComponentShowcase} />
       <Route path="/components" component={ComponentLibrary} />
       <Route path="/canvas/:canvasId">{() => <FlowWorkspace />}</Route>
