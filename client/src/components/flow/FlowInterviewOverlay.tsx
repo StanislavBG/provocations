@@ -365,7 +365,10 @@ export function FlowInterviewOverlay({
       const isBrainstorm = stance === "brainstorm";
       lcLog("process", "start", `Generating next ${isBrainstorm ? "brainstorm response" : "question"} (streaming)`);
       const allEntries = updatedEntries ?? entries;
-      const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
+      const effectiveObjective = objective.trim()
+        || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE
+          : stance === "brainstorm" ? "Open brainstorm — explore and develop whatever the user wants to discuss."
+          : objective);
 
       // Determine if we should use streaming (ElevenLabs voice available)
       const useStreaming = ttsEnabled && (ttsProvider === "elevenlabs" || (ttsProvider === "auto" && elevenlabsAvailable));
@@ -462,7 +465,7 @@ export function FlowInterviewOverlay({
         streamingQuestionRef.current = false;
         brainstormAbortRef.current = null;
         lcLog("process", "success", `${isBrainstorm ? "Response" : "Question"}: "${finalQuestion.slice(0, 60)}..."`, { durationMs: Math.round(performance.now() - t0) });
-        return { question: finalQuestion, topic: topic || "General", reasoning: "", _streamed: true } as InterviewQuestionResponse & { _streamed?: boolean };
+        return { question: finalQuestion, topic: topic || "General", reasoning: "", _streamed: true, _hadAudio: audioStarted } as InterviewQuestionResponse & { _streamed?: boolean; _hadAudio?: boolean };
       }
 
       // Fallback: REST endpoint (no streaming TTS)
@@ -477,12 +480,19 @@ export function FlowInterviewOverlay({
       lcLog("process", "success", `Question: "${data.question.slice(0, 60)}..."`, { durationMs: Math.round(performance.now() - t0) });
       return data;
     },
-    onSuccess: (data: InterviewQuestionResponse & { _streamed?: boolean }) => {
+    onSuccess: (data: InterviewQuestionResponse & { _streamed?: boolean; _hadAudio?: boolean }) => {
       setCurrentQuestion(data.question);
       setCurrentTopic(data.topic);
-      // Only speak via REST TTS if we didn't use streaming (which already played audio inline)
       if (!data._streamed) {
+        // Non-streamed: speak via REST TTS
         speakQuestion(data.question);
+      } else if (!data._hadAudio && trueInterview) {
+        // Streamed but no audio was played (ElevenLabs unavailable) —
+        // manually advance the conversation turn so the cycle continues.
+        // Transition PROCESSING → AI_SPEAKING → LISTENING to start the mic.
+        conversationTurn.startSpeaking();
+        // No audio to play, so immediately finish speaking to enter LISTENING
+        setTimeout(() => conversationTurn.finishSpeaking(), 300);
       }
     },
     onError: (error: Error) => {
@@ -502,7 +512,10 @@ export function FlowInterviewOverlay({
     mutationFn: async () => {
       const t0 = performance.now();
       lcLog("process", "start", `Summarizing ${entries.length} entries`);
-      const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
+      const effectiveObjective = objective.trim()
+        || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE
+          : stance === "brainstorm" ? "Open brainstorm — explore and develop whatever the user wants to discuss."
+          : objective);
       const response = await apiRequest("POST", "/api/interview/summary", {
         objective: effectiveObjective,
         entries,
@@ -581,8 +594,8 @@ export function FlowInterviewOverlay({
       setAnswerText("");
       trackEvent("interview_answer");
 
-      // If this is the first answer and no objective was set, use it as the objective (not in brainstorm)
-      if (!objective.trim() && entries.length === 0 && stance !== "autobiography" && stance !== "brainstorm") {
+      // If this is the first answer and no objective was set, infer it from the answer
+      if (!objective.trim() && entries.length === 0 && stance !== "autobiography") {
         setObjective(answer.trim());
       }
 
