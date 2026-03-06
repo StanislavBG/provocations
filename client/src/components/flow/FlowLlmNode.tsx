@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useRef } from "react";
 import { Brain, Trash2, Lock, Unlock, Monitor, Loader2, Play, Copy, StickyNote, Check, AlertCircle, Mic, MicOff } from "lucide-react";
+import { InputModeToggle } from "./InputModeToggle";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -246,6 +247,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
       >
         <Brain className="w-3 h-3 text-violet-500 shrink-0" />
         <span className="text-[10px] font-medium truncate flex-1">{node.label || "Text Modifications"}</span>
+        <InputModeToggle node={node} onUpdateNode={onUpdateNode} />
         <span className={cn(
           "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded",
           presetColors.active,

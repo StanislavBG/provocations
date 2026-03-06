@@ -66,15 +66,22 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
         const def = FLOW_NODE_REGISTRY[downstream.type];
         if (!def?.supportsChainExecution) continue;
 
-        // Check if ALL inputs to this downstream node are satisfied
-        const allInputEdges = edges.filter((e) => e.toNodeId === downstream.id);
-        const allInputsSatisfied = allInputEdges.every((ie) => {
-          const inputNode = nodes.find((n) => n.id === ie.fromNodeId);
-          return inputNode && (inputNode.llmStatus === "done" || !FLOW_NODE_REGISTRY[inputNode.type]?.playable);
-        });
+        const mode = downstream.inputMode ?? "wait-all";
 
-        if (allInputsSatisfied) {
+        if (mode === "fire-each") {
+          // Fire immediately — this upstream node just completed, that's enough
           candidates.push(downstream.id);
+        } else {
+          // Wait-all: check if ALL inputs to this downstream node are satisfied
+          const allInputEdges = edges.filter((e) => e.toNodeId === downstream.id);
+          const allInputsSatisfied = allInputEdges.every((ie) => {
+            const inputNode = nodes.find((n) => n.id === ie.fromNodeId);
+            return inputNode && (inputNode.llmStatus === "done" || !FLOW_NODE_REGISTRY[inputNode.type]?.playable);
+          });
+
+          if (allInputsSatisfied) {
+            candidates.push(downstream.id);
+          }
         }
       }
 

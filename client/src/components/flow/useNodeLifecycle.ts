@@ -7,11 +7,32 @@
  */
 
 import { useState, useRef, useCallback } from "react";
-import type { FlowNode, FlowEdge } from "./useFlowCanvas";
+import type { FlowNode, FlowEdge, FlowNodeType } from "./useFlowCanvas";
 
 // ── Types ──
 
 export type NodeStatus = "idle" | "pre-processing" | "processing" | "post-processing" | "done" | "error";
+
+/** Structured context entry representing one node's contribution to the chain */
+export interface ChainContextEntry {
+  nodeId: string;
+  nodeType: FlowNodeType;
+  label: string;
+  /** The node's output content */
+  content: string;
+  /** Execution status of the node */
+  status: "done" | "running" | "error" | "idle";
+  /** Topological distance from the current node (1 = direct parent, 2 = grandparent, ...) */
+  depth: number;
+  /** Edge role connecting this node to its downstream neighbor toward the current node */
+  edgeRole?: "context" | "objective" | "output-format";
+  /** For logic nodes (filter/gate/router/merge): whether content was passed or blocked */
+  verdict?: "pass" | "fail";
+  /** For coherence-gate nodes: the quality score */
+  score?: number;
+  /** For logic nodes: the rule that was applied */
+  rule?: string;
+}
 
 export interface NodeProcessContext {
   node: FlowNode;
@@ -19,7 +40,7 @@ export interface NodeProcessContext {
   inputEdges: FlowEdge[];
   /** Combined text content gathered from immediately connected upstream nodes (+ their child outputs) */
   combinedInputContent: string;
-  /** Full chain context: all content from all nodes in the execution chain up to this point */
+  /** Full chain context: all content from all nodes in the execution chain up to this point (flat string, legacy) */
   chainContext: string;
   /** AbortSignal for cancellation */
   signal: AbortSignal;
@@ -29,6 +50,13 @@ export interface NodeProcessContext {
   contextText: string;
   /** Output-format template from edges with role="output-format" */
   templateContent: string;
+  /** Structured immediate context: output from directly preceding node(s), depth=1 only.
+   *  For logic nodes, includes the logic node AND its predecessor (depth 1 & 2) so the
+   *  downstream node gets both the decision metadata and the substantive content. */
+  immediateContext: ChainContextEntry[];
+  /** Structured full chain context: every node from chain origin to this point, ordered by depth (nearest first).
+   *  Grows as the chain progresses — later nodes see the full accumulated history. */
+  fullChainContext: ChainContextEntry[];
 }
 
 export interface NodeLifecycleHandlers {
@@ -188,6 +216,103 @@ export function gatherChainContext(
   return parts.join("\n\n---\n\n");
 }
 
+// ── Logic node types that are "operational" (pass-through) rather than content-producing ──
+const LOGIC_NODE_TYPES = new Set<FlowNodeType>(["filter", "gate", "router", "merge", "coherence-gate"]);
+
+/** Extract logic-specific metadata from a node */
+function extractLogicMeta(n: FlowNode): Pick<ChainContextEntry, "verdict" | "score" | "rule"> {
+  const meta: Pick<ChainContextEntry, "verdict" | "score" | "rule"> = {};
+  if (n.type === "coherence-gate") {
+    meta.verdict = n.coherenceLastVerdict ?? undefined;
+    meta.score = n.coherenceLastScore ?? undefined;
+    meta.rule = n.coherencePrompt ?? undefined;
+  } else if (n.type === "gate") {
+    meta.verdict = n.gateOpen !== false ? "pass" : "fail";
+    meta.rule = n.logicRule ?? undefined;
+  } else if (n.type === "filter" || n.type === "router" || n.type === "merge") {
+    meta.verdict = n.llmStatus === "done" ? "pass" : undefined;
+    meta.rule = n.logicRule ?? undefined;
+  }
+  return meta;
+}
+
+/** Build a ChainContextEntry from a node */
+function toChainEntry(
+  n: FlowNode,
+  depth: number,
+  edgeRole?: "context" | "objective" | "output-format",
+): ChainContextEntry {
+  return {
+    nodeId: n.id,
+    nodeType: n.type,
+    label: n.label,
+    content: nodeContent(n),
+    status: (n.llmStatus as ChainContextEntry["status"]) || "idle",
+    depth,
+    edgeRole,
+    ...extractLogicMeta(n),
+  };
+}
+
+/**
+ * Gather structured chain context with depth tracking.
+ *
+ * Returns two arrays:
+ * - `immediate`: depth-1 parents (and depth-2 when a logic node sits at depth-1,
+ *   so the consuming node gets both the decision metadata AND the substantive content
+ *   that the logic node was evaluating).
+ * - `full`: every upstream node ordered nearest-first.
+ */
+export function gatherStructuredChainContext(
+  nodeId: string,
+  allNodes: FlowNode[],
+  allEdges: FlowEdge[],
+): { immediateContext: ChainContextEntry[]; fullChainContext: ChainContextEntry[] } {
+  const full: ChainContextEntry[] = [];
+  const visited = new Set<string>();
+
+  // BFS backward with depth tracking
+  const queue: Array<{ id: string; depth: number; edgeRole?: "context" | "objective" | "output-format" }> = [];
+
+  // Seed with direct parents at depth 1
+  const directEdges = allEdges.filter((e) => e.toNodeId === nodeId);
+  for (const edge of directEdges) {
+    queue.push({ id: edge.fromNodeId, depth: 1, edgeRole: edge.role });
+  }
+
+  while (queue.length > 0) {
+    const { id, depth, edgeRole } = queue.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+
+    const node = allNodes.find((n) => n.id === id);
+    if (!node) continue;
+
+    full.push(toChainEntry(node, depth, edgeRole));
+
+    // Walk further upstream
+    const upstreamEdges = allEdges.filter((e) => e.toNodeId === id);
+    for (const ue of upstreamEdges) {
+      if (!visited.has(ue.fromNodeId)) {
+        queue.push({ id: ue.fromNodeId, depth: depth + 1, edgeRole: ue.role });
+      }
+    }
+  }
+
+  // Sort by depth (nearest first), then by label for stability
+  full.sort((a, b) => a.depth - b.depth || a.label.localeCompare(b.label));
+
+  // Immediate context: depth-1 entries, plus depth-2 entries when a logic node
+  // sits at depth 1 (so the downstream node sees the content the logic node processed)
+  const depth1 = full.filter((e) => e.depth === 1);
+  const hasLogicAtDepth1 = depth1.some((e) => LOGIC_NODE_TYPES.has(e.nodeType));
+  const immediate = hasLogicAtDepth1
+    ? full.filter((e) => e.depth <= 2)
+    : depth1;
+
+  return { immediateContext: immediate, fullChainContext: full };
+}
+
 // ── Hook ──
 
 export function useNodeLifecycle(handlers: NodeLifecycleHandlers): NodeLifecycleReturn {
@@ -212,6 +337,8 @@ export function useNodeLifecycle(handlers: NodeLifecycleHandlers): NodeLifecycle
           gatherInputContentWithRoles(node.id, allNodes, allEdges);
 
         const chainCtx = gatherChainContext(node.id, allNodes, allEdges);
+        const { immediateContext, fullChainContext } =
+          gatherStructuredChainContext(node.id, allNodes, allEdges);
 
         const ctx: NodeProcessContext = {
           node,
@@ -223,6 +350,8 @@ export function useNodeLifecycle(handlers: NodeLifecycleHandlers): NodeLifecycle
           objectiveText,
           contextText,
           templateContent,
+          immediateContext,
+          fullChainContext,
         };
 
         // Pre-process

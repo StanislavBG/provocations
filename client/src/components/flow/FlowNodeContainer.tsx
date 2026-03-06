@@ -8,6 +8,7 @@
 
 import React, { useCallback, useState, useRef, useEffect } from "react";
 import { Pause, Trash2, Lock, Unlock, Play, Loader2, Settings } from "lucide-react";
+import { InputModeToggle } from "./InputModeToggle";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -360,6 +361,11 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
               +New
             </button>
           </div>
+        )}
+
+        {/* Input mode toggle: Wait All vs Fire Each (playable nodes only) */}
+        {isPlayable && onUpdateNode && (
+          <InputModeToggle node={node} onUpdateNode={onUpdateNode} />
         )}
 
         {/* Badge for non-playable nodes */}

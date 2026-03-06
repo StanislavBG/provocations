@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.11.2";
+export const APP_VERSION = "0.11.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,19 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.11.3",
+    date: "2026-03-05",
+    changes: [
+      "Multi-input mode toggle on playable nodes: 'Wait All' (default) waits for every upstream input to complete before running; 'Fire Each' runs the node independently for each input as it arrives",
+      "Chain propagation now respects inputMode — 'fire-each' nodes execute immediately on any single input completion, 'wait-all' nodes gate until all upstream sources are done",
+      "Structured chain context: nodes now receive `immediateContext` (direct parents with metadata) and `fullChainContext` (entire upstream DAG with depth tracking)",
+      "Logic node awareness: chain context entries include verdict (pass/fail), score, and rule metadata from filter/gate/router/merge/coherence-gate nodes",
+      "When a logic node is the direct parent, immediate context automatically includes depth-2 (the substantive content node before the logic node) so downstream nodes get both the decision and the data",
+      "Trigger node compact view now shows Manual/Timed/Auto mode toggle (was missing Manual)",
+      "InputModeToggle shared component used across all playable node types (LLM, Research, YouTube, and generic nodes)",
+    ],
+  },
   {
     version: "0.11.2",
     date: "2026-03-05",
