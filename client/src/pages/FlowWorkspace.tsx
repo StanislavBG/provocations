@@ -76,7 +76,7 @@ import {
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
-  Search, Zap, Settings, ScrollText,
+  Search, Zap, Settings, ScrollText, Trash2,
 } from "lucide-react";
 import type { ChatMessageWithMeta } from "@shared/schema";
 import { APP_VERSION, RELEASE_NOTES } from "@/lib/version";
@@ -2294,6 +2294,32 @@ function FlowWorkspaceInner() {
     toast({ title: "New canvas created" });
   }, [resetCanvas, toast, setCanvasDocumentId]);
 
+  // ── Delete canvas ──
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; title: string } | null>(null);
+
+  const handleDeleteCanvas = useCallback(async (docId: number) => {
+    try {
+      await apiRequest("DELETE", `/api/documents/${docId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      // If the deleted canvas is the one currently open, reset to a blank canvas
+      if (canvasDocumentId === docId) {
+        resetCanvas();
+        setCanvasDocumentIdRaw(null);
+        setCanvasTitle("");
+        try {
+          localStorage.removeItem("flow:lastCanvasId");
+          localStorage.removeItem("flow:lastCanvasTitle");
+        } catch { /* ignore */ }
+        setLocation("/", { replace: true });
+      }
+      toast({ title: "Canvas deleted" });
+    } catch {
+      toast({ title: "Failed to delete canvas", variant: "destructive" });
+    }
+    setDeleteConfirm(null);
+  }, [canvasDocumentId, resetCanvas, toast, setLocation]);
+
   // ── Fit to screen ──
 
   const handleFitToScreen = useCallback(() => {
@@ -2446,6 +2472,14 @@ function FlowWorkspaceInner() {
           >
             <Share2 className="w-3.5 h-3.5" />
             Share Canvas
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => canvasDocumentId && setDeleteConfirm({ id: canvasDocumentId, title: canvasTitle || "Untitled Canvas" })}
+            disabled={!canvasDocumentId}
+            className="text-xs gap-2 text-destructive focus:text-destructive"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete Canvas
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={addTab} className="text-xs gap-2">
@@ -2714,6 +2748,7 @@ function FlowWorkspaceInner() {
         onRenameCanvas={handleRenameCanvas}
         savedCanvases={canvasDocs.map((d: DocumentListItem) => ({ id: d.id, title: d.title }))}
         onOpenCanvas={handleOpenCanvas}
+        onDeleteCanvas={(id, title) => setDeleteConfirm({ id, title })}
         canvasLoading={canvasLoading}
         onToggleDetails={() => setDetailsPanelOpen((v) => !v)}
         detailsOpen={detailsPanelOpen}
@@ -3149,21 +3184,35 @@ function FlowWorkspaceInner() {
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">My Canvases</p>
                     <div className="space-y-0.5">
                       {canvasDocs.map((doc) => (
-                        <button
+                        <div
                           key={doc.id}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 text-left transition-colors"
-                          onClick={() => handleOpenCanvas(doc.id, doc.title)}
+                          className="group w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors"
                         >
-                          <ScanLine className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <span className="text-xs truncate block">{doc.title}</span>
-                            {doc.updatedAt && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            )}
-                          </div>
-                        </button>
+                          <button
+                            className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                            onClick={() => handleOpenCanvas(doc.id, doc.title)}
+                          >
+                            <ScanLine className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <span className="text-xs truncate block">{doc.title}</span>
+                              {doc.updatedAt && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/20 hover:text-destructive transition-all shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConfirm({ id: doc.id, title: doc.title });
+                            }}
+                            title="Delete canvas"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -3190,6 +3239,31 @@ function FlowWorkspaceInner() {
                 )}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete canvas confirmation */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Delete Canvas</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Are you sure you want to delete <strong className="text-foreground">{deleteConfirm?.title}</strong>? This cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setDeleteConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => deleteConfirm && handleDeleteCanvas(deleteConfirm.id)}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Delete
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

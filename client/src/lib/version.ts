@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.13.0";
+export const APP_VERSION = "0.13.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.13.1",
+    date: "2026-03-06",
+    changes: [
+      "Delete canvas from status bar dropdown, Open Canvas dialog, and Canvas toolbar menu",
+      "Confirmation dialog before deletion to prevent accidental loss",
+      "Deleting the currently-open canvas resets to a blank canvas",
+    ],
+  },
   {
     version: "0.13.0",
     date: "2026-03-05",
