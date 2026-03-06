@@ -20,6 +20,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/tracking";
+import { ImageCustomizer, type ImageTransform, type ImageMeta } from "@/components/ImageCustomizer";
 
 // ── Style presets ──────────────────────────────────────────
 const STYLE_PRESETS = [
@@ -89,6 +90,11 @@ export function ArtifyPanel({
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
   const [usedPrompt, setUsedPrompt] = useState("");
 
+  // ImageCustomizer state
+  const [expandedImageIdx, setExpandedImageIdx] = useState<number | null>(null);
+  const [imageTransforms, setImageTransforms] = useState<Record<number, ImageTransform>>({});
+  const [imageMetas, setImageMetas] = useState<Record<number, ImageMeta>>({});
+
   const handleGenerate = useCallback(async () => {
     if (!sourceText.trim() && !customPrompt.trim()) {
       toast({ title: "No content", description: "Provide source text or a custom prompt.", variant: "destructive" });
@@ -97,6 +103,7 @@ export function ArtifyPanel({
 
     setIsGenerating(true);
     setGeneratedImages([]);
+    setExpandedImageIdx(null);
 
     try {
       // Build the style directive
@@ -321,26 +328,69 @@ export function ArtifyPanel({
             <div className="space-y-3">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Generated</Label>
               {generatedImages.map((img, i) => (
-                <div key={i} className="relative group rounded-lg overflow-hidden border bg-muted/20">
-                  <img src={img} alt={`Generated ${i + 1}`} className="w-full h-auto" />
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="h-7 w-7 bg-background/80 backdrop-blur-sm"
-                      onClick={() => handleCopyImage(img)}
+                <div key={i} className="space-y-2">
+                  {expandedImageIdx === i ? (
+                    /* Full ImageCustomizer for the selected image */
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="flex items-center justify-between px-2 py-1.5 bg-muted/30 border-b">
+                        <span className="text-xs font-medium">Image {i + 1}</span>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopyImage(img)}>
+                            <Copy className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDownload(img, i)}>
+                            <Download className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpandedImageIdx(null)}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <ImageCustomizer
+                        src={img}
+                        transform={imageTransforms[i]}
+                        onTransformChange={(t) => setImageTransforms(prev => ({ ...prev, [i]: t }))}
+                        meta={imageMetas[i]}
+                        onMetaChange={(m) => setImageMetas(prev => ({ ...prev, [i]: m }))}
+                        showMeta
+                        showCrop
+                        showUpload={false}
+                        showGenerate={false}
+                        compact
+                      />
+                    </div>
+                  ) : (
+                    /* Compact thumbnail — click to expand */
+                    <div
+                      className="relative group rounded-lg overflow-hidden border bg-muted/20 cursor-pointer"
+                      onClick={() => setExpandedImageIdx(i)}
                     >
-                      <Copy className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="h-7 w-7 bg-background/80 backdrop-blur-sm"
-                      onClick={() => handleDownload(img, i)}
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
+                      <img src={img} alt={`Generated ${i + 1}`} className="w-full h-auto" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                        <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 px-2 py-1 rounded">
+                          Click to customize
+                        </span>
+                      </div>
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-7 w-7 bg-background/80 backdrop-blur-sm"
+                          onClick={(e) => { e.stopPropagation(); handleCopyImage(img); }}
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-7 w-7 bg-background/80 backdrop-blur-sm"
+                          onClick={(e) => { e.stopPropagation(); handleDownload(img, i); }}
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {usedPrompt && (

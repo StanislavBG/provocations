@@ -16,6 +16,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   LayoutTemplate,
   ChevronDown,
   Zap,
@@ -99,13 +104,16 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] px-2">
-            <LayoutTemplate className="w-3 h-3" />
-            Blueprints
-            <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="w-7 h-7 rounded text-muted-foreground hover:text-foreground">
+                <LayoutTemplate className="w-3.5 h-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs z-[60]">Blueprints</TooltipContent>
+        </Tooltip>
         <DropdownMenuContent align="start" className="w-60 max-h-[400px] overflow-auto">
           {/* Save as blueprint */}
           <DropdownMenuItem

@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(gh repo:*)",
+      "Bash(wc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(gh pr:*)",
+      "Bash(xargs ls:*)",
+      "Bash(grep:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(rm:*)",
+      "Bash(git:*)",
+      "Bash(npx vitest:*)",
+      "WebSearch",
+      "WebFetch(domain:elevenlabs.io)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm view:*)",
+      "Bash(npm ls:*)",
+      "Bash(GIT_EDITOR=true git rebase:*)"
+    ]
+  }
+}

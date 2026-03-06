@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import multer from "multer";
 import { createServer, type Server } from "http";
 import { getAuth, clerkClient } from "@clerk/express";
 import { storage } from "./storage";
@@ -5382,6 +5383,65 @@ RULES:
   // Documents are encrypted at rest on the server.
   // Ownership is determined by Clerk userId.
   // ==========================================
+
+  // ── File Upload ──
+  const uploadMiddleware = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  });
+
+  // Upload a file and save to Context Store as an encrypted document
+  app.post("/api/upload", uploadMiddleware.single("file"), async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "No file provided" });
+
+      const { title, folderId, docType } = req.body;
+      const finalTitle = title || file.originalname;
+
+      // Convert file to base64 data URL for storage
+      const mimeType = file.mimetype;
+      const base64 = file.buffer.toString("base64");
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+
+      // For text files, store the raw text content
+      const isText = mimeType.startsWith("text/") ||
+                     mimeType === "text/markdown" || mimeType === "text/plain";
+      const content = isText ? file.buffer.toString("utf-8") : dataUrl;
+
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(content, key);
+      const encryptedTitle = encrypt(finalTitle, key);
+
+      const doc = await storage.saveDocument({
+        userId,
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
+        folderId: folderId ? parseInt(folderId, 10) : null,
+        docType: docType || null,
+      });
+
+      res.json({
+        id: doc.id,
+        title: finalTitle,
+        mimeType,
+        size: file.size,
+        createdAt: doc.createdAt,
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to upload file", details: errorMessage });
+    }
+  });
 
   // Save a new document (server encrypts before storing)
   app.post("/api/documents", async (req, res) => {

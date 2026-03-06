@@ -81,7 +81,7 @@
   --font-mono: 'JetBrains Mono', monospace;
 
   /* FTUX shell variables */
-  --ftux-status-bar-height: 36px;
+  --ftux-status-bar-height: 44px;
   --ftux-dock-height: 56px;
   --ftux-dock-blur: 16px;
   --ftux-dock-opacity: 0.75;

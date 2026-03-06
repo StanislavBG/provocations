@@ -20,7 +20,7 @@ export function FtuxShell({ children }: FtuxShellProps) {
         statusBarPosition === "top" ? "flex-col" : "flex-col-reverse",
       )}
       style={{
-        ["--ftux-status-bar-height" as string]: "36px",
+        ["--ftux-status-bar-height" as string]: "44px",
         ["--ftux-dock-height" as string]: "56px",
       }}
     >

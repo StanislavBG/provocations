@@ -24,7 +24,8 @@ export type FlowNodeType =
   | "social-post"
   | "api-connection"
   | "coherence-gate"
-  | "notification";
+  | "notification"
+  | "upload";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -248,6 +249,29 @@ export interface FlowNode {
   notifyLastSent?: string;
   /** Notification: status */
   notifyStatus?: "idle" | "sending" | "sent" | "error";
+  /** Upload node: list of uploaded files */
+  uploadFiles?: Array<{
+    id: string;
+    name: string;
+    type: string;       // MIME type
+    size: number;        // bytes
+    dataUrl: string;     // base64 data URL
+    docType: string;     // "image" | "video" | "pdf" | "document"
+    savedDocId?: number; // Context Store document ID after save
+    meta?: {
+      tags: string[];
+      label: string;
+      altText: string;
+      description: string;
+    };
+    transform?: {
+      panX: number;
+      panY: number;
+      scale: number;
+    };
+  }>;
+  /** Upload node: processing status */
+  uploadStatus?: "idle" | "uploading" | "done" | "error";
 }
 
 /** Named edge roles — how source data is used by the target node */

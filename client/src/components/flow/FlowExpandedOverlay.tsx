@@ -64,7 +64,7 @@ export function FlowExpandedOverlay({
   const Icon = def.icon;
   const accentBg = ACCENT_BG[style.accent] || "bg-primary";
   const { statusBarPosition } = useFtuxShell();
-  const sbHeight = "var(--ftux-status-bar-height, 36px)";
+  const sbHeight = "var(--ftux-status-bar-height, 44px)";
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const renameLabelRef = useRef<HTMLInputElement>(null);

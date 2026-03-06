@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { UserButton } from "@clerk/clerk-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
 import { FtuxBreadcrumbStepper } from "./FtuxBreadcrumbStepper";
@@ -19,7 +19,6 @@ import {
   FolderOpen,
   Settings,
   Check,
-  Info,
   Sun,
   Moon,
   Activity,
@@ -30,6 +29,9 @@ import {
   CircuitBoard,
   AudioLines,
   Trash2,
+  ScrollText,
+  ChevronRight,
+  HardDrive,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -97,10 +99,6 @@ interface FtuxStatusBarProps {
   onOpenCanvas?: (id: number, title: string) => void;
   /** Callback to delete a saved canvas */
   onDeleteCanvas?: (id: number, title: string) => void;
-  /** Toggle the node details panel */
-  onToggleDetails?: () => void;
-  /** Whether the details panel is open */
-  detailsOpen?: boolean;
   /** Whether a canvas is currently loading */
   canvasLoading?: boolean;
   /** Callback to open the Activity Logs overlay */
@@ -109,14 +107,22 @@ interface FtuxStatusBarProps {
   onOpenConnections?: () => void;
   /** Callback to open the Platform Integrations dialog */
   onOpenIntegrations?: () => void;
+  /** Current app version string (shown in gear menu) */
+  appVersion?: string;
+  /** Callback to open the Release Notes dialog */
+  onOpenReleaseNotes?: () => void;
+  /** Callback to open the Context Store Manager */
+  onOpenContextStore?: () => void;
+  /** Slot for the BlueprintsMenu component, rendered before the gear button */
+  blueprintsSlot?: React.ReactNode;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, onToggleDetails, detailsOpen, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations, appVersion, onOpenReleaseNotes, onOpenContextStore, blueprintsSlot }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
-  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gearDropdownOpen, setGearDropdownOpen] = useState(false);
+  const [themeExpanded, setThemeExpanded] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const shell = useFtuxShell();
@@ -127,7 +133,26 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
     activeWorkflow,
     setActiveTool,
     removeStatusBarPinnedItem,
+    dockItems,
   } = shell;
+
+  const GROUP_LABELS: Record<string, string> = {
+    gather: "Gather",
+    workshop: "Workshop",
+    build: "Build",
+    other: "Other",
+  };
+
+  const pinnedByGroup = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    for (const toolId of statusBarPinnedItems) {
+      const dockItem = dockItems.find((d) => d.toolId === toolId);
+      const group = dockItem?.group || "other";
+      if (!groups[group]) groups[group] = [];
+      groups[group].push(toolId);
+    }
+    return groups;
+  }, [statusBarPinnedItems, dockItems]);
 
   const opacity = (statusBarTranslucency ?? 85) / 100;
   const blur = Math.round(opacity * 24);
@@ -139,7 +164,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
     <div
       className="relative z-50 flex items-center justify-between px-4 shrink-0 border-b border-border/50"
       style={{
-        height: "var(--ftux-status-bar-height, 36px)",
+        height: "var(--ftux-status-bar-height, 44px)",
         background: bgColor,
         backdropFilter: `blur(${blur}px)`,
       }}
@@ -251,43 +276,51 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
           </Tooltip>
         )}
 
-        {/* Pinned items */}
+        {/* Pinned items — grouped by dock group */}
         {statusBarPinnedItems.length > 0 && (
           <>
             {/* Mobile: compact count badge */}
             <Badge variant="secondary" className="md:hidden text-[9px] px-1.5 py-0 h-4 font-normal ml-1">
               {statusBarPinnedItems.length} pinned
             </Badge>
-            {/* Desktop: full pinned item buttons */}
-            <div className="hidden md:flex items-center gap-0.5 ml-2 border-l border-border/30 pl-2">
-              {statusBarPinnedItems.map((toolId) => {
-                const Icon = getToolIcon(toolId);
-                const label = getToolLabel(toolId);
-
-                return (
-                  <Tooltip key={toolId}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`${label} (right-click to unpin)`}
-                        className="w-6 h-6 rounded text-muted-foreground hover:text-foreground"
-                        onClick={() => setActiveTool(toolId as ToolId)}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          removeStatusBarPinnedItem(toolId);
-                        }}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs z-[60]">
-                      {label}
-                      <span className="text-muted-foreground ml-1">(right-click to unpin)</span>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
+            {/* Desktop: grouped pinned item buttons */}
+            <div className="hidden md:flex items-center gap-0 ml-2 border-l border-border/30 pl-2">
+              {Object.entries(pinnedByGroup).map(([group, toolIds], idx) => (
+                <div key={group} className={cn("flex flex-col items-center gap-0", idx > 0 && "ml-1.5 pl-1.5 border-l border-border/30")}>
+                  <span className="text-[8px] uppercase tracking-wider text-muted-foreground/50 font-semibold leading-none">
+                    {GROUP_LABELS[group] || group}
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    {toolIds.map((toolId) => {
+                      const Icon = getToolIcon(toolId);
+                      const label = getToolLabel(toolId);
+                      return (
+                        <Tooltip key={toolId}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`${label} (right-click to unpin)`}
+                              className="w-6 h-6 rounded text-muted-foreground hover:text-foreground"
+                              onClick={() => setActiveTool(toolId as ToolId)}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                removeStatusBarPinnedItem(toolId);
+                              }}
+                            >
+                              <Icon className="w-3.5 h-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs z-[60]">
+                            {label}
+                            <span className="text-muted-foreground ml-1">(right-click to unpin)</span>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </>
         )}
@@ -301,111 +334,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
       {/* Right: Controls */}
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
-        {onToggleDetails && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`w-7 h-7 rounded ${detailsOpen ? "text-primary bg-primary/10" : "text-muted-foreground/50"}`}
-                onClick={onToggleDetails}
-              >
-                <Info className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs z-[60]">
-              Node details
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {/* Unified Canvas Style dropdown */}
-        {onChangeCanvasTheme && (
-          <div className="relative">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-7 h-7 rounded text-muted-foreground hover:text-foreground relative"
-                  onClick={() => setThemeDropdownOpen((v) => !v)}
-                >
-                  <Paintbrush className="w-3.5 h-3.5" />
-                  <span
-                    className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full ring-1 ring-card"
-                    style={{ backgroundColor: CANVAS_STYLES.find((s) => s.key === canvasTheme)?.swatchColor ?? "#1a1040" }}
-                  />
-                </Button>
-              </TooltipTrigger>
-              {!themeDropdownOpen && (
-                <TooltipContent side="bottom" className="text-xs z-[60]">
-                  Style: {CANVAS_STYLES.find((s) => s.key === canvasTheme)?.label ?? "Aurora"}
-                </TooltipContent>
-              )}
-            </Tooltip>
-
-            {themeDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-50" onClick={() => setThemeDropdownOpen(false)} onKeyDown={(e) => { if (e.key === "Escape") setThemeDropdownOpen(false); }} />
-                <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[240px] animate-in fade-in zoom-in-95 duration-100">
-                  {/* Dark themes section */}
-                  <div className="px-3 py-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">Dark</div>
-                  {CANVAS_STYLES.filter((s) => s.isDark).map((style) => (
-                    <button
-                      key={style.key}
-                      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
-                      onClick={() => {
-                        onChangeCanvasTheme(style.key);
-                        setThemeDropdownOpen(false);
-                      }}
-                    >
-                      <div
-                        className="w-4 h-4 rounded-full border border-border/60 shrink-0"
-                        style={{ background: style.swatchColor }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium flex items-center gap-1.5">
-                          {style.label}
-                          <Moon className="w-2.5 h-2.5 text-muted-foreground/50" />
-                        </div>
-                        <div className="text-[10px] text-muted-foreground truncate">{style.description}</div>
-                      </div>
-                      {canvasTheme === style.key && (
-                        <Check className="w-3.5 h-3.5 text-primary shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                  {/* Light themes section */}
-                  <div className="px-3 py-1 mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 border-t border-border/30">Light</div>
-                  {CANVAS_STYLES.filter((s) => !s.isDark).map((style) => (
-                    <button
-                      key={style.key}
-                      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
-                      onClick={() => {
-                        onChangeCanvasTheme(style.key);
-                        setThemeDropdownOpen(false);
-                      }}
-                    >
-                      <div
-                        className="w-4 h-4 rounded-full border border-border/60 shrink-0"
-                        style={{ background: style.swatchColor }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium flex items-center gap-1.5">
-                          {style.label}
-                          <Sun className="w-2.5 h-2.5 text-muted-foreground/50" />
-                        </div>
-                        <div className="text-[10px] text-muted-foreground truncate">{style.description}</div>
-                      </div>
-                      {canvasTheme === style.key && (
-                        <Check className="w-3.5 h-3.5 text-primary shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        {blueprintsSlot}
         <div className="relative">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -426,7 +355,95 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
           {gearDropdownOpen && (
             <>
               <div className="fixed inset-0 z-50" onClick={() => setGearDropdownOpen(false)} />
-              <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[180px] animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[220px] animate-in fade-in zoom-in-95 duration-100">
+                {/* Context Store */}
+                {onOpenContextStore && (
+                  <button
+                    className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setGearDropdownOpen(false);
+                      onOpenContextStore();
+                    }}
+                  >
+                    <HardDrive className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium">Context Store</div>
+                      <div className="text-[10px] text-muted-foreground">Files, folders, uploads</div>
+                    </div>
+                  </button>
+                )}
+                {/* Canvas Style — collapsible theme picker */}
+                {onChangeCanvasTheme && (
+                  <>
+                    <button
+                      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                      onClick={() => setThemeExpanded((v) => !v)}
+                    >
+                      <Paintbrush className="w-3.5 h-3.5 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium">Canvas Style</div>
+                        <div className="text-[10px] text-muted-foreground">{CANVAS_STYLES.find((s) => s.key === canvasTheme)?.label ?? "Aurora"}</div>
+                      </div>
+                      <span
+                        className="w-3 h-3 rounded-full border border-border/60 shrink-0"
+                        style={{ backgroundColor: CANVAS_STYLES.find((s) => s.key === canvasTheme)?.swatchColor ?? "#1a1040" }}
+                      />
+                      <ChevronRight className={cn("w-3 h-3 text-muted-foreground/50 transition-transform", themeExpanded && "rotate-90")} />
+                    </button>
+                    {themeExpanded && (
+                      <div className="pl-4 border-l-2 border-primary/20 ml-4 space-y-0.5 py-1">
+                        <div className="px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">Dark</div>
+                        {CANVAS_STYLES.filter((s) => s.isDark).map((style) => (
+                          <button
+                            key={style.key}
+                            className="flex items-center gap-2 w-full px-2 py-1 text-left hover:bg-muted transition-colors rounded"
+                            onClick={() => {
+                              onChangeCanvasTheme(style.key);
+                            }}
+                          >
+                            <div
+                              className="w-3.5 h-3.5 rounded-full border border-border/60 shrink-0"
+                              style={{ background: style.swatchColor }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[11px] font-medium flex items-center gap-1">
+                                {style.label}
+                                <Moon className="w-2.5 h-2.5 text-muted-foreground/50" />
+                              </div>
+                            </div>
+                            {canvasTheme === style.key && (
+                              <Check className="w-3 h-3 text-primary shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                        <div className="px-2 py-0.5 mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 border-t border-border/30">Light</div>
+                        {CANVAS_STYLES.filter((s) => !s.isDark).map((style) => (
+                          <button
+                            key={style.key}
+                            className="flex items-center gap-2 w-full px-2 py-1 text-left hover:bg-muted transition-colors rounded"
+                            onClick={() => {
+                              onChangeCanvasTheme(style.key);
+                            }}
+                          >
+                            <div
+                              className="w-3.5 h-3.5 rounded-full border border-border/60 shrink-0"
+                              style={{ background: style.swatchColor }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[11px] font-medium flex items-center gap-1">
+                                {style.label}
+                                <Sun className="w-2.5 h-2.5 text-muted-foreground/50" />
+                              </div>
+                            </div>
+                            {canvasTheme === style.key && (
+                              <Check className="w-3 h-3 text-primary shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
                 <button
                   className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
                   onClick={() => {
@@ -480,6 +497,22 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium">Platform Integrations</div>
                       <div className="text-[10px] text-muted-foreground">External services, APIs</div>
+                    </div>
+                  </button>
+                )}
+                {/* Release Notes */}
+                {onOpenReleaseNotes && (
+                  <button
+                    className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setGearDropdownOpen(false);
+                      onOpenReleaseNotes();
+                    }}
+                  >
+                    <ScrollText className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium">Release Notes</div>
+                      <div className="text-[10px] text-muted-foreground">{appVersion ? `v${appVersion}` : "View changelog"}</div>
                     </div>
                   </button>
                 )}
