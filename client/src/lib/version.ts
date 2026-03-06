@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.4";
+export const APP_VERSION = "0.15.0";
 
 export interface ReleaseNote {
   version: string;
@@ -19,14 +19,29 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.14.4",
+    version: "0.15.0",
     date: "2026-03-06",
     changes: [
+      // Team 1: YouTube API
+      "Replace fake LLM-powered YouTube search/playlist/channel with real YouTube Data API v3",
+      "Video player visible by default in expanded view — no click required",
+      "Playlist transcript fetch with per-video progress indicator and error handling",
+      "Compact YouTube node thumbnail with onError fallback",
+      // Team 2: Brainstorm & Triggers
+      "Brainstorm mode no longer requires an objective — starts open-ended and infers from conversation",
+      "Brainstorm state machine cycles continuously (fixes stuck-after-one-message bug)",
+      "Trigger nodes auto-fire audio capture via autoStartRecording flag",
+      // Team 3: Context Store
       "Context Store Manager converted from Dialog modal to full-frame overlay with two-column layout",
-      "Left sidebar shows folder tree + scrollable file list; main area shows full document preview/editor",
-      "Document preview now uses ProvokeText (ADR compliance) with proper read-only and edit modes",
-      "Overlay no longer closes on outside click — explicit X button and Escape key to close",
-      "Smooth enter/exit transitions matching other expanded views in the app",
+      "Document preview uses ProvokeText (ADR compliance) with read-only and edit modes",
+      // Team 4: Image & Social
+      "Painter node stores imageUrl for both overlay and chain execution paths",
+      "Social post lifecycle discovers upstream images via findUpstreamImage() helper",
+      "ImagePreviewDialog gets Edit Image toggle with full ImageCustomizer tools",
+      // Team 5: Features
+      "New Approval node type — pauses chain execution until user approves/rejects",
+      "Upload node enhanced with folder picker in expanded view",
+      "Blueprint sharing UI — share button with connection picker on user blueprints",
     ],
   },
   {
