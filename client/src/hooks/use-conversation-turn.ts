@@ -5,7 +5,10 @@ export type ConversationState = "IDLE" | "PROCESSING" | "AI_SPEAKING" | "LISTENI
 export interface ConversationTurnOptions {
   onTranscript: (text: string, isFinal: boolean) => void;
   onStateChange?: (state: ConversationState) => void;
+  onInterrupt?: () => void; // called when user interrupts during AI_SPEAKING
   silenceTimeout?: number; // ms after final transcript before auto-submitting (default: 1500)
+  /** When true, mic stays active during AI_SPEAKING and auto-triggers interrupt on speech detection */
+  alwaysListening?: boolean;
 }
 
 // SpeechRecognition type shim for browsers that lack built-in typings
@@ -58,7 +61,7 @@ function createSpeechRecognition(): SpeechRecognitionInstance | null {
 }
 
 export function useConversationTurn(options: ConversationTurnOptions) {
-  const { onTranscript, onStateChange, silenceTimeout = 1000 } = options;
+  const { onTranscript, onStateChange, onInterrupt, silenceTimeout = 1000, alwaysListening = false } = options;
 
   const [state, setState] = useState<ConversationState>("IDLE");
   const [currentTranscript, setCurrentTranscript] = useState("");
@@ -70,7 +73,9 @@ export function useConversationTurn(options: ConversationTurnOptions) {
   const finalTranscriptRef = useRef("");
   const onTranscriptRef = useRef(onTranscript);
   const onStateChangeRef = useRef(onStateChange);
+  const onInterruptRef = useRef(onInterrupt);
   const silenceTimeoutRef = useRef(silenceTimeout);
+  const alwaysListeningRef = useRef(alwaysListening);
 
   // Keep refs in sync with latest props
   useEffect(() => {
@@ -82,8 +87,16 @@ export function useConversationTurn(options: ConversationTurnOptions) {
   }, [onStateChange]);
 
   useEffect(() => {
+    onInterruptRef.current = onInterrupt;
+  }, [onInterrupt]);
+
+  useEffect(() => {
     silenceTimeoutRef.current = silenceTimeout;
   }, [silenceTimeout]);
+
+  useEffect(() => {
+    alwaysListeningRef.current = alwaysListening;
+  }, [alwaysListening]);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current !== null) {
@@ -165,6 +178,25 @@ export function useConversationTurn(options: ConversationTurnOptions) {
         }
       }
 
+      // If we're in AI_SPEAKING with alwaysListening, any speech triggers interrupt
+      if (stateRef.current === "AI_SPEAKING" && alwaysListeningRef.current) {
+        if (interim.length > 3 || final) {
+          // User started talking — interrupt the AI
+          onInterruptRef.current?.();
+          transition("LISTENING");
+          // Don't stop/restart recognition — it's already running
+          // Just reset transcript for the new listening phase
+          finalTranscriptRef.current = final || "";
+          setCurrentTranscript(final + interim);
+          if (final || interim) {
+            onTranscriptRef.current(final + interim, false);
+          }
+          return;
+        }
+        // Short interim during AI_SPEAKING — ignore (could be background noise)
+        return;
+      }
+
       // Accumulate final transcript segments
       if (final) {
         finalTranscriptRef.current = final;
@@ -200,8 +232,10 @@ export function useConversationTurn(options: ConversationTurnOptions) {
     };
 
     recognition.onend = () => {
-      // Recognition ended unexpectedly (browser can stop it). Restart if still in LISTENING state.
-      if (stateRef.current === "LISTENING") {
+      // Recognition ended unexpectedly (browser can stop it). Restart if still active.
+      const shouldRestart = stateRef.current === "LISTENING" ||
+        (stateRef.current === "AI_SPEAKING" && alwaysListeningRef.current);
+      if (shouldRestart) {
         try {
           recognition.start();
         } catch {
@@ -237,7 +271,11 @@ export function useConversationTurn(options: ConversationTurnOptions) {
   const startSpeaking = useCallback(() => {
     if (stateRef.current !== "PROCESSING") return;
     transition("AI_SPEAKING");
-  }, [transition]);
+    // In alwaysListening mode, keep mic active during AI speech for interrupt detection
+    if (alwaysListeningRef.current) {
+      startRecognition();
+    }
+  }, [transition, startRecognition]);
 
   // AI_SPEAKING -> LISTENING (auto-starts mic)
   const finishSpeaking = useCallback(() => {
@@ -249,6 +287,7 @@ export function useConversationTurn(options: ConversationTurnOptions) {
   // AI_SPEAKING -> LISTENING (interrupt: user speaks during AI audio)
   const interrupt = useCallback(() => {
     if (stateRef.current !== "AI_SPEAKING") return;
+    onInterruptRef.current?.();
     transition("LISTENING");
     startRecognition();
   }, [transition, startRecognition]);

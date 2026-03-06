@@ -164,7 +164,7 @@ export interface FlowNode {
   interviewObjective?: string;
   /** Interview node: journalist config */
   interviewConfig?: {
-    stance: "investigative" | "exploratory" | "balanced" | "autobiography";
+    stance: "investigative" | "exploratory" | "balanced" | "autobiography" | "brainstorm";
     journalistDescription: string;
     voiceEnabled: boolean;
     ttsEnabled: boolean;
