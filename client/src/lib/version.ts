@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.3";
+export const APP_VERSION = "0.14.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,21 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.14.4",
+    date: "2026-03-06",
+    changes: [
+      "Replace fake LLM-generated YouTube search/playlist/channel endpoints with real YouTube Data API v3 calls",
+      "Fix broken thumbnails, unplayable videos, and failed transcript fetches caused by fabricated video IDs",
+      "YouTube search now returns real results with accurate duration and view counts",
+      "Playlist endpoint fetches real video lists with pagination support",
+      "Channel endpoint resolves handles and channel IDs to real uploads",
+      "Add YOUTUBE_API_KEY environment variable requirement with clear 501 error if missing",
+      "Video player now visible by default in expanded YouTube view (no click required)",
+      "Multi-video transcript fetch shows progress bar with per-video error handling",
+      "Compact YouTube node thumbnail has onError fallback to lower-quality image",
+    ],
+  },
   {
     version: "0.14.3",
     date: "2026-03-06",

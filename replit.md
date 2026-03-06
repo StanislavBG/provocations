@@ -110,6 +110,7 @@ See `CLAUDE.md` → "ADR: Dual Schema Management" for the full rules.
 | `ENCRYPTION_SECRET` | AES-GCM key for document encryption |
 | `CLERK_PUBLISHABLE_KEY` | Clerk frontend auth |
 | `CLERK_SECRET_KEY` | Clerk backend secret |
+| `YOUTUBE_API_KEY` | YouTube Data API v3 key (for search, playlist, channel endpoints) |
 | `PLAYWRIGHT_CHROMIUM_PATH` | Path to Chromium for screenshots |
 | `STRIPE_SECRET_KEY_PROD` | Stripe secret key for payment processing |
 | `STRIPE_PUBLISHABLE_KEY_PROD` | Stripe publishable key (not currently used client-side) |
