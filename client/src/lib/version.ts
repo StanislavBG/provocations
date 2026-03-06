@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.12.6";
+export const APP_VERSION = "0.12.7";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.12.7",
+    date: "2026-03-05",
+    changes: [
+      "Fix cross-canvas contamination — output nodes from a running chain now stay on the correct canvas tab, even if the user switches tabs mid-execution",
+      "Tab-scoped mutations: all addNode, addEdge, and updateNode calls in handlePlayNode route to the execution tab's snapshot when the user is on a different tab",
+    ],
+  },
   {
     version: "0.12.6",
     date: "2026-03-05",

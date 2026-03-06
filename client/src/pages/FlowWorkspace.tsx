@@ -1434,6 +1434,42 @@ function FlowWorkspaceInner() {
       const node = stateRef.current.nodes.find((n) => n.id === nodeId);
       if (!node) { executingNodesRef.current.delete(nodeId); return; }
 
+      // Capture which tab this execution belongs to — mutations must target this tab
+      const execTabId = activeTabIdRef.current;
+      const onExecTab = () => activeTabIdRef.current === execTabId;
+
+      // Tab-scoped mutations: if user switched tabs, route changes to the correct tab's snapshot
+      const scopedUpdate = (id: string, patch: Partial<FlowNode>) => {
+        if (onExecTab()) { updateNode(id, patch); return; }
+        setWorkspaceTabs(tabs => tabs.map(t =>
+          t.id !== execTabId ? t : {
+            ...t, snapshot: { ...t.snapshot, nodes: t.snapshot.nodes.map(n => n.id === id ? { ...n, ...patch } : n) },
+          }
+        ));
+      };
+      const scopedAddNode = (type: FlowNodeType, x: number, y: number, data: Partial<FlowNode> & { label: string }): string => {
+        if (onExecTab()) return addNode(type, x, y, data);
+        const dims = DEFAULT_DIMENSIONS[type] || { width: 200, height: 100 };
+        const id = generateId("flow");
+        const newNode = { id, type, x: x - dims.width / 2, y: y - dims.height / 2, width: dims.width, height: dims.height, zIndex: 0, ...data } as FlowNode;
+        setWorkspaceTabs(tabs => tabs.map(t =>
+          t.id !== execTabId ? t : {
+            ...t, snapshot: { ...t.snapshot, nodes: [...t.snapshot.nodes, { ...newNode, zIndex: t.snapshot.nodes.length }] },
+          }
+        ));
+        return id;
+      };
+      const scopedAddEdge = (fromId: string, toId: string): string => {
+        if (onExecTab()) return addEdge(fromId, toId);
+        const id = generateId("edge");
+        setWorkspaceTabs(tabs => tabs.map(t =>
+          t.id !== execTabId ? t : {
+            ...t, snapshot: { ...t.snapshot, edges: [...t.snapshot.edges, { id, fromNodeId: fromId, toNodeId: toId } as FlowEdge] },
+          }
+        ));
+        return id;
+      };
+
       try {
       const t0 = performance.now();
       const def = FLOW_NODE_REGISTRY[node.type];
@@ -1453,7 +1489,7 @@ function FlowWorkspaceInner() {
         const count = (node.timerPulseCount || 0) + 1;
         const entry = `[${ts}] Manual fire #${count}`;
         const content = (node.content || "") + (node.content ? "\n" : "") + entry;
-        updateNode(nodeId, {
+        scopedUpdate(nodeId, {
           timerPulseCount: count,
           timerLastPulse: now.toISOString(),
           content,
@@ -1496,7 +1532,7 @@ function FlowWorkspaceInner() {
         const ok = await handlers.onPreProcess(ctx);
         if (!ok) {
           lcLog(node, "pre-process", "error", "Validation failed", { error: "Handler rejected" });
-          updateNode(nodeId, { llmStatus: "idle", snippet: node.snippet });
+          scopedUpdate(nodeId, { llmStatus: "idle", snippet: node.snippet });
           toast({ title: "Cannot execute", description: "Check node configuration" });
           return;
         }
@@ -1511,13 +1547,13 @@ function FlowWorkspaceInner() {
       lcLog(node, "pre-process", "success", `${inputNodes.length} input(s), ${combinedContent.length} chars`);
 
       // Mark node as running
-      updateNode(nodeId, { llmStatus: "running", snippet: "Running..." });
+      scopedUpdate(nodeId, { llmStatus: "running", snippet: "Running..." });
       replaceDownstreamOutputs(nodeId);
 
       // ── Generic pre-process hook (node.preProcess) ──
       let processedInput = combinedContent;
       if (node.preProcess?.trim()) {
-        updateNode(nodeId, { snippet: "Pre-processing..." });
+        scopedUpdate(nodeId, { snippet: "Pre-processing..." });
         try {
           const preRes = await apiRequest("POST", "/api/write", {
             document: processedInput,
@@ -1527,7 +1563,7 @@ function FlowWorkspaceInner() {
           const preData = (await preRes.json()) as { document: string };
           if (preData.document?.trim()) processedInput = preData.document;
         } catch { /* continue with original */ }
-        updateNode(nodeId, { snippet: "Running..." });
+        scopedUpdate(nodeId, { snippet: "Running..." });
       }
 
       // ── PROCESS: delegate to lifecycle handler ──
@@ -1547,15 +1583,15 @@ function FlowWorkspaceInner() {
         // -- Painter: structured image output --
         if (preset === "media") {
           const { prompt, imageUrl } = parsePainterOutput(outputText);
-          updateNode(nodeId, { llmStatus: "done", snippet: `Generated: ${prompt.slice(0, 80)}...` });
-          const imgNodeId = addNode("document", node.x + node.width + 60, node.y, {
+          scopedUpdate(nodeId, { llmStatus: "done", snippet: `Generated: ${prompt.slice(0, 80)}...` });
+          const imgNodeId = scopedAddNode("document", node.x + node.width + 60, node.y, {
             label: `Image: ${prompt.slice(0, 30)}${prompt.length > 30 ? "..." : ""}`,
             snippet: "Generated image",
             imageUrl,
             content: prompt,
             documentContent: prompt,
           });
-          addEdge(nodeId, imgNodeId);
+          scopedAddEdge(nodeId, imgNodeId);
           lcLog(node, "process", "success", `Image generated`, { durationMs: elapsed });
           lcLog(node, "post-process", "success", "Output image node created");
           toast({ title: "Image generated" });
@@ -1579,15 +1615,15 @@ function FlowWorkspaceInner() {
           for (const [platform, post] of Object.entries(posts)) {
             generatedPosts[platform] = { text: post.text, imageUrl: socialImageUrl, charCount: post.characterCount || post.text.length, status: "draft" };
             idx++;
-            const childId = addNode("document", node.x + node.width + 60, node.y + idx * 80, {
+            const childId = scopedAddNode("document", node.x + node.width + 60, node.y + idx * 80, {
               label: `${platform} Post`,
               documentContent: post.text,
               imageUrl: socialImageUrl,
               snippet: post.text.slice(0, 120),
             });
-            addEdge(nodeId, childId);
+            scopedAddEdge(nodeId, childId);
           }
-          updateNode(nodeId, {
+          scopedUpdate(nodeId, {
             socialGeneratedPosts: generatedPosts,
             socialGenStatus: "done",
             llmStatus: "done",
@@ -1609,7 +1645,7 @@ function FlowWorkspaceInner() {
             timestamp: new Date().toISOString(),
             externalId: data.externalPostId,
           };
-          updateNode(nodeId, {
+          scopedUpdate(nodeId, {
             llmStatus: data.success ? "done" : "error",
             snippet: data.success ? `Posted to ${node.apiService}` : (data.error || "Post failed"),
             apiLastResult: logEntry,
@@ -1627,23 +1663,23 @@ function FlowWorkspaceInner() {
         // -- Coherence: conditional pass/fail --
         if (preset === "coherence") {
           const result = JSON.parse(outputText) as { score: number; verdict: string; reasoning: string; content: string };
-          updateNode(nodeId, {
+          scopedUpdate(nodeId, {
             coherenceLastScore: result.score,
             coherenceLastVerdict: result.verdict as "pass" | "fail",
             coherenceFailCount: result.verdict === "fail" ? (node.coherenceFailCount ?? 0) + 1 : 0,
           });
           if (result.verdict === "pass") {
-            updateNode(nodeId, {
+            scopedUpdate(nodeId, {
               llmStatus: "done",
               content: result.content,
               snippet: `Pass: ${result.score}% — ${result.reasoning.slice(0, 80)}`,
             });
-            const outputDocId = addNode("document", node.x + node.width + 60, node.y, {
+            const outputDocId = scopedAddNode("document", node.x + node.width + 60, node.y, {
               label: `${node.label} Output`,
               documentContent: result.content,
               snippet: result.content.slice(0, 200),
             });
-            addEdge(nodeId, outputDocId);
+            scopedAddEdge(nodeId, outputDocId);
             lcLog(node, "process", "success", `Pass: ${result.score}%`, { durationMs: elapsed });
             lcLog(node, "post-process", "success", "Output document created");
             toast({ title: "Quality check passed" });
@@ -1651,7 +1687,7 @@ function FlowWorkspaceInner() {
             const fc = (node.coherenceFailCount ?? 0) + 1;
             const pfThreshold = node.coherencePersistentFailThreshold ?? 5;
             const driftWarning = fc >= pfThreshold ? " — Upstream drift likely" : "";
-            updateNode(nodeId, {
+            scopedUpdate(nodeId, {
               llmStatus: "error",
               snippet: `Failed: ${result.score}%${driftWarning}`,
               coherenceFailCount: fc,
@@ -1665,7 +1701,7 @@ function FlowWorkspaceInner() {
         // -- All other presets (stream, llm, logic, interview, generic): text output --
         if (!outputText?.trim()) {
           lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });
-          updateNode(nodeId, { llmStatus: "error", snippet: "No output generated" });
+          scopedUpdate(nodeId, { llmStatus: "error", snippet: "No output generated" });
           return;
         }
 
@@ -1674,7 +1710,7 @@ function FlowWorkspaceInner() {
         // Generic post-process hook (node.postProcess)
         let finalOutput = outputText;
         if (node.postProcess?.trim()) {
-          updateNode(nodeId, { snippet: "Post-processing..." });
+          scopedUpdate(nodeId, { snippet: "Post-processing..." });
           try {
             const postRes = await apiRequest("POST", "/api/write", {
               document: finalOutput,
@@ -1696,7 +1732,7 @@ function FlowWorkspaceInner() {
         if (preset === "llm") {
           nodeUpdate.llmOutput = finalOutput;
         }
-        updateNode(nodeId, nodeUpdate);
+        scopedUpdate(nodeId, nodeUpdate);
 
         // Create output document(s) — split or consolidated
         const oc = node.outputConfig;
@@ -1713,22 +1749,22 @@ function FlowWorkspaceInner() {
             const sectionLabel = headingMatch
               ? headingMatch[1].slice(0, 50)
               : `${node.label} [${i + 1}/${sections.length}]`;
-            const docId = addNode("document", node.x + node.width + 60, node.y + i * 160, {
+            const docId = scopedAddNode("document", node.x + node.width + 60, node.y + i * 160, {
               label: sectionLabel,
               documentContent: sections[i],
               snippet: sections[i].slice(0, 200),
             });
-            addEdge(nodeId, docId);
+            scopedAddEdge(nodeId, docId);
           }
           lcLog(node, "post-process", "success", `Created ${sections.length} split output documents`);
           toast({ title: "Execution complete", description: `Created ${sections.length} output documents` });
         } else {
-          const outputDocId = addNode("document", node.x + node.width + 60, node.y, {
+          const outputDocId = scopedAddNode("document", node.x + node.width + 60, node.y, {
             label: `${node.label} Output`,
             documentContent: finalOutput,
             snippet: finalOutput.slice(0, 200),
           });
-          addEdge(nodeId, outputDocId);
+          scopedAddEdge(nodeId, outputDocId);
           lcLog(node, "post-process", "success", "Output document created");
           toast({ title: "Execution complete", description: `Output document created` });
         }
@@ -1737,14 +1773,14 @@ function FlowWorkspaceInner() {
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Execution failed";
         lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
-        updateNode(nodeId, { llmStatus: "error", snippet: "Execution failed" });
+        scopedUpdate(nodeId, { llmStatus: "error", snippet: "Execution failed" });
         toast({ title: "Execution failed", variant: "destructive" });
       }
       } finally {
         executingNodesRef.current.delete(nodeId);
       }
     },
-    [addNode, addEdge, updateNode, toast, lcLog, replaceDownstreamOutputs],
+    [addNode, addEdge, updateNode, toast, lcLog, replaceDownstreamOutputs, setWorkspaceTabs],
   );
 
   // Keep ref in sync for chain propagation
