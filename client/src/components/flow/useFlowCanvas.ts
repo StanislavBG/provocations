@@ -25,7 +25,8 @@ export type FlowNodeType =
   | "api-connection"
   | "coherence-gate"
   | "notification"
-  | "upload";
+  | "upload"
+  | "approval";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -274,6 +275,18 @@ export interface FlowNode {
   }>;
   /** Upload node: processing status */
   uploadStatus?: "idle" | "uploading" | "done" | "error";
+  /** Approval node: current approval status */
+  approvalStatus?: "idle" | "pending" | "approved" | "rejected";
+  /** Approval node: message template (supports {output}, {label}, {time} placeholders) */
+  approvalMessage?: string;
+  /** Approval node: target user IDs to request approval from */
+  approvalUserIds?: string[];
+  /** Approval node: who approved/rejected */
+  approvalResponderId?: string;
+  /** Approval node: responder display name */
+  approvalResponderName?: string;
+  /** Approval node: timestamp of approval/rejection */
+  approvalRespondedAt?: string;
 }
 
 /** Named edge roles — how source data is used by the target node */
