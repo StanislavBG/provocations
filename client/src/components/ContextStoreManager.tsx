@@ -219,15 +219,22 @@ export function ContextStoreManager({
     enabled: open,
   });
 
-  const { data: documents = [] } = useQuery({
+  const { data: rawDocData } = useQuery({
     queryKey: ["/api/documents"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/documents");
-      const data = await res.json();
-      return (data.documents ?? data) as DocItem[];
+      return res.json();
     },
     enabled: open,
   });
+
+  // The shared query key may hold either { documents: [...] } (from FlowWorkspace)
+  // or a bare array (from our own queryFn). Normalise to a flat array.
+  const documents: DocItem[] = Array.isArray(rawDocData)
+    ? rawDocData
+    : Array.isArray((rawDocData as any)?.documents)
+      ? (rawDocData as any).documents
+      : [];
 
   // Selected document full content (lazy load)
   const { data: selectedDoc } = useQuery({
@@ -266,7 +273,7 @@ export function ContextStoreManager({
         ? documents
         : documents.filter((d) => d.folderId === selectedFolderId);
 
-    const sorted = [...base];
+    const sorted = Array.isArray(base) ? [...base] : [];
     switch (sortBy) {
       case "name":
         sorted.sort((a, b) => a.title.localeCompare(b.title));
