@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.12.2";
+export const APP_VERSION = "0.12.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.12.3",
+    date: "2026-03-05",
+    changes: [
+      "Double-click node label in expanded overlay to rename it inline",
+    ],
+  },
   {
     version: "0.12.2",
     date: "2026-03-05",
