@@ -28,6 +28,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Brainstorm streaming endpoint: `/api/interview/brainstorm/stream` with shorter, more conversational LLM responses (100 words max, temp 1.0)",
       "Conversation turn hook: new `alwaysListening` and `onInterrupt` options for interrupt-aware voice dialog",
       "ElevenLabs default voice: server's ELEVENLABS_VOICE_ID now exposed via /api/tts/elevenlabs/voices and pre-selected in interview dropdowns",
+      "Fix canvas save: invalidate document list cache after save/rename so canvases appear immediately in Open Canvas list",
+      "Auto-save on rename: naming an unsaved canvas with content now triggers first save automatically",
     ],
   },
   {

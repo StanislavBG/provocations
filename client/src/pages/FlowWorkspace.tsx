@@ -19,7 +19,7 @@ import { NotebookResearchChat } from "@/components/notebook/NotebookResearchChat
 import { DEFAULT_SHELL_CONFIG } from "@/lib/ftux-shell-context";
 import { useFtuxShellConfig } from "@/hooks/use-ftux-shell-config";
 import { getPreset } from "@/components/flow/llm-presets";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCanvasCollab } from "@/hooks/use-canvas-collab";
 import { Button } from "@/components/ui/button";
@@ -2030,6 +2030,8 @@ function FlowWorkspaceInner() {
         setCanvasTitle(title);
         toast({ title: "Canvas saved", description: "Saved to Context Store" });
       }
+      // Refresh the document list so the canvas appears immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
     } catch {
       toast({ title: "Save failed", variant: "destructive" });
     } finally {
@@ -2081,13 +2083,34 @@ function FlowWorkspaceInner() {
     if (!trimmed) return;
     setCanvasTitle(trimmed);
     if (canvasDocumentId) {
+      // Canvas already saved — update the title on the server
       try {
         await apiRequest("PATCH", `/api/documents/${canvasDocumentId}`, { title: trimmed });
+        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       } catch {
         // silent — name is already set locally
       }
+    } else if (state.nodes.length > 0) {
+      // Canvas has content but was never saved — naming it triggers first save
+      // We need to call save after the title state update takes effect,
+      // so we do the POST inline here with the new name
+      try {
+        const contentNodes = state.nodes.filter((n) => n.type !== "store");
+        const canvasData = { nodes: contentNodes, edges: state.edges, viewport: state.viewport };
+        const res = await apiRequest("POST", "/api/documents", {
+          title: trimmed,
+          content: JSON.stringify(canvasData),
+          docType: "chart",
+        });
+        const data = (await res.json()) as { id: number };
+        setCanvasDocumentId(data.id);
+        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+        toast({ title: "Canvas saved", description: trimmed });
+      } catch {
+        // silent — rename still took effect locally
+      }
     }
-  }, [canvasDocumentId]);
+  }, [canvasDocumentId, state.nodes, state.edges, state.viewport, setCanvasDocumentId, toast]);
 
   // ── New canvas ──
 
