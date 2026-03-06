@@ -29,6 +29,7 @@ import {
   BookOpen,
   CircuitBoard,
   AudioLines,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -94,6 +95,8 @@ interface FtuxStatusBarProps {
   savedCanvases?: SavedCanvas[];
   /** Callback to open/switch to a saved canvas */
   onOpenCanvas?: (id: number, title: string) => void;
+  /** Callback to delete a saved canvas */
+  onDeleteCanvas?: (id: number, title: string) => void;
   /** Toggle the node details panel */
   onToggleDetails?: () => void;
   /** Whether the details panel is open */
@@ -108,7 +111,7 @@ interface FtuxStatusBarProps {
   onOpenIntegrations?: () => void;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onToggleDetails, detailsOpen, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, onToggleDetails, detailsOpen, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -193,17 +196,34 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                     <div className="px-3 py-2 text-[10px] text-muted-foreground">No saved canvases</div>
                   ) : (
                     savedCanvases.map((c) => (
-                      <button
+                      <div
                         key={c.id}
-                        className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
-                        onClick={() => {
-                          onOpenCanvas(c.id, c.title);
-                          setCanvasDropdownOpen(false);
-                        }}
+                        className="group flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-muted transition-colors"
                       >
-                        <FolderOpen className="w-3 h-3 text-muted-foreground shrink-0" />
-                        <span className="truncate">{c.title}</span>
-                      </button>
+                        <button
+                          className="flex items-center gap-2 min-w-0 flex-1"
+                          onClick={() => {
+                            onOpenCanvas(c.id, c.title);
+                            setCanvasDropdownOpen(false);
+                          }}
+                        >
+                          <FolderOpen className="w-3 h-3 text-muted-foreground shrink-0" />
+                          <span className="truncate">{c.title}</span>
+                        </button>
+                        {onDeleteCanvas && (
+                          <button
+                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/20 hover:text-destructive transition-all shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteCanvas(c.id, c.title);
+                              setCanvasDropdownOpen(false);
+                            }}
+                            title="Delete canvas"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     ))
                   )}
                 </div>
