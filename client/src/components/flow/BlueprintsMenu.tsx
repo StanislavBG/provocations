@@ -29,7 +29,11 @@ import {
   Users,
   Save,
   Sparkles,
+  Share2,
+  Loader2,
+  CheckCircle,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface BlueprintSummary {
   id: string;
@@ -42,6 +46,14 @@ interface BlueprintSummary {
   source: "built-in" | "user" | "shared";
   documentId?: number;
   ownerId?: string;
+}
+
+interface Connection {
+  id: number;
+  peerId: string;
+  peerName: string;
+  peerAvatar?: string;
+  status: string;
 }
 
 const ICON_MAP: Record<string, typeof Zap> = {
@@ -68,7 +80,11 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
   const [saveLabel, setSaveLabel] = useState("");
   const [saveDescription, setSaveDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareBlueprint, setShareBlueprint] = useState<BlueprintSummary | null>(null);
+  const [sharing, setSharing] = useState(false);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: blueprints = [] } = useQuery<BlueprintSummary[]>({
     queryKey: ["/api/blueprints"],
@@ -77,6 +93,18 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
       return await res.json();
     },
   });
+
+  // Fetch connections only when share dialog is open
+  const { data: connections } = useQuery<Connection[]>({
+    queryKey: ["/api/chat/connections"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/chat/connections");
+      return await res.json();
+    },
+    enabled: shareDialogOpen,
+  });
+
+  const acceptedConnections = connections?.filter((c) => c.status === "accepted") || [];
 
   const builtIn = blueprints.filter((b) => b.source === "built-in");
   const userBps = blueprints.filter((b) => b.source === "user");
@@ -93,6 +121,42 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
       queryClient.invalidateQueries({ queryKey: ["/api/blueprints"] });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleShareClick = (bp: BlueprintSummary, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setShareBlueprint(bp);
+    setShareDialogOpen(true);
+  };
+
+  const handleShareToUser = async (recipientId: string) => {
+    if (!shareBlueprint?.documentId) return;
+    setSharing(true);
+    try {
+      await apiRequest("POST", "/api/share", {
+        recipientId,
+        itemType: "document",
+        itemId: shareBlueprint.documentId,
+        permission: "read",
+        note: `Shared blueprint: ${shareBlueprint.label}`,
+      });
+      toast({
+        title: "Blueprint shared",
+        description: `"${shareBlueprint.label}" shared successfully.`,
+      });
+      setShareDialogOpen(false);
+      setShareBlueprint(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/blueprints"] });
+    } catch (err) {
+      toast({
+        title: "Share failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -114,7 +178,7 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs z-[60]">Blueprints</TooltipContent>
         </Tooltip>
-        <DropdownMenuContent align="start" className="w-60 max-h-[400px] overflow-auto">
+        <DropdownMenuContent align="start" className="w-64 max-h-[400px] overflow-auto">
           {/* Save as blueprint */}
           <DropdownMenuItem
             onClick={() => setSaveDialogOpen(true)}
@@ -174,6 +238,15 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
                         {bp.nodeCount} nodes · {bp.edgeCount} edges
                       </div>
                     </div>
+                    {bp.documentId && (
+                      <button
+                        className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                        onClick={(e) => handleShareClick(bp, e)}
+                        title="Share blueprint"
+                      >
+                        <Share2 className="w-3 h-3" />
+                      </button>
+                    )}
                   </DropdownMenuItem>
                 );
               })}
@@ -256,6 +329,66 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
                   <Save className="w-3.5 h-3.5 mr-1.5" />
                   {saving ? "Saving..." : "Save Blueprint"}
                 </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Share Blueprint Dialog */}
+      {shareDialogOpen && shareBlueprint && (
+        <Dialog open onOpenChange={() => { setShareDialogOpen(false); setShareBlueprint(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-sm flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-primary" />
+                Share Blueprint
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                <div className="text-sm font-medium">{shareBlueprint.label}</div>
+                {shareBlueprint.description && (
+                  <div className="text-xs text-muted-foreground mt-0.5">{shareBlueprint.description}</div>
+                )}
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  {shareBlueprint.nodeCount} nodes · {shareBlueprint.edgeCount} edges
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                  Select a connection to share with
+                </label>
+                <div className="flex flex-col gap-1 max-h-[200px] overflow-auto">
+                  {acceptedConnections.length === 0 && (
+                    <div className="text-xs text-muted-foreground/60 py-4 text-center">
+                      No connections found. Invite users first.
+                    </div>
+                  )}
+                  {acceptedConnections.map((conn) => (
+                    <button
+                      key={conn.peerId}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-muted/50 text-left transition-colors"
+                      onClick={() => handleShareToUser(conn.peerId)}
+                      disabled={sharing}
+                    >
+                      {conn.peerAvatar ? (
+                        <img src={conn.peerAvatar} className="w-6 h-6 rounded-full" alt="" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold">
+                          {conn.peerName?.charAt(0) || "?"}
+                        </div>
+                      )}
+                      <span className="text-sm flex-1 truncate">{conn.peerName}</span>
+                      {sharing ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Share2 className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </DialogContent>

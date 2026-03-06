@@ -116,6 +116,12 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
         const currentNode = nodes.find((n) => n.id === nodeId);
         const autoTrigger = currentNode?.autoTriggerNext !== false; // default true
 
+        // Block chain propagation at approval nodes that are pending or rejected
+        if (currentNode?.type === "approval" && currentNode.approvalStatus !== "approved") {
+          runningRef.current = activeNodesRef.current.size > 0;
+          return;
+        }
+
         if (autoTrigger) {
           // Find and trigger downstream nodes after a delay
           const downstream = getExecutableDownstream(nodeId);
