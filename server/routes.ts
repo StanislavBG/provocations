@@ -5420,6 +5420,42 @@ RULES:
     }
   });
 
+  // Beacon save — best-effort save fired by sendBeacon on tab close / visibility hidden.
+  // Same logic as PUT but accepts POST and returns 204 (no body — beacon ignores responses).
+  app.post("/api/documents/:id/beacon", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).end();
+
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).end();
+
+      const { title, content } = req.body ?? {};
+      if (!title || !content) return res.status(400).end();
+
+      const existing = await storage.getDocument(id);
+      if (!existing || existing.userId !== userId) return res.status(403).end();
+
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(content, key);
+      const encryptedTitle = encrypt(title, key);
+
+      await storage.updateDocument(id, {
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
+      });
+
+      res.status(204).end();
+    } catch {
+      res.status(500).end();
+    }
+  });
+
   // Update an existing document (server re-encrypts)
   app.put("/api/documents/:id", async (req, res) => {
     try {

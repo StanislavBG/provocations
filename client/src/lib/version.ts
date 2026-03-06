@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.12.7";
+export const APP_VERSION = "0.13.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.13.0",
+    date: "2026-03-05",
+    changes: [
+      "Auto-save canvas on every change — 2-second debounce saves all node/edge changes immediately so work is never lost",
+      "Auto-create canvas document on first node — new canvases get a document ID automatically, enabling collab and persistence",
+      "Broadcast state to collaborators in real time — 500ms debounced full-sync keeps shared canvas users in sync",
+      "Flush save on tab close — sendBeacon + visibilitychange ensure the last few seconds of work are persisted",
+      "New /api/documents/:id/beacon endpoint for reliable save-on-close",
+    ],
+  },
   {
     version: "0.12.7",
     date: "2026-03-05",

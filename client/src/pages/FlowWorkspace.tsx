@@ -1036,6 +1036,110 @@ function FlowWorkspaceInner() {
     };
   }, [canvasDocumentId, canvasTitle]);
 
+  // ── Debounced auto-save on every state change ──
+  // Saves the canvas 2 seconds after the last node/edge change so work is never lost.
+  // Skips the save cycle immediately after a canvas load (generation check).
+
+  const debounceSaveRef = useRef<ReturnType<typeof setTimeout>>();
+  const lastSavedGenerationRef = useRef(canvasGenerationRef.current);
+  const isSavingRef = useRef(false);
+  // Refs so the debounce callback always reads fresh values without re-registering the effect.
+  const canvasDocIdRef = useRef(canvasDocumentId);
+  canvasDocIdRef.current = canvasDocumentId;
+  const canvasTitleRef = useRef(canvasTitle);
+  canvasTitleRef.current = canvasTitle;
+
+  useEffect(() => {
+    // Don't save if canvas is currently being loaded
+    if (canvasLoading) return;
+    // Don't save empty canvases
+    if (state.nodes.length === 0) return;
+    // If generation changed since last save, this is a load — skip but mark as saved
+    if (canvasGenerationRef.current !== lastSavedGenerationRef.current) {
+      lastSavedGenerationRef.current = canvasGenerationRef.current;
+      return;
+    }
+
+    clearTimeout(debounceSaveRef.current);
+    debounceSaveRef.current = setTimeout(async () => {
+      if (isSavingRef.current) return;
+      isSavingRef.current = true;
+      try {
+        const contentNodes = stateRef.current.nodes.filter((n) => n.type !== "store");
+        const canvasData = { nodes: contentNodes, edges: stateRef.current.edges, viewport: stateRef.current.viewport };
+        const title = canvasTitleRef.current || "Flow Canvas";
+
+        if (canvasDocIdRef.current) {
+          await apiRequest("PUT", `/api/documents/${canvasDocIdRef.current}`, {
+            title,
+            content: JSON.stringify(canvasData),
+          });
+        } else {
+          // Auto-create canvas document on first change
+          const res = await apiRequest("POST", "/api/documents", {
+            title,
+            content: JSON.stringify(canvasData),
+            docType: "chart",
+          });
+          const data = (await res.json()) as { id: number };
+          setCanvasDocumentId(data.id);
+          queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+        }
+      } catch {
+        // Silent — debounce save should never break the UI
+      } finally {
+        isSavingRef.current = false;
+      }
+    }, 2000);
+
+    return () => clearTimeout(debounceSaveRef.current);
+  }, [state.nodes, state.edges, canvasLoading, setCanvasDocumentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Broadcast state to collaborators on changes ──
+  // Debounces full-sync by 500ms so rapid changes batch together.
+
+  const debounceSyncRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (!collabConnected || state.nodes.length === 0) return;
+
+    clearTimeout(debounceSyncRef.current);
+    debounceSyncRef.current = setTimeout(() => {
+      sendFullSync({ nodes: state.nodes, edges: state.edges, viewport: state.viewport });
+    }, 500);
+
+    return () => clearTimeout(debounceSyncRef.current);
+  }, [state.nodes, state.edges, collabConnected, sendFullSync, state.viewport]);
+
+  // ── Flush save before tab close ──
+
+  useEffect(() => {
+    const flush = () => {
+      const s = stateRef.current;
+      if (s.nodes.length === 0) return;
+      const docId = canvasDocIdRef.current;
+      if (!docId) return;
+      const contentNodes = s.nodes.filter((n) => n.type !== "store");
+      const canvasData = { nodes: contentNodes, edges: s.edges, viewport: s.viewport };
+      const title = canvasTitleRef.current || "Flow Canvas";
+      // Use sendBeacon for reliability — it fires even as the page unloads
+      const blob = new Blob(
+        [JSON.stringify({ title, content: JSON.stringify(canvasData) })],
+        { type: "application/json" },
+      );
+      navigator.sendBeacon(`/api/documents/${docId}/beacon`, blob);
+    };
+    const onVisChange = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisChange);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisChange);
+    };
+  }, []);
+
   // ── Document list for picker ──
 
   const { data: docsData } = useQuery<{ documents: DocumentListItem[] }>({
