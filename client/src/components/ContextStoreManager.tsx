@@ -1,15 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ProvokeText } from "@/components/ProvokeText";
 import {
   HardDrive,
   Folder,
@@ -163,6 +159,18 @@ export function ContextStoreManager({
 }: ContextStoreManagerProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Animation state for smooth exit
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      // Trigger enter animation on next frame
+      requestAnimationFrame(() => setVisible(true));
+    } else {
+      setVisible(false);
+    }
+  }, [open]);
 
   // Selection state
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
@@ -498,7 +506,7 @@ export function ContextStoreManager({
     return () => window.removeEventListener("click", handler);
   }, [contextMenu]);
 
-  // Reset state when dialog closes
+  // Reset state when overlay closes
   useEffect(() => {
     if (!open) {
       setSelectedDocId(null);
@@ -506,6 +514,16 @@ export function ContextStoreManager({
       setMovingDoc(null);
     }
   }, [open]);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onOpenChange]);
 
   // ── Folder tree toggle ────────────────────────────────────────────────
 
@@ -686,13 +704,16 @@ export function ContextStoreManager({
 
   // ── Preview panel content ─────────────────────────────────────────────
 
-  const renderPreview = () => {
-    if (!selectedDoc) {
+  const renderMainArea = () => {
+    if (!selectedDocId || !selectedDoc) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-center px-6">
-          <Eye className="w-8 h-8 text-muted-foreground/30 mb-2" />
-          <p className="text-xs text-muted-foreground/60">
-            Select a file to preview
+          <Eye className="w-12 h-12 text-muted-foreground/20 mb-3" />
+          <p className="text-sm text-muted-foreground/60 font-medium">
+            Select a document to preview
+          </p>
+          <p className="text-xs text-muted-foreground/40 mt-1">
+            Choose a file from the sidebar to view or edit its content
           </p>
         </div>
       );
@@ -702,8 +723,68 @@ export function ContextStoreManager({
 
     return (
       <div className="flex flex-col h-full">
-        {/* Preview content */}
-        <div className="flex-1 overflow-auto p-4">
+        {/* Document header */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-border/30 shrink-0">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold truncate">{selectedDoc.title}</h3>
+            <div className="flex items-center gap-2 mt-0.5">
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1.5 py-0 h-4 font-normal"
+              >
+                {getDocBadge(selectedDoc.docType)}
+              </Badge>
+              <span className="text-[10px] text-muted-foreground/50">
+                {getFolderPath(selectedDoc.folderId)}
+              </span>
+              {selectedDoc.updatedAt && (
+                <span className="text-[10px] text-muted-foreground/40">
+                  Updated {formatDateTime(selectedDoc.updatedAt)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Document actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs gap-1"
+              title="Rename"
+              onClick={() => setRenamingDocId(selectedDoc.id)}
+            >
+              <Pencil className="w-3 h-3" />
+              Rename
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs gap-1"
+              title="Move"
+              onClick={() =>
+                setMovingDoc({ id: selectedDoc.id, title: selectedDoc.title })
+              }
+            >
+              <FolderInput className="w-3 h-3" />
+              Move
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive"
+              title="Delete"
+              onClick={() =>
+                setDeletingDoc({ id: selectedDoc.id, title: selectedDoc.title })
+              }
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Document content area */}
+        <div className="flex-1 min-h-0 p-4">
           {docType === "image" && selectedDoc.content && (
             <div className="flex items-center justify-center h-full">
               <img
@@ -726,14 +807,14 @@ export function ContextStoreManager({
 
           {docType === "pdf" && (
             <div className="flex flex-col items-center justify-center h-full gap-3">
-              <FileType className="w-12 h-12 text-muted-foreground/40" />
-              <p className="text-xs text-muted-foreground">
+              <FileType className="w-16 h-16 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">
                 {selectedDoc.title}
               </p>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs gap-1.5"
+                className="h-8 text-xs gap-1.5"
                 onClick={() => {
                   if (selectedDoc.content) {
                     const blob = new Blob([selectedDoc.content], {
@@ -748,37 +829,21 @@ export function ContextStoreManager({
                   }
                 }}
               >
-                <Download className="w-3 h-3" />
-                Download
+                <Download className="w-3.5 h-3.5" />
+                Download PDF
               </Button>
             </div>
           )}
 
           {docType === "document" && (
             <div className="h-full flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Content
-                </span>
-                {!editingContent ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 px-1.5 text-[10px]"
-                    onClick={() => {
-                      setEditingContent(true);
-                      setEditedContent(selectedDoc.content || "");
-                    }}
-                  >
-                    <Pencil className="w-2.5 h-2.5 mr-0.5" />
-                    Edit
-                  </Button>
-                ) : (
-                  <div className="flex gap-1">
+              {editingContent ? (
+                <>
+                  <div className="flex items-center justify-end gap-2 mb-2 shrink-0">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-5 px-1.5 text-[10px]"
+                      className="h-7 px-2 text-xs"
                       onClick={() => setEditingContent(false)}
                     >
                       Cancel
@@ -786,7 +851,7 @@ export function ContextStoreManager({
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-5 px-1.5 text-[10px]"
+                      className="h-7 px-3 text-xs"
                       onClick={() =>
                         updateDocMutation.mutate({
                           id: selectedDoc.id,
@@ -796,57 +861,55 @@ export function ContextStoreManager({
                       }
                       disabled={updateDocMutation.isPending}
                     >
-                      Save
+                      {updateDocMutation.isPending ? "Saving..." : "Save Changes"}
                     </Button>
                   </div>
-                )}
-              </div>
-              {editingContent ? (
-                <textarea
-                  className="flex-1 w-full text-xs bg-muted/30 border border-border/50 rounded-lg p-3 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
-                  value={editedContent}
-                  onChange={(e) => setEditedContent(e.target.value)}
-                />
+                  <div className="flex-1 min-h-0">
+                    <ProvokeText
+                      chrome="container"
+                      variant="editor"
+                      label="Edit Document"
+                      labelIcon={Pencil}
+                      value={editedContent}
+                      onChange={setEditedContent}
+                      showCopy
+                      showClear={false}
+                    />
+                  </div>
+                </>
               ) : (
-                <div className="flex-1 overflow-auto text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/20 rounded-lg p-3 border border-border/30">
-                  {selectedDoc.content || (
-                    <span className="italic text-muted-foreground/40">
-                      No content
-                    </span>
-                  )}
-                </div>
+                <>
+                  <div className="flex items-center justify-end mb-2 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={() => {
+                        setEditingContent(true);
+                        setEditedContent(selectedDoc.content || "");
+                      }}
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Edit Content
+                    </Button>
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <ProvokeText
+                      chrome="container"
+                      variant="editor"
+                      label="Document Content"
+                      labelIcon={FileText}
+                      value={selectedDoc.content || ""}
+                      onChange={() => {}}
+                      readOnly
+                      showCopy
+                      showClear={false}
+                    />
+                  </div>
+                </>
               )}
             </div>
           )}
-        </div>
-
-        {/* File info section */}
-        <div className="border-t border-border/50 p-4 space-y-1.5 bg-card/30">
-          <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-            File Info
-          </h4>
-          <div className="grid grid-cols-[80px_1fr] gap-y-1 text-[10px]">
-            <span className="text-muted-foreground">Name</span>
-            <span className="truncate">{selectedDoc.title}</span>
-            <span className="text-muted-foreground">Type</span>
-            <span>{getDocBadge(selectedDoc.docType)}</span>
-            <span className="text-muted-foreground">Location</span>
-            <span className="truncate">
-              {getFolderPath(selectedDoc.folderId)}
-            </span>
-            {selectedDoc.createdAt && (
-              <>
-                <span className="text-muted-foreground">Created</span>
-                <span>{formatDateTime(selectedDoc.createdAt)}</span>
-              </>
-            )}
-            {selectedDoc.updatedAt && (
-              <>
-                <span className="text-muted-foreground">Updated</span>
-                <span>{formatDateTime(selectedDoc.updatedAt)}</span>
-              </>
-            )}
-          </div>
         </div>
       </div>
     );
@@ -854,106 +917,118 @@ export function ContextStoreManager({
 
   // ── Main render ────────────────────────────────────────────────────────
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-6xl h-[85vh] p-0 overflow-hidden flex flex-col"
-        aria-describedby={undefined}
-      >
-        <DialogTitle className="sr-only">Context Store Manager</DialogTitle>
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex flex-col bg-background transition-all duration-200",
+        visible ? "opacity-100 scale-100" : "opacity-0 scale-[0.98]"
+      )}
+      onWheel={(e) => e.stopPropagation()}
+    >
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-border/50 shrink-0 bg-card/50">
+        <HardDrive className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-semibold">Context Store</h2>
+        <span className="text-[10px] text-muted-foreground">
+          {documents.length} files, {folders.length} folders
+        </span>
+        <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-8 h-8 rounded-full hover:bg-muted"
+          onClick={() => onOpenChange(false)}
+          title="Close"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
 
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-border/50 shrink-0">
-          <HardDrive className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-semibold">Context Store</h2>
-          <span className="text-[10px] text-muted-foreground">
-            {documents.length} files, {folders.length} folders
-          </span>
-        </div>
-
-        {/* Three-panel layout */}
-        <div className="flex flex-1 min-h-0">
-          {/* Left panel: Folder tree */}
-          <div className="w-[280px] border-r border-border/50 flex flex-col bg-card/50 shrink-0">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
-              <span className="text-xs font-semibold">Folders</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 px-1.5 text-[10px] text-primary hover:text-primary"
-                onClick={() => setCreatingFolderIn(null)}
-              >
-                <Plus className="w-3 h-3 mr-0.5" />
-                New Folder
-              </Button>
-            </div>
-
-            <ScrollArea className="flex-1">
-              <div className="py-1">
-                {/* All Files */}
-                <button
-                  className={cn(
-                    "w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
-                    selectedFolderId === null
-                      ? "bg-primary/15"
-                      : "hover:bg-muted/50"
-                  )}
-                  onClick={() => {
-                    setSelectedFolderId(null);
-                    setSelectedDocId(null);
-                  }}
-                >
-                  <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span className="text-xs font-medium">All Files</span>
-                  <span className="text-[10px] text-muted-foreground/50 ml-auto">
-                    {documents.length}
-                  </span>
-                </button>
-
-                {/* Inline new folder at root */}
-                {creatingFolderIn === null && (
-                  <div
-                    className="flex items-center gap-1.5 px-2 py-1"
-                    style={{ paddingLeft: "8px" }}
-                  >
-                    <FolderPlus className="w-3.5 h-3.5 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <InlineInput
-                        value=""
-                        placeholder="Folder name..."
-                        onSubmit={(name) =>
-                          createFolderMutation.mutate({
-                            name,
-                            parentFolderId: null,
-                          })
-                        }
-                        onCancel={() => setCreatingFolderIn(false)}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {rootFolders.map((folder) => renderFolder(folder, 0))}
-
-                {folders.length === 0 && creatingFolderIn === false && (
-                  <p className="text-[10px] text-muted-foreground/60 py-3 text-center">
-                    No folders yet
-                  </p>
-                )}
-              </div>
-            </ScrollArea>
+      {/* Two-column layout */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left sidebar: Folder tree + file list */}
+        <div className="w-[280px] border-r border-border/50 flex flex-col bg-card/30 shrink-0">
+          {/* Folder tree section */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
+            <span className="text-xs font-semibold">Folders</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 px-1.5 text-[10px] text-primary hover:text-primary"
+              onClick={() => setCreatingFolderIn(null)}
+            >
+              <Plus className="w-3 h-3 mr-0.5" />
+              New Folder
+            </Button>
           </div>
 
-          {/* Center panel: File list */}
-          <div
-            className="flex-1 flex flex-col min-w-0 relative"
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
+          <ScrollArea className="max-h-[200px] shrink-0">
+            <div className="py-1">
+              {/* All Files */}
+              <button
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
+                  selectedFolderId === null
+                    ? "bg-primary/15"
+                    : "hover:bg-muted/50"
+                )}
+                onClick={() => {
+                  setSelectedFolderId(null);
+                  setSelectedDocId(null);
+                }}
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span className="text-xs font-medium">All Files</span>
+                <span className="text-[10px] text-muted-foreground/50 ml-auto">
+                  {documents.length}
+                </span>
+              </button>
+
+              {/* Inline new folder at root */}
+              {creatingFolderIn === null && (
+                <div
+                  className="flex items-center gap-1.5 px-2 py-1"
+                  style={{ paddingLeft: "8px" }}
+                >
+                  <FolderPlus className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <InlineInput
+                      value=""
+                      placeholder="Folder name..."
+                      onSubmit={(name) =>
+                        createFolderMutation.mutate({
+                          name,
+                          parentFolderId: null,
+                        })
+                      }
+                      onCancel={() => setCreatingFolderIn(false)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {rootFolders.map((folder) => renderFolder(folder, 0))}
+
+              {folders.length === 0 && creatingFolderIn === false && (
+                <p className="text-[10px] text-muted-foreground/60 py-3 text-center">
+                  No folders yet
+                </p>
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* File list section */}
+          <div className="flex-1 flex flex-col min-h-0 border-t border-border/30">
             {/* File list header */}
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-border/30 shrink-0">
-              <span className="text-xs font-semibold truncate">
+            <div
+              className="flex items-center gap-2 px-3 py-2 border-b border-border/30 shrink-0"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <span className="text-xs font-semibold truncate flex-1">
                 {selectedFolderName}
               </span>
               <Badge
@@ -962,17 +1037,16 @@ export function ContextStoreManager({
               >
                 {filteredDocs.length}
               </Badge>
-              <div className="flex-1" />
 
               {/* Sort dropdown */}
               <div className="relative">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-1.5 text-[10px] gap-1"
+                  className="h-5 px-1 text-[10px] gap-0.5"
                   onClick={() => setSortDropdownOpen((v) => !v)}
                 >
-                  <ArrowUpDown className="w-3 h-3" />
+                  <ArrowUpDown className="w-2.5 h-2.5" />
                   {sortBy === "name"
                     ? "Name"
                     : sortBy === "type"
@@ -1011,15 +1085,15 @@ export function ContextStoreManager({
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-6 h-6"
+                className="w-5 h-5"
                 onClick={() =>
                   setViewMode((v) => (v === "list" ? "grid" : "list"))
                 }
               >
                 {viewMode === "list" ? (
-                  <LayoutGrid className="w-3 h-3" />
+                  <LayoutGrid className="w-2.5 h-2.5" />
                 ) : (
-                  <LayoutList className="w-3 h-3" />
+                  <LayoutList className="w-2.5 h-2.5" />
                 )}
               </Button>
 
@@ -1027,11 +1101,10 @@ export function ContextStoreManager({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-1.5 text-[10px] gap-1"
+                className="h-5 px-1 text-[10px] gap-0.5"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Upload className="w-3 h-3" />
-                Upload
+                <Upload className="w-2.5 h-2.5" />
               </Button>
               <input
                 ref={fileInputRef}
@@ -1047,20 +1120,17 @@ export function ContextStoreManager({
               />
             </div>
 
-            {/* File list / grid */}
-            <ScrollArea className="flex-1">
+            {/* File list */}
+            <ScrollArea className="flex-1 relative">
               {filteredDocs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center px-6 py-12">
-                  <FileText className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                  <p className="text-xs text-muted-foreground/60">
+                <div className="flex flex-col items-center justify-center text-center px-4 py-8">
+                  <FileText className="w-6 h-6 text-muted-foreground/30 mb-2" />
+                  <p className="text-[10px] text-muted-foreground/60">
                     No files in this folder
-                  </p>
-                  <p className="text-[10px] text-muted-foreground/40 mt-1">
-                    Upload files or create documents to get started
                   </p>
                 </div>
               ) : viewMode === "list" ? (
-                <div className="divide-y divide-border/30">
+                <div className="divide-y divide-border/20">
                   {filteredDocs.map((doc) => {
                     const Icon = getDocIcon(doc.docType);
                     const isRenaming = renamingDocId === doc.id;
@@ -1070,14 +1140,14 @@ export function ContextStoreManager({
                       <div
                         key={doc.id}
                         className={cn(
-                          "flex items-center gap-2 px-4 py-2.5 group transition-colors cursor-pointer",
+                          "flex items-center gap-2 px-3 py-2 group transition-colors cursor-pointer",
                           isActive
                             ? "bg-primary/10"
                             : "hover:bg-muted/30"
                         )}
                         onClick={() => setSelectedDocId(doc.id)}
                       >
-                        <Icon className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                        <Icon className="w-3 h-3 text-muted-foreground/50 shrink-0" />
 
                         {isRenaming ? (
                           <div className="flex-1 min-w-0">
@@ -1094,18 +1164,18 @@ export function ContextStoreManager({
                           </div>
                         ) : (
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium truncate">
+                            <div className="text-[11px] font-medium truncate">
                               {doc.title}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5">
+                            <div className="flex items-center gap-1.5 mt-0.5">
                               <Badge
                                 variant="outline"
-                                className="text-[9px] px-1 py-0 h-3.5 font-normal"
+                                className="text-[8px] px-1 py-0 h-3 font-normal"
                               >
                                 {getDocBadge(doc.docType)}
                               </Badge>
                               {doc.updatedAt && (
-                                <span className="text-[10px] text-muted-foreground/40">
+                                <span className="text-[9px] text-muted-foreground/40">
                                   {formatDate(doc.updatedAt)}
                                 </span>
                               )}
@@ -1115,30 +1185,20 @@ export function ContextStoreManager({
 
                         {/* Hover actions */}
                         {!isRenaming && (
-                          <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                          <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
                             <button
-                              className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
-                              title="Preview"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedDocId(doc.id);
-                              }}
-                            >
-                              <Eye className="w-3 h-3" />
-                            </button>
-                            <button
-                              className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                              className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
                               title="Rename"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setRenamingDocId(doc.id);
                               }}
                             >
-                              <Pencil className="w-3 h-3" />
+                              <Pencil className="w-2.5 h-2.5" />
                             </button>
                             <button
-                              className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
-                              title="Move to folder"
+                              className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                              title="Move"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setMovingDoc({
@@ -1147,10 +1207,10 @@ export function ContextStoreManager({
                                 });
                               }}
                             >
-                              <FolderInput className="w-3 h-3" />
+                              <FolderInput className="w-2.5 h-2.5" />
                             </button>
                             <button
-                              className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-destructive"
+                              className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground hover:text-destructive"
                               title="Delete"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1160,7 +1220,7 @@ export function ContextStoreManager({
                                 });
                               }}
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-2.5 h-2.5" />
                             </button>
                           </div>
                         )}
@@ -1170,7 +1230,7 @@ export function ContextStoreManager({
                 </div>
               ) : (
                 /* Grid view */
-                <div className="grid grid-cols-3 gap-3 p-4">
+                <div className="grid grid-cols-2 gap-2 p-2">
                   {filteredDocs.map((doc) => {
                     const Icon = getDocIcon(doc.docType);
                     const isActive = selectedDocId === doc.id;
@@ -1179,290 +1239,228 @@ export function ContextStoreManager({
                       <div
                         key={doc.id}
                         className={cn(
-                          "border rounded-lg p-3 cursor-pointer transition-colors group",
+                          "border rounded-lg p-2 cursor-pointer transition-colors group",
                           isActive
                             ? "border-primary/40 bg-primary/5"
                             : "border-border/50 hover:bg-muted/30"
                         )}
                         onClick={() => setSelectedDocId(doc.id)}
                       >
-                        <div className="flex items-center justify-center h-16 mb-2 bg-muted/20 rounded">
-                          <Icon className="w-8 h-8 text-muted-foreground/30" />
+                        <div className="flex items-center justify-center h-10 mb-1.5 bg-muted/20 rounded">
+                          <Icon className="w-5 h-5 text-muted-foreground/30" />
                         </div>
-                        <div className="text-xs font-medium truncate">
+                        <div className="text-[10px] font-medium truncate">
                           {doc.title}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex items-center gap-1 mt-0.5">
                           <Badge
                             variant="outline"
-                            className="text-[9px] px-1 py-0 h-3.5 font-normal"
+                            className="text-[8px] px-0.5 py-0 h-3 font-normal"
                           >
                             {getDocBadge(doc.docType)}
                           </Badge>
-                          {doc.updatedAt && (
-                            <span className="text-[9px] text-muted-foreground/40">
-                              {formatDate(doc.updatedAt)}
-                            </span>
-                          )}
-                        </div>
-                        {/* Grid hover actions */}
-                        <div className="hidden group-hover:flex items-center gap-1 mt-2 justify-end">
-                          <button
-                            className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
-                            title="Rename"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenamingDocId(doc.id);
-                            }}
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                          <button
-                            className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
-                            title="Move"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMovingDoc({
-                                id: doc.id,
-                                title: doc.title,
-                              });
-                            }}
-                          >
-                            <FolderInput className="w-3 h-3" />
-                          </button>
-                          <button
-                            className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-destructive"
-                            title="Delete"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeletingDoc({
-                                id: doc.id,
-                                title: doc.title,
-                              });
-                            }}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </ScrollArea>
 
-            {/* Drag-and-drop overlay */}
-            {isDraggingOver && (
-              <div className="absolute inset-0 z-10 bg-primary/5 border-2 border-dashed border-primary/40 rounded-lg flex items-center justify-center pointer-events-none">
-                <div className="text-center">
-                  <Upload className="w-8 h-8 text-primary/60 mx-auto mb-2" />
-                  <p className="text-xs text-primary/80 font-medium">
-                    Drop files here to upload
-                  </p>
+              {/* Drag-and-drop overlay */}
+              {isDraggingOver && (
+                <div className="absolute inset-0 z-10 bg-primary/5 border-2 border-dashed border-primary/40 rounded-lg flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <Upload className="w-6 h-6 text-primary/60 mx-auto mb-1" />
+                    <p className="text-[10px] text-primary/80 font-medium">
+                      Drop files here
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </ScrollArea>
           </div>
-
-          {/* Right panel: Preview + Edit */}
-          {selectedDocId && (
-            <div className="w-[350px] border-l border-border/50 flex flex-col bg-card/30 shrink-0">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 shrink-0">
-                <span className="text-xs font-semibold truncate">
-                  Preview
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-5 h-5"
-                  onClick={() => {
-                    setSelectedDocId(null);
-                    setEditingContent(false);
-                  }}
-                >
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-              {renderPreview()}
-            </div>
-          )}
         </div>
 
-        {/* ── Overlays ─────────────────────────────────────────────────── */}
+        {/* Main area: Document preview/editor */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {renderMainArea()}
+        </div>
+      </div>
 
-        {/* Context menu for folders */}
-        {contextMenu && (
-          <div
-            className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-xl py-1 min-w-[140px]"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-            onClick={(e) => e.stopPropagation()}
+      {/* ── Overlays ─────────────────────────────────────────────────── */}
+
+      {/* Context menu for folders */}
+      {contextMenu && (
+        <div
+          className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-xl py-1 min-w-[140px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
+            onClick={() => {
+              setRenamingFolderId(contextMenu.folderId);
+              setContextMenu(null);
+            }}
           >
-            <button
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-              onClick={() => {
-                setRenamingFolderId(contextMenu.folderId);
-                setContextMenu(null);
-              }}
-            >
-              <Pencil className="w-3 h-3" />
-              Rename
-            </button>
-            <button
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
-              onClick={() => {
-                setCreatingFolderIn(contextMenu.folderId);
-                setExpandedFolders(
-                  (prev) => new Set(prev).add(contextMenu.folderId)
-                );
-                setContextMenu(null);
-              }}
-            >
-              <FolderPlus className="w-3 h-3" />
-              New Subfolder
-            </button>
-            <div className="border-t border-border/50 my-1" />
-            <button
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 text-left text-destructive"
-              onClick={() => {
-                setDeletingFolder({
-                  id: contextMenu.folderId,
-                  name: contextMenu.folderName,
-                });
-                setContextMenu(null);
-              }}
-            >
-              <Trash2 className="w-3 h-3" />
-              Delete
-            </button>
-          </div>
-        )}
+            <Pencil className="w-3 h-3" />
+            Rename
+          </button>
+          <button
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 text-left"
+            onClick={() => {
+              setCreatingFolderIn(contextMenu.folderId);
+              setExpandedFolders(
+                (prev) => new Set(prev).add(contextMenu.folderId)
+              );
+              setContextMenu(null);
+            }}
+          >
+            <FolderPlus className="w-3 h-3" />
+            New Subfolder
+          </button>
+          <div className="border-t border-border/50 my-1" />
+          <button
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 text-left text-destructive"
+            onClick={() => {
+              setDeletingFolder({
+                id: contextMenu.folderId,
+                name: contextMenu.folderName,
+              });
+              setContextMenu(null);
+            }}
+          >
+            <Trash2 className="w-3 h-3" />
+            Delete
+          </button>
+        </div>
+      )}
 
-        {/* Delete folder confirmation */}
-        {deletingFolder && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-            <div className="bg-popover border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4">
-              <h4 className="text-sm font-semibold mb-2">Delete folder?</h4>
-              <p className="text-xs text-muted-foreground mb-4">
-                Are you sure you want to delete{" "}
-                <span className="font-medium text-foreground">
-                  "{deletingFolder.name}"
-                </span>
-                ? Documents inside may be moved to root.
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setDeletingFolder(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() =>
-                    deleteFolderMutation.mutate(deletingFolder.id)
-                  }
-                  disabled={deleteFolderMutation.isPending}
-                >
-                  {deleteFolderMutation.isPending
-                    ? "Deleting..."
-                    : "Delete"}
-                </Button>
-              </div>
+      {/* Delete folder confirmation */}
+      {deletingFolder && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+          <div className="bg-popover border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4">
+            <h4 className="text-sm font-semibold mb-2">Delete folder?</h4>
+            <p className="text-xs text-muted-foreground mb-4">
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-foreground">
+                &quot;{deletingFolder.name}&quot;
+              </span>
+              ? Documents inside may be moved to root.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setDeletingFolder(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() =>
+                  deleteFolderMutation.mutate(deletingFolder.id)
+                }
+                disabled={deleteFolderMutation.isPending}
+              >
+                {deleteFolderMutation.isPending
+                  ? "Deleting..."
+                  : "Delete"}
+              </Button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Delete document confirmation */}
-        {deletingDoc && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-            <div className="bg-popover border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4">
-              <h4 className="text-sm font-semibold mb-2">
-                Delete document?
-              </h4>
-              <p className="text-xs text-muted-foreground mb-4">
-                Are you sure you want to delete{" "}
-                <span className="font-medium text-foreground">
-                  "{deletingDoc.title}"
-                </span>
-                ? This cannot be undone.
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setDeletingDoc(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() =>
-                    deleteDocMutation.mutate(deletingDoc.id)
-                  }
-                  disabled={deleteDocMutation.isPending}
-                >
-                  {deleteDocMutation.isPending
-                    ? "Deleting..."
-                    : "Delete"}
-                </Button>
-              </div>
+      {/* Delete document confirmation */}
+      {deletingDoc && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+          <div className="bg-popover border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4">
+            <h4 className="text-sm font-semibold mb-2">
+              Delete document?
+            </h4>
+            <p className="text-xs text-muted-foreground mb-4">
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-foreground">
+                &quot;{deletingDoc.title}&quot;
+              </span>
+              ? This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setDeletingDoc(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() =>
+                  deleteDocMutation.mutate(deletingDoc.id)
+                }
+                disabled={deleteDocMutation.isPending}
+              >
+                {deleteDocMutation.isPending
+                  ? "Deleting..."
+                  : "Delete"}
+              </Button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Move document to folder */}
-        {movingDoc && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-            <div className="bg-popover border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4">
-              <h4 className="text-sm font-semibold mb-2">
-                Move "{movingDoc.title}"
-              </h4>
-              <p className="text-xs text-muted-foreground mb-3">
-                Select destination folder:
-              </p>
-              <div className="border border-border/50 rounded-lg max-h-[200px] overflow-auto mb-4">
+      {/* Move document to folder */}
+      {movingDoc && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+          <div className="bg-popover border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4">
+            <h4 className="text-sm font-semibold mb-2">
+              Move &quot;{movingDoc.title}&quot;
+            </h4>
+            <p className="text-xs text-muted-foreground mb-3">
+              Select destination folder:
+            </p>
+            <div className="border border-border/50 rounded-lg max-h-[200px] overflow-auto mb-4">
+              <button
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
+                onClick={() => handleMoveDoc(movingDoc.id, null)}
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-amber-500" />
+                / (Root)
+              </button>
+              {folders.map((f) => (
                 <button
+                  key={f.id}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
-                  onClick={() => handleMoveDoc(movingDoc.id, null)}
+                  style={{
+                    paddingLeft: `${(f.parentId ? 2 : 1) * 12 + 12}px`,
+                  }}
+                  onClick={() => handleMoveDoc(movingDoc.id, f.id)}
                 >
-                  <FolderOpen className="w-3.5 h-3.5 text-amber-500" />
-                  / (Root)
+                  <Folder className="w-3.5 h-3.5 text-amber-500" />
+                  {f.name}
                 </button>
-                {folders.map((f) => (
-                  <button
-                    key={f.id}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
-                    style={{
-                      paddingLeft: `${(f.parentId ? 2 : 1) * 12 + 12}px`,
-                    }}
-                    onClick={() => handleMoveDoc(movingDoc.id, f.id)}
-                  >
-                    <Folder className="w-3.5 h-3.5 text-amber-500" />
-                    {f.name}
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setMovingDoc(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setMovingDoc(null)}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+    </div>
   );
 }

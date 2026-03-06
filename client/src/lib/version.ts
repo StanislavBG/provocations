@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.3";
+export const APP_VERSION = "0.14.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.14.4",
+    date: "2026-03-06",
+    changes: [
+      "Context Store Manager converted from Dialog modal to full-frame overlay with two-column layout",
+      "Left sidebar shows folder tree + scrollable file list; main area shows full document preview/editor",
+      "Document preview now uses ProvokeText (ADR compliance) with proper read-only and edit modes",
+      "Overlay no longer closes on outside click — explicit X button and Escape key to close",
+      "Smooth enter/exit transitions matching other expanded views in the app",
+    ],
+  },
   {
     version: "0.14.3",
     date: "2026-03-06",
