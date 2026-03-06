@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Bell,
   Upload,
+  UserCheck,
 } from "lucide-react";
 import type { FlowNodeType, PortDef } from "./useFlowCanvas";
 
@@ -48,7 +49,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification" | "approval";
 
 // ── Registry definition ──
 
@@ -636,6 +637,32 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     minHeight: 120,
     inputDescription: "No input — files are uploaded directly by the user via drag-and-drop or file browser.",
     outputDescription: "File content (text for documents, base64 data URL for media). Connected downstream nodes receive the uploaded content.",
+  },
+  approval: {
+    type: "approval",
+    style: {
+      border: "border-amber-500/60",
+      bg: "bg-card",
+      headerBg: "bg-amber-500/15",
+      headerBorder: "border-amber-500/40",
+      iconClass: "text-amber-500",
+      badgeBg: "bg-amber-500/25",
+      badgeText: "text-amber-600 dark:text-amber-400",
+      badge: "Approval",
+      accent: "amber",
+    },
+    icon: UserCheck,
+    defaultWidth: 220,
+    defaultHeight: 140,
+    ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+    expandMode: "overlay",
+    playable: true,
+    supportsChainExecution: true,
+    lifecyclePreset: "approval",
+    minWidth: 160,
+    minHeight: 100,
+    inputDescription: "Content from upstream nodes. When triggered, sends an approval request to assigned users and blocks the chain until approved.",
+    outputDescription: "When approved, passes upstream content through to downstream nodes. When rejected, blocks downstream propagation.",
   },
   label: {
     type: "label",

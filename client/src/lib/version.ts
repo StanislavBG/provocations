@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.3";
+export const APP_VERSION = "0.15.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,19 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.15.0",
+    date: "2026-03-06",
+    changes: [
+      "New Approval node type: pauses chain execution until assigned user(s) approve or reject",
+      "Approval node compact view shows status (pending/approved/rejected) with color-coded badges",
+      "Approval expanded view with recipient picker, message template, approve/reject buttons",
+      "Chain executor blocks propagation past approval nodes until approved",
+      "Upload node enhanced with folder picker for save destination",
+      "Blueprint sharing: Share button on user blueprints to share with connected users",
+      "Share dialog with connection picker, uses existing /api/share endpoint",
+    ],
+  },
   {
     version: "0.14.3",
     date: "2026-03-06",

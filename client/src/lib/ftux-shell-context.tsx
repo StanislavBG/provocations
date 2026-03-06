@@ -28,7 +28,8 @@ export type ToolId =
   | "social-post"
   | "api-connection"
   | "notification"
-  | "upload";
+  | "upload"
+  | "approval";
 
 export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";
