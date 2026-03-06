@@ -67,6 +67,8 @@ export function FlowExpandedOverlay({
   const sbHeight = "var(--ftux-status-bar-height, 36px)";
 
   const overlayRef = useRef<HTMLDivElement>(null);
+  const renameLabelRef = useRef<HTMLInputElement>(null);
+  const [renamingLabel, setRenamingLabel] = useState(false);
   const [phase, setPhase] = useState<AnimationPhase>(
     sourceRect ? "expanding" : "open",
   );
@@ -191,9 +193,39 @@ export function FlowExpandedOverlay({
           )}
         >
           <Icon className="w-4 h-4" />
-          <h2 className="text-sm font-semibold truncate flex-1">
-            {node.label || style.badge}
-          </h2>
+          {renamingLabel ? (
+            <input
+              ref={renameLabelRef}
+              className="text-sm font-semibold flex-1 bg-white/20 border border-white/40 rounded px-1.5 py-0 h-6 text-white outline-none placeholder:text-white/50"
+              defaultValue={node.label || style.badge}
+              autoFocus
+              onBlur={(e) => {
+                const val = e.target.value.trim();
+                if (val && val !== node.label) {
+                  onUpdateNode(node.id, { label: val });
+                }
+                setRenamingLabel(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const val = (e.target as HTMLInputElement).value.trim();
+                  if (val && val !== node.label) {
+                    onUpdateNode(node.id, { label: val });
+                  }
+                  setRenamingLabel(false);
+                }
+                if (e.key === "Escape") setRenamingLabel(false);
+              }}
+            />
+          ) : (
+            <h2
+              className="text-sm font-semibold truncate flex-1 cursor-pointer hover:underline decoration-white/40"
+              onDoubleClick={() => setRenamingLabel(true)}
+              title="Double-click to rename"
+            >
+              {node.label || style.badge}
+            </h2>
+          )}
           <span className="text-[10px] uppercase tracking-wider opacity-75 font-semibold">
             {style.badge}
           </span>
