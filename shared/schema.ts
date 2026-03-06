@@ -466,7 +466,7 @@ export interface AskQuestionResponse {
 
 // Interview question request - generates the next provocative question
 export const interviewQuestionRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
+  objective: z.string().default(""),
   document: z.string().optional(),
   appType: z.enum(templateIds).optional(),
   template: z.string().optional(),

@@ -1494,6 +1494,13 @@ function FlowWorkspaceInner() {
       for (const edge of downstreamEdges) {
         const downstream = nodes.find((n) => n.id === edge.toNodeId);
         if (!downstream) continue;
+
+        // Audio nodes: flag for auto-start recording instead of chain execution
+        if (downstream.type === "audio") {
+          updateNode(downstream.id, { autoStartRecording: true });
+          continue;
+        }
+
         const def = FLOW_NODE_REGISTRY[downstream.type];
         if (!def?.supportsChainExecution) continue;
 
