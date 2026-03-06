@@ -1700,7 +1700,7 @@ function FlowWorkspaceInner() {
         // -- Painter: structured image output --
         if (preset === "media") {
           const { prompt, imageUrl } = parsePainterOutput(outputText);
-          scopedUpdate(nodeId, { llmStatus: "done", snippet: `Generated: ${prompt.slice(0, 80)}...` });
+          scopedUpdate(nodeId, { llmStatus: "done", snippet: `Generated: ${prompt.slice(0, 80)}...`, imageUrl });
           const imgNodeId = scopedAddNode("document", node.x + node.width + 60, node.y, {
             label: `Image: ${prompt.slice(0, 30)}${prompt.length > 30 ? "..." : ""}`,
             snippet: "Generated image",
@@ -2650,6 +2650,7 @@ function FlowWorkspaceInner() {
       updateNode(activePainterNodeId, {
         llmStatus: "done",
         snippet: `Generated: ${prompt.slice(0, 80)}...`,
+        imageUrl,
       });
 
       const imgX = (painterNode?.x ?? 0) + (painterNode?.width ?? 260) + 60;
