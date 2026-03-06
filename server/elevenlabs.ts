@@ -245,6 +245,147 @@ function claimPooledConnection(voiceId: string): { ws: any; ready: Promise<void>
   return { ws: pooled.ws, ready: pooled.ready };
 }
 
+// ---------------------------------------------------------------------------
+// Multi-context streaming session (for brainstorm / conversational mode)
+// ---------------------------------------------------------------------------
+// Uses the multi-stream-input endpoint which supports multiple concurrent
+// "contexts" on one WebSocket. This enables interruption handling: close the
+// current speaking context and start a new one without reconnecting.
+
+export interface MultiContextSession {
+  /** Send text to a specific context. Creates the context on first use. */
+  sendToContext(contextId: string, text: string): void;
+  /** Flush buffered audio in a context (end of sentence). */
+  flushContext(contextId: string): void;
+  /** Close a context (e.g., interrupted). */
+  closeContext(contextId: string): void;
+  /** Close the entire WebSocket connection. */
+  close(): void;
+  /** Audio chunks arrive tagged with their contextId. */
+  onAudio: (callback: (base64Chunk: string, contextId: string) => void) => void;
+  /** Context completed (is_final). */
+  onContextDone: (callback: (contextId: string) => void) => void;
+  onError: (callback: (error: Error) => void) => void;
+  onClose: (callback: () => void) => void;
+  ready: Promise<void>;
+}
+
+export function createMultiContextSession(voiceId?: string): MultiContextSession {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY is not set");
+  }
+
+  const vid = voiceId ?? getDefaultVoiceId();
+  const model = getModelId();
+  // multi-stream-input uses eleven_flash_v2_5 (multi-context not available for eleven_v3)
+  const safeModel = model === "eleven_v3" ? "eleven_flash_v2_5" : model;
+  const wsUrl = `${WS_BASE}/text-to-speech/${vid}/multi-stream-input?model_id=${encodeURIComponent(safeModel)}&inactivity_timeout=60`;
+
+  let audioCallback: ((base64Chunk: string, contextId: string) => void) | null = null;
+  let contextDoneCallback: ((contextId: string) => void) | null = null;
+  let errorCallback: ((error: Error) => void) | null = null;
+  let closeCallback: (() => void) | null = null;
+  let ws: any = null;
+  const initializedContexts = new Set<string>();
+
+  const ready = (async () => {
+    const WS = await resolveWebSocket();
+    const WebSocketClass = WS.default ?? WS;
+    ws = new (WebSocketClass as any)(wsUrl, {
+      headers: { "xi-api-key": apiKey },
+      maxPayload: 16 * 1024 * 1024,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      ws!.on("open", () => resolve());
+      ws!.on("error", (err: Error) => {
+        console.error("ElevenLabs multi-context WS error:", err);
+        if (errorCallback) errorCallback(err);
+        reject(err);
+      });
+    });
+
+    ws!.on("message", (data: Buffer | string) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        const ctxId = msg.contextId ?? msg.context_id ?? "default";
+
+        if (msg.audio && audioCallback) {
+          audioCallback(msg.audio, ctxId);
+        }
+        if (msg.is_final && contextDoneCallback) {
+          contextDoneCallback(ctxId);
+        }
+        if (msg.error) {
+          console.error("ElevenLabs multi-context server error:", msg.error);
+          if (errorCallback) errorCallback(new Error(msg.error));
+        }
+      } catch (e) {
+        console.error("ElevenLabs multi-context message parse error:", e);
+      }
+    });
+
+    ws!.on("close", () => {
+      if (closeCallback) closeCallback();
+    });
+  })();
+
+  return {
+    sendToContext(contextId: string, text: string) {
+      if (!ws || ws.readyState !== 1) return;
+      const msg: Record<string, unknown> = {
+        text,
+        context_id: contextId,
+      };
+      // First message in a context needs voice_settings
+      if (!initializedContexts.has(contextId)) {
+        initializedContexts.add(contextId);
+        msg.voice_settings = {
+          stability: 0.5,
+          similarity_boost: 0.75,
+        };
+      }
+      ws.send(JSON.stringify(msg));
+    },
+
+    flushContext(contextId: string) {
+      if (!ws || ws.readyState !== 1) return;
+      ws.send(JSON.stringify({ context_id: contextId, flush: true }));
+    },
+
+    closeContext(contextId: string) {
+      if (!ws || ws.readyState !== 1) return;
+      initializedContexts.delete(contextId);
+      ws.send(JSON.stringify({ context_id: contextId, close_context: true }));
+    },
+
+    close() {
+      if (!ws) return;
+      try {
+        ws.send(JSON.stringify({ close_socket: true }));
+      } catch {
+        // Socket may already be closed
+      }
+      ws.close();
+    },
+
+    onAudio(callback) {
+      audioCallback = callback;
+    },
+    onContextDone(callback) {
+      contextDoneCallback = callback;
+    },
+    onError(callback) {
+      errorCallback = callback;
+    },
+    onClose(callback) {
+      closeCallback = callback;
+    },
+    ready,
+  };
+}
+
 export function createStreamingSession(voiceId?: string): StreamingSession {
   const apiKey = getApiKey();
   if (!apiKey) {

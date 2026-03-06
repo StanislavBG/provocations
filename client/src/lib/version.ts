@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.12.1";
+export const APP_VERSION = "0.12.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,18 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.12.2",
+    date: "2026-03-05",
+    changes: [
+      "Brainstorm mode: new interview stance for fluid, interruptible voice conversations — uses ElevenLabs multi-context WebSocket for real-time TTS with interruption handling",
+      "Always-listening mic: in brainstorm mode, mic stays active during AI speech — start talking to interrupt, AI stops and listens",
+      "Multi-context TTS session: new `createMultiContextSession()` in elevenlabs.ts supports concurrent audio contexts with close/interrupt per context",
+      "Brainstorm streaming endpoint: `/api/interview/brainstorm/stream` with shorter, more conversational LLM responses (100 words max, temp 1.0)",
+      "Conversation turn hook: new `alwaysListening` and `onInterrupt` options for interrupt-aware voice dialog",
+      "ElevenLabs default voice: server's ELEVENLABS_VOICE_ID now exposed via /api/tts/elevenlabs/voices and pre-selected in interview dropdowns",
+    ],
+  },
   {
     version: "0.12.1",
     date: "2026-03-05",

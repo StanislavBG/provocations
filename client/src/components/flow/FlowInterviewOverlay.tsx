@@ -30,6 +30,7 @@ import {
   VolumeX,
   Radio,
   Download,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { FlowNode } from "./useFlowCanvas";
@@ -38,13 +39,14 @@ import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 // ── Interview stance ──
 
-type InterviewStance = "investigative" | "exploratory" | "balanced" | "autobiography";
+type InterviewStance = "investigative" | "exploratory" | "balanced" | "autobiography" | "brainstorm";
 
 const INTERVIEW_STANCES: { id: InterviewStance; label: string; icon: LucideIcon; description: string }[] = [
   { id: "balanced", label: "Balanced", icon: Scale, description: "Mix of analytical and creative questioning" },
   { id: "investigative", label: "Investigative", icon: Search, description: "Rigorous — digs into claims, demands evidence" },
   { id: "exploratory", label: "Exploratory", icon: Compass, description: "Curious — opens new angles, draws connections" },
   { id: "autobiography", label: "Autobiography", icon: Clock, description: "Biographer capturing time-tagged life events" },
+  { id: "brainstorm", label: "Brainstorm", icon: Zap, description: "Live voice brainstorm — fluid, interruptible, collaborative" },
 ];
 
 function buildGuidance(stance: InterviewStance, focus: string): string | undefined {
@@ -149,7 +151,11 @@ export function FlowInterviewOverlay({
   // Ref to hold the latest handleAnswer for conversation turn callback
   const handleAnswerRef = useRef<(answer: string) => void>(() => {});
 
-  // ── Conversation turn (True Interview mode) ──
+  // Ref to hold the brainstorm abort controller for interruption
+  const brainstormAbortRef = useRef<AbortController | null>(null);
+
+  // ── Conversation turn (True Interview / Brainstorm mode) ──
+  const isBrainstorm = stance === "brainstorm";
   const conversationTurn = useConversationTurn({
     onTranscript: useCallback((text: string, isFinal: boolean) => {
       if (isFinal && text.trim()) {
@@ -158,7 +164,23 @@ export function FlowInterviewOverlay({
         setAnswerText(text);
       }
     }, []),
-    silenceTimeout: 1500,
+    silenceTimeout: isBrainstorm ? 1000 : 1500,
+    alwaysListening: isBrainstorm,
+    onInterrupt: useCallback(() => {
+      // In brainstorm mode, abort the current SSE stream and stop audio
+      if (brainstormAbortRef.current) {
+        brainstormAbortRef.current.abort();
+        brainstormAbortRef.current = null;
+      }
+      // Stop any playing audio
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current.onended = null;
+      }
+      audioQueueRef.current = [];
+      isPlayingQueueRef.current = false;
+      setIsSpeaking(false);
+    }, []),
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -181,10 +203,18 @@ export function FlowInterviewOverlay({
     };
   }, []);
 
-  // Auto-enable TTS in true interview mode
+  // Auto-enable TTS in true interview mode or brainstorm mode
   useEffect(() => {
     if (trueInterview && !ttsEnabled) setTtsEnabled(true);
   }, [trueInterview, ttsEnabled]);
+
+  // Brainstorm mode always forces conversation mode + TTS
+  useEffect(() => {
+    if (stance === "brainstorm") {
+      if (!trueInterview) setTrueInterview(true);
+      if (!ttsEnabled) setTtsEnabled(true);
+    }
+  }, [stance, trueInterview, ttsEnabled]);
 
   // ── Persist state back to node ──
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -332,24 +362,35 @@ export function FlowInterviewOverlay({
   const questionMutation = useMutation({
     mutationFn: async (updatedEntries?: InterviewEntry[]) => {
       const t0 = performance.now();
-      lcLog("process", "start", "Generating next question (streaming)");
+      const isBrainstorm = stance === "brainstorm";
+      lcLog("process", "start", `Generating next ${isBrainstorm ? "brainstorm response" : "question"} (streaming)`);
       const allEntries = updatedEntries ?? entries;
       const effectiveObjective = objective.trim() || (stance === "autobiography" ? AUTOBIOGRAPHY_DEFAULT_OBJECTIVE : objective);
 
       // Determine if we should use streaming (ElevenLabs voice available)
       const useStreaming = ttsEnabled && (ttsProvider === "elevenlabs" || (ttsProvider === "auto" && elevenlabsAvailable));
 
-      if (useStreaming) {
+      if (useStreaming || isBrainstorm) {
         // Use the streaming endpoint for low-latency TTS
         streamingQuestionRef.current = true;
-        const res = await fetch("/api/interview/question/stream", {
+
+        // Brainstorm mode uses multi-context endpoint; interview uses single-stream
+        const endpoint = isBrainstorm ? "/api/interview/brainstorm/stream" : "/api/interview/question/stream";
+
+        // Set up abort controller for brainstorm interruption
+        if (isBrainstorm) {
+          brainstormAbortRef.current = new AbortController();
+        }
+
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
+          signal: isBrainstorm ? brainstormAbortRef.current?.signal : undefined,
           body: JSON.stringify({
             objective: effectiveObjective,
             document: documentText,
-            previousEntries: allEntries.length > 0 ? allEntries : undefined,
+            previousEntries: allEntries.length > 0 ? (isBrainstorm ? allEntries.slice(-10) : allEntries) : undefined,
             directionMode: stance === "investigative" ? "challenge" : stance === "exploratory" || stance === "autobiography" ? "advise" : undefined,
             directionGuidance: buildGuidance(stance, focusText),
             voiceId: selectedElevenVoiceId,
@@ -363,7 +404,7 @@ export function FlowInterviewOverlay({
         const decoder = new TextDecoder();
         let buffer = "";
         let questionText = "";
-        let topic = "";
+        let topic = isBrainstorm ? "Brainstorm" : "";
         let audioStarted = false;
 
         // Reset audio queue
@@ -380,44 +421,47 @@ export function FlowInterviewOverlay({
             if (!line.startsWith("data: ")) continue;
             try {
               const evt = JSON.parse(line.slice(6));
-              if (evt.type === "question_text") {
+              // Handle both brainstorm events ("text") and interview events ("question_text")
+              if (evt.type === "question_text" || evt.type === "text") {
                 questionText += evt.chunk;
-                // Show text progressively
-                setCurrentQuestion(questionText.replace(/[{}"]/g, "").replace(/question:\s*/i, "").trim());
+                setCurrentQuestion(isBrainstorm
+                  ? questionText.trim()
+                  : questionText.replace(/[{}"]/g, "").replace(/question:\s*/i, "").trim()
+                );
               } else if (evt.type === "audio") {
                 // Queue audio chunk for playback
                 audioQueueRef.current.push(evt.data);
                 if (!audioStarted) {
                   audioStarted = true;
-                  // Start playing as soon as first chunk arrives
                   playAudioQueue();
                 }
               } else if (evt.type === "metadata") {
-                topic = evt.topic || "";
+                topic = evt.topic || topic;
               } else if (evt.type === "done") {
-                questionText = evt.question || questionText;
+                questionText = isBrainstorm ? (evt.text || questionText) : (evt.question || questionText);
               } else if (evt.type === "tts_error") {
-                // TTS failed mid-stream, will fall back to text-only
                 lcLog("process", "error", `TTS error: ${evt.message}`);
               }
             } catch { /* skip malformed SSE lines */ }
           }
         }
 
-        // Parse the final question text from JSON if needed
+        // Parse the final question text from JSON if needed (interview only)
         let finalQuestion = questionText;
-        try {
-          const jsonMatch = questionText.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            finalQuestion = parsed.question || questionText;
-            topic = topic || parsed.topic || "";
-          }
-        } catch { /* use raw text */ }
+        if (!isBrainstorm) {
+          try {
+            const jsonMatch = questionText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              finalQuestion = parsed.question || questionText;
+              topic = topic || parsed.topic || "";
+            }
+          } catch { /* use raw text */ }
+        }
 
         streamingQuestionRef.current = false;
-        lcLog("process", "success", `Question: "${finalQuestion.slice(0, 60)}..."`, { durationMs: Math.round(performance.now() - t0) });
-        // Mark as streamed so onSuccess doesn't re-speak
+        brainstormAbortRef.current = null;
+        lcLog("process", "success", `${isBrainstorm ? "Response" : "Question"}: "${finalQuestion.slice(0, 60)}..."`, { durationMs: Math.round(performance.now() - t0) });
         return { question: finalQuestion, topic: topic || "General", reasoning: "", _streamed: true } as InterviewQuestionResponse & { _streamed?: boolean };
       }
 
@@ -443,6 +487,9 @@ export function FlowInterviewOverlay({
     },
     onError: (error: Error) => {
       streamingQuestionRef.current = false;
+      brainstormAbortRef.current = null;
+      // Don't show error for brainstorm interruption (AbortError)
+      if (error.name === "AbortError") return;
       const msg = error instanceof Error ? error.message : "Failed to generate question";
       lcLog("process", "error", msg, { error: msg });
       errorLogStore.push({ step: "Interview Question", endpoint: "/api/interview/question/stream", message: msg });
@@ -484,6 +531,13 @@ export function FlowInterviewOverlay({
     if (ttsEnabled) unlockMobileAudio();
     setIsActive(true);
     if (trueInterview) conversationTurn.startProcessing();
+
+    // Brainstorm always starts via the streaming endpoint (even without objective)
+    if (stance === "brainstorm") {
+      questionMutation.mutate(undefined);
+      trackEvent("interview_started", { metadata: { stance: "brainstorm" } });
+      return;
+    }
 
     // If no objective is set (and not autobiography), use a default opening question
     if (!objective.trim() && stance !== "autobiography") {
@@ -527,8 +581,8 @@ export function FlowInterviewOverlay({
       setAnswerText("");
       trackEvent("interview_answer");
 
-      // If this is the first answer and no objective was set, use it as the objective
-      if (!objective.trim() && entries.length === 0 && stance !== "autobiography") {
+      // If this is the first answer and no objective was set, use it as the objective (not in brainstorm)
+      if (!objective.trim() && entries.length === 0 && stance !== "autobiography" && stance !== "brainstorm") {
         setObjective(answer.trim());
       }
 
@@ -715,46 +769,59 @@ export function FlowInterviewOverlay({
                 </p>
               </div>
 
-              {/* Interview Mode — mutually exclusive */}
-              <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Mode</p>
-                <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 border">
-                  <button
-                    onClick={() => {
-                      setTrueInterview(true);
-                      setTtsEnabled(true);
-                      unlockMobileAudio();
-                    }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-[10px] font-medium transition-colors ${
-                      trueInterview
-                        ? "bg-emerald-600 text-white"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Radio className="w-3 h-3" />
-                    Conversation
-                  </button>
-                  <button
-                    onClick={() => {
-                      setTrueInterview(false);
-                      setTtsEnabled(true);
-                    }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-[10px] font-medium transition-colors ${
-                      !trueInterview
-                        ? "bg-violet-600 text-white"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    One at a Time
-                  </button>
+              {/* Interview Mode — mutually exclusive (hidden in brainstorm which forces conversation) */}
+              {!isBrainstorm && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Mode</p>
+                  <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 border">
+                    <button
+                      onClick={() => {
+                        setTrueInterview(true);
+                        setTtsEnabled(true);
+                        unlockMobileAudio();
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-[10px] font-medium transition-colors ${
+                        trueInterview
+                          ? "bg-emerald-600 text-white"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Radio className="w-3 h-3" />
+                      Conversation
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTrueInterview(false);
+                        setTtsEnabled(true);
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-[10px] font-medium transition-colors ${
+                        !trueInterview
+                          ? "bg-violet-600 text-white"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Volume2 className="w-3 h-3" />
+                      One at a Time
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground/60">
+                    {trueInterview
+                      ? "Hands-free voice dialog — questions spoken aloud, mic auto-listens"
+                      : "Questions read aloud one at a time — type or speak your answers manually"}
+                  </p>
                 </div>
-                <p className="text-[9px] text-muted-foreground/60">
-                  {trueInterview
-                    ? "Hands-free voice dialog — questions spoken aloud, mic auto-listens"
-                    : "Questions read aloud one at a time — type or speak your answers manually"}
-                </p>
-              </div>
+              )}
+              {isBrainstorm && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Mode</p>
+                  <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                      Live voice — mic stays on, interrupt anytime
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Voice selection (visible when TTS enabled) */}
               {ttsEnabled && (
@@ -834,7 +901,9 @@ export function FlowInterviewOverlay({
                     onClick={handleStart}
                   >
                     <Play className="w-3.5 h-3.5" />
-                    {entries.length > 0 ? "Continue Interview" : trueInterview ? "Start True Interview" : "Start Interview"}
+                    {entries.length > 0
+                      ? (isBrainstorm ? "Continue Brainstorm" : "Continue Interview")
+                      : isBrainstorm ? "Start Brainstorm" : trueInterview ? "Start True Interview" : "Start Interview"}
                   </Button>
                 ) : (
                   <Button
@@ -876,9 +945,14 @@ export function FlowInterviewOverlay({
                   </>
                 )}
 
-                {!objective.trim() && stance !== "autobiography" && (
+                {!objective.trim() && stance !== "autobiography" && !isBrainstorm && (
                   <p className="text-[10px] text-muted-foreground/60 text-center">
                     No objective? No problem — the interview will start with an open question
+                  </p>
+                )}
+                {!objective.trim() && isBrainstorm && (
+                  <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 text-center">
+                    Open brainstorm — we'll explore whatever you want to discuss
                   </p>
                 )}
                 {!objective.trim() && stance === "autobiography" && (
@@ -898,13 +972,20 @@ export function FlowInterviewOverlay({
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center space-y-3 max-w-sm">
                 <MessageCircleQuestion className="w-12 h-12 text-cyan-500/30 mx-auto" />
-                <h3 className="text-lg font-semibold text-muted-foreground/70">Ready to Interview</h3>
+                <h3 className="text-lg font-semibold text-muted-foreground/70">
+                  {isBrainstorm ? "Ready to Brainstorm" : "Ready to Interview"}
+                </h3>
                 <p className="text-sm text-muted-foreground/50 leading-relaxed">
-                  Set your objective, choose an interview style, and click Start.
-                  The journalist will ask probing questions — answer with voice or text.
-                  {trueInterview
-                    ? " In True Interview mode, answers auto-submit after a pause."
-                    : ' Say "Provo Message" to submit your answer.'}
+                  {isBrainstorm
+                    ? "Set a topic (optional), then click Start. You'll have a fluid voice conversation — just start talking to interrupt at any time."
+                    : <>
+                        Set your objective, choose an interview style, and click Start.
+                        The journalist will ask probing questions — answer with voice or text.
+                        {trueInterview
+                          ? " In True Interview mode, answers auto-submit after a pause."
+                          : ' Say "Provo Message" to submit your answer.'}
+                      </>
+                  }
                 </p>
               </div>
             </div>
@@ -917,12 +998,15 @@ export function FlowInterviewOverlay({
                 {/* Previous entries */}
                 {entries.map((entry) => (
                   <div key={entry.id} className="space-y-2">
-                    {/* Question */}
+                    {/* Question / AI response */}
                     <div className="flex justify-start">
                       <div className="max-w-[85%] bg-card border rounded-xl rounded-bl-sm p-3">
                         <div className="flex items-center gap-1.5 mb-1.5">
-                          <MessageCircleQuestion className="w-3.5 h-3.5 text-cyan-500" />
-                          <Badge variant="outline" className="text-[10px] h-4">{entry.topic}</Badge>
+                          {isBrainstorm
+                            ? <Zap className="w-3.5 h-3.5 text-amber-500" />
+                            : <MessageCircleQuestion className="w-3.5 h-3.5 text-cyan-500" />
+                          }
+                          {!isBrainstorm && <Badge variant="outline" className="text-[10px] h-4">{entry.topic}</Badge>}
                         </div>
                         <p className="text-sm leading-relaxed">{entry.question}</p>
                       </div>
@@ -950,19 +1034,24 @@ export function FlowInterviewOverlay({
                 {currentQuestion && !questionMutation.isPending && (
                   <div className="space-y-3">
                     <div className="flex justify-start">
-                      <div className="max-w-[85%] bg-card border border-cyan-500/30 rounded-xl rounded-bl-sm p-3">
+                      <div className={`max-w-[85%] bg-card border rounded-xl rounded-bl-sm p-3 ${isBrainstorm ? "border-amber-500/30" : "border-cyan-500/30"}`}>
                         <div className="flex items-center gap-1.5 mb-1.5">
-                          <MessageCircleQuestion className="w-3.5 h-3.5 text-cyan-500" />
-                          {currentTopic && <Badge className="text-[10px] h-4 bg-cyan-500/20 text-cyan-700 dark:text-cyan-300">{currentTopic}</Badge>}
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="sm" className="gap-1 text-xs h-5 px-1.5 ml-auto text-muted-foreground" onClick={handleSkip}>
-                                <SkipForward className="w-3 h-3" />
-                                Skip
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Skip this question</TooltipContent>
-                          </Tooltip>
+                          {isBrainstorm
+                            ? <Zap className="w-3.5 h-3.5 text-amber-500" />
+                            : <MessageCircleQuestion className="w-3.5 h-3.5 text-cyan-500" />
+                          }
+                          {currentTopic && !isBrainstorm && <Badge className="text-[10px] h-4 bg-cyan-500/20 text-cyan-700 dark:text-cyan-300">{currentTopic}</Badge>}
+                          {!isBrainstorm && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="sm" className="gap-1 text-xs h-5 px-1.5 ml-auto text-muted-foreground" onClick={handleSkip}>
+                                  <SkipForward className="w-3 h-3" />
+                                  Skip
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Skip this question</TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                         <p className="text-sm font-medium leading-relaxed">{currentQuestion}</p>
                       </div>
@@ -989,22 +1078,29 @@ export function FlowInterviewOverlay({
                             </div>
                           )}
                           {conversationTurn.state === "AI_SPEAKING" && (
-                            <div className="flex items-center gap-2 text-xs text-violet-500 animate-pulse">
-                              <Volume2 className="w-4 h-4" />
-                              Speaking...
-                              {/* Waveform bars */}
-                              <div className="flex items-end gap-0.5 h-4">
-                                {[1, 2, 3, 4, 5].map((i) => (
-                                  <div
-                                    key={i}
-                                    className="w-0.5 bg-violet-500 rounded-full animate-pulse"
-                                    style={{
-                                      height: `${8 + Math.random() * 8}px`,
-                                      animationDelay: `${i * 0.1}s`,
-                                    }}
-                                  />
-                                ))}
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="flex items-center gap-2 text-xs text-violet-500 animate-pulse">
+                                <Volume2 className="w-4 h-4" />
+                                Speaking...
+                                {/* Waveform bars */}
+                                <div className="flex items-end gap-0.5 h-4">
+                                  {[1, 2, 3, 4, 5].map((i) => (
+                                    <div
+                                      key={i}
+                                      className="w-0.5 bg-violet-500 rounded-full animate-pulse"
+                                      style={{
+                                        height: `${8 + Math.random() * 8}px`,
+                                        animationDelay: `${i * 0.1}s`,
+                                      }}
+                                    />
+                                  ))}
+                                </div>
                               </div>
+                              {stance === "brainstorm" && (
+                                <span className="text-[10px] text-muted-foreground/50">
+                                  just start talking to interrupt
+                                </span>
+                              )}
                             </div>
                           )}
                           {conversationTurn.state === "LISTENING" && (

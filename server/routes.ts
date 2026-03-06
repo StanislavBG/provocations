@@ -4099,6 +4099,188 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
     }
   });
 
+  // ── Brainstorm streaming endpoint (multi-context TTS with interruption) ──
+  // Similar to /api/interview/question/stream but uses multi-context WS for
+  // interrupt support and a more conversational brainstorm-style system prompt.
+  app.post("/api/interview/brainstorm/stream", async (req, res) => {
+    try {
+      const body = req.body;
+      const parsed = interviewQuestionRequestSchema.safeParse(body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const voiceId = typeof body.voiceId === "string" ? body.voiceId : undefined;
+      const contextId = typeof body.contextId === "string" ? body.contextId : `ctx_${Date.now()}`;
+
+      const { objective, document: docText, previousEntries, directionGuidance, chainContext } = parsed.data;
+
+      // Build previous context
+      const previousContext = previousEntries && previousEntries.length > 0
+        ? previousEntries.slice(-10).map(e => `You: ${e.question}\nUser: ${e.answer}`).join("\n\n")
+        : "No conversation yet — this is the opening.";
+
+      const documentContext = docText ? `\n\nREFERENCE MATERIAL:\n${docText.slice(0, 3000)}` : "";
+      const chainContextBlock = chainContext ? `\n\nADDITIONAL CONTEXT:\n${chainContext}` : "";
+      const guidanceBlock = directionGuidance ? `\n\nFOCUS: ${directionGuidance}` : "";
+
+      const systemPrompt = `You are a creative brainstorm partner having a real-time voice conversation. You're energetic, curious, and build on ideas collaboratively.
+
+YOUR STYLE:
+- Keep responses SHORT — 1-3 sentences max. This is a live conversation, not an essay.
+- Be reactive and specific — reference what the user JUST said.
+- Riff on their ideas, add unexpected angles, make surprising connections.
+- Ask a brief follow-up question at the end to keep momentum.
+- Use conversational language — contractions, enthusiasm, natural speech patterns.
+- Never be generic. Never repeat what they said back to them.
+- Think of yourself as a brilliant friend who's excited about their idea.
+
+TOPIC: ${objective || "Open brainstorm — help the user explore and develop whatever they want to discuss."}
+${documentContext}${guidanceBlock}${chainContextBlock}
+
+RECENT CONVERSATION:
+${previousContext}
+
+Respond naturally — no JSON, no formatting, no markdown. Just speak like a human in conversation. Keep it under 100 words.`;
+
+      const userPrompt = previousEntries && previousEntries.length > 0
+        ? `The user just said: "${previousEntries[previousEntries.length - 1].answer}"\n\nRespond naturally and ask a brief follow-up.`
+        : "Start the brainstorm. Greet the user briefly and ask an exciting opening question about their topic.";
+
+      // SSE setup
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      const sendEvent = (type: string, data: Record<string, unknown>) => {
+        res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+      };
+
+      // Send the context ID so the client can reference it for interruption
+      sendEvent("context", { contextId });
+
+      // Stream LLM response
+      const stream = llm.stream({
+        maxTokens: 256,
+        temperature: 1.0,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+
+      let fullText = "";
+      let sentenceBuffer = "";
+
+      // Multi-context TTS session
+      let ttsSession: any = null;
+      let ttsErrored = false;
+      try {
+        const elevenlabs = await import("./elevenlabs.js");
+        if (elevenlabs.isAvailable() && voiceId) {
+          ttsSession = elevenlabs.createMultiContextSession(voiceId);
+          ttsSession.onAudio((base64Chunk: string, audioCtxId: string) => {
+            if (audioCtxId === contextId) {
+              sendEvent("audio", { data: base64Chunk });
+            }
+          });
+          ttsSession.onContextDone((doneCtxId: string) => {
+            if (doneCtxId === contextId) {
+              sendEvent("audio_done", {});
+            }
+          });
+          ttsSession.onError((err: Error) => {
+            console.error("Brainstorm TTS error:", err.message);
+            ttsErrored = true;
+            sendEvent("tts_error", { message: "TTS error — falling back to text" });
+          });
+          await ttsSession.ready;
+        }
+      } catch {
+        // TTS not available
+      }
+
+      // Handle client disconnect (interruption)
+      let aborted = false;
+      res.on("close", () => {
+        aborted = true;
+        if (ttsSession) {
+          try { ttsSession.closeContext(contextId); } catch {}
+          try { ttsSession.close(); } catch {}
+        }
+      });
+
+      // Hybrid TTS feeding
+      let lastTtsSendTime = Date.now();
+      const TTS_CHAR_THRESHOLD = 80; // shorter for brainstorm
+      const TTS_TIME_THRESHOLD_MS = 120;
+      let ttsSendTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const flushBufferToTts = () => {
+        if (!ttsSession || ttsErrored || !sentenceBuffer.trim() || aborted) return;
+        ttsSession.sendToContext(contextId, sentenceBuffer.trim());
+        sentenceBuffer = "";
+        lastTtsSendTime = Date.now();
+        if (ttsSendTimer) { clearTimeout(ttsSendTimer); ttsSendTimer = null; }
+      };
+
+      const scheduleTtsFlush = () => {
+        if (ttsSendTimer) return;
+        const elapsed = Date.now() - lastTtsSendTime;
+        const delay = Math.max(0, TTS_TIME_THRESHOLD_MS - elapsed);
+        ttsSendTimer = setTimeout(flushBufferToTts, delay);
+      };
+
+      for await (const chunk of stream) {
+        if (aborted) break;
+
+        fullText += chunk;
+        sentenceBuffer += chunk;
+        sendEvent("text", { chunk });
+
+        if (ttsSession && !ttsErrored) {
+          const sentenceEnd = sentenceBuffer.match(/[.!?,:;]\s/);
+          if (sentenceEnd && sentenceBuffer.length > 15) {
+            flushBufferToTts();
+          } else if (sentenceBuffer.length >= TTS_CHAR_THRESHOLD) {
+            flushBufferToTts();
+          } else {
+            scheduleTtsFlush();
+          }
+        }
+      }
+
+      // Flush remaining
+      if (ttsSendTimer) clearTimeout(ttsSendTimer);
+      if (!aborted) {
+        if (sentenceBuffer.trim() && ttsSession && !ttsErrored) {
+          ttsSession.sendToContext(contextId, sentenceBuffer.trim());
+          ttsSession.flushContext(contextId);
+        } else if (ttsSession && !ttsErrored) {
+          ttsSession.flushContext(contextId);
+        }
+
+        sendEvent("done", { text: fullText });
+      }
+
+      // Clean up TTS session after audio finishes (give it time to drain)
+      if (ttsSession && !aborted) {
+        setTimeout(() => {
+          try { ttsSession.close(); } catch {}
+        }, 10000);
+      }
+
+      if (!aborted) res.end();
+    } catch (error) {
+      console.error("Brainstorm stream error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Stream failed" });
+      } else {
+        res.end();
+      }
+    }
+  });
+
   // Summarize interview entries into a coherent instruction for the writer
   app.post("/api/interview/summary", async (req, res) => {
     try {
