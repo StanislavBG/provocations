@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.12.4";
+export const APP_VERSION = "0.12.6";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,24 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.12.6",
+    date: "2026-03-05",
+    changes: [
+      "Fix blank page when loading inactive/deleted canvas — status bar and navigation always render so users are never stuck",
+      "Show error banner with 'New Canvas' and 'Open Canvas' buttons when a canvas fails to load",
+      "Clear localStorage immediately on canvas load failure to prevent retry loops",
+    ],
+  },
+  {
+    version: "0.12.5",
+    date: "2026-03-05",
+    changes: [
+      "Fix chain auto-start on canvas load — re-seed chain watcher when loading saved canvases so completed nodes don't trigger downstream execution",
+      "Fix duplicate chain execution — re-entrance guard prevents the same node from running concurrently when multiple upstream nodes complete simultaneously",
+      "Fix Replace mode race condition — single-execution guarantee ensures old outputs are properly replaced instead of accumulating",
+    ],
+  },
   {
     version: "0.12.4",
     date: "2026-03-05",
