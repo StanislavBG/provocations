@@ -858,12 +858,14 @@ function FlowWorkspaceInner() {
     } catch { /* localStorage unavailable */ }
   }, [canvasDocumentId, canvasTitle]);
 
-  // ── Auto-load last canvas on mount ──
+  // ── Auto-load canvas on mount (from URL or localStorage) ──
   const autoLoadedRef = useRef(false);
   useEffect(() => {
     if (autoLoadedRef.current) return;
     if (!canvasDocumentId) return;
-    if (state.nodes.length > 0) return; // Already has content
+    // If the ID came from the URL, always load it (even if canvas has content from a prior tab)
+    // If from localStorage, skip if canvas already has content
+    if (!urlCanvasId && state.nodes.length > 0) return;
     autoLoadedRef.current = true;
     (async () => {
       setCanvasLoading(true);
@@ -892,7 +894,8 @@ function FlowWorkspaceInner() {
           setLocation(`/canvas/${canvasDocumentId}`, { replace: true });
         }
       } catch {
-        // Canvas no longer exists — clear the stored ID
+        // Canvas not found or not authorized
+        toast({ title: "Canvas not found", description: `Could not load canvas #${canvasDocumentId}`, variant: "destructive" });
         setCanvasDocumentId(null);
       } finally {
         setCanvasLoading(false);
