@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useEffect, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRoute, useLocation } from "wouter";
-import { cn } from "@/lib/utils";
+import { cn, generateId } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@clerk/clerk-react";
 import { FtuxShellProvider, useFtuxShell } from "@/lib/ftux-shell-context";
@@ -12,8 +12,8 @@ import { FtuxStatusBar } from "@/components/ftux/FtuxStatusBar";
 import { FtuxDock } from "@/components/ftux/FtuxDock";
 import { FlowCanvas } from "@/components/flow/FlowCanvas";
 import { useFlowCanvas } from "@/components/flow/useFlowCanvas";
-import type { FlowNode, FlowEdge, FlowViewport, EdgeRole } from "@/components/flow/useFlowCanvas";
-import { ROLE_AWARE_TARGETS } from "@/components/flow/useFlowCanvas";
+import type { FlowNode, FlowEdge, FlowViewport, EdgeRole, FlowNodeType } from "@/components/flow/useFlowCanvas";
+import { ROLE_AWARE_TARGETS, DEFAULT_DIMENSIONS } from "@/components/flow/useFlowCanvas";
 import { useMinimapState } from "@/components/flow/useMinimapState";
 import { NotebookResearchChat } from "@/components/notebook/NotebookResearchChat";
 import { DEFAULT_SHELL_CONFIG } from "@/lib/ftux-shell-context";
@@ -244,9 +244,17 @@ function FlowWorkspaceInner() {
   const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasTheme, setCanvasTheme, keyBinds } = useFtuxShell();
   const {
     state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteNodes, deleteEdge,
-    selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas, resetCanvas,
+    selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas: loadCanvasRaw, resetCanvas,
     undo, redo,
   } = useFlowCanvas();
+  const canvasGenerationRef = useRef(0);
+  const loadCanvas = useCallback(
+    (snapshot: Parameters<typeof loadCanvasRaw>[0]) => {
+      canvasGenerationRef.current++;
+      loadCanvasRaw(snapshot);
+    },
+    [loadCanvasRaw],
+  );
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { user } = useUser();
@@ -334,6 +342,7 @@ function FlowWorkspaceInner() {
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
+  const [canvasLoadError, setCanvasLoadError] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
   // Resolve the active canvas theme
   const activeTheme = CANVAS_STYLES.find((t) => t.key === canvasTheme) ?? CANVAS_STYLES[0];
@@ -383,6 +392,8 @@ function FlowWorkspaceInner() {
     { id: "main", label: "Canvas 1", snapshot: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } } },
   ]);
   const [activeTabId, setActiveTabId] = useState("main");
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
 
   const switchTab = useCallback((targetTabId: string) => {
@@ -894,9 +905,15 @@ function FlowWorkspaceInner() {
           setLocation(`/canvas/${canvasDocumentId}`, { replace: true });
         }
       } catch {
-        // Canvas not found or not authorized
-        toast({ title: "Canvas not found", description: `Could not load canvas #${canvasDocumentId}`, variant: "destructive" });
-        setCanvasDocumentId(null);
+        // Canvas not found, inactive, or not authorized — stay on page with status bar visible.
+        // Clear localStorage immediately so a refresh doesn't retry the same broken canvas.
+        try {
+          localStorage.removeItem("flow:lastCanvasId");
+          localStorage.removeItem("flow:lastCanvasTitle");
+        } catch { /* ignore */ }
+        setCanvasLoadError(`Canvas #${canvasDocumentId} could not be loaded. It may have been deleted or you don't have access.`);
+        setCanvasDocumentIdRaw(null);
+        setCanvasTitle("");
       } finally {
         setCanvasLoading(false);
         setLoadProgress(undefined);
@@ -1410,9 +1427,14 @@ function FlowWorkspaceInner() {
 
   const handlePlayNode = useCallback(
     async (nodeId: string) => {
-      const node = stateRef.current.nodes.find((n) => n.id === nodeId);
-      if (!node) return;
+      // Re-entrance guard: prevent concurrent execution of the same node
+      if (executingNodesRef.current.has(nodeId)) return;
+      executingNodesRef.current.add(nodeId);
 
+      const node = stateRef.current.nodes.find((n) => n.id === nodeId);
+      if (!node) { executingNodesRef.current.delete(nodeId); return; }
+
+      try {
       const t0 = performance.now();
       const def = FLOW_NODE_REGISTRY[node.type];
       const preset: LifecyclePreset = def?.lifecyclePreset || "passive";
@@ -1718,6 +1740,9 @@ function FlowWorkspaceInner() {
         updateNode(nodeId, { llmStatus: "error", snippet: "Execution failed" });
         toast({ title: "Execution failed", variant: "destructive" });
       }
+      } finally {
+        executingNodesRef.current.delete(nodeId);
+      }
     },
     [addNode, addEdge, updateNode, toast, lcLog, replaceDownstreamOutputs],
   );
@@ -1732,10 +1757,14 @@ function FlowWorkspaceInner() {
   // (via handlePlayNode, internal Run button, or lifecycle engine).
   const chainPropagatedRef = useRef<Map<string, number>>(new Map());
   const chainWatcherInitRef = useRef(false);
+  const lastSeededGenerationRef = useRef(0);
+  const executingNodesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!chainWatcherInitRef.current) {
-      // First render: seed tracking for already-done nodes (loaded from save)
+    // First render OR canvas load: seed tracking for already-done nodes
+    // so loaded "done" nodes don't trigger downstream execution
+    if (!chainWatcherInitRef.current || lastSeededGenerationRef.current !== canvasGenerationRef.current) {
+      chainPropagatedRef.current.clear();
       for (const node of state.nodes) {
         if (node.llmStatus === "done") {
           const version = node.type === "timer-event" ? (node.timerPulseCount || 0) : 0;
@@ -1743,6 +1772,7 @@ function FlowWorkspaceInner() {
         }
       }
       chainWatcherInitRef.current = true;
+      lastSeededGenerationRef.current = canvasGenerationRef.current;
       return;
     }
 
@@ -2618,6 +2648,34 @@ function FlowWorkspaceInner() {
           ...(canvasFontSize && canvasFontSize !== 14 ? { fontSize: `${canvasFontSize}px` } : {}),
         }}
       >
+        {/* Error banner when a canvas fails to load */}
+        {canvasLoadError && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto bg-card/95 backdrop-blur-sm border border-border rounded-lg p-6 max-w-md text-center shadow-lg space-y-4">
+              <p className="text-sm text-muted-foreground">{canvasLoadError}</p>
+              <div className="flex gap-2 justify-center">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    setCanvasLoadError(null);
+                    setLocation("/", { replace: true });
+                  }}
+                >
+                  New Canvas
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOpenCanvasDialogOpen(true)}
+                >
+                  <FolderOpen className="w-4 h-4 mr-1" />
+                  Open Canvas
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         <FlowCanvas
           state={state}
           frozen={frozen}
