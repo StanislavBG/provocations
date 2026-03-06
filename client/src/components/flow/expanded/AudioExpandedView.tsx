@@ -40,7 +40,7 @@ export function AudioExpandedView({ node, onUpdateNode }: AudioExpandedViewProps
       audioTranscript: "",
       content: "",
       documentContent: "",
-      snippet: "Double-click to start recording",
+      snippet: "Record audio via microphone — speech is transcribed in real-time using browser speech recognition",
     });
     toast({ title: "Transcript cleared" });
   }, [node.id, onUpdateNode, toast]);

@@ -9,6 +9,7 @@ import {
   NODE_ICONS,
   ACCENT_BG,
   PLAYABLE_TYPES,
+  FLOW_NODE_REGISTRY,
 } from "./FlowNodeRegistry";
 
 // Re-export from registry for backward compatibility with external consumers
@@ -238,11 +239,17 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
         {deleteButton}
       </div>
 
-      {/* Content snippet */}
+      {/* Content snippet — shows node output, or detailed usage instructions when empty */}
       <div className="px-2 py-1.5 overflow-hidden flex-1">
-        <p className="text-[10px] text-muted-foreground/80 leading-relaxed line-clamp-4">
-          {node.snippet || "No preview available"}
-        </p>
+        {node.snippet ? (
+          <p className="text-[10px] text-muted-foreground/80 leading-relaxed line-clamp-4">
+            {node.snippet}
+          </p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground/50 leading-relaxed line-clamp-6 italic">
+            {FLOW_NODE_REGISTRY[node.type]?.inputDescription || "Double-click to configure"}
+          </p>
+        )}
       </div>
 
       {/* Port dots */}

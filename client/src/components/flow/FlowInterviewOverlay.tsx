@@ -236,7 +236,7 @@ export function FlowInterviewOverlay({
           : "Interview",
         snippet: entries.length > 0
           ? `${entries[entries.length - 1].topic}: ${entries[entries.length - 1].answer.slice(0, 80)}...`
-          : objective.slice(0, 100) || "Double-click to start interview",
+          : objective.slice(0, 100) || "Guided Q&A session — define an objective, then answer AI-generated questions to build structured knowledge",
       });
     }, 300);
     return () => {

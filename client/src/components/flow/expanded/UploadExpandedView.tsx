@@ -199,7 +199,7 @@ export function UploadExpandedView({ node, onUpdateNode }: UploadExpandedViewPro
       const updated = files.filter((f) => f.id !== fileId);
       onUpdateNode(node.id, {
         uploadFiles: updated,
-        snippet: updated.length ? `${updated.length} file(s)` : "Double-click to upload files",
+        snippet: updated.length ? `${updated.length} file(s)` : "Upload files (images, PDFs, text) — drag-and-drop or browse to attach documents for downstream processing",
         uploadStatus: updated.length ? "done" : "idle",
       });
       if (selectedFileId === fileId) setSelectedFileId(null);

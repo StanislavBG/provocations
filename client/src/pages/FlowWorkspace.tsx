@@ -91,7 +91,7 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "context", label: "Context", icon: "BookOpen", group: "gather" },
   { toolId: "label", label: "Label", icon: "Type", group: "gather" },
   { toolId: "zone", label: "Zone", icon: "SquareDashedBottom", group: "gather" },
-  { toolId: "audio", label: "Voice Capture", icon: "AudioLines", group: "gather" },
+  { toolId: "audio", label: "Capture Audio", icon: "Mic", group: "gather" },
   { toolId: "youtube", label: "YouTube", icon: "Youtube", group: "gather" },
   { toolId: "upload", label: "Upload", icon: "Upload", group: "gather" },
   { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop" },
@@ -1555,6 +1555,26 @@ function FlowWorkspaceInner() {
     [deleteNodes],
   );
 
+  // ── Helper: find a non-overlapping position for a new output node ──
+
+  const findOpenSlot = useCallback(
+    (targetX: number, targetY: number, nodeWidth: number, nodeHeight: number, gap: number = 40): { x: number; y: number } => {
+      const existing = stateRef.current.nodes;
+      let y = targetY;
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const overlaps = existing.some((n) => {
+          const ax1 = targetX, ay1 = y, ax2 = targetX + nodeWidth, ay2 = y + nodeHeight;
+          const bx1 = n.x - gap, by1 = n.y - gap, bx2 = n.x + n.width + gap, by2 = n.y + n.height + gap;
+          return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+        });
+        if (!overlaps) return { x: targetX, y };
+        y += nodeHeight + gap;
+      }
+      return { x: targetX, y };
+    },
+    [],
+  );
+
   // ── Play node: auto-execute a node using its inputs ──
 
   const handlePlayNode = useCallback(
@@ -1806,7 +1826,9 @@ function FlowWorkspaceInner() {
               content: result.content,
               snippet: `Pass: ${result.score}% — ${result.reasoning.slice(0, 80)}`,
             });
-            const outputDocId = scopedAddNode("document", node.x + node.width + 60, node.y, {
+            const docDims = DEFAULT_DIMENSIONS["document"] || { width: 200, height: 100 };
+            const slot = findOpenSlot(node.x + node.width + 60, node.y, docDims.width, docDims.height);
+            const outputDocId = scopedAddNode("document", slot.x, slot.y, {
               label: `${node.label} Output`,
               documentContent: result.content,
               snippet: result.content.slice(0, 200),
@@ -1900,12 +1922,14 @@ function FlowWorkspaceInner() {
           const sections = isAnySplit
             ? splitOutputByDelimiters(finalOutput, 5)
             : splitOutputIntoSections(finalOutput, fixedSplitCount);
+          const splitDocDims = DEFAULT_DIMENSIONS["document"] || { width: 200, height: 100 };
           for (let i = 0; i < sections.length; i++) {
             const headingMatch = sections[i].match(/^#{1,3}\s+(.+)$/m);
             const sectionLabel = headingMatch
               ? headingMatch[1].slice(0, 50)
               : `${node.label} [${i + 1}/${sections.length}]`;
-            const docId = scopedAddNode("document", node.x + node.width + 60, node.y + i * 160, {
+            const splitSlot = findOpenSlot(node.x + node.width + 60, node.y + i * (splitDocDims.height + 40), splitDocDims.width, splitDocDims.height);
+            const docId = scopedAddNode("document", splitSlot.x, splitSlot.y, {
               label: sectionLabel,
               documentContent: sections[i],
               snippet: sections[i].slice(0, 200),
@@ -1915,7 +1939,9 @@ function FlowWorkspaceInner() {
           lcLog(node, "post-process", "success", `Created ${sections.length} split output documents`);
           toast({ title: "Execution complete", description: `Created ${sections.length} output documents` });
         } else {
-          const outputDocId = scopedAddNode("document", node.x + node.width + 60, node.y, {
+          const singleDocDims = DEFAULT_DIMENSIONS["document"] || { width: 200, height: 100 };
+          const singleSlot = findOpenSlot(node.x + node.width + 60, node.y, singleDocDims.width, singleDocDims.height);
+          const outputDocId = scopedAddNode("document", singleSlot.x, singleSlot.y, {
             label: `${node.label} Output`,
             documentContent: finalOutput,
             snippet: finalOutput.slice(0, 200),
@@ -2661,7 +2687,7 @@ function FlowWorkspaceInner() {
         content: n.content,
         documentContent: n.documentContent,
         snippet: n.snippet,
-        role: roleMap.get(n.id) as "context" | "objective" | undefined,
+        role: roleMap.get(n.id) as "context" | "objective" | "output-format" | undefined,
       })),
       outputNodes: outputNodes.map((n) => ({
         id: n.id,
