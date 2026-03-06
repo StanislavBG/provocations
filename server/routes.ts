@@ -6337,9 +6337,14 @@ Output only valid JSON, no markdown wrapping.`,
 
   // ─── YouTube Channel → Infographic Pipeline ────────────────────────────
 
-  // Fetch video list from a YouTube channel URL
+  // Fetch video list from a YouTube channel URL — YouTube Data API v3
   app.post("/api/youtube/channel", async (req, res) => {
     try {
+      const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+      if (!YOUTUBE_API_KEY) {
+        return res.status(501).json({ error: "YouTube API key not configured", details: "Set YOUTUBE_API_KEY environment variable" });
+      }
+
       const parsed = youtubeChannelRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
@@ -6349,52 +6354,92 @@ Output only valid JSON, no markdown wrapping.`,
 
       // Extract channel identifier from various URL formats
       // Supported: /channel/UC..., /@handle, /c/CustomName, /user/Username
-      let channelQuery = channelUrl.trim();
-      const channelMatch = channelUrl.match(
-        /youtube\.com\/(?:channel\/|@|c\/|user\/)?([^\/?&#]+)/
-      );
-      if (channelMatch) {
-        channelQuery = channelMatch[1];
+      let channelId: string | null = null;
+      let handle: string | null = null;
+
+      const channelIdMatch = channelUrl.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]+)/);
+      const handleMatch = channelUrl.match(/youtube\.com\/@([^\/?&#]+)/);
+      const customMatch = channelUrl.match(/youtube\.com\/(?:c\/|user\/)([^\/?&#]+)/);
+
+      if (channelIdMatch) {
+        channelId = channelIdMatch[1];
+      } else if (handleMatch) {
+        handle = handleMatch[1];
+      } else if (customMatch) {
+        handle = customMatch[1];
+      } else {
+        // Treat raw input as handle or channel ID
+        const raw = channelUrl.trim();
+        if (raw.startsWith("UC")) channelId = raw;
+        else handle = raw.replace(/^@/, "");
       }
 
-      // Use LLM to simulate channel video list extraction
-      // (In production, this would call the YouTube Data API v3)
-      const response = await llm.generate({
-        maxTokens: 4096,
-        temperature: 0.3,
-        system: `You are a YouTube channel content analyzer. Given a channel URL or identifier, generate a realistic list of recent videos that such a channel might have.
+      // Resolve channel to get uploads playlist
+      let channelsUrl: string;
+      if (channelId) {
+        channelsUrl = `https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&id=${encodeURIComponent(channelId)}&key=${YOUTUBE_API_KEY}`;
+      } else {
+        channelsUrl = `https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&forHandle=${encodeURIComponent(handle!)}&key=${YOUTUBE_API_KEY}`;
+      }
 
-Output ONLY valid JSON matching this exact schema:
-{
-  "channelTitle": "Channel Name",
-  "channelId": "UC_identifier",
-  "videos": [
-    {
-      "videoId": "unique_id_11chars",
-      "title": "Video Title",
-      "description": "Brief description of the video content",
-      "publishedAt": "2025-01-15T10:00:00Z",
-      "thumbnailUrl": "https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg",
-      "channelTitle": "Channel Name"
-    }
-  ]
-}
+      const channelRes = await fetch(channelsUrl);
+      if (!channelRes.ok) {
+        const errBody = await channelRes.text();
+        throw new Error(`YouTube channels API error: ${channelRes.status} ${errBody}`);
+      }
+      const channelData = await channelRes.json() as {
+        items?: Array<{
+          id: string;
+          snippet: { title: string };
+          contentDetails: { relatedPlaylists: { uploads: string } };
+        }>;
+      };
 
-Generate ${maxResults} videos. Make the content realistic and topically coherent for the channel.
-Output ONLY the JSON — no markdown, no explanation.`,
-        messages: [
-          {
-            role: "user",
-            content: `Channel URL: ${channelUrl}\nChannel identifier: ${channelQuery}\nGenerate ${maxResults} recent videos.`,
-          },
-        ],
-      });
+      if (!channelData.items || channelData.items.length === 0) {
+        return res.status(404).json({ error: "Channel not found" });
+      }
 
-      // Parse the LLM response as JSON
-      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-      const channelData = JSON.parse(jsonText) as YouTubeChannelResponse;
+      const channel = channelData.items[0];
+      const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads;
+      const channelTitle = channel.snippet.title;
+      const resolvedChannelId = channel.id;
 
-      res.json(channelData);
+      // Fetch recent uploads via playlistItems
+      const plUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${encodeURIComponent(uploadsPlaylistId)}&maxResults=${maxResults}&key=${YOUTUBE_API_KEY}`;
+      const plRes = await fetch(plUrl);
+      if (!plRes.ok) {
+        const errBody = await plRes.text();
+        throw new Error(`YouTube playlistItems API error: ${plRes.status} ${errBody}`);
+      }
+      const plData = await plRes.json() as {
+        items?: Array<{
+          snippet: {
+            resourceId: { videoId: string };
+            title: string;
+            description: string;
+            publishedAt: string;
+            thumbnails?: { high?: { url: string }; medium?: { url: string }; default?: { url: string } };
+            channelTitle: string;
+          };
+        }>;
+      };
+
+      const videos = (plData.items || []).map((item) => ({
+        videoId: item.snippet.resourceId.videoId,
+        title: item.snippet.title,
+        description: item.snippet.description?.slice(0, 200) || "",
+        publishedAt: item.snippet.publishedAt,
+        thumbnailUrl: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${item.snippet.resourceId.videoId}/hqdefault.jpg`,
+        channelTitle: item.snippet.channelTitle || channelTitle,
+      }));
+
+      const result: YouTubeChannelResponse = {
+        channelTitle,
+        channelId: resolvedChannelId,
+        videos,
+      };
+
+      res.json(result);
     } catch (error) {
       console.error("YouTube channel fetch error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -6402,43 +6447,95 @@ Output ONLY the JSON — no markdown, no explanation.`,
     }
   });
 
-  // ── YouTube Search — LLM-powered search (no YouTube API key needed) ──
+  // ── YouTube Search — YouTube Data API v3 ──
   app.post("/api/youtube/search", async (req, res) => {
     try {
+      const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+      if (!YOUTUBE_API_KEY) {
+        return res.status(501).json({ error: "YouTube API key not configured", details: "Set YOUTUBE_API_KEY environment variable" });
+      }
+
       const parsed = youtubeSearchRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
       }
       const { query, maxResults } = parsed.data;
 
-      const response = await llm.generate({
-        maxTokens: 4096,
-        temperature: 0.3,
-        system: `You are a YouTube search results generator. Given a search query, generate realistic YouTube search results that would actually appear for this query. Each result must have a real-looking 11-character videoId, realistic title, description, channel name, publish date, and thumbnail URL.
+      // Step 1: Search for videos
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${YOUTUBE_API_KEY}`;
+      const searchRes = await fetch(searchUrl);
+      if (!searchRes.ok) {
+        const errBody = await searchRes.text();
+        throw new Error(`YouTube search API error: ${searchRes.status} ${errBody}`);
+      }
+      const searchData = await searchRes.json() as {
+        items?: Array<{
+          id: { videoId: string };
+          snippet: {
+            title: string;
+            description: string;
+            channelTitle: string;
+            publishedAt: string;
+            thumbnails?: { high?: { url: string }; medium?: { url: string }; default?: { url: string } };
+          };
+        }>;
+      };
 
-Output ONLY valid JSON array matching this schema:
-[
-  {
-    "videoId": "xxxxxxxxxxx",
-    "title": "Video Title",
-    "description": "Brief description",
-    "channelTitle": "Channel Name",
-    "publishedAt": "2025-01-15T10:00:00Z",
-    "thumbnailUrl": "https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg",
-    "duration": "12:34",
-    "viewCount": "1.2M"
-  }
-]
+      const items = searchData.items || [];
+      const videoIds = items.map((item) => item.id.videoId).join(",");
 
-Generate ${maxResults} results. Make titles, descriptions, and channels realistic for the topic.
-Output ONLY the JSON array — no markdown, no explanation.`,
-        messages: [
-          { role: "user", content: `Search query: "${query}"\nGenerate ${maxResults} YouTube search results.` },
-        ],
+      // Step 2: Get duration and view counts via videos endpoint
+      let videoDetails: Record<string, { duration: string; viewCount: string }> = {};
+      if (videoIds) {
+        const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${YOUTUBE_API_KEY}`;
+        const detailsRes = await fetch(detailsUrl);
+        if (detailsRes.ok) {
+          const detailsData = await detailsRes.json() as {
+            items?: Array<{
+              id: string;
+              contentDetails: { duration: string };
+              statistics: { viewCount: string };
+            }>;
+          };
+          for (const d of detailsData.items || []) {
+            // Convert ISO 8601 duration (PT1H2M3S) to human-readable
+            const iso = d.contentDetails.duration;
+            const hMatch = iso.match(/(\d+)H/);
+            const mMatch = iso.match(/(\d+)M/);
+            const sMatch = iso.match(/(\d+)S/);
+            const h = hMatch ? parseInt(hMatch[1]) : 0;
+            const m = mMatch ? parseInt(mMatch[1]) : 0;
+            const s = sMatch ? parseInt(sMatch[1]) : 0;
+            const duration = h > 0
+              ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+              : `${m}:${String(s).padStart(2, "0")}`;
+
+            // Format view count
+            const views = parseInt(d.statistics.viewCount || "0");
+            let viewCount: string;
+            if (views >= 1_000_000) viewCount = `${(views / 1_000_000).toFixed(1)}M`;
+            else if (views >= 1_000) viewCount = `${(views / 1_000).toFixed(1)}K`;
+            else viewCount = String(views);
+
+            videoDetails[d.id] = { duration, viewCount };
+          }
+        }
+      }
+
+      const results: YouTubeSearchResult[] = items.map((item) => {
+        const details = videoDetails[item.id.videoId];
+        return {
+          videoId: item.id.videoId,
+          title: item.snippet.title,
+          description: item.snippet.description?.slice(0, 200) || "",
+          channelTitle: item.snippet.channelTitle,
+          publishedAt: item.snippet.publishedAt,
+          thumbnailUrl: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg`,
+          duration: details?.duration,
+          viewCount: details?.viewCount,
+        };
       });
 
-      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-      const results = JSON.parse(jsonText) as YouTubeSearchResult[];
       res.json({ query, results });
     } catch (error) {
       console.error("YouTube search error:", error);
@@ -6446,9 +6543,14 @@ Output ONLY the JSON array — no markdown, no explanation.`,
     }
   });
 
-  // ── YouTube Playlist ──
+  // ── YouTube Playlist — YouTube Data API v3 ──
   app.post("/api/youtube/playlist", async (req, res) => {
     try {
+      const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+      if (!YOUTUBE_API_KEY) {
+        return res.status(501).json({ error: "YouTube API key not configured", details: "Set YOUTUBE_API_KEY environment variable" });
+      }
+
       const parsed = youtubePlaylistRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
@@ -6459,37 +6561,73 @@ Output ONLY the JSON array — no markdown, no explanation.`,
       const plMatch = playlistUrl.match(/[?&]list=([a-zA-Z0-9_-]+)/);
       const playlistId = plMatch ? plMatch[1] : playlistUrl.trim();
 
-      const response = await llm.generate({
-        maxTokens: 4096,
-        temperature: 0.3,
-        system: `You are a YouTube playlist content analyzer. Given a playlist URL or ID, generate a realistic list of videos that such a playlist might contain.
+      // Fetch playlist metadata
+      const plMetaUrl = `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${encodeURIComponent(playlistId)}&key=${YOUTUBE_API_KEY}`;
+      const plMetaRes = await fetch(plMetaUrl);
+      let playlistTitle = "Playlist";
+      if (plMetaRes.ok) {
+        const plMetaData = await plMetaRes.json() as {
+          items?: Array<{ snippet: { title: string } }>;
+        };
+        if (plMetaData.items && plMetaData.items.length > 0) {
+          playlistTitle = plMetaData.items[0].snippet.title;
+        }
+      }
 
-Output ONLY valid JSON matching this schema:
-{
-  "playlistTitle": "Playlist Title",
-  "playlistId": "${playlistId}",
-  "videos": [
-    {
-      "videoId": "xxxxxxxxxxx",
-      "title": "Video Title",
-      "description": "Brief description",
-      "publishedAt": "2025-01-15T10:00:00Z",
-      "thumbnailUrl": "https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg",
-      "channelTitle": "Channel Name"
-    }
-  ]
-}
+      // Fetch playlist items (paginate if needed for larger playlists)
+      let allItems: Array<{
+        snippet: {
+          resourceId: { videoId: string };
+          title: string;
+          description: string;
+          publishedAt: string;
+          thumbnails?: { high?: { url: string }; medium?: { url: string }; default?: { url: string } };
+          channelTitle: string;
+        };
+      }> = [];
+      let nextPageToken: string | undefined;
+      let remaining = maxResults;
 
-Generate ${maxResults} videos. Make the content realistic and topically coherent.
-Output ONLY the JSON — no markdown, no explanation.`,
-        messages: [
-          { role: "user", content: `Playlist URL: ${playlistUrl}\nPlaylist ID: ${playlistId}\nGenerate ${maxResults} videos.` },
-        ],
-      });
+      while (remaining > 0) {
+        const pageSize = Math.min(remaining, 50);
+        let plItemsUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${encodeURIComponent(playlistId)}&maxResults=${pageSize}&key=${YOUTUBE_API_KEY}`;
+        if (nextPageToken) plItemsUrl += `&pageToken=${nextPageToken}`;
 
-      const jsonText = response.text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-      const playlistData = JSON.parse(jsonText) as YouTubePlaylistResponse;
-      res.json(playlistData);
+        const plItemsRes = await fetch(plItemsUrl);
+        if (!plItemsRes.ok) {
+          const errBody = await plItemsRes.text();
+          throw new Error(`YouTube playlistItems API error: ${plItemsRes.status} ${errBody}`);
+        }
+        const plItemsData = await plItemsRes.json() as {
+          items?: typeof allItems;
+          nextPageToken?: string;
+        };
+
+        const items = plItemsData.items || [];
+        allItems = allItems.concat(items);
+        remaining -= items.length;
+        nextPageToken = plItemsData.nextPageToken;
+        if (!nextPageToken || items.length === 0) break;
+      }
+
+      const videos = allItems
+        .filter((item) => item.snippet.resourceId.videoId) // skip deleted/private videos
+        .map((item) => ({
+          videoId: item.snippet.resourceId.videoId,
+          title: item.snippet.title,
+          description: item.snippet.description?.slice(0, 200) || "",
+          publishedAt: item.snippet.publishedAt,
+          thumbnailUrl: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${item.snippet.resourceId.videoId}/hqdefault.jpg`,
+          channelTitle: item.snippet.channelTitle || "",
+        }));
+
+      const result: YouTubePlaylistResponse = {
+        playlistTitle,
+        playlistId,
+        videos,
+      };
+
+      res.json(result);
     } catch (error) {
       console.error("YouTube playlist error:", error);
       res.status(500).json({ error: "Playlist fetch failed", details: error instanceof Error ? error.message : "Unknown error" });
