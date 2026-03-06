@@ -27,6 +27,23 @@ import {
 } from "./lifecycles/timer";
 import { lifecycleLogStore, type LifecyclePhase, type LifecycleStatus } from "@/lib/lifecycleLog";
 
+/** Flag downstream audio nodes to auto-start recording when a trigger fires. */
+function flagAudioNodes(
+  triggerId: string,
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  updateNode: (nodeId: string, patch: Partial<FlowNode>) => void,
+) {
+  const outputEdges = edges.filter((e) => e.fromNodeId === triggerId);
+  for (const edge of outputEdges) {
+    const target = nodes.find((n) => n.id === edge.toNodeId);
+    if (!target) continue;
+    if (target.type === "audio") {
+      updateNode(target.id, { autoStartRecording: true });
+    }
+  }
+}
+
 // ── Types ──
 
 interface LifecycleEngineOpts {
@@ -154,6 +171,10 @@ export function useLifecycleEngine(opts: LifecycleEngineOpts) {
               log(freshCtx.node, "post-process", "success", "Output document updated");
             }
 
+            // Flag downstream audio nodes for auto-start recording
+            const { nodes: latestNodes, edges: latestEdges } = stateRef.current;
+            flagAudioNodes(node.id, latestNodes, latestEdges, mutRef.current.updateNode);
+
             // Chain propagation
             if (downstream.length > 0) {
               log(ctx.node, "chain", "start", `Propagating to ${downstream.length} downstream node(s)`, { downstreamIds: downstream });
@@ -228,6 +249,10 @@ export function useLifecycleEngine(opts: LifecycleEngineOpts) {
           );
           const elapsed = Math.round(performance.now() - t0);
           log(ctx.node, "tick", "success", `Fired by "${inputNode.label}"`, { durationMs: elapsed });
+
+          // Flag downstream audio nodes for auto-start recording
+          const { nodes: latestNodes2, edges: latestEdges2 } = stateRef.current;
+          flagAudioNodes(node.id, latestNodes2, latestEdges2, mutRef.current.updateNode);
 
           // Chain propagation
           if (downstream.length > 0) {

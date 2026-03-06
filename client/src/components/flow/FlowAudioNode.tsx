@@ -36,6 +36,15 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
     setIsRecording(node.audioRecording ?? false);
   }, [node.audioRecording]);
 
+  // Auto-start recording when flagged by a trigger node
+  useEffect(() => {
+    if (node.autoStartRecording && !isRecording) {
+      startRecording();
+      // Clear the flag after starting
+      onUpdateNode(node.id, { autoStartRecording: false });
+    }
+  }, [node.autoStartRecording]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const startRecording = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;

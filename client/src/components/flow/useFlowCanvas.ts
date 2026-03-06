@@ -72,6 +72,8 @@ export interface FlowNode {
   audioRecording?: boolean;
   /** Audio node: transcript text */
   audioTranscript?: string;
+  /** Audio node: auto-start recording flag (set by trigger nodes) */
+  autoStartRecording?: boolean;
   /** Image data URL (base64 PNG) — used by painter output and image documents */
   imageUrl?: string;
   /** YouTube node: the URL pasted by the user */

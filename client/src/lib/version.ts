@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.14.3";
+export const APP_VERSION = "0.14.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.14.4",
+    date: "2026-03-06",
+    changes: [
+      "Fix brainstorm stance not starting without objective — schema now allows empty objective, client provides sensible default",
+      "Fix brainstorm conversation dying after first AI response — state machine now cycles even without TTS audio",
+      "Fix trigger nodes unable to auto-fire audio capture — triggers now set autoStartRecording flag on downstream audio nodes",
+    ],
+  },
   {
     version: "0.14.3",
     date: "2026-03-06",
