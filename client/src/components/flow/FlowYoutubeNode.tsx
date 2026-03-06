@@ -207,6 +207,14 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
               src={node.youtubeThumbnailUrl}
               alt="Thumbnail"
               className="w-full h-12 object-cover rounded border border-border/30"
+              onError={(e) => {
+                const img = e.currentTarget;
+                // Fallback to default quality thumbnail
+                const vid = extractVideoId(node.youtubeUrl || "");
+                if (vid && !img.src.includes("/default.jpg")) {
+                  img.src = `https://i.ytimg.com/vi/${vid}/default.jpg`;
+                }
+              }}
             />
           </div>
         )}
