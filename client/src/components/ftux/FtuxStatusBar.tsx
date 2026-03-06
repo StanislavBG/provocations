@@ -145,7 +145,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
 
   const pinnedByGroup = useMemo(() => {
     const groups: Record<string, string[]> = {};
-    for (const toolId of statusBarPinnedItems) {
+    for (const toolId of statusBarPinnedItems ?? []) {
       const dockItem = dockItems.find((d) => d.toolId === toolId);
       const group = dockItem?.group || "other";
       if (!groups[group]) groups[group] = [];
