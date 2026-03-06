@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.12.3";
+export const APP_VERSION = "0.12.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.12.4",
+    date: "2026-03-05",
+    changes: [
+      "Fix /canvas/:id URL loading — always load from URL even if canvas has prior content",
+      "Show error toast when canvas fails to load instead of silently redirecting",
+    ],
+  },
   {
     version: "0.12.3",
     date: "2026-03-05",
