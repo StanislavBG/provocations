@@ -256,6 +256,43 @@ export function FlowCanvas({
     if (node.type === "document") return (
       <FlowDocumentNode key={node.id} node={node} isSelected={sel} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onPortMouseDown={handlePortMouseDown} />
     );
+    if (node.type === "upload") {
+      const files = node.uploadFiles ?? [];
+      const firstImage = files.find(f => f.type?.startsWith("image/"));
+      return (
+        <FlowNodeContainer
+          key={node.id}
+          node={node}
+          isSelected={sel}
+          zoom={state.viewport.zoom}
+          onMouseDown={handleNodeMouseDown}
+          onDoubleClick={handleNodeDoubleClick}
+          onDelete={onDeleteNode}
+          onToggleLock={onToggleLock}
+          onPortMouseDown={handlePortMouseDown}
+          onPlayNode={onPlayNode}
+          onUpdateNode={onUpdateNode}
+        >
+          <div className="px-2 py-1.5 overflow-hidden flex-1 flex items-center gap-2">
+            {firstImage ? (
+              <img
+                src={firstImage.dataUrl}
+                alt={firstImage.name}
+                className="w-8 h-8 rounded object-cover shrink-0"
+                draggable={false}
+              />
+            ) : files.length > 0 ? (
+              <div className="w-8 h-8 rounded bg-muted/40 flex items-center justify-center shrink-0">
+                <BookOpen className="w-4 h-4 text-muted-foreground/60" />
+              </div>
+            ) : null}
+            <p className="text-[10px] text-muted-foreground/80 leading-relaxed line-clamp-3">
+              {files.length > 0 ? `${files.length} file${files.length !== 1 ? "s" : ""}` : "No files uploaded"}
+            </p>
+          </div>
+        </FlowNodeContainer>
+      );
+    }
     if (node.type === "label") return (
       <FlowLabelNode key={node.id} node={node} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} />
     );

@@ -540,7 +540,7 @@ export interface WorkspaceState {
 }
 
 // Document type for icon display in the Context Store
-export const docTypes = ["document", "image", "timeline", "chart", "note"] as const;
+export const docTypes = ["document", "image", "video", "pdf", "media", "timeline", "chart", "note"] as const;
 export type DocType = (typeof docTypes)[number];
 
 // Document save/load schemas (server-side encryption, Clerk auth for ownership)

@@ -53,9 +53,11 @@ import { ApiConnectionExpandedView } from "@/components/flow/expanded/ApiConnect
 import { CoherenceGateExpandedView } from "@/components/flow/expanded/CoherenceGateExpandedView";
 import { NotificationExpandedView } from "@/components/flow/expanded/NotificationExpandedView";
 import { StoreExpandedView } from "@/components/flow/expanded/StoreExpandedView";
+import { UploadExpandedView } from "@/components/flow/expanded/UploadExpandedView";
 import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
 import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { PlatformIntegrations } from "@/components/PlatformIntegrations";
+import { ContextStoreManager } from "@/components/ContextStoreManager";
 import {
   Dialog,
   DialogContent,
@@ -76,7 +78,7 @@ import {
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
-  Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench,
+  Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench, Info,
 } from "lucide-react";
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
@@ -90,6 +92,7 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "zone", label: "Zone", icon: "SquareDashedBottom", group: "gather" },
   { toolId: "audio", label: "Voice Capture", icon: "AudioLines", group: "gather" },
   { toolId: "youtube", label: "YouTube", icon: "Youtube", group: "gather" },
+  { toolId: "upload", label: "Upload", icon: "Upload", group: "gather" },
   { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop" },
   { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", group: "workshop" },
   { toolId: "llm", label: "Text Mods", icon: "Brain", group: "build" },
@@ -387,6 +390,7 @@ function FlowWorkspaceInner() {
   const collabEnabled = true;
   const [lifecycleConsoleOpen, setLifecycleConsoleOpen] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [contextStoreOpen, setContextStoreOpen] = useState(false);
   const [pendingContextAction, setPendingContextAction] = useState<{ x: number; y: number; mode?: "load" | "save" } | null>(null);
 
   // ── Workspace tabs ──
@@ -2114,6 +2118,15 @@ function FlowWorkspaceInner() {
         });
         return;
       }
+      if (toolId === "upload") {
+        addNode("upload", canvasX, canvasY, {
+          label: "Upload",
+          snippet: "Double-click to upload files",
+          uploadFiles: [],
+          uploadStatus: "idle",
+        });
+        return;
+      }
     },
     [addNode],
   );
@@ -2445,12 +2458,6 @@ function FlowWorkspaceInner() {
 
   const headerActions = (
     <div className="flex items-center gap-0.5 mr-2 border-r border-border/30 pr-2">
-      {canvasTitle && (
-        <span className="text-[10px] text-muted-foreground mr-1 max-w-[120px] truncate">
-          {canvasTitle}
-        </span>
-      )}
-
       {/* Canvas Manager dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -2497,38 +2504,6 @@ function FlowWorkspaceInner() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Blueprints dropdown — dynamic from API */}
-      <BlueprintsMenu
-        onLoadBlueprint={handleLoadBlueprint}
-        onSaveBlueprint={async (label: string, description: string) => {
-          // Snapshot current canvas as blueprint
-          const nodes = state.nodes
-            .filter((n) => n.type !== "zone" && n.type !== "label")
-            .map((n) => {
-              const { id, type, x: nx, y: ny, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt } = n;
-              return { id, type, x: nx - state.nodes[0].x, y: ny - state.nodes[0].y, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt };
-            });
-          const edges = state.edges.map((e) => ({
-            fromNodeId: e.fromNodeId,
-            toNodeId: e.toNodeId,
-            role: e.role,
-          }));
-          try {
-            const res = await apiRequest("POST", "/api/blueprints", {
-              label,
-              description,
-              nodes,
-              edges,
-            });
-            const data = await res.json();
-            toast({ title: "Blueprint saved", description: `"${label}" saved successfully` });
-            return data;
-          } catch (err) {
-            toast({ title: "Failed to save blueprint", variant: "destructive" });
-          }
-        }}
-      />
-
       {/* View dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -2538,7 +2513,7 @@ function FlowWorkspaceInner() {
             <ChevronDown className="w-2.5 h-2.5 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuContent align="start" className="w-44">
           <DropdownMenuItem onClick={handleZoomIn} className="text-xs gap-2">
             <ZoomIn className="w-3.5 h-3.5" />
             Zoom In
@@ -2560,6 +2535,13 @@ function FlowWorkspaceInner() {
             Fit to Screen
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => setDetailsPanelOpen((v) => !v)}
+            className="text-xs gap-2"
+          >
+            <Info className={`w-3.5 h-3.5 ${detailsPanelOpen ? "text-primary" : ""}`} />
+            {detailsPanelOpen ? "Hide Node Details" : "Show Node Details"}
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setFrozen((f) => !f)}
             className="text-xs gap-2"
@@ -2584,17 +2566,6 @@ function FlowWorkspaceInner() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Release Notes button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-6 gap-1 text-[10px] px-2"
-        onClick={() => setReleaseNotesOpen(true)}
-      >
-        <ScrollText className="w-3 h-3" />
-        v{APP_VERSION}
-      </Button>
 
       {/* Collaboration presence indicator */}
       {collabEnabled && (
@@ -2758,11 +2729,43 @@ function FlowWorkspaceInner() {
         onOpenCanvas={handleOpenCanvas}
         onDeleteCanvas={(id, title) => setDeleteConfirm({ id, title })}
         canvasLoading={canvasLoading}
-        onToggleDetails={() => setDetailsPanelOpen((v) => !v)}
-        detailsOpen={detailsPanelOpen}
         onOpenActivityLogs={() => setLifecycleConsoleOpen(true)}
         onOpenConnections={() => setConnectionsDialogOpen(true)}
         onOpenIntegrations={() => setIntegrationsDialogOpen(true)}
+        onOpenContextStore={() => setContextStoreOpen(true)}
+        appVersion={APP_VERSION}
+        onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
+        blueprintsSlot={
+          <BlueprintsMenu
+            onLoadBlueprint={handleLoadBlueprint}
+            onSaveBlueprint={async (label: string, description: string) => {
+              const nodes = state.nodes
+                .filter((n) => n.type !== "zone" && n.type !== "label")
+                .map((n) => {
+                  const { id, type, x: nx, y: ny, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt } = n;
+                  return { id, type, x: nx - state.nodes[0].x, y: ny - state.nodes[0].y, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt };
+                });
+              const edges = state.edges.map((e) => ({
+                fromNodeId: e.fromNodeId,
+                toNodeId: e.toNodeId,
+                role: e.role,
+              }));
+              try {
+                const res = await apiRequest("POST", "/api/blueprints", {
+                  label,
+                  description,
+                  nodes,
+                  edges,
+                });
+                const data = await res.json();
+                toast({ title: "Blueprint saved", description: `"${label}" saved successfully` });
+                return data;
+              } catch (err) {
+                toast({ title: "Failed to save blueprint", variant: "destructive" });
+              }
+            }}
+          />
+        }
       />
 
       {/* Workspace tabs */}
@@ -3757,6 +3760,14 @@ function FlowWorkspaceInner() {
                 />
               );
 
+            case "upload":
+              return (
+                <UploadExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                />
+              );
+
             case "notification":
               return (
                 <NotificationExpandedView
@@ -3851,6 +3862,7 @@ function FlowWorkspaceInner() {
 
       {/* Platform Integrations dialog */}
       <PlatformIntegrations open={integrationsDialogOpen} onOpenChange={setIntegrationsDialogOpen} />
+      <ContextStoreManager open={contextStoreOpen} onOpenChange={setContextStoreOpen} />
 
       {/* Share Canvas dialog */}
       {canvasDocumentId && (

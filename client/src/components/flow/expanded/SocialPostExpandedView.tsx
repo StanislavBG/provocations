@@ -5,8 +5,8 @@
  * Right panel: tabbed preview of generated posts per platform.
  */
 
-import { useState, useCallback, useMemo } from "react";
-import { Play, Loader2, Check, RefreshCw, Share2, Settings2 } from "lucide-react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { Play, Loader2, Check, RefreshCw, Share2, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,6 +17,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { SOCIAL_PLATFORMS, type PlatformId } from "@/lib/social-platforms";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
+import { ImageCustomizer } from "@/components/ImageCustomizer";
 
 interface SocialPostExpandedViewProps {
   node: FlowNode;
@@ -48,6 +49,7 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("");
   const [connectionStatus, setConnectionStatus] = useState<Record<string, { connected: boolean; status: string }>>({});
+  const [imageCustomizerOpen, setImageCustomizerOpen] = useState(false);
 
   const platforms = node.socialPlatforms || {};
   const intent = node.socialIntent || "marketing";
@@ -96,6 +98,11 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
       setActiveTab(platformId);
     }
   }, [platforms, node.id, onUpdateNode, activeTab]);
+
+  // Reset customizer when switching platforms
+  useEffect(() => {
+    setImageCustomizerOpen(false);
+  }, [activeTab]);
 
   const lcLog = useCallback(
     (phase: "pre-process" | "process" | "post-process", status: "start" | "success" | "error", message: string, extra?: { durationMs?: number; error?: string }) => {
@@ -403,14 +410,44 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
                 showClear={false}
               />
 
-              {/* Thumbnail preview */}
+              {/* Image preview */}
               {currentPost.imageUrl && (
-                <div className="border rounded-lg overflow-hidden">
-                  <img
-                    src={currentPost.imageUrl}
-                    alt="Post thumbnail"
-                    className="w-full max-h-64 object-cover"
-                  />
+                <div className="space-y-2">
+                  {imageCustomizerOpen ? (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="flex items-center justify-between px-2 py-1.5 bg-muted/30 border-b">
+                        <span className="text-xs font-medium">Post Image</span>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setImageCustomizerOpen(false)}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <ImageCustomizer
+                        src={currentPost.imageUrl}
+                        showMeta={false}
+                        showCrop
+                        showUpload={false}
+                        showGenerate={false}
+                        compact
+                        readOnly
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="border rounded-lg overflow-hidden cursor-pointer group relative"
+                      onClick={() => setImageCustomizerOpen(true)}
+                    >
+                      <img
+                        src={currentPost.imageUrl}
+                        alt="Post thumbnail"
+                        className="w-full max-h-64 object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                        <span className="text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 px-2 py-1 rounded">
+                          Click to customize
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

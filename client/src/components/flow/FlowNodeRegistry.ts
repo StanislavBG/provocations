@@ -27,6 +27,7 @@ import {
   Wifi,
   ShieldCheck,
   Bell,
+  Upload,
 } from "lucide-react";
 import type { FlowNodeType, PortDef } from "./useFlowCanvas";
 
@@ -609,6 +610,32 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     minHeight: 100,
     inputDescription: "Content from upstream nodes. When triggered, sends a notification with a summary of the input to assigned users.",
     outputDescription: "Notification delivery status (sent/failed). Terminal node — no downstream output.",
+  },
+  upload: {
+    type: "upload",
+    style: {
+      border: "border-emerald-500/60",
+      bg: "bg-card",
+      headerBg: "bg-emerald-500/15",
+      headerBorder: "border-emerald-500/40",
+      iconClass: "text-emerald-500",
+      badgeBg: "bg-emerald-500/25",
+      badgeText: "text-emerald-600 dark:text-emerald-400",
+      badge: "Upload",
+      accent: "emerald",
+    },
+    icon: Upload,
+    defaultWidth: 220,
+    defaultHeight: 160,
+    ports: [{ side: "right", type: "output" }],
+    expandMode: "overlay",
+    playable: false,
+    supportsChainExecution: false,
+    lifecyclePreset: "passive",
+    minWidth: 160,
+    minHeight: 120,
+    inputDescription: "No input — files are uploaded directly by the user via drag-and-drop or file browser.",
+    outputDescription: "File content (text for documents, base64 data URL for media). Connected downstream nodes receive the uploaded content.",
   },
   label: {
     type: "label",

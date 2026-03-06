@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.13.3";
+export const APP_VERSION = "0.14.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,19 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.14.0",
+    date: "2026-03-06",
+    changes: [
+      "Upload node: new flow canvas node for drag-and-drop file uploads (images, video, PDF, text) with image customizer and Context Store save",
+      "ImageCustomizer component: reusable drag-to-pan viewport, position/scale sliders, crop presets, metadata/tag editor — embeddable in Upload, Painter, Social Post",
+      "Context Store Manager: full-screen overlay (Settings gear → Context Store) with folder tree, file list (list/grid view), upload, preview, rename, move, delete",
+      "Backend file upload: POST /api/upload with multer multipart handling, server-side encryption, 50MB limit",
+      "Extended docTypes: added video, pdf, media types for richer file classification",
+      "Status bar reorganization: Canvas Style + Release Notes + Node Details consolidated into gear/View menus, grouped pinned items with category labels, Blueprints icon-only button",
+      "Store node enhanced: folder CRUD and document browser in expanded view",
+    ],
+  },
   {
     version: "0.13.3",
     date: "2026-03-06",

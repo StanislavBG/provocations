@@ -209,13 +209,13 @@ export function FtuxDock() {
   const positionClasses = dockSnapped
     ? {
         bottom: "fixed bottom-0 left-0 right-0 z-40",
-        top: "fixed top-[var(--ftux-status-bar-height,36px)] left-0 right-0 z-40",
+        top: "fixed top-[var(--ftux-status-bar-height,44px)] left-0 right-0 z-40",
         left: "fixed left-0 top-0 bottom-0 z-40",
         right: "fixed right-0 top-0 bottom-0 z-40",
       }
     : {
         bottom: "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
-        top: "fixed top-[calc(var(--ftux-status-bar-height,36px)+12px)] left-1/2 -translate-x-1/2 z-40",
+        top: "fixed top-[calc(var(--ftux-status-bar-height,44px)+12px)] left-1/2 -translate-x-1/2 z-40",
         left: "fixed left-4 top-1/2 -translate-y-1/2 z-40",
         right: "fixed right-4 top-1/2 -translate-y-1/2 z-40",
       };
@@ -241,7 +241,7 @@ export function FtuxDock() {
           className={cn(
             "fixed z-39",
             dockPosition === "bottom" && "bottom-0 left-0 right-0 h-4",
-            dockPosition === "top" && "top-[var(--ftux-status-bar-height,36px)] left-0 right-0 h-4",
+            dockPosition === "top" && "top-[var(--ftux-status-bar-height,44px)] left-0 right-0 h-4",
             dockPosition === "left" && "left-0 top-0 bottom-0 w-4",
             dockPosition === "right" && "right-0 top-0 bottom-0 w-4",
           )}
