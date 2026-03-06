@@ -52,6 +52,7 @@ import { SocialPostExpandedView } from "@/components/flow/expanded/SocialPostExp
 import { ApiConnectionExpandedView } from "@/components/flow/expanded/ApiConnectionExpandedView";
 import { CoherenceGateExpandedView } from "@/components/flow/expanded/CoherenceGateExpandedView";
 import { NotificationExpandedView } from "@/components/flow/expanded/NotificationExpandedView";
+import { ApprovalExpandedView } from "@/components/flow/expanded/ApprovalExpandedView";
 import { StoreExpandedView } from "@/components/flow/expanded/StoreExpandedView";
 import { UploadExpandedView } from "@/components/flow/expanded/UploadExpandedView";
 import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
@@ -103,6 +104,7 @@ const FLOW_DOCK_ITEMS: DockItem[] = [
   { toolId: "social-post", label: "Social Post", icon: "Share2", group: "build" },
   { toolId: "api-connection", label: "API Post", icon: "Wifi", group: "build" },
   { toolId: "notification", label: "Notify", icon: "Bell", group: "build" },
+  { toolId: "approval", label: "Approval", icon: "UserCheck", group: "build" },
 ];
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -1489,6 +1491,12 @@ function FlowWorkspaceInner() {
   const propagateDownstream = useCallback(
     (nodeId: string, node: FlowNode) => {
       const { nodes, edges } = stateRef.current;
+      // Block chain propagation past approval nodes that are pending or rejected
+      const sourceNode = nodes.find((n) => n.id === nodeId);
+      if (sourceNode?.type === "approval" && sourceNode.approvalStatus !== "approved") {
+        return;
+      }
+
       const downstreamEdges = edges.filter((e) => e.fromNodeId === nodeId);
       const downstreamIds: string[] = [];
       for (const edge of downstreamEdges) {
@@ -1815,6 +1823,30 @@ function FlowWorkspaceInner() {
           return;
         }
 
+        // -- Approval: set pending status, block chain --
+        if (preset === "approval") {
+          if (outputText === "__APPROVAL_PENDING__") {
+            scopedUpdate(nodeId, {
+              approvalStatus: "pending",
+              llmStatus: "done",
+              snippet: "Awaiting approval",
+            });
+            lcLog(node, "process", "success", "Approval request sent, chain paused", { durationMs: elapsed });
+            toast({ title: "Approval requested", description: "Chain will resume when approved" });
+          } else {
+            // Already approved — pass content through
+            scopedUpdate(nodeId, { llmStatus: "done", content: outputText, snippet: "Approved" });
+            const docId = scopedAddNode("document", node.x + node.width + 60, node.y, {
+              label: `${node.label} Output`,
+              documentContent: outputText,
+              snippet: outputText.slice(0, 200),
+            });
+            scopedAddEdge(nodeId, docId);
+            lcLog(node, "process", "success", "Approved — content passed through", { durationMs: elapsed });
+          }
+          return;
+        }
+
         // -- All other presets (stream, llm, logic, interview, generic): text output --
         if (!outputText?.trim()) {
           lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });
@@ -2126,6 +2158,16 @@ function FlowWorkspaceInner() {
           snippet: "Double-click to upload files",
           uploadFiles: [],
           uploadStatus: "idle",
+        });
+        return;
+      }
+      if (toolId === "approval") {
+        addNode("approval", canvasX, canvasY, {
+          label: "Approval",
+          snippet: "Double-click to configure",
+          approvalStatus: "idle",
+          approvalMessage: "Approval required for: {label}",
+          approvalUserIds: [],
         });
         return;
       }
@@ -3773,6 +3815,15 @@ function FlowWorkspaceInner() {
             case "notification":
               return (
                 <NotificationExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
+                />
+              );
+
+            case "approval":
+              return (
+                <ApprovalExpandedView
                   node={activeExpandedNode}
                   onUpdateNode={updateNode}
                   onPlayNode={handlePlayNode}

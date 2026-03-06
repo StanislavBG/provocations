@@ -17,6 +17,8 @@ import {
   CheckCircle,
   AlertCircle,
   X,
+  FolderOpen,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +26,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProvokeText } from "@/components/ProvokeText";
 import { ImageCustomizer } from "@/components/ImageCustomizer";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { generateId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "../useFlowCanvas";
@@ -94,6 +98,26 @@ export function UploadExpandedView({ node, onUpdateNode }: UploadExpandedViewPro
 
   const files: UploadFile[] = (node.uploadFiles as UploadFile[]) || [];
   const selectedFile = files.find((f) => f.id === selectedFileId) || null;
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+
+  // Fetch folders for picker
+  const { data: foldersRaw } = useQuery({
+    queryKey: ["/api/folders"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/folders");
+      const data = await res.json();
+      return (Array.isArray(data) ? data : data?.folders ?? data?.data ?? []) as Array<{ id: number; name: string; parentId?: number | null }>;
+    },
+  });
+  const folders = foldersRaw ?? [];
+
+  const handleSelectFolder = useCallback((folderId: number | null, folderName: string) => {
+    onUpdateNode(node.id, {
+      storeFolderId: folderId ?? undefined,
+      storeFolderName: folderName,
+    });
+    setFolderPickerOpen(false);
+  }, [node.id, onUpdateNode]);
 
   // ---- File handling ----
 
@@ -308,6 +332,51 @@ export function UploadExpandedView({ node, onUpdateNode }: UploadExpandedViewPro
             className="hidden"
             onChange={handleInputChange}
           />
+        </div>
+
+        {/* Destination Folder Picker */}
+        <div className="rounded-md border border-border bg-muted/20 px-2.5 py-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-1.5">
+              <FolderOpen className="w-3 h-3" />
+              Save to Folder
+            </label>
+            <button
+              className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+              onClick={() => setFolderPickerOpen(!folderPickerOpen)}
+            >
+              {node.storeFolderName || "Root (no folder)"}
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
+          {folderPickerOpen && (
+            <div className="mt-2 max-h-[120px] overflow-auto rounded border border-border bg-card p-1">
+              <button
+                className={cn(
+                  "w-full text-left text-xs px-2 py-1 rounded hover:bg-muted/50",
+                  !node.storeFolderId && "bg-primary/10 text-primary font-medium",
+                )}
+                onClick={() => handleSelectFolder(null, "Root")}
+              >
+                Root (no folder)
+              </button>
+              {folders.map((f) => (
+                <button
+                  key={f.id}
+                  className={cn(
+                    "w-full text-left text-xs px-2 py-1 rounded hover:bg-muted/50",
+                    node.storeFolderId === f.id && "bg-primary/10 text-primary font-medium",
+                  )}
+                  onClick={() => handleSelectFolder(f.id, f.name)}
+                >
+                  {f.name}
+                </button>
+              ))}
+              {folders.length === 0 && (
+                <div className="text-[10px] text-muted-foreground/50 py-1 text-center">No folders</div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* File list */}

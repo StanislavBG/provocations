@@ -293,6 +293,33 @@ export function FlowCanvas({
         </FlowNodeContainer>
       );
     }
+    if (node.type === "approval") {
+      const aStatus = node.approvalStatus || "idle";
+      const statusLabel = aStatus === "idle" ? "Not submitted" : aStatus === "pending" ? "Awaiting approval" : aStatus === "approved" ? "Approved" : "Rejected";
+      const statusColor = aStatus === "pending" ? "text-amber-500" : aStatus === "approved" ? "text-emerald-500" : aStatus === "rejected" ? "text-red-500" : "text-muted-foreground";
+      return (
+        <FlowNodeContainer
+          key={node.id}
+          node={node}
+          isSelected={sel}
+          zoom={state.viewport.zoom}
+          onMouseDown={handleNodeMouseDown}
+          onDoubleClick={handleNodeDoubleClick}
+          onDelete={onDeleteNode}
+          onToggleLock={onToggleLock}
+          onPortMouseDown={handlePortMouseDown}
+          onPlayNode={onPlayNode}
+          onUpdateNode={onUpdateNode}
+        >
+          <div className="px-2 py-1.5 overflow-hidden flex-1 flex flex-col gap-1">
+            <span className={`text-[10px] font-semibold ${statusColor}`}>{statusLabel}</span>
+            {(node.approvalUserIds?.length ?? 0) > 0 && (
+              <span className="text-[9px] text-muted-foreground/60">{node.approvalUserIds!.length} approver(s)</span>
+            )}
+          </div>
+        </FlowNodeContainer>
+      );
+    }
     if (node.type === "label") return (
       <FlowLabelNode key={node.id} node={node} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} />
     );

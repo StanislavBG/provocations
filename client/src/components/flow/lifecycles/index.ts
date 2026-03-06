@@ -18,6 +18,7 @@ import { createInterviewHandlers } from "./interview";
 import { createCoherenceHandlers } from "./coherence";
 import { createYoutubeHandlers } from "./youtube";
 import { createNotificationHandlers } from "./notification";
+import { createApprovalHandlers } from "./approval";
 
 /** No-op handlers for passive nodes (document, context-doc, store, audio, label, zone) */
 function createPassiveHandlers(): NodeLifecycleHandlers {
@@ -39,6 +40,7 @@ const LIFECYCLE_FACTORIES: Record<LifecyclePreset, () => NodeLifecycleHandlers> 
   coherence: createCoherenceHandlers,
   youtube: createYoutubeHandlers,
   notification: createNotificationHandlers,
+  approval: createApprovalHandlers,
 };
 
 /** Get lifecycle handlers for a given lifecycle preset */
@@ -58,3 +60,4 @@ export { createLogicHandlers } from "./logic";
 export { createInterviewHandlers } from "./interview";
 export { createCoherenceHandlers } from "./coherence";
 export { createNotificationHandlers } from "./notification";
+export { createApprovalHandlers } from "./approval";
