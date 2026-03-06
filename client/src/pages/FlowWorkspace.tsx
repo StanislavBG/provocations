@@ -35,7 +35,7 @@ import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { LifecyclePreset } from "@/components/flow/FlowNodeRegistry";
 import { useLifecycleEngine } from "@/components/flow/useLifecycleEngine";
 import { getLifecycleHandlers } from "@/components/flow/lifecycles/index";
-import { gatherInputContentWithRoles, gatherChainContext } from "@/components/flow/useNodeLifecycle";
+import { gatherInputContentWithRoles, gatherChainContext, gatherStructuredChainContext } from "@/components/flow/useNodeLifecycle";
 import type { NodeProcessContext } from "@/components/flow/useNodeLifecycle";
 import { parsePainterOutput } from "@/components/flow/lifecycles/painter";
 import { ActivityLogsOverlay } from "@/components/flow/ActivityLogsOverlay";
@@ -1356,16 +1356,34 @@ function FlowWorkspaceInner() {
 
   const propagateDownstream = useCallback(
     (nodeId: string, node: FlowNode) => {
-      const downstreamEdges = stateRef.current.edges.filter((e) => e.fromNodeId === nodeId);
+      const { nodes, edges } = stateRef.current;
+      const downstreamEdges = edges.filter((e) => e.fromNodeId === nodeId);
       const downstreamIds: string[] = [];
       for (const edge of downstreamEdges) {
-        const downstream = stateRef.current.nodes.find((n) => n.id === edge.toNodeId);
+        const downstream = nodes.find((n) => n.id === edge.toNodeId);
         if (!downstream) continue;
         const def = FLOW_NODE_REGISTRY[downstream.type];
-        if (def?.supportsChainExecution) {
+        if (!def?.supportsChainExecution) continue;
+
+        const mode = downstream.inputMode ?? "wait-all";
+
+        if (mode === "fire-each") {
+          // Fire immediately for this single input — no waiting for others
           downstreamIds.push(edge.toNodeId);
           const toId = edge.toNodeId;
           setTimeout(() => handlePlayNodeRef.current(toId), 500);
+        } else {
+          // Wait-all: only fire if ALL inputs to this downstream node are done
+          const allInputEdges = edges.filter((e) => e.toNodeId === downstream.id);
+          const allInputsSatisfied = allInputEdges.every((ie) => {
+            const inputNode = nodes.find((n) => n.id === ie.fromNodeId);
+            return inputNode && (inputNode.llmStatus === "done" || !FLOW_NODE_REGISTRY[inputNode.type]?.playable);
+          });
+          if (allInputsSatisfied) {
+            downstreamIds.push(edge.toNodeId);
+            const toId = edge.toNodeId;
+            setTimeout(() => handlePlayNodeRef.current(toId), 500);
+          }
         }
       }
       if (downstreamIds.length > 0) {
@@ -1430,6 +1448,8 @@ function FlowWorkspaceInner() {
       const { inputNodes, inputEdges, combinedContent, objectiveText, contextText, templateContent } =
         gatherInputContentWithRoles(nodeId, stateRef.current.nodes, stateRef.current.edges);
       const chainCtx = gatherChainContext(nodeId, stateRef.current.nodes, stateRef.current.edges);
+      const { immediateContext, fullChainContext } =
+        gatherStructuredChainContext(nodeId, stateRef.current.nodes, stateRef.current.edges);
 
       if (inputNodes.length === 0) {
         lcLog(node, "pre-process", "error", "No inputs connected", { error: "No upstream nodes" });
@@ -1447,6 +1467,7 @@ function FlowWorkspaceInner() {
         chainContext: chainCtx,
         signal: abortController.signal,
         objectiveText, contextText, templateContent,
+        immediateContext, fullChainContext,
       };
 
       // ── PRE-PROCESS: handler validation ──

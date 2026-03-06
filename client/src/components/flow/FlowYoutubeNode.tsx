@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { Youtube, Loader2, Trash2, Lock, Unlock, Monitor } from "lucide-react";
+import { InputModeToggle } from "./InputModeToggle";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -164,6 +165,7 @@ export const FlowYoutubeNode = React.memo(function FlowYoutubeNode({
       >
         <Youtube className="w-3 h-3 text-red-600 shrink-0" />
         <span className="text-[10px] font-medium truncate flex-1">{node.label || "YouTube"}</span>
+        <InputModeToggle node={node} onUpdateNode={onUpdateNode} />
         <span className="text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded bg-red-600/25 text-red-700 dark:text-red-400">
           Video
         </span>

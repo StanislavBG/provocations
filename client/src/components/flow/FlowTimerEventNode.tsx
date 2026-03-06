@@ -102,6 +102,17 @@ export const FlowTimerEventNode = React.memo(function FlowTimerEventNode({
           <button
             className={cn(
               "px-2 py-0.5 rounded-full text-[8px] font-medium transition-colors",
+              mode === "manual"
+                ? "bg-emerald-500/20 text-emerald-500"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => handleModeChange("manual")}
+          >
+            Manual
+          </button>
+          <button
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[8px] font-medium transition-colors",
               mode === "timed"
                 ? "bg-emerald-500/20 text-emerald-500"
                 : "text-muted-foreground hover:text-foreground",

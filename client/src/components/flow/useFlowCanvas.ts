@@ -228,6 +228,9 @@ export interface FlowNode {
   failureAcknowledged?: boolean;
   /** Chain execution: auto-trigger next node on completion (default true) */
   autoTriggerNext?: boolean;
+  /** Multi-input mode: "wait-all" waits for every input to complete before running (default);
+   *  "fire-each" runs the node independently for each input as it arrives */
+  inputMode?: "wait-all" | "fire-each";
 }
 
 export interface FlowEdge {

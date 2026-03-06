@@ -1,5 +1,6 @@
 import React, { useCallback } from "react";
 import { Sparkles, Play, Loader2, Trash2, Lock, Unlock, Monitor, Settings2 } from "lucide-react";
+import { InputModeToggle } from "./InputModeToggle";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -168,6 +169,8 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
             <span className="text-[7px] text-violet-400/50">{outputFormatEdges.length} template</span>
           )}
           <div className="ml-auto flex items-center gap-0.5">
+            <InputModeToggle node={node} onUpdateNode={onUpdateNode} />
+            <div className="w-px h-3 bg-muted-foreground/20 mx-0.5" />
             <button
               className={cn(
                 "text-[7px] px-1 py-0.5 rounded transition-colors",
