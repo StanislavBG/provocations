@@ -943,7 +943,8 @@ function FlowWorkspaceInner() {
       if (autoSaveFolderIdRef.current) return autoSaveFolderIdRef.current;
       try {
         const res = await apiRequest("GET", "/api/folders?parentFolderId=null");
-        const folders = await res.json();
+        const rawFolders = await res.json();
+        const folders = Array.isArray(rawFolders) ? rawFolders : (rawFolders.folders ?? []);
         const existing = folders.find((f: { name: string }) => f.name === "Canvas Auto-saves");
         if (existing) {
           autoSaveFolderIdRef.current = existing.id;
@@ -990,7 +991,8 @@ function FlowWorkspaceInner() {
           // Purge 5-min saves older than 1 hour from the folder
           try {
             const docsRes = await apiRequest("GET", "/api/documents");
-            const allDocs = await docsRes.json();
+            const raw = await docsRes.json();
+            const allDocs = Array.isArray(raw) ? raw : (raw.documents ?? []);
             const oneHourAgo = now - 3600_000;
             const old5Min = allDocs.filter(
               (d: { title: string; folderId: number | null; updatedAt: string }) =>

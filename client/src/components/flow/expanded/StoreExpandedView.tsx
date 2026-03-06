@@ -100,23 +100,35 @@ export function StoreExpandedView({
 
   // ── Data queries ──
 
-  const { data: folders = [] } = useQuery({
+  const { data: rawFolderData } = useQuery({
     queryKey: ["/api/folders"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/folders");
-      const data = await res.json();
-      return (data.folders ?? data) as FolderItem[];
+      return res.json();
     },
   });
 
-  const { data: documents = [] } = useQuery({
+  const folders: FolderItem[] = Array.isArray(rawFolderData)
+    ? rawFolderData
+    : Array.isArray((rawFolderData as any)?.folders)
+      ? (rawFolderData as any).folders
+      : [];
+
+  const { data: rawDocData } = useQuery({
     queryKey: ["/api/documents"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/documents");
-      const data = await res.json();
-      return (data.documents ?? data) as DocItem[];
+      return res.json();
     },
   });
+
+  // Normalise: cache may hold { documents: [...] } or a bare array depending on
+  // which component populated the shared ["/api/documents"] key first.
+  const documents: DocItem[] = Array.isArray(rawDocData)
+    ? rawDocData
+    : Array.isArray((rawDocData as any)?.documents)
+      ? (rawDocData as any).documents
+      : [];
 
   const rootFolders = folders.filter((f) => f.parentId === null);
   const getChildren = (parentId: number) => folders.filter((f) => f.parentId === parentId);
