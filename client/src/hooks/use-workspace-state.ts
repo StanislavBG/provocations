@@ -154,7 +154,11 @@ export function useWorkspaceState(initialTemplateId: string | null): WorkspaceSt
 
   // ── Persona state ──
   const [activePersonas, setActivePersonas] = useState<Set<ProvocationType>>(
-    () => new Set<ProvocationType>(["architect", "product_manager", "ux_designer", "quality_engineer"]),
+    () => {
+      const pool: ProvocationType[] = ["ceo", "product_manager", "quality_engineer", "ux_designer", "tech_writer", "growth_strategist", "brand_strategist", "content_strategist"];
+      const random = pool[Math.floor(Math.random() * pool.length)];
+      return new Set<ProvocationType>(["thinking_bigger", "architect", random]);
+    },
   );
 
   // ── Context pinning ──

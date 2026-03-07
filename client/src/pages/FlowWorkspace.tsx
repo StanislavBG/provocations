@@ -333,7 +333,11 @@ function FlowWorkspaceInner() {
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docLeftTab, setDocLeftTab] = useState<"tools" | "provo">("tools");
-  const [docActivePersonas, setDocActivePersonas] = useState<Set<ProvocationType>>(new Set());
+  const [docActivePersonas, setDocActivePersonas] = useState<Set<ProvocationType>>(() => {
+    const pool: ProvocationType[] = ["ceo", "product_manager", "quality_engineer", "ux_designer", "tech_writer", "growth_strategist", "brand_strategist", "content_strategist"];
+    const random = pool[Math.floor(Math.random() * pool.length)];
+    return new Set<ProvocationType>(["thinking_bigger", "architect", random]);
+  });
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
