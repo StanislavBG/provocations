@@ -263,9 +263,9 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
               const roles = edgeRoles(edge);
               if (roles.length === 0) return null;
               const ROLE_COLORS: Record<string, string> = {
-                objective: "rgba(59,130,246,0.85)",
-                "output-format": "rgba(139,92,246,0.85)",
-                context: "rgba(217,119,6,0.85)",
+                objective: "rgba(59,130,246,1)",
+                "output-format": "rgba(139,92,246,1)",
+                context: "rgba(217,119,6,1)",
               };
               const ROLE_SHORT: Record<string, string> = {
                 objective: "OBJ",
@@ -286,7 +286,7 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
                         width={pillW}
                         height={16}
                         rx={4}
-                        fill={ROLE_COLORS[r] || "rgba(100,100,100,0.85)"}
+                        fill={ROLE_COLORS[r] || "rgba(100,100,100,1)"}
                       />
                       <text
                         x={startX + i * (pillW + gap) + pillW / 2}

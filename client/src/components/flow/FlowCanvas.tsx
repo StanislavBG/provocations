@@ -23,6 +23,8 @@ import type { useMinimapState } from "./useMinimapState";
 interface FlowCanvasProps {
   state: FlowCanvasState;
   frozen?: boolean;
+  /** When true, all keyboard interactions (glide, space-pan) are suppressed */
+  disableKeys?: boolean;
   onMoveNode: (nodeId: string, x: number, y: number) => void;
   onMoveNodes?: (nodeIds: string[], dx: number, dy: number) => void;
   onDeleteNode: (nodeId: string) => void;
@@ -77,6 +79,7 @@ function isNodeVisible(
 export function FlowCanvas({
   state,
   frozen,
+  disableKeys,
   onMoveNode,
   onMoveNodes,
   onDeleteNode,
@@ -139,6 +142,7 @@ export function FlowCanvas({
     nodes: state.nodes,
     selectedNodeIds: state.selectedNodeIds,
     glideKeys: resolvedGlideKeys,
+    disableKeys,
   });
 
   // Track canvas dimensions for viewport culling

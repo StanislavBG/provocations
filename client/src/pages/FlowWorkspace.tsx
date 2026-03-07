@@ -330,6 +330,8 @@ function FlowWorkspaceInner() {
 
   // ── Unified overlay state (replaces 7 individual overlay state variables) ──
   const [activeExpandedNodeId, setActiveExpandedNodeId] = useState<string | null>(null);
+  const activeExpandedNodeIdRef = useRef(activeExpandedNodeId);
+  activeExpandedNodeIdRef.current = activeExpandedNodeId;
   const [expandSourceRect, setExpandSourceRect] = useState<DOMRect | null>(null);
   // Legacy overlay states kept for dialog-based overlays (not full-screen)
   const [activeLabelNodeId, setActiveLabelNodeId] = useState<string | null>(null);
@@ -532,6 +534,7 @@ function FlowWorkspaceInner() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (activeExpandedNodeIdRef.current) return;
       // Don't trigger if user is typing in an input/textarea/contenteditable
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
@@ -613,6 +616,7 @@ function FlowWorkspaceInner() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (activeExpandedNodeIdRef.current) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
 
@@ -772,6 +776,7 @@ function FlowWorkspaceInner() {
     }
 
     const onDown = (e: KeyboardEvent) => {
+      if (activeExpandedNodeIdRef.current) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
       if (e.repeat) return;
@@ -2969,6 +2974,7 @@ function FlowWorkspaceInner() {
         <FlowCanvas
           state={state}
           frozen={frozen}
+          disableKeys={!!activeExpandedNodeId}
           transparentBg={activeTheme.heroVisible}
           gridOpacity={activeTheme.gridOpacity}
           gridColor={activeTheme.gridColor}

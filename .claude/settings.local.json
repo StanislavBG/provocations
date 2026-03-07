@@ -28,7 +28,16 @@
       "Bash(ls -lt client/src/components/ftux/*.tsx client/src/components/flow/*.tsx 2>/dev/null | head -15)",
       "Bash(grep -l \"queryKey.*documents\" /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/*.tsx | xargs -I {} bash -c \"echo '=== {} ===' && grep -A 20 'queryKey.*documents' {}\" | head -150)",
       "Bash(for file in /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/InfographicStudioWorkspace.tsx /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/ContextCapturePanel.tsx /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/notebook/MobileCapture.tsx; do echo \"=== $\\(basename $file\\) ===\"; grep -n \"useMemo\" \"$file\" | head -5; done)",
-      "Bash(find /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src -name \"*scroll*\" -type f 2>/dev/null | head -10)"
+      "Bash(find /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src -name \"*scroll*\" -type f 2>/dev/null | head -10)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cp:*)",
+      "mcp__aiqa__list_bugs",
+      "Bash(npx:*)",
+      "mcp__aiqa__update_bug_status"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "aiqa"
+  ]
 }

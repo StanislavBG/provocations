@@ -83,6 +83,8 @@ interface UseFlowInteractionProps {
   selectedNodeIds?: Set<string>;
   /** Customizable glide camera keys (default: WASD) */
   glideKeys?: { up: string; down: string; left: string; right: string };
+  /** When true, all keyboard interactions (glide, space-pan) are suppressed */
+  disableKeys?: boolean;
 }
 
 /** Check if a node's center is inside a zone's bounds */
@@ -111,6 +113,7 @@ export function useFlowInteraction({
   nodes,
   selectedNodeIds,
   glideKeys,
+  disableKeys,
 }: UseFlowInteractionProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -119,6 +122,7 @@ export function useFlowInteraction({
   // Track Space key for pan-while-space-held
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (disableKeysRef.current) return;
       if (e.code === "Space" && !(e.target as HTMLElement)?.closest("input, textarea, [contenteditable]")) {
         spaceHeld.current = true;
       }
@@ -144,6 +148,8 @@ export function useFlowInteraction({
   onViewportChangeRef.current = onViewportChange;
   const glideKeysRef = useRef(glideKeys);
   glideKeysRef.current = glideKeys;
+  const disableKeysRef = useRef(disableKeys);
+  disableKeysRef.current = disableKeys;
 
   useEffect(() => {
     const isInput = (e: KeyboardEvent) =>
@@ -152,6 +158,7 @@ export function useFlowInteraction({
     const getGK = () => glideKeysRef.current ?? { up: "w", down: "s", left: "a", right: "d" };
 
     const down = (e: KeyboardEvent) => {
+      if (disableKeysRef.current) return;
       if (isInput(e)) return;
       const k = e.key.toLowerCase();
       const gk = getGK();
