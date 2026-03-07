@@ -314,6 +314,32 @@ export function ProvoThread({
                 challenges on your document from multiple expert perspectives.
               </p>
             </div>
+            <div className="w-full max-w-[280px] mt-2 space-y-2 text-left">
+              <p className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wider text-center">How it works</p>
+              <div className="space-y-1.5">
+                <div className="flex items-start gap-2 bg-muted/20 rounded-md px-2.5 py-1.5">
+                  <Flame className="w-3 h-3 text-primary/60 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-[10px] font-semibold text-foreground/60">Generate</span>
+                    <p className="text-[9px] text-muted-foreground/70 leading-snug">Sends document + objective to each persona. Returns challenges that probe weaknesses.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 bg-muted/20 rounded-md px-2.5 py-1.5">
+                  <Lightbulb className="w-3 h-3 text-amber-500/60 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-[10px] font-semibold text-foreground/60">Show Advice</span>
+                    <p className="text-[9px] text-muted-foreground/70 leading-snug">Asks the persona for actionable advice on a specific challenge. Sends challenge + document context.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 bg-muted/20 rounded-md px-2.5 py-1.5">
+                  <MessageSquare className="w-3 h-3 text-blue-500/60 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-[10px] font-semibold text-foreground/60">Respond</span>
+                    <p className="text-[9px] text-muted-foreground/70 leading-snug">No AI call — your response is saved to Notes and deepens the next round of provocations.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="p-3 space-y-3">

@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.15.1";
+export const APP_VERSION = "0.15.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.15.2",
+    date: "2026-03-06",
+    changes: [
+      "Add AIM (Actor, Input, Mission) smart button to Writer panel for framework-based document structuring",
+      "Add hover tooltips with descriptions to all Writer panel category headers across all 3 view modes",
+      "Default Provo personas to Think Bigger + Architect + one random (3 total) in both Notebook and Flow workspaces",
+      "Add 'How it works' section to Provo empty state explaining Generate, Show Advice, and Respond LLM calls",
+    ],
+  },
   {
     version: "0.15.1",
     date: "2026-03-06",

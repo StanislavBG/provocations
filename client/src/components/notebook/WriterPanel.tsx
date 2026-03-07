@@ -23,6 +23,7 @@ import {
   FileText,
   Pin,
   Target,
+  Crosshair,
   Settings2,
   Info,
   type LucideIcon,
@@ -40,6 +41,7 @@ interface SmartOption {
 interface SmartButtonDef {
   id: string;
   label: string;
+  description: string;
   icon: LucideIcon;
   color: string;
   activeBg: string;
@@ -60,6 +62,7 @@ const SMART_BUTTONS: SmartButtonDef[] = [
   {
     id: "expand",
     label: "Expand",
+    description: "Add depth, examples, and supporting information",
     icon: Maximize2,
     color: "text-primary/70",
     activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
@@ -72,6 +75,7 @@ const SMART_BUTTONS: SmartButtonDef[] = [
   {
     id: "condense",
     label: "Condense",
+    description: "Remove redundancy and tighten prose",
     icon: Minimize2,
     color: "text-primary/70",
     activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
@@ -84,6 +88,7 @@ const SMART_BUTTONS: SmartButtonDef[] = [
   {
     id: "restructure",
     label: "Restructure",
+    description: "Reorganize content and improve logical flow",
     icon: ArrowUpDown,
     color: "text-primary/70",
     activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
@@ -96,6 +101,7 @@ const SMART_BUTTONS: SmartButtonDef[] = [
   {
     id: "clarify",
     label: "Clarify",
+    description: "Simplify language and add context for readers",
     icon: Lightbulb,
     color: "text-primary/70",
     activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
@@ -108,6 +114,7 @@ const SMART_BUTTONS: SmartButtonDef[] = [
   {
     id: "style",
     label: "Style",
+    description: "Adjust voice, tone, and writing style",
     icon: Palette,
     color: "text-primary/70",
     activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
@@ -115,6 +122,19 @@ const SMART_BUTTONS: SmartButtonDef[] = [
       { id: "professional", label: "Professional", description: "Formal business tone" },
       { id: "casual", label: "Casual", description: "Conversational and friendly" },
       { id: "academic", label: "Academic", description: "Scholarly and precise" },
+    ],
+  },
+  {
+    id: "aim",
+    label: "AIM",
+    description: "Format into Actor, Input, Mission framework",
+    icon: Crosshair,
+    color: "text-primary/70",
+    activeBg: "bg-primary/10 border-primary/30 text-primary dark:text-primary",
+    options: [
+      { id: "full-aim", label: "Full AIM", description: "Restructure document into Actor, Input, Mission sections" },
+      { id: "actor", label: "Define Actor", description: "Identify and clarify who performs the action" },
+      { id: "mission", label: "State Mission", description: "Articulate desired outcome and success criteria" },
     ],
   },
 ];
@@ -442,9 +462,14 @@ function SliderView({
         return (
           <div key={btn.id}>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                {btn.label}
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground cursor-help">
+                    {btn.label}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-[10px] max-w-[200px]">{btn.description}</TooltipContent>
+              </Tooltip>
               {count > 0 && (
                 <Badge className="h-3.5 min-w-[14px] px-1 text-[9px] bg-primary/15 text-primary">
                   {count}
@@ -524,9 +549,14 @@ function CardView({
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    {btn.label}
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground cursor-help">
+                        {btn.label}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-[10px] max-w-[200px]">{btn.description}</TooltipContent>
+                  </Tooltip>
                   {count > 0 && (
                     <Badge className="h-3.5 min-w-[14px] px-1 text-[9px] bg-primary/15 text-primary">
                       {count}
@@ -611,7 +641,12 @@ function AccordionView({
                 ) : (
                   <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
                 )}
-                <span className="text-[11px] font-semibold text-foreground">{btn.label}</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[11px] font-semibold text-foreground cursor-help">{btn.label}</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-[10px] max-w-[200px]">{btn.description}</TooltipContent>
+                </Tooltip>
                 {count > 0 && (
                   <Badge className="h-3.5 min-w-[14px] px-1 text-[9px] bg-primary/15 text-primary">
                     {count}
