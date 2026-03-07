@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.3";
+export const APP_VERSION = "0.16.5";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,23 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.5",
+    date: "2026-03-06",
+    changes: [
+      "Add AIM (Actor, Input, Mission) tool to document node's Tools panel on the flow canvas",
+      "Improve error diagnostics for document load failures (separates DB errors from decrypt errors)",
+    ],
+  },
+  {
+    version: "0.16.4",
+    date: "2026-03-06",
+    changes: [
+      "Fix LLM dock icon showing generic Sparkles instead of BrainCircuit — now matches its canvas icon",
+      "Add descriptive tooltips to all dock items so users can see what each tool does on hover",
+      "Rewrite all tool descriptions to be user-friendly and action-oriented (what you do, what happens)",
+    ],
+  },
   {
     version: "0.16.3",
     date: "2026-03-06",

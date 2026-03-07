@@ -48,6 +48,7 @@ export interface DockItem {
   label: string;
   icon: string; // Lucide icon name
   group?: DockGroup;
+  description?: string;
 }
 
 export const DEFAULT_DOCK_ITEMS: DockItem[] = [

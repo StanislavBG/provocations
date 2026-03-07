@@ -5704,7 +5704,14 @@ RULES:
         return res.status(400).json({ error: "Invalid document ID" });
       }
 
-      const doc = await storage.getDocument(id);
+      let doc;
+      try {
+        doc = await storage.getDocument(id);
+      } catch (dbErr) {
+        console.error(`Load document DB error (id=${id}):`, dbErr);
+        const msg = dbErr instanceof Error ? dbErr.message : "Unknown DB error";
+        return res.status(500).json({ error: "Database error loading document", details: msg });
+      }
       if (!doc) {
         return res.status(404).json({ error: "Document not found" });
       }

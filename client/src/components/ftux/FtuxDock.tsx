@@ -38,6 +38,7 @@ import {
   Bell,
   Upload,
   UserCheck,
+  BrainCircuit,
   Layers,
   Pin,
   PinOff,
@@ -76,6 +77,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Bell,
   Upload,
   UserCheck,
+  BrainCircuit,
 };
 
 /** Grid: 2 rows x COLS columns. Items fill slots, remaining are empty. */
@@ -358,9 +360,14 @@ export function FtuxDock() {
                       <IconComponent className={sz.icon} />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
-                    <span className="font-mono text-muted-foreground/60 mr-1">{slotIndex + 1}</span>
-                    {item.label}
+                  <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs max-w-[220px]">
+                    <div className="font-medium">
+                      <span className="font-mono text-muted-foreground/60 mr-1">{slotIndex + 1}</span>
+                      {item.label}
+                    </div>
+                    {item.description && (
+                      <p className="text-muted-foreground mt-0.5 font-normal">{item.description}</p>
+                    )}
                   </TooltipContent>
                 </Tooltip>
 
