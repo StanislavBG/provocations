@@ -67,8 +67,15 @@ function InlineInput({
       placeholder={placeholder}
       className="w-full text-xs bg-muted/30 border border-primary/40 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50"
       onKeyDown={(e) => {
-        if (e.key === "Enter" && text.trim()) onSubmit(text.trim());
-        if (e.key === "Escape") onCancel();
+        if (e.key === "Enter" && text.trim()) {
+          onSubmit(text.trim());
+          e.stopPropagation();
+        }
+        if (e.key === "Escape") {
+          onCancel();
+          e.stopPropagation();
+          e.preventDefault();
+        }
       }}
       onBlur={() => {
         if (text.trim() && text.trim() !== value) onSubmit(text.trim());

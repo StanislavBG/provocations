@@ -2367,6 +2367,9 @@ function FlowWorkspaceInner() {
   const handleRenameCanvas = useCallback(async (newName: string) => {
     const trimmed = newName.trim();
     if (!trimmed) return;
+    // Update ref synchronously so the debounce auto-save reads the new title
+    // (setCanvasTitle is async and the ref update happens during render)
+    canvasTitleRef.current = trimmed;
     setCanvasTitle(trimmed);
     if (canvasDocumentId) {
       // Canvas already saved — update the title on the server
@@ -2389,6 +2392,8 @@ function FlowWorkspaceInner() {
           docType: "chart",
         });
         const data = (await res.json()) as { id: number };
+        // Update ref synchronously so debounce auto-save doesn't create a duplicate
+        canvasDocIdRef.current = data.id;
         setCanvasDocumentId(data.id);
         queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
         toast({ title: "Canvas saved", description: trimmed });
