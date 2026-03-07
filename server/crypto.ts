@@ -23,6 +23,29 @@ const AUTH_TAG_LENGTH = 16; // bytes (128 bits, AES-GCM default)
 
 const IDENTITY_SALT = "provocations-identity-v1";
 
+/* ── Master Key Cache ──
+ * Since the server uses a single ENCRYPTION_SECRET (not per-user passwords),
+ * we can derive a master key ONCE and reuse it for all encrypt() calls.
+ * AES-GCM security comes from unique IVs (generated randomly per encrypt),
+ * not from unique keys. This eliminates the 100k-iteration PBKDF2 cost
+ * from every encrypt call (~10ms → ~0.01ms).
+ */
+const MASTER_SALT_STR = "provocations-master-key-v1";
+const MASTER_SALT = Buffer.from(MASTER_SALT_STR);
+const MASTER_SALT_B64 = MASTER_SALT.toString("base64");
+let masterKeyCache: { passphrase: string; key: Buffer } | null = null;
+
+function getMasterKey(passphrase: string): Buffer {
+  if (masterKeyCache && masterKeyCache.passphrase === passphrase) {
+    return masterKeyCache.key;
+  }
+  const key = crypto.pbkdf2Sync(passphrase, MASTER_SALT, PBKDF2_ITERATIONS, KEY_LENGTH, "sha256");
+  masterKeyCache = { passphrase, key };
+  // Also put in LRU cache for decrypt compatibility
+  setCachedKey(passphrase, MASTER_SALT_B64, key);
+  return key;
+}
+
 /* ── LRU Key Cache ──
  * Caches derived keys by (passphrase + salt) to avoid repeat PBKDF2 derivations.
  * Each entry is ~32 bytes (key) + ~24 bytes (salt base64) overhead.
@@ -92,10 +115,11 @@ export function hashPassphrase(passphrase: string): string {
  * Returns base64-encoded ciphertext (with auth tag appended), salt, and IV.
  */
 export function encrypt(plaintext: string, passphrase: string): EncryptedPayload {
-  const salt = crypto.randomBytes(SALT_LENGTH);
   const iv = crypto.randomBytes(IV_LENGTH);
-  const saltB64 = salt.toString("base64");
-  const key = deriveKeySync(passphrase, salt, saltB64);
+  // Use master key (derived once, cached) with fixed salt — AES-GCM security
+  // comes from unique IVs, not unique keys. Random salt was causing cache misses
+  // on every call, making each encrypt ~10ms due to 100k PBKDF2 iterations.
+  const key = getMasterKey(passphrase);
 
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([
@@ -109,7 +133,7 @@ export function encrypt(plaintext: string, passphrase: string): EncryptedPayload
 
   return {
     ciphertext: combined.toString("base64"),
-    salt: saltB64,
+    salt: MASTER_SALT_B64,
     iv: iv.toString("base64"),
   };
 }
@@ -144,10 +168,8 @@ export function decrypt(payload: EncryptedPayload, passphrase: string): string {
  * Encrypt plaintext using a passphrase (async — doesn't block event loop).
  */
 export async function encryptAsync(plaintext: string, passphrase: string): Promise<EncryptedPayload> {
-  const salt = crypto.randomBytes(SALT_LENGTH);
   const iv = crypto.randomBytes(IV_LENGTH);
-  const saltB64 = salt.toString("base64");
-  const key = await deriveKeyAsync(passphrase, salt, saltB64);
+  const key = getMasterKey(passphrase);
 
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([
@@ -159,7 +181,7 @@ export async function encryptAsync(plaintext: string, passphrase: string): Promi
 
   return {
     ciphertext: combined.toString("base64"),
-    salt: saltB64,
+    salt: MASTER_SALT_B64,
     iv: iv.toString("base64"),
   };
 }

@@ -564,7 +564,7 @@ export function NotebookResearchChat({
       setStreamingContent("");
       abortRef.current = null;
     }
-  }, [messages, effectiveObjective, focusMode, responseConfig, streamingContent, toast]);
+  }, [messages, effectiveObjective, focusMode, responseConfig, streamingContent, toast, contextFromInputs]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();

@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.15.2";
+export const APP_VERSION = "0.16.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,18 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.0",
+    date: "2026-03-06",
+    changes: [
+      "Add LLM Base node — raw, unrestricted LLM access with full model configuration (temperature, top-p, top-k, max tokens, safety, search grounding, streaming)",
+      "LLM Base supports system-instruction edge role for document-driven system prompts",
+      "LLM Base works with all providers (Gemini, OpenAI, Anthropic) via model selector",
+      "Fix canvas save performance: master key caching eliminates per-encrypt PBKDF2 cost (~10ms → ~0.01ms)",
+      "Fix chain nav bar: show only direct upstream/downstream chain, not entire connected component",
+      "Fix researcher not picking up newly connected context mid-conversation",
+    ],
+  },
   {
     version: "0.15.2",
     date: "2026-03-06",

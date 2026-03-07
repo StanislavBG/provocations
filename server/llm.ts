@@ -38,6 +38,12 @@ export interface LLMRequest {
   /** Enable Google Search grounding (Gemini only). When true, Gemini uses
    *  live internet search to ground its responses with real-time data. */
   enableSearch?: boolean;
+  /** Nucleus sampling threshold (0-1). Controls diversity by limiting to top probability mass. */
+  topP?: number;
+  /** Top-K sampling (0-100). Limits selection to the K most probable tokens. 0 = unlimited. */
+  topK?: number;
+  /** Safety filter level for content generation. Maps to provider-specific safety settings. */
+  safetyLevel?: "none" | "low" | "medium" | "high";
 }
 
 export interface LLMResponse {
@@ -440,16 +446,31 @@ const GEMINI_SAFETY_OFF = [
   { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
 ];
 
+/** Map safety level string to Gemini safety settings */
+function getSafetySettings(level?: "none" | "low" | "medium" | "high") {
+  if (!level || level === "none") return GEMINI_SAFETY_OFF;
+  const thresholds: Record<string, string> = {
+    low: "BLOCK_ONLY_HIGH",
+    medium: "BLOCK_MEDIUM_AND_ABOVE",
+    high: "BLOCK_LOW_AND_ABOVE",
+  };
+  const threshold = thresholds[level] || "BLOCK_NONE";
+  return GEMINI_SAFETY_OFF.map((s) => ({ ...s, threshold }));
+}
+
 /** Build the native Gemini request body */
 function buildGeminiBody(req: LLMRequest, enableSearch = false): Record<string, unknown> {
+  const genConfig: Record<string, unknown> = {
+    maxOutputTokens: req.maxTokens,
+    ...(req.temperature != null ? { temperature: req.temperature } : {}),
+    ...(req.topP != null ? { topP: req.topP } : {}),
+    ...(req.topK != null && req.topK > 0 ? { topK: req.topK } : {}),
+  };
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: req.system }] },
     contents: toGeminiContents(req.messages),
-    generationConfig: {
-      maxOutputTokens: req.maxTokens,
-      ...(req.temperature != null ? { temperature: req.temperature } : {}),
-    },
-    safetySettings: GEMINI_SAFETY_OFF,
+    generationConfig: genConfig,
+    safetySettings: getSafetySettings(req.safetyLevel),
   };
   if (enableSearch) {
     body.tools = [{ googleSearch: {} }];
@@ -563,6 +584,7 @@ function openaiCompatibleGenerate(
       model,
       max_tokens: req.maxTokens,
       temperature: req.temperature,
+      ...(req.topP != null ? { top_p: req.topP } : {}),
       messages: [
         { role: "system", content: req.system },
         ...req.messages.map((m) => ({
@@ -583,6 +605,7 @@ async function* openaiCompatibleStream(
     model,
     max_tokens: req.maxTokens,
     temperature: req.temperature,
+    ...(req.topP != null ? { top_p: req.topP } : {}),
     stream: true,
     messages: [
       { role: "system", content: req.system },
@@ -607,6 +630,8 @@ async function anthropicGenerateWithModel(
     model,
     max_tokens: req.maxTokens,
     temperature: req.temperature,
+    ...(req.topP != null ? { top_p: req.topP } : {}),
+    ...(req.topK != null && req.topK > 0 ? { top_k: req.topK } : {}),
     system: req.system,
     messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
   });
@@ -626,6 +651,8 @@ async function* anthropicStreamWithModel(
     model,
     max_tokens: req.maxTokens,
     temperature: req.temperature,
+    ...(req.topP != null ? { top_p: req.topP } : {}),
+    ...(req.topK != null && req.topK > 0 ? { top_k: req.topK } : {}),
     system: req.system,
     messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
   });

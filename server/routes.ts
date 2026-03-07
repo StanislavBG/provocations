@@ -634,6 +634,104 @@ export async function registerRoutes(
   });
 
   // ═══════════════════════════════════════════════════════════════
+  // LLM Base Node — Raw LLM Access
+  // ═══════════════════════════════════════════════════════════════
+
+  app.post("/api/llm-base/generate", async (req, res) => {
+    try {
+      const { z } = await import("zod");
+      const schema = z.object({
+        model: z.string().default("gemini-2.5-flash"),
+        system: z.string().default("You are a helpful assistant."),
+        userMessage: z.string().min(1),
+        temperature: z.number().min(0).max(2).optional().default(1.0),
+        topP: z.number().min(0).max(1).optional().default(1.0),
+        topK: z.number().min(0).max(100).optional().default(0),
+        maxTokens: z.number().min(1).max(65536).optional().default(8192),
+        safetyLevel: z.enum(["none", "low", "medium", "high"]).optional().default("none"),
+        enableSearch: z.boolean().optional().default(false),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { model, system, userMessage, temperature, topP, topK, maxTokens, safetyLevel, enableSearch } = parsed.data;
+
+      const result = await llm.generateWithModel(model, {
+        system,
+        messages: [{ role: "user", content: userMessage }],
+        maxTokens,
+        temperature,
+        topP,
+        topK,
+        safetyLevel: safetyLevel as "none" | "low" | "medium" | "high",
+        enableSearch,
+      });
+
+      return res.json({ output: result.text, model });
+    } catch (err: any) {
+      console.error("LLM Base generate error:", err);
+      return res.status(500).json({ error: err?.message || "LLM generation failed" });
+    }
+  });
+
+  app.post("/api/llm-base/stream", async (req, res) => {
+    try {
+      const { z } = await import("zod");
+      const schema = z.object({
+        model: z.string().default("gemini-2.5-flash"),
+        system: z.string().default("You are a helpful assistant."),
+        userMessage: z.string().min(1),
+        temperature: z.number().min(0).max(2).optional().default(1.0),
+        topP: z.number().min(0).max(1).optional().default(1.0),
+        topK: z.number().min(0).max(100).optional().default(0),
+        maxTokens: z.number().min(1).max(65536).optional().default(8192),
+        safetyLevel: z.enum(["none", "low", "medium", "high"]).optional().default("none"),
+        enableSearch: z.boolean().optional().default(false),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const { model, system, userMessage, temperature, topP, topK, maxTokens, safetyLevel, enableSearch } = parsed.data;
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      const stream = llm.streamWithModel(model, {
+        system,
+        messages: [{ role: "user", content: userMessage }],
+        maxTokens,
+        temperature,
+        topP,
+        topK,
+        safetyLevel: safetyLevel as "none" | "low" | "medium" | "high",
+        enableSearch,
+      });
+
+      for await (const chunk of stream) {
+        res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+      }
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (err: any) {
+      console.error("LLM Base stream error:", err);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: err?.message || "LLM streaming failed" });
+      }
+      res.write(`data: ${JSON.stringify({ error: err?.message })}\n\n`);
+      res.end();
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════
   // Flow Coherence Gate Evaluation
   // ═══════════════════════════════════════════════════════════════
 

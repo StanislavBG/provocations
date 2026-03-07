@@ -30,6 +30,7 @@ import {
   Upload,
   UserCheck,
   CircuitBoard,
+  BrainCircuit,
 } from "lucide-react";
 import type { FlowNodeType, PortDef } from "./useFlowCanvas";
 
@@ -50,7 +51,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification" | "approval";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification" | "approval" | "llm-base";
 
 // ── Registry definition ──
 
@@ -691,6 +692,32 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     inputDescription: "No input — labels are text annotations placed on the canvas for organizational purposes.",
     outputDescription: "No output — labels don't participate in data flow. They are visual-only elements.",
   },
+  "llm-base": {
+    type: "llm-base",
+    style: {
+      border: "border-fuchsia-500/60",
+      bg: "bg-card",
+      headerBg: "bg-fuchsia-500/15",
+      headerBorder: "border-fuchsia-500/40",
+      iconClass: "text-fuchsia-500",
+      badgeBg: "bg-fuchsia-500/25",
+      badgeText: "text-fuchsia-600 dark:text-fuchsia-400",
+      badge: "LLM",
+      accent: "fuchsia",
+    },
+    icon: BrainCircuit,
+    defaultWidth: 260,
+    defaultHeight: 200,
+    ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+    expandMode: "overlay",
+    playable: true,
+    supportsChainExecution: true,
+    lifecyclePreset: "llm-base",
+    minWidth: 180,
+    minHeight: 140,
+    inputDescription: "Accepts system-instruction edges (become system prompt) and context edges (become user context). Full model configuration with temperature, top-p, top-k, safety, and search grounding.",
+    outputDescription: "Raw LLM output text. Supports any model (Gemini, OpenAI, Anthropic) with unrestricted defaults for maximum flexibility.",
+  },
 };
 
 // ── Derived convenience accessors (backward-compatible) ──
@@ -714,6 +741,7 @@ export const ACCENT_BG: Record<string, string> = {
   stone: "bg-stone-500",
   pink: "bg-pink-500",
   green: "bg-green-500",
+  fuchsia: "bg-fuchsia-500",
 };
 
 /** Node types that show the Play button on their compact card */
@@ -788,4 +816,5 @@ export const DOCK_TOOL_CATALOG: DockToolCatalogEntry[] = [
   { toolId: "api-connection", label: "API Post", icon: Wifi, iconName: "Wifi", group: "build", description: "Publish content to external APIs and services" },
   { toolId: "notification", label: "Notify", icon: Bell, iconName: "Bell", group: "build", description: "Send notifications to users when chain completes" },
   { toolId: "approval", label: "Approval", icon: UserCheck, iconName: "UserCheck", group: "build", description: "Pause chain until user approves or rejects" },
+  { toolId: "llm-base", label: "LLM", icon: BrainCircuit, iconName: "BrainCircuit", group: "build", description: "Raw LLM access with full model configuration — unrestricted by default" },
 ];
