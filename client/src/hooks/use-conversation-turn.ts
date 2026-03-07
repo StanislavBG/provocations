@@ -7,7 +7,9 @@ export interface ConversationTurnOptions {
   onStateChange?: (state: ConversationState) => void;
   onInterrupt?: () => void; // called when user interrupts during AI_SPEAKING
   silenceTimeout?: number; // ms after final transcript before auto-submitting (default: 1500)
-  /** When true, mic stays active during AI_SPEAKING and auto-triggers interrupt on speech detection */
+  /** When true, enables echo-cancelled voice activity detection during AI_SPEAKING.
+   *  Uses getUserMedia with echoCancellation to filter out speaker output, so only
+   *  genuine user speech triggers an interrupt — no feedback loops from laptop speakers. */
   alwaysListening?: boolean;
 }
 
@@ -76,6 +78,15 @@ export function useConversationTurn(options: ConversationTurnOptions) {
   const onInterruptRef = useRef(onInterrupt);
   const silenceTimeoutRef = useRef(silenceTimeout);
   const alwaysListeningRef = useRef(alwaysListening);
+  // ── Echo-cancelled voice activity detection (for interrupt during AI_SPEAKING) ──
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadContextRef = useRef<AudioContext | null>(null);
+  const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** RMS threshold above which we consider the user to be speaking (after echo cancellation) */
+  const VAD_THRESHOLD = 0.02;
+  /** How many consecutive frames must exceed the threshold before we fire an interrupt */
+  const VAD_CONSECUTIVE_FRAMES = 3;
+  const vadFrameCountRef = useRef(0);
 
   // Keep refs in sync with latest props
   useEffect(() => {
@@ -113,6 +124,23 @@ export function useConversationTurn(options: ConversationTurnOptions) {
     },
     [],
   );
+
+  /** Stop echo-cancelled voice activity detection */
+  const stopVAD = useCallback(() => {
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
+    if (vadContextRef.current) {
+      vadContextRef.current.close().catch(() => {});
+      vadContextRef.current = null;
+    }
+    if (vadStreamRef.current) {
+      vadStreamRef.current.getTracks().forEach((t) => t.stop());
+      vadStreamRef.current = null;
+    }
+    vadFrameCountRef.current = 0;
+  }, []);
 
   const stopRecognition = useCallback(() => {
     clearSilenceTimer();
@@ -178,25 +206,6 @@ export function useConversationTurn(options: ConversationTurnOptions) {
         }
       }
 
-      // If we're in AI_SPEAKING with alwaysListening, any speech triggers interrupt
-      if (stateRef.current === "AI_SPEAKING" && alwaysListeningRef.current) {
-        if (interim.length > 3 || final) {
-          // User started talking — interrupt the AI
-          onInterruptRef.current?.();
-          transition("LISTENING");
-          // Don't stop/restart recognition — it's already running
-          // Just reset transcript for the new listening phase
-          finalTranscriptRef.current = final || "";
-          setCurrentTranscript(final + interim);
-          if (final || interim) {
-            onTranscriptRef.current(final + interim, false);
-          }
-          return;
-        }
-        // Short interim during AI_SPEAKING — ignore (could be background noise)
-        return;
-      }
-
       // Accumulate final transcript segments
       if (final) {
         finalTranscriptRef.current = final;
@@ -232,10 +241,8 @@ export function useConversationTurn(options: ConversationTurnOptions) {
     };
 
     recognition.onend = () => {
-      // Recognition ended unexpectedly (browser can stop it). Restart if still active.
-      const shouldRestart = stateRef.current === "LISTENING" ||
-        (stateRef.current === "AI_SPEAKING" && alwaysListeningRef.current);
-      if (shouldRestart) {
+      // Recognition ended unexpectedly (browser can stop it). Restart if still listening.
+      if (stateRef.current === "LISTENING") {
         try {
           recognition.start();
         } catch {
@@ -267,47 +274,97 @@ export function useConversationTurn(options: ConversationTurnOptions) {
     transition("PROCESSING");
   }, [stopRecognition, transition]);
 
+  /** Start echo-cancelled voice activity detection — listens for real user speech while AI audio plays.
+   *  Uses getUserMedia with echoCancellation so the browser's AEC suppresses speaker output.
+   *  Only genuine user speech registers as significant volume → triggers interrupt. */
+  const startVAD = useCallback(async () => {
+    stopVAD();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+
+      vadStreamRef.current = stream;
+      vadContextRef.current = audioCtx;
+      vadFrameCountRef.current = 0;
+
+      const dataArray = new Float32Array(analyser.fftSize);
+      vadIntervalRef.current = setInterval(() => {
+        analyser.getFloatTimeDomainData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+        const rms = Math.sqrt(sum / dataArray.length);
+
+        if (rms > VAD_THRESHOLD) {
+          vadFrameCountRef.current++;
+          if (vadFrameCountRef.current >= VAD_CONSECUTIVE_FRAMES && stateRef.current === "AI_SPEAKING") {
+            // Genuine user speech detected through echo-cancelled stream — interrupt
+            stopVAD();
+            onInterruptRef.current?.();
+            transition("LISTENING");
+            startRecognition();
+          }
+        } else {
+          vadFrameCountRef.current = 0;
+        }
+      }, 80); // ~12.5 checks/sec
+    } catch (err) {
+      console.warn("useConversationTurn: VAD getUserMedia failed — voice interrupt unavailable", err);
+    }
+  }, [stopVAD, transition, startRecognition]);
+
   // PROCESSING -> AI_SPEAKING
   const startSpeaking = useCallback(() => {
     if (stateRef.current !== "PROCESSING") return;
+    // SpeechRecognition stays OFF during AI playback — it can't distinguish speaker from user.
+    // Instead, in alwaysListening mode we use echo-cancelled VAD to detect real user speech.
+    stopRecognition();
     transition("AI_SPEAKING");
-    // In alwaysListening mode, keep mic active during AI speech for interrupt detection
     if (alwaysListeningRef.current) {
-      startRecognition();
+      startVAD();
     }
-  }, [transition, startRecognition]);
+  }, [transition, stopRecognition, startVAD]);
 
-  // AI_SPEAKING -> LISTENING (auto-starts mic)
+  // AI_SPEAKING -> LISTENING (audio finished naturally)
   const finishSpeaking = useCallback(() => {
     if (stateRef.current !== "AI_SPEAKING") return;
+    stopVAD();
     transition("LISTENING");
     startRecognition();
-  }, [transition, startRecognition]);
+  }, [transition, startRecognition, stopVAD]);
 
-  // AI_SPEAKING -> LISTENING (interrupt: user speaks during AI audio)
+  // AI_SPEAKING -> LISTENING (interrupt: user speaks during AI audio, or manual button)
   const interrupt = useCallback(() => {
     if (stateRef.current !== "AI_SPEAKING") return;
+    stopVAD();
     onInterruptRef.current?.();
     transition("LISTENING");
     startRecognition();
-  }, [transition, startRecognition]);
+  }, [transition, startRecognition, stopVAD]);
 
   // Any -> IDLE
   const reset = useCallback(() => {
     clearSilenceTimer();
     stopRecognition();
+    stopVAD();
     setCurrentTranscript("");
     finalTranscriptRef.current = "";
     transition("IDLE");
-  }, [clearSilenceTimer, stopRecognition, transition]);
+  }, [clearSilenceTimer, stopRecognition, stopVAD, transition]);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
       clearSilenceTimer();
       stopRecognition();
+      stopVAD();
     };
-  }, [clearSilenceTimer, stopRecognition]);
+  }, [clearSilenceTimer, stopRecognition, stopVAD]);
 
   return {
     state,
