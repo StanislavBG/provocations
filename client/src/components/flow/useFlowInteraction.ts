@@ -397,6 +397,8 @@ export function useFlowInteraction({
 
       if (e.shiftKey) {
         onToggleSelectNode(nodeId);
+      } else if (selectedNodeIds && selectedNodeIds.size > 1 && selectedNodeIds.has(nodeId)) {
+        // Node is already part of a multi-selection — keep selection for group drag
       } else {
         onSelectNode(nodeId);
       }

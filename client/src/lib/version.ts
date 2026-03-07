@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.10";
+export const APP_VERSION = "0.16.11";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.11",
+    date: "2026-03-07",
+    changes: [
+      "Fix multi-select group drag — clicking a node in a multi-selection now keeps the selection and drags all selected nodes together instead of panning the canvas",
+    ],
+  },
   {
     version: "0.16.10",
     date: "2026-03-07",
