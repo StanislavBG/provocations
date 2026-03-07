@@ -41,12 +41,15 @@ describe('crypto', () => {
   });
 
   describe('encryption properties', () => {
-    it('should produce different ciphertexts for same plaintext (random salt/IV)', () => {
+    it('should produce different ciphertexts for same plaintext (unique IV per call)', () => {
       const plaintext = 'Same text';
       const payload1 = encrypt(plaintext, PASSPHRASE);
       const payload2 = encrypt(plaintext, PASSPHRASE);
+      // Ciphertexts differ because IVs are unique
       expect(payload1.ciphertext).not.toBe(payload2.ciphertext);
-      expect(payload1.salt).not.toBe(payload2.salt);
+      // Salt is now fixed (master key caching) — same for all encryptions
+      expect(payload1.salt).toBe(payload2.salt);
+      // IVs are still random per call
       expect(payload1.iv).not.toBe(payload2.iv);
     });
 
