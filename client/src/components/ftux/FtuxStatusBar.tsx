@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { FlowNodeType } from "@/components/flow/useFlowCanvas";
 import { CANVAS_STYLES } from "@/lib/canvas-styles";
+import { DebugButton } from "@/components/DebugButton";
 
 /**
  * Icons for virtual dock toolIds that don't map to a FlowNodeType in the registry.
@@ -335,6 +336,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
         {blueprintsSlot}
+        <DebugButton />
         <div className="relative">
           <Tooltip>
             <TooltipTrigger asChild>

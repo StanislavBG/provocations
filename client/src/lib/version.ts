@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.1";
+export const APP_VERSION = "0.16.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.2",
+    date: "2026-03-06",
+    changes: [
+      "Add error log button to canvas status bar — bug icon next to Settings shows collected errors with copy-all",
+      "Auto-capture API/network errors (500s, fetch failures) into the error log for easy debugging",
+    ],
+  },
   {
     version: "0.16.1",
     date: "2026-03-06",
