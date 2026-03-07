@@ -332,8 +332,8 @@ export function FlowMinimap({
   );
 
   // ── Minimap zoom (Shift+scroll) ──
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+  const handleMinimapWheel = useCallback(
+    (e: WheelEvent) => {
       e.stopPropagation();
       e.preventDefault();
       if (e.shiftKey) {
@@ -341,10 +341,17 @@ export function FlowMinimap({
         const newZoom = Math.max(MIN_MINIMAP_ZOOM, Math.min(MAX_MINIMAP_ZOOM, ms.minimapZoom * factor));
         setMinimapZoom(newZoom);
       }
-      // Without shift: no-op (don't propagate to canvas)
     },
     [ms.minimapZoom, setMinimapZoom],
   );
+
+  // Non-passive wheel listener to avoid Chrome passive violations
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", handleMinimapWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleMinimapWheel);
+  }, [handleMinimapWheel]);
 
   // ── Double-click: fit all nodes ──
   const handleDoubleClick = useCallback(
@@ -455,7 +462,7 @@ export function FlowMinimap({
           className="relative cursor-pointer"
           onMouseDown={handleSvgMouseDown}
           onDoubleClick={handleDoubleClick}
-          onWheel={handleWheel}
+          /* wheel handled via non-passive native listener */
         >
           {/* Layer 1: Edges */}
           {showEdges &&
