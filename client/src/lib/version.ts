@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.5";
+export const APP_VERSION = "0.16.6";
 
 export interface ReleaseNote {
   version: string;
@@ -19,10 +19,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.16.6",
+    date: "2026-03-06",
+    changes: [
+      "Unify canvas & blueprint save via shared whitelist serializer — strips transient runtime state, reduces payload size, fixes beacon save reliability",
+    ],
+  },
+  {
     version: "0.16.5",
     date: "2026-03-06",
     changes: [
       "Add AIM (Actor, Input, Mission) tool to document node's Tools panel on the flow canvas",
+      "Add error boundary around expanded overlay — render crashes show error message instead of blanking the page",
       "Improve error diagnostics for document load failures (separates DB errors from decrypt errors)",
     ],
   },
