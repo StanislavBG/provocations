@@ -243,7 +243,7 @@ function splitOutputIntoSections(text: string, count: number): string[] {
 function FlowWorkspaceInner() {
   const { activeTool, setActiveTool, dockItems, dockHidden, canvasFontSize, canvasTheme, setCanvasTheme, keyBinds } = useFtuxShell();
   const {
-    state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, deleteNode, deleteNodes, deleteEdge,
+    state, addNode, addEdge, updateNode, pushUndoSnapshot, moveNode, moveNodes, bringToFront, deleteNode, deleteNodes, deleteEdge,
     selectNode, selectNodes, selectAll, toggleSelectNode, setViewport, loadCanvas: loadCanvasRaw, resetCanvas,
     undo, redo,
   } = useFlowCanvas();
@@ -2992,6 +2992,7 @@ function FlowWorkspaceInner() {
           onCreateEdge={handleCreateEdge}
           onDeleteEdge={deleteEdge}
           onPlayNode={handlePlayNode}
+          onBringToFront={bringToFront}
           onToggleTrigger={toggleTrigger}
           onToggleLock={(nodeId) => {
             const node = state.nodes.find((n) => n.id === nodeId);

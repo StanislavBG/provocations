@@ -41,6 +41,7 @@ interface FlowCanvasProps {
   onToggleLock?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
+  onBringToFront?: (nodeIds: string | string[]) => void;
   onToggleTrigger?: (nodeId: string) => void;
   transparentBg?: boolean;
   gridOpacity?: number;
@@ -96,6 +97,7 @@ export function FlowCanvas({
   onToggleLock,
   onDropTool,
   onDragStart,
+  onBringToFront,
   onToggleTrigger,
   transparentBg,
   gridOpacity = 0.2,
@@ -139,6 +141,7 @@ export function FlowCanvas({
     onNodeDoubleClick,
     onEdgeCreate: onCreateEdge,
     onDragStart,
+    onBringToFront,
     nodes: state.nodes,
     selectedNodeIds: state.selectedNodeIds,
     glideKeys: resolvedGlideKeys,

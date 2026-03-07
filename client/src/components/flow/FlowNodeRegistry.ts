@@ -169,7 +169,7 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     defaultHeight: 240,
     ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
     expandMode: "overlay",
-    playable: false,
+    playable: true,
     supportsChainExecution: true,
     lifecyclePreset: "llm",
     minWidth: 180,
