@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.11";
+export const APP_VERSION = "0.16.12";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.12",
+    date: "2026-03-07",
+    changes: [
+      "Fix interview brainstorm feedback loop: AI audio through speakers no longer triggers self-interrupt",
+      "Replace SpeechRecognition-based interrupt with echo-cancelled VAD (voice activity detection)",
+      "getUserMedia with echoCancellation filters out speaker output — only real user speech triggers interrupt",
+      "SpeechRecognition starts fresh after interrupt with AI audio stopped, so no transcript contamination",
+    ],
+  },
   {
     version: "0.16.11",
     date: "2026-03-07",
