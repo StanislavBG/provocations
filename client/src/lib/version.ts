@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.0";
+export const APP_VERSION = "0.16.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.1",
+    date: "2026-03-06",
+    changes: [
+      "Fix passive event listener violations: wheel handlers on canvas and minimap now use non-passive native listeners",
+    ],
+  },
   {
     version: "0.16.0",
     date: "2026-03-06",

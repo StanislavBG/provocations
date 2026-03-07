@@ -232,8 +232,8 @@ export function useFlowInteraction({
   );
 
   const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
+    (e: React.WheelEvent | WheelEvent) => {
+      // preventDefault is handled by the non-passive native listener in FlowCanvas
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
 

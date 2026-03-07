@@ -342,6 +342,18 @@ export function FlowCanvas({
     );
   }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote, onToggleTrigger]);
 
+  // Attach wheel handler as non-passive so preventDefault() works (Chrome passive default)
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || frozen) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      handleWheel(e);
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [frozen, handleWheel]);
+
   const cursorClass = frozen
     ? "cursor-not-allowed"
     : isDrawingEdge
@@ -356,7 +368,6 @@ export function FlowCanvas({
     <div
       ref={canvasRef}
       className={`absolute inset-0 overflow-hidden ${transparentBg ? "bg-transparent" : "bg-background"} ${cursorClass}`}
-      onWheel={frozen ? undefined : handleWheel}
       onMouseDown={frozen ? undefined : handleMouseDown}
       onMouseMove={frozen ? undefined : handleMouseMove}
       onMouseUp={frozen ? undefined : handleMouseUp}
