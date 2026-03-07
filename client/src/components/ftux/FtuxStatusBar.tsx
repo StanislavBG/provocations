@@ -32,6 +32,7 @@ import {
   ScrollText,
   ChevronRight,
   HardDrive,
+  Blocks,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -472,6 +473,17 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                     <div className="text-[10px] text-muted-foreground">Lifecycle events, debug</div>
                   </div>
                 </button>
+                <a
+                  href="/components"
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                  onClick={() => setGearDropdownOpen(false)}
+                >
+                  <Blocks className="w-3.5 h-3.5 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium">Component Library</div>
+                    <div className="text-[10px] text-muted-foreground">Wiki, props, hooks</div>
+                  </div>
+                </a>
                 {onOpenConnections && (
                   <button
                     className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"

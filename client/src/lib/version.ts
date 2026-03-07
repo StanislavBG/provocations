@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.6";
+export const APP_VERSION = "0.16.7";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.7",
+    date: "2026-03-06",
+    changes: [
+      "Restore Component Library button to status bar gear menu — quick access to the component wiki, props, and hooks reference",
+    ],
+  },
   {
     version: "0.16.6",
     date: "2026-03-06",
