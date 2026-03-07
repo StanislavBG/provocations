@@ -47,7 +47,7 @@ export function AleComponentGateway({ open, onOpenChange }: AleComponentGatewayP
 
   const handleToggle = (tool: DockToolCatalogEntry, enabled: boolean) => {
     if (enabled) {
-      addDockItem({ toolId: tool.toolId as ToolId, label: tool.label, icon: tool.iconName, group: tool.group });
+      addDockItem({ toolId: tool.toolId as ToolId, label: tool.label, icon: tool.iconName, group: tool.group, description: tool.description });
     } else {
       removeDockItem(tool.toolId as ToolId);
     }

@@ -81,7 +81,7 @@ import {
   Lightbulb, Paintbrush2, PenLine, Users, Wifi,
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
-  Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench, Info,
+  Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench, Info, Crosshair,
 } from "lucide-react";
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
@@ -94,6 +94,7 @@ const FLOW_DOCK_ITEMS: DockItem[] = DOCK_TOOL_CATALOG.map((entry) => ({
   label: entry.label,
   icon: entry.iconName,
   group: entry.group,
+  description: entry.description,
 }));
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
@@ -150,6 +151,7 @@ const DOC_TOOLS = [
   { id: "clarify", label: "Clarify", icon: Lightbulb, instruction: "Simplify language, improve accessibility and clarity" },
   { id: "style", label: "Style", icon: Paintbrush2, instruction: "Adjust voice and tone for better reading experience" },
   { id: "correct", label: "Correct", icon: PenLine, instruction: "Fix grammar, spelling, logic errors, and inconsistencies" },
+  { id: "aim", label: "AIM", icon: Crosshair, instruction: "Restructure into Actor (who performs), Input (what they receive), Mission (desired outcome) framework" },
 ];
 
 /**
