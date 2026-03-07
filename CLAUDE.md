@@ -43,6 +43,27 @@ GET https://aiqastudio.replit.app/api/stats/overview?project_id=eacc71c9-f5f5-4d
 
 All endpoints require `X-API-Key: {AIQA_API_KEY}` header.
 
+### Update bug/feature status
+
+```bash
+curl -X PATCH -H "X-API-Key: REDACTED" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"in_progress"}' \
+  "https://aiqastudio.replit.app/api/bugs/{BUG_ID}"
+```
+
+Valid statuses: `open`, `in_progress`, `resolved`, `closed`.
+
+### AIQA Workflow Rules (MANDATORY)
+
+When working on bugs or feature requests from AIQA:
+
+1. **Claim before starting.** Before writing any code for an AIQA item, PATCH its status to `in_progress`. This prevents teammates from duplicating work.
+2. **Batch-claim for parallel work.** If planning to work on multiple items simultaneously (e.g., via parallel agents), mark ALL of them `in_progress` before any agent begins coding.
+3. **Resolve when done.** After the fix is committed and verified, PATCH the status to `resolved`.
+4. **Release if abandoned.** If you stop working on an item before finishing, PATCH it back to `open` so others can pick it up.
+5. **Check status before starting.** Always filter by `&status=open` when fetching items to work on — never grab an `in_progress` item unless the user explicitly asks to take it over.
+
 ## Quick Commands
 
 ```bash

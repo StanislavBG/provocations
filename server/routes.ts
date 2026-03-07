@@ -4271,9 +4271,12 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
       let fullText = "";
       let sentenceBuffer = "";
 
-      // Multi-context TTS session
+      // Multi-context TTS session — set up in PARALLEL with LLM streaming
       let ttsSession: any = null;
       let ttsErrored = false;
+      let ttsReady = false;
+      let pendingTtsChunks: string[] = [];
+
       try {
         const elevenlabs = await import("./elevenlabs.js");
         if (elevenlabs.isAvailable() && voiceId) {
@@ -4293,7 +4296,18 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
             ttsErrored = true;
             sendEvent("tts_error", { message: "TTS error — falling back to text" });
           });
-          await ttsSession.ready;
+          // Don't await — let LLM stream iteration start immediately in parallel
+          ttsSession.ready.then(() => {
+            ttsReady = true;
+            // Flush any text that buffered while WS was connecting
+            if (pendingTtsChunks.length > 0) {
+              for (const chunk of pendingTtsChunks) {
+                ttsSession.sendToContext(contextId, chunk);
+              }
+              ttsSession.flushContext(contextId);
+              pendingTtsChunks = [];
+            }
+          }).catch(() => { ttsErrored = true; });
         }
       } catch {
         // TTS not available
@@ -4309,16 +4323,26 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
         }
       });
 
-      // Hybrid TTS feeding
+      // Hybrid TTS feeding — aggressive thresholds for brainstorm
       let lastTtsSendTime = Date.now();
-      const TTS_CHAR_THRESHOLD = 80; // shorter for brainstorm
-      const TTS_TIME_THRESHOLD_MS = 120;
+      let ttsSendCount = 0;
+      const TTS_CHAR_THRESHOLD = 80;
+      const TTS_FIRST_CHAR_THRESHOLD = 30; // prime TTS pipeline early with first fragment
+      const TTS_TIME_THRESHOLD_MS = 100;
       let ttsSendTimer: ReturnType<typeof setTimeout> | null = null;
 
       const flushBufferToTts = () => {
         if (!ttsSession || ttsErrored || !sentenceBuffer.trim() || aborted) return;
-        ttsSession.sendToContext(contextId, sentenceBuffer.trim());
+        const text = sentenceBuffer.trim();
         sentenceBuffer = "";
+        ttsSendCount++;
+        if (ttsReady) {
+          ttsSession.sendToContext(contextId, text);
+          // Flush after each send to force immediate audio generation
+          ttsSession.flushContext(contextId);
+        } else {
+          pendingTtsChunks.push(text);
+        }
         lastTtsSendTime = Date.now();
         if (ttsSendTimer) { clearTimeout(ttsSendTimer); ttsSendTimer = null; }
       };
@@ -4338,10 +4362,12 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
         sendEvent("text", { chunk });
 
         if (ttsSession && !ttsErrored) {
+          // Use lower threshold for first send to prime TTS pipeline early
+          const charThreshold = ttsSendCount === 0 ? TTS_FIRST_CHAR_THRESHOLD : TTS_CHAR_THRESHOLD;
           const sentenceEnd = sentenceBuffer.match(/[.!?,:;]\s/);
-          if (sentenceEnd && sentenceBuffer.length > 15) {
+          if (sentenceEnd && sentenceBuffer.length > 10) {
             flushBufferToTts();
-          } else if (sentenceBuffer.length >= TTS_CHAR_THRESHOLD) {
+          } else if (sentenceBuffer.length >= charThreshold) {
             flushBufferToTts();
           } else {
             scheduleTtsFlush();
@@ -4353,9 +4379,13 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
       if (ttsSendTimer) clearTimeout(ttsSendTimer);
       if (!aborted) {
         if (sentenceBuffer.trim() && ttsSession && !ttsErrored) {
-          ttsSession.sendToContext(contextId, sentenceBuffer.trim());
-          ttsSession.flushContext(contextId);
-        } else if (ttsSession && !ttsErrored) {
+          if (ttsReady) {
+            ttsSession.sendToContext(contextId, sentenceBuffer.trim());
+            ttsSession.flushContext(contextId);
+          } else {
+            pendingTtsChunks.push(sentenceBuffer.trim());
+          }
+        } else if (ttsSession && !ttsErrored && ttsReady) {
           ttsSession.flushContext(contextId);
         }
 
