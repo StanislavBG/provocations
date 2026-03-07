@@ -18,6 +18,7 @@ import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { SOCIAL_PLATFORMS, type PlatformId } from "@/lib/social-platforms";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import { ImageCustomizer } from "@/components/ImageCustomizer";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface SocialPostExpandedViewProps {
   node: FlowNode;
@@ -195,9 +196,10 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
   const currentPlatform = activeTab ? SOCIAL_PLATFORMS[activeTab] : null;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left panel: Config */}
-      <div className="w-80 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-5">
             {/* Platform toggles */}
@@ -324,10 +326,10 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
             </Button>
           </div>
         </ScrollArea>
-      </div>
-
-      {/* Right panel: Preview */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col overflow-hidden">
         {/* Platform tabs */}
         {enabledPlatforms.length > 0 && (
           <div className="border-b flex gap-0.5 px-3 py-1.5 overflow-x-auto shrink-0">
@@ -482,7 +484,8 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
             </div>
           )}
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

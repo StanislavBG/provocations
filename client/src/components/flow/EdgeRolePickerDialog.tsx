@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { BookOpenCheck, Target, LayoutTemplate, Link, BrainCircuit } from "lucide-react";
 import type { FlowNode, EdgeRole } from "./useFlowCanvas";
+import { FLOW_NODE_REGISTRY } from "./FlowNodeRegistry";
 
 interface EdgeRolePickerDialogProps {
   pendingEdge: { fromNodeId: string; toNodeId: string };
@@ -42,7 +43,7 @@ const ROLE_OPTIONS: Array<{
   {
     role: "system-instruction",
     label: "System Instruction",
-    description: "Becomes part of the LLM system prompt (LLM Base node)",
+    description: "Becomes part of the LLM system prompt",
     icon: BrainCircuit,
     iconClass: "text-fuchsia-500",
   },
@@ -55,6 +56,14 @@ export function EdgeRolePickerDialog({
   onCancel,
 }: EdgeRolePickerDialogProps) {
   const [selected, setSelected] = useState<Set<EdgeRole>>(new Set());
+
+  // Filter roles to only those the target node actually processes
+  const visibleRoles = useMemo(() => {
+    if (!targetNode) return ROLE_OPTIONS;
+    const def = FLOW_NODE_REGISTRY[targetNode.type];
+    if (!def || def.acceptedRoles.length === 0) return ROLE_OPTIONS;
+    return ROLE_OPTIONS.filter((opt) => def.acceptedRoles.includes(opt.role));
+  }, [targetNode]);
 
   const toggle = (role: EdgeRole) => {
     setSelected((prev) => {
@@ -77,7 +86,7 @@ export function EdgeRolePickerDialog({
           How should <span className="font-medium text-foreground">{targetLabel}</span> use this input? Select one or more roles.
         </p>
         <div className="flex flex-col gap-2">
-          {ROLE_OPTIONS.map(({ role, label, description, icon: Icon, iconClass }) => {
+          {visibleRoles.map(({ role, label, description, icon: Icon, iconClass }) => {
             const isSelected = selected.has(role);
             return (
               <button

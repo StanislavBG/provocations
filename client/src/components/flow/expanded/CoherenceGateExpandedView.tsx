@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface CoherenceGateExpandedViewProps {
   node: FlowNode;
@@ -153,9 +154,10 @@ export function CoherenceGateExpandedView({
           : "bg-red-500/10";
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left: Config */}
-      <div className="w-80 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             {/* Label */}
@@ -302,10 +304,10 @@ export function CoherenceGateExpandedView({
             </div>
           </div>
         </ScrollArea>
-      </div>
-
-      {/* Right: Score display + test */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="px-4 py-2 border-b bg-muted/20 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Coherence Score
@@ -461,7 +463,8 @@ export function CoherenceGateExpandedView({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

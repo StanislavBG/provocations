@@ -13,6 +13,7 @@ import { ProvokeText } from "@/components/ProvokeText";
 import { useToast } from "@/hooks/use-toast";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import type { FlowNode } from "../useFlowCanvas";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface AudioExpandedViewProps {
   node: FlowNode;
@@ -46,9 +47,10 @@ export function AudioExpandedView({ node, onUpdateNode }: AudioExpandedViewProps
   }, [node.id, onUpdateNode, toast]);
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left: Controls */}
-      <div className="w-72 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={25}
+      left={
+        <div className="flex flex-col h-full">
         <div className="p-4 space-y-4">
           {/* Recording control */}
           <div className="flex flex-col items-center gap-3 py-4">
@@ -109,10 +111,10 @@ export function AudioExpandedView({ node, onUpdateNode }: AudioExpandedViewProps
             </Button>
           </div>
         </div>
-      </div>
-
-      {/* Right: Transcript */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="px-4 py-2 border-b bg-muted/20 flex items-center gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Transcript</h3>
           {isRecording && (
@@ -148,7 +150,8 @@ export function AudioExpandedView({ node, onUpdateNode }: AudioExpandedViewProps
             </div>
           )}
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

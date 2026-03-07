@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface LogicExpandedViewProps {
   node: FlowNode;
@@ -36,9 +37,10 @@ export function LogicExpandedView({ node, nodes, edges, onUpdateNode }: LogicExp
   }, [node.id, nodes, edges]);
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left: Config */}
-      <div className="w-80 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             {/* Node label */}
@@ -77,10 +79,10 @@ export function LogicExpandedView({ node, nodes, edges, onUpdateNode }: LogicExp
             </div>
           </div>
         </ScrollArea>
-      </div>
-
-      {/* Right: Visual flow */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="px-4 py-2 border-b bg-muted/20">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Data Flow</h3>
         </div>
@@ -124,8 +126,9 @@ export function LogicExpandedView({ node, nodes, edges, onUpdateNode }: LogicExp
             </div>
           </div>
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }
 

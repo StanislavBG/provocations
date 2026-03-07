@@ -16,6 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { SOCIAL_PLATFORMS } from "@/lib/social-platforms";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface ApiConnectionExpandedViewProps {
   node: FlowNode;
@@ -201,9 +202,10 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
   const serviceConn = service ? connectionStatus[service] : null;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left panel: Config */}
-      <div className="w-80 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-5">
             {/* Auto-detected hint */}
@@ -326,10 +328,10 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
             </Button>
           </div>
         </ScrollArea>
-      </div>
-
-      {/* Right panel: Preview + Log */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col overflow-hidden">
         {/* Status banner */}
         {node.apiLastResult && (
           <div className={`px-4 py-2 border-b flex items-center gap-2 text-sm ${
@@ -400,7 +402,8 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
             </div>
           )}
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

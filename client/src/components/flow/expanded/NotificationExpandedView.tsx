@@ -4,6 +4,7 @@ import { Bell, Users, Mail, Link2, Send, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode } from "../useFlowCanvas";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface NotificationExpandedViewProps {
   node: FlowNode;
@@ -80,9 +81,10 @@ export function NotificationExpandedView({
     .replace(/\{time\}/g, new Date().toLocaleString());
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left panel: Configuration */}
-      <div className="w-80 border-r flex flex-col bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <div className="p-4 border-b border-border/50">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Bell className="w-4 h-4 text-pink-500" />
@@ -206,10 +208,10 @@ export function NotificationExpandedView({
             {node.notifyStatus === "sending" ? "Sending..." : "Send Test Notification"}
           </Button>
         </div>
-      </div>
-
-      {/* Right panel: Preview */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="p-4 border-b border-border/50">
           <h3 className="text-sm font-semibold">Message Preview</h3>
         </div>
@@ -258,7 +260,8 @@ export function NotificationExpandedView({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.13";
+export const APP_VERSION = "0.17.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,30 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.17.2",
+    date: "2026-03-07",
+    changes: [
+      "Connection role picker now only shows roles the target node actually accepts — LLM Base shows System Instruction + Context, Research shows Objective + Context + Output Format, Interview shows Objective + Context",
+      "Nodes that don't differentiate roles (Painter, Social Post, etc.) skip the role picker entirely",
+    ],
+  },
+  {
+    version: "0.17.1",
+    date: "2026-03-07",
+    changes: [
+      "Add delete button for user-created blueprints in the My Blueprints section",
+    ],
+  },
+  {
+    version: "0.17.0",
+    date: "2026-03-07",
+    changes: [
+      "Resizable left panel in all expanded node views — drag the divider to see full descriptions, video titles, and controls",
+      "Fix expanded view buttons unclickable (YouTube Get Transcript, etc.) — overflow-hidden on content wrapper gives ResizablePanelGroup proper height",
+      "Fix AIQA overlay not visible — boost z-index to render above all app UI layers",
+    ],
+  },
   {
     version: "0.16.13",
     date: "2026-03-07",
