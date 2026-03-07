@@ -51,7 +51,9 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
     queryKey: ["/api/chat/models"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/chat/models");
-      return res.json();
+      const data = await res.json();
+      // Endpoint returns { models: [...], defaultModel: "..." }
+      return Array.isArray(data) ? data : (data.models ?? []);
     },
     staleTime: 60_000,
   });
