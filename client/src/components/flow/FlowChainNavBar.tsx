@@ -6,8 +6,9 @@ import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { NODE_STYLES, NODE_ICONS, ACCENT_BG } from "./FlowNodeRenderer";
 
 /**
- * Compute the ordered chain of connected nodes starting from a given node.
- * BFS to find connected component, then topological sort for left-to-right order.
+ * Compute the direct workflow chain through a given node.
+ * Walks backward (upstream ancestors) and forward (downstream descendants)
+ * following directed edges only. Unconnected nodes produce a chain of 1.
  */
 function computeChain(
   activeNodeId: string,
@@ -17,7 +18,7 @@ function computeChain(
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   if (!nodeMap.has(activeNodeId)) return [];
 
-  // Build adjacency (both directions for finding connected component)
+  // Build directed adjacency
   const forward = new Map<string, string[]>();
   const backward = new Map<string, string[]>();
   for (const e of edges) {
@@ -28,56 +29,41 @@ function computeChain(
     backward.get(e.toNodeId)!.push(e.fromNodeId);
   }
 
-  // BFS to find connected component (undirected traversal)
-  const visited = new Set<string>();
-  const queue = [activeNodeId];
-  visited.add(activeNodeId);
-  while (queue.length > 0) {
-    const cur = queue.shift()!;
-    for (const next of forward.get(cur) || []) {
-      if (!visited.has(next)) {
-        visited.add(next);
-        queue.push(next);
-      }
-    }
+  // BFS upstream (follow backward edges only)
+  const upstream: string[] = [];
+  const upVisited = new Set<string>([activeNodeId]);
+  const upQueue = [...(backward.get(activeNodeId) || [])];
+  for (const id of upQueue) upVisited.add(id);
+  while (upQueue.length > 0) {
+    const cur = upQueue.shift()!;
+    upstream.push(cur);
     for (const prev of backward.get(cur) || []) {
-      if (!visited.has(prev)) {
-        visited.add(prev);
-        queue.push(prev);
+      if (!upVisited.has(prev)) {
+        upVisited.add(prev);
+        upQueue.push(prev);
       }
     }
   }
 
-  // Topological sort (Kahn's algorithm) within the connected component
-  const componentIds = Array.from(visited);
-  const inDegree = new Map<string, number>();
-  for (const id of componentIds) inDegree.set(id, 0);
-  for (const e of edges) {
-    if (visited.has(e.fromNodeId) && visited.has(e.toNodeId)) {
-      inDegree.set(e.toNodeId, (inDegree.get(e.toNodeId) || 0) + 1);
-    }
-  }
-
-  const sorted: string[] = [];
-  const sources = componentIds.filter((id) => inDegree.get(id) === 0);
-  const q = [...sources];
-  while (q.length > 0) {
-    const cur = q.shift()!;
-    sorted.push(cur);
+  // BFS downstream (follow forward edges only)
+  const downstream: string[] = [];
+  const downVisited = new Set<string>([activeNodeId]);
+  const downQueue = [...(forward.get(activeNodeId) || [])];
+  for (const id of downQueue) downVisited.add(id);
+  while (downQueue.length > 0) {
+    const cur = downQueue.shift()!;
+    downstream.push(cur);
     for (const next of forward.get(cur) || []) {
-      if (!visited.has(next)) continue;
-      const deg = (inDegree.get(next) || 1) - 1;
-      inDegree.set(next, deg);
-      if (deg === 0) q.push(next);
+      if (!downVisited.has(next)) {
+        downVisited.add(next);
+        downQueue.push(next);
+      }
     }
   }
 
-  // Append any remaining nodes (cycles) in original order
-  for (const id of componentIds) {
-    if (!sorted.includes(id)) sorted.push(id);
-  }
-
-  return sorted.map((id) => nodeMap.get(id)!).filter(Boolean);
+  // Build chain: upstream (reversed for source-first) → active → downstream
+  const chain = [...upstream.reverse(), activeNodeId, ...downstream];
+  return chain.map((id) => nodeMap.get(id)!).filter(Boolean);
 }
 
 interface FlowChainNavBarProps {

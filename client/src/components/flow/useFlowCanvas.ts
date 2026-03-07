@@ -26,7 +26,8 @@ export type FlowNodeType =
   | "coherence-gate"
   | "notification"
   | "upload"
-  | "approval";
+  | "approval"
+  | "llm-base";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -57,6 +58,32 @@ export interface FlowNode {
   llmOutput?: string;
   /** LLM node: error message if execution failed */
   llmError?: string;
+  /** LLM Base node: selected model ID */
+  llmBaseModel?: string;
+  /** LLM Base node: temperature (0-2, default 1.0) */
+  llmBaseTemperature?: number;
+  /** LLM Base node: top-p nucleus sampling (0-1, default 1.0) */
+  llmBaseTopP?: number;
+  /** LLM Base node: top-k token sampling (0-100, default 0 = unlimited) */
+  llmBaseTopK?: number;
+  /** LLM Base node: max output tokens (default 8192) */
+  llmBaseMaxTokens?: number;
+  /** LLM Base node: safety filter level */
+  llmBaseSafety?: "none" | "low" | "medium" | "high";
+  /** LLM Base node: enable Google Search grounding */
+  llmBaseEnableSearch?: boolean;
+  /** LLM Base node: manual system prompt text */
+  llmBaseSystemPrompt?: string;
+  /** LLM Base node: user prompt text */
+  llmBaseUserPrompt?: string;
+  /** LLM Base node: last generated output */
+  llmBaseOutput?: string;
+  /** LLM Base node: streaming toggle */
+  llmBaseStreaming?: boolean;
+  /** LLM Base node: execution status */
+  llmBaseStatus?: "idle" | "running" | "done" | "error";
+  /** LLM Base node: error message */
+  llmBaseError?: string;
   /** Research node: persisted conversation messages */
   researchMessages?: Array<{ role: string; content: string }>;
   /** Research node: the initial query for display on the card */
@@ -290,7 +317,7 @@ export interface FlowNode {
 }
 
 /** Named edge roles — how source data is used by the target node */
-export type EdgeRole = "context" | "objective" | "output-format";
+export type EdgeRole = "context" | "objective" | "output-format" | "system-instruction";
 
 export interface FlowEdge {
   id: string;
@@ -314,7 +341,7 @@ export function edgeRoles(edge: FlowEdge): EdgeRole[] {
 
 /** Node types that benefit from role-typed input edges */
 export const ROLE_AWARE_TARGETS = new Set([
-  "research", "interview", "llm", "painter", "social-post", "coherence-gate",
+  "research", "interview", "llm", "painter", "social-post", "coherence-gate", "llm-base",
 ]);
 
 export interface FlowViewport {

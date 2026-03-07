@@ -45,6 +45,7 @@ import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import type { LifecyclePhase, LifecycleStatus } from "@/lib/lifecycleLog";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
 import { LlmExpandedView } from "@/components/flow/expanded/LlmExpandedView";
+import { LlmBaseExpandedView } from "@/components/flow/expanded/LlmBaseExpandedView";
 import { AudioExpandedView } from "@/components/flow/expanded/AudioExpandedView";
 import { YoutubeExpandedView } from "@/components/flow/expanded/YoutubeExpandedView";
 import { TimerExpandedView } from "@/components/flow/expanded/TimerExpandedView";
@@ -2196,6 +2197,22 @@ function FlowWorkspaceInner() {
         });
         return;
       }
+      if (toolId === "llm-base") {
+        addNode("llm-base", canvasX, canvasY, {
+          label: "LLM",
+          snippet: "Double-click to configure and run",
+          llmBaseModel: "gemini-2.5-flash",
+          llmBaseTemperature: 1.0,
+          llmBaseTopP: 1.0,
+          llmBaseTopK: 0,
+          llmBaseMaxTokens: 8192,
+          llmBaseSafety: "none",
+          llmBaseEnableSearch: false,
+          llmBaseStreaming: true,
+          llmBaseStatus: "idle",
+        });
+        return;
+      }
     },
     [addNode],
   );
@@ -2292,8 +2309,15 @@ function FlowWorkspaceInner() {
         setCanvasTitle(title);
         toast({ title: "Canvas saved", description: "Saved to Context Store" });
       }
-      // Refresh the document list so the canvas appears immediately
-      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      // Update the specific doc in cache instead of refetching all documents
+      // (full invalidation triggers decryption of every document title — slow)
+      if (canvasDocumentId) {
+        queryClient.setQueryData(["/api/documents"], (old: unknown) =>
+          Array.isArray(old) ? old.map((d: { id: number }) => d.id === canvasDocumentId ? { ...d, title } : d) : old,
+        );
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      }
     } catch {
       toast({ title: "Save failed", variant: "destructive" });
     } finally {
@@ -3754,6 +3778,16 @@ function FlowWorkspaceInner() {
             case "llm":
               return (
                 <LlmExpandedView
+                  node={activeExpandedNode}
+                  nodes={state.nodes}
+                  edges={state.edges}
+                  onUpdateNode={updateNode}
+                />
+              );
+
+            case "llm-base":
+              return (
+                <LlmBaseExpandedView
                   node={activeExpandedNode}
                   nodes={state.nodes}
                   edges={state.edges}
