@@ -29,6 +29,7 @@ import {
   Bell,
   Upload,
   UserCheck,
+  CircuitBoard,
 } from "lucide-react";
 import type { FlowNodeType, PortDef } from "./useFlowCanvas";
 
@@ -750,3 +751,41 @@ export const DEFAULT_DIMENSIONS: Record<FlowNodeType, { width: number; height: n
       { width: v.defaultWidth, height: v.defaultHeight },
     ]),
   ) as Record<FlowNodeType, { width: number; height: number }>;
+
+// ── Dock Tool Catalog — single source of truth for all dock-able tools ──
+
+export interface DockToolCatalogEntry {
+  toolId: string;
+  label: string;
+  icon: React.ElementType;
+  iconName: string;
+  group: "gather" | "workshop" | "build";
+  description: string;
+}
+
+/**
+ * Canonical list of all tools available in the dock and Workspace Tools gateway.
+ * AleComponentGateway, FtuxDock, and FlowWorkspace all derive from this catalog.
+ */
+export const DOCK_TOOL_CATALOG: DockToolCatalogEntry[] = [
+  // ── Gather ──
+  { toolId: "context", label: "Context", icon: BookOpen, iconName: "BookOpen", group: "gather", description: "Browse and load documents from your Context Store" },
+  { toolId: "label", label: "Label", icon: Type, iconName: "Type", group: "gather", description: "Add text annotations to organize your canvas" },
+  { toolId: "zone", label: "Zone", icon: SquareDashedBottom, iconName: "SquareDashedBottom", group: "gather", description: "Group and organize elements in a visual container" },
+  { toolId: "audio", label: "Audio Capture", icon: Mic, iconName: "Mic", group: "gather", description: "Record audio with real-time speech-to-text transcription" },
+  { toolId: "youtube", label: "YouTube", icon: Youtube, iconName: "Youtube", group: "gather", description: "Extract transcripts from YouTube videos, search, or playlists" },
+  { toolId: "upload", label: "Upload", icon: Upload, iconName: "Upload", group: "gather", description: "Upload files (images, PDFs, text) via drag-and-drop" },
+  // ── Workshop ──
+  { toolId: "research", label: "Research", icon: Sparkles, iconName: "Sparkles", group: "workshop", description: "AI-powered streaming research assistant" },
+  { toolId: "interview", label: "Interview", icon: MessageCircleQuestion, iconName: "MessageCircleQuestion", group: "workshop", description: "Guided Q&A sessions to build structured knowledge" },
+  // ── Build ──
+  { toolId: "llm", label: "Text Mods", icon: Brain, iconName: "Brain", group: "build", description: "Summarize, expand, clean, or custom-transform text with AI" },
+  { toolId: "painter", label: "Painter", icon: Paintbrush, iconName: "Paintbrush", group: "build", description: "Generate images from text descriptions" },
+  { toolId: "timeline", label: "Timeline", icon: Clock, iconName: "Clock", group: "build", description: "Build visual timelines from content" },
+  { toolId: "timer-event", label: "Trigger", icon: Timer, iconName: "Timer", group: "build", description: "Schedule or trigger downstream node execution" },
+  { toolId: "logic", label: "Logic", icon: CircuitBoard, iconName: "CircuitBoard", group: "build", description: "Filter, gate, route, merge, or coherence-check content" },
+  { toolId: "social-post", label: "Social Post", icon: Share2, iconName: "Share2", group: "build", description: "Generate platform-specific social media posts" },
+  { toolId: "api-connection", label: "API Post", icon: Wifi, iconName: "Wifi", group: "build", description: "Publish content to external APIs and services" },
+  { toolId: "notification", label: "Notify", icon: Bell, iconName: "Bell", group: "build", description: "Send notifications to users when chain completes" },
+  { toolId: "approval", label: "Approval", icon: UserCheck, iconName: "UserCheck", group: "build", description: "Pause chain until user approves or rejects" },
+];

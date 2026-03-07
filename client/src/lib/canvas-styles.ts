@@ -11,6 +11,7 @@ export interface CanvasStyleDef {
   swatchColor: string;        // swatch preview color
   isDark: boolean;            // true = adds .dark class, false = removes it
   paletteId: PaletteId;
+  cssClass?: string;          // Optional class applied to <html> for theme-specific styles
 }
 
 export const CANVAS_STYLES: CanvasStyleDef[] = [
@@ -25,7 +26,8 @@ export const CANVAS_STYLES: CanvasStyleDef[] = [
     heroVisible: true,
     swatchColor: "#1a1040",
     isDark: true,
-    paletteId: "ember",
+    paletteId: "dusk",
+    cssClass: "canvas-aurora",
   },
   // ── Light themes ──
   {

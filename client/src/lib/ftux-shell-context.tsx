@@ -310,6 +310,12 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
         // Auto-apply palette and dark/light mode from the style
         applyThemeToDOM(style.isDark ? "dark" : "light");
         applyPaletteToDOM(style.paletteId);
+        // Toggle canvas-specific CSS class on <html>
+        const root = document.documentElement;
+        for (const s of CANVAS_STYLES) {
+          if (s.cssClass) root.classList.remove(s.cssClass);
+        }
+        if (style.cssClass) root.classList.add(style.cssClass);
         return {
           ...c,
           canvasTheme: val,
@@ -467,6 +473,16 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
   useEffect(() => {
     applyPaletteToDOM(config.palette);
   }, [config.palette]);
+
+  // Apply canvas style CSS class on mount and when canvasTheme changes
+  useEffect(() => {
+    const root = document.documentElement;
+    for (const s of CANVAS_STYLES) {
+      if (s.cssClass) root.classList.remove(s.cssClass);
+    }
+    const active = CANVAS_STYLES.find((s) => s.key === config.canvasTheme);
+    if (active?.cssClass) root.classList.add(active.cssClass);
+  }, [config.canvasTheme]);
 
   // Sync initialConfig prop into state when API data arrives after mount
   const initialConfigRef = useRef(initialConfig);

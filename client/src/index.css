@@ -736,6 +736,38 @@
   }
 }
 
+/* ── Aurora Glassmorphism ──
+ * When the "Aurora" canvas style is active, UI surfaces become translucent
+ * with backdrop blur so the BG-Labs animated background shows through.
+ */
+html.canvas-aurora .bg-card {
+  background-color: hsl(var(--card) / 0.55) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+html.canvas-aurora .bg-popover {
+  background-color: hsl(var(--popover) / 0.6) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+html.canvas-aurora .bg-background {
+  background-color: hsl(var(--background) / 0.35) !important;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+html.canvas-aurora .bg-muted {
+  background-color: hsl(var(--muted) / 0.4) !important;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+html.canvas-aurora .border-border {
+  border-color: hsl(var(--border) / 0.35);
+}
+
 /* Flow canvas loading bar animation */
 @keyframes flow-loading-bar {
   0% { transform: translateX(-100%); }

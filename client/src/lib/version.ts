@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.15.0";
+export const APP_VERSION = "0.15.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.15.1",
+    date: "2026-03-06",
+    changes: [
+      "Workspace Tools gateway now sources all 17 tools from DOCK_TOOL_CATALOG (single source of truth in FlowNodeRegistry)",
+      "Aurora canvas style: glassmorphism UI with translucent cards, backdrop blur, and dusk palette for visual harmony with BG-Labs background",
+      "Fix FtuxDock missing icons for Social Post, API Connection, Notification, Upload, and Approval nodes",
+      "Derive FLOW_DOCK_ITEMS from DOCK_TOOL_CATALOG — no more duplicate tool definitions",
+    ],
+  },
   {
     version: "0.15.0",
     date: "2026-03-06",

@@ -33,6 +33,11 @@ import {
   ToggleRight,
   GitBranch,
   Merge as MergeIcon,
+  Share2,
+  Wifi,
+  Bell,
+  Upload,
+  UserCheck,
   Layers,
   Pin,
   PinOff,
@@ -66,6 +71,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
   ToggleRight,
   GitBranch,
   Merge: MergeIcon,
+  Share2,
+  Wifi,
+  Bell,
+  Upload,
+  UserCheck,
 };
 
 /** Grid: 2 rows x COLS columns. Items fill slots, remaining are empty. */
