@@ -476,6 +476,22 @@ export function useFlowCanvas() {
     }));
   }, []);
 
+  /** Bring a node (or multiple nodes) to the front of the z-stack */
+  const bringToFront = useCallback((nodeIds: string | string[]) => {
+    const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+    const idSet = new Set(ids);
+    setState((s) => {
+      const maxZ = Math.max(...s.nodes.map((n) => n.zIndex), 0);
+      let nextZ = maxZ + 1;
+      return {
+        ...s,
+        nodes: s.nodes.map((n) =>
+          idSet.has(n.id) ? { ...n, zIndex: nextZ++ } : n,
+        ),
+      };
+    });
+  }, []);
+
   const addEdge = useCallback(
     (fromNodeId: string, toNodeId: string, role?: EdgeRole | EdgeRole[]): string => {
       pushHistory();
@@ -618,6 +634,7 @@ export function useFlowCanvas() {
     pushUndoSnapshot,
     moveNode,
     moveNodes,
+    bringToFront,
     deleteNode,
     deleteNodes,
     deleteEdge,

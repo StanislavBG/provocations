@@ -78,6 +78,7 @@ interface UseFlowInteractionProps {
   onNodeDoubleClick: (nodeId: string) => void;
   onEdgeCreate?: (fromNodeId: string, toNodeId: string) => void;
   onDragStart?: () => void;
+  onBringToFront?: (nodeIds: string | string[]) => void;
   nodes: FlowNode[];
   /** Currently selected node IDs (for multi-select group drag) */
   selectedNodeIds?: Set<string>;
@@ -110,6 +111,7 @@ export function useFlowInteraction({
   onNodeDoubleClick,
   onEdgeCreate,
   onDragStart,
+  onBringToFront,
   nodes,
   selectedNodeIds,
   glideKeys,
@@ -430,6 +432,10 @@ export function useFlowInteraction({
         groupIds = Array.from(merged);
       }
 
+      // Bring dragged node(s) to front of z-stack
+      const allDragIds = groupIds ? [nodeId, ...groupIds] : [nodeId];
+      onBringToFront?.(allDragIds);
+
       setDragState({
         type: "move-node",
         startX: pos.x,
@@ -442,7 +448,7 @@ export function useFlowInteraction({
         lastCanvasY: pos.y,
       });
     },
-    [nodes, screenToCanvas, onSelectNode, onToggleSelectNode, selectedNodeIds],
+    [nodes, screenToCanvas, onSelectNode, onToggleSelectNode, selectedNodeIds, onBringToFront],
   );
 
   const handleNodeDoubleClick = useCallback(

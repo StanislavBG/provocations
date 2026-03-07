@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.17.2";
+export const APP_VERSION = "0.17.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.17.3",
+    date: "2026-03-07",
+    changes: [
+      "LLM (Text Mods) node is now playable from the compact canvas card — click Play to run without opening the expanded view",
+      "Dragged nodes now elevate to the top of the z-stack so they stay visible above other nodes",
+      "Fixed node renaming in the expanded overlay — double-click the label, type, and it persists correctly",
+      "Added /project-component-compare page with a side-by-side table comparing LLM, LLM Base, and Research nodes",
+    ],
+  },
   {
     version: "0.17.2",
     date: "2026-03-07",
