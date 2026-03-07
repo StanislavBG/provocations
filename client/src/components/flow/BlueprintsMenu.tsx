@@ -32,6 +32,7 @@ import {
   Share2,
   Loader2,
   CheckCircle,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -160,6 +161,23 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
     }
   };
 
+  const handleDeleteBlueprint = async (bp: BlueprintSummary, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!bp.documentId) return;
+    try {
+      await apiRequest("DELETE", `/api/documents/${bp.documentId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/blueprints"] });
+      toast({ title: "Blueprint deleted", description: `"${bp.label}" has been removed.` });
+    } catch (err) {
+      toast({
+        title: "Delete failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getIcon = (iconName: string) => {
     const Icon = ICON_MAP[iconName] || LayoutTemplate;
     return Icon;
@@ -239,13 +257,22 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
                       </div>
                     </div>
                     {bp.documentId && (
-                      <button
-                        className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                        onClick={(e) => handleShareClick(bp, e)}
-                        title="Share blueprint"
-                      >
-                        <Share2 className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center shrink-0">
+                        <button
+                          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                          onClick={(e) => handleShareClick(bp, e)}
+                          title="Share blueprint"
+                        >
+                          <Share2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          onClick={(e) => handleDeleteBlueprint(bp, e)}
+                          title="Delete blueprint"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     )}
                   </DropdownMenuItem>
                 );
