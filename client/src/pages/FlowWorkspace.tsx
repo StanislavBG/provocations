@@ -5,7 +5,7 @@ import { cn, generateId } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@clerk/clerk-react";
 import { FtuxShellProvider, useFtuxShell } from "@/lib/ftux-shell-context";
-import type { FtuxShellConfig, DockItem } from "@/lib/ftux-shell-context";
+import type { FtuxShellConfig, DockItem, ToolId } from "@/lib/ftux-shell-context";
 import { matchesAction } from "@/lib/keybind-actions";
 import { FtuxShell } from "@/components/ftux/FtuxShell";
 import { FtuxStatusBar } from "@/components/ftux/FtuxStatusBar";
@@ -34,6 +34,7 @@ import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
 import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { LifecyclePreset } from "@/components/flow/FlowNodeRegistry";
+import { DOCK_TOOL_CATALOG } from "@/components/flow/FlowNodeRegistry";
 import { useLifecycleEngine } from "@/components/flow/useLifecycleEngine";
 import { getLifecycleHandlers } from "@/components/flow/lifecycles/index";
 import { gatherInputContentWithRoles, gatherChainContext, gatherStructuredChainContext } from "@/components/flow/useNodeLifecycle";
@@ -85,27 +86,14 @@ import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
 import { APP_VERSION, RELEASE_NOTES } from "@/lib/version";
 
-// ── Dock config ──
+// ── Dock config — derived from the single-source-of-truth catalog ──
 
-const FLOW_DOCK_ITEMS: DockItem[] = [
-  { toolId: "context", label: "Context", icon: "BookOpen", group: "gather" },
-  { toolId: "label", label: "Label", icon: "Type", group: "gather" },
-  { toolId: "zone", label: "Zone", icon: "SquareDashedBottom", group: "gather" },
-  { toolId: "audio", label: "Capture Audio", icon: "Mic", group: "gather" },
-  { toolId: "youtube", label: "YouTube", icon: "Youtube", group: "gather" },
-  { toolId: "upload", label: "Upload", icon: "Upload", group: "gather" },
-  { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop" },
-  { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", group: "workshop" },
-  { toolId: "llm", label: "Text Mods", icon: "Brain", group: "build" },
-  { toolId: "painter", label: "Painter", icon: "Paintbrush", group: "build" },
-  { toolId: "timeline", label: "Timeline", icon: "Clock", group: "build" },
-  { toolId: "timer-event", label: "Trigger", icon: "Timer", group: "build" },
-  { toolId: "logic", label: "Logic", icon: "CircuitBoard", group: "build" },
-  { toolId: "social-post", label: "Social Post", icon: "Share2", group: "build" },
-  { toolId: "api-connection", label: "API Post", icon: "Wifi", group: "build" },
-  { toolId: "notification", label: "Notify", icon: "Bell", group: "build" },
-  { toolId: "approval", label: "Approval", icon: "UserCheck", group: "build" },
-];
+const FLOW_DOCK_ITEMS: DockItem[] = DOCK_TOOL_CATALOG.map((entry) => ({
+  toolId: entry.toolId as ToolId,
+  label: entry.label,
+  icon: entry.iconName,
+  group: entry.group,
+}));
 
 const FLOW_SHELL_CONFIG: FtuxShellConfig = {
   ...DEFAULT_SHELL_CONFIG,

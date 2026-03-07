@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { useFtuxShell, type ToolId, type DockItem, type DockGroup } from "@/lib/ftux-shell-context";
+import { useFtuxShell, type ToolId, type DockGroup } from "@/lib/ftux-shell-context";
 import {
   Dialog,
   DialogContent,
@@ -8,50 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import {
-  Sparkles,
-  FileText,
-  Users,
-  Paintbrush,
-  BookOpen,
-  MessageCircleQuestion,
-  Clock,
-  Brain,
-  FileEdit,
-  SquareDashedBottom,
-  BarChart3,
-  Wand2,
-  ListCollapse,
-  type LucideIcon,
-} from "lucide-react";
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  Sparkles, FileText, Users, Paintbrush, BookOpen,
-  MessageCircleQuestion, Clock, Brain, FileEdit,
-  SquareDashedBottom, BarChart3, Wand2, ListCollapse,
-};
-
-/** Full catalog of available workspace tools */
-const ALL_TOOLS: {
-  toolId: ToolId;
-  label: string;
-  icon: string;
-  group: DockGroup;
-  description: string;
-}[] = [
-  { toolId: "context", label: "Context Store", icon: "BookOpen", group: "gather", description: "Browse and load documents from your store" },
-  { toolId: "zone", label: "Zone", icon: "SquareDashedBottom", group: "gather", description: "Group and organize elements on canvas" },
-  { toolId: "research", label: "Research", icon: "Sparkles", group: "workshop", description: "AI-powered research assistant" },
-  { toolId: "interview", label: "Interview", icon: "MessageCircleQuestion", group: "workshop", description: "Guided interview to gather requirements" },
-  { toolId: "document", label: "Document", icon: "FileEdit", group: "build", description: "Create and groom markdown documents" },
-  { toolId: "llm", label: "Text Modifications", icon: "Brain", group: "build", description: "Summarize, expand, refine text with AI" },
-  { toolId: "painter", label: "Painter", icon: "Paintbrush", group: "build", description: "Generate images from text descriptions" },
-  { toolId: "timeline", label: "Timeline", icon: "Clock", group: "build", description: "Build visual timelines from content" },
-  { toolId: "chart", label: "BS Chart", icon: "BarChart3", group: "build", description: "Create flowcharts and diagrams" },
-  { toolId: "provo", label: "Provocations", icon: "Users", group: "workshop", description: "Multi-persona challenge discussions" },
-  { toolId: "notes", label: "Notes", icon: "ListCollapse", group: "gather", description: "Capture and manage notes" },
-  { toolId: "writer", label: "Writer", icon: "Wand2", group: "build", description: "Smart document writing assistant" },
-];
+import { Sparkles } from "lucide-react";
+import { DOCK_TOOL_CATALOG, type DockToolCatalogEntry } from "@/components/flow/FlowNodeRegistry";
 
 const GROUP_META: Record<DockGroup, { label: string; color: string }> = {
   gather: { label: "Gather", color: "text-amber-500" },
@@ -74,11 +32,11 @@ export function AleComponentGateway({ open, onOpenChange }: AleComponentGatewayP
   );
 
   const filtered = filter === "all"
-    ? ALL_TOOLS
-    : ALL_TOOLS.filter((t) => t.group === filter);
+    ? DOCK_TOOL_CATALOG
+    : DOCK_TOOL_CATALOG.filter((t) => t.group === filter);
 
   const grouped = useMemo(() => {
-    const groups: Record<string, typeof ALL_TOOLS> = {};
+    const groups: Record<string, DockToolCatalogEntry[]> = {};
     for (const tool of filtered) {
       const g = tool.group;
       if (!groups[g]) groups[g] = [];
@@ -87,11 +45,11 @@ export function AleComponentGateway({ open, onOpenChange }: AleComponentGatewayP
     return groups;
   }, [filtered]);
 
-  const handleToggle = (tool: typeof ALL_TOOLS[0], enabled: boolean) => {
+  const handleToggle = (tool: DockToolCatalogEntry, enabled: boolean) => {
     if (enabled) {
-      addDockItem({ toolId: tool.toolId, label: tool.label, icon: tool.icon, group: tool.group });
+      addDockItem({ toolId: tool.toolId as ToolId, label: tool.label, icon: tool.iconName, group: tool.group });
     } else {
-      removeDockItem(tool.toolId);
+      removeDockItem(tool.toolId as ToolId);
     }
   };
 
@@ -132,8 +90,8 @@ export function AleComponentGateway({ open, onOpenChange }: AleComponentGatewayP
               </h3>
               <div className="space-y-1">
                 {tools.map((tool) => {
-                  const Icon = ICON_MAP[tool.icon] || Sparkles;
-                  const isEnabled = dockToolIds.has(tool.toolId);
+                  const Icon = tool.icon || Sparkles;
+                  const isEnabled = dockToolIds.has(tool.toolId as ToolId);
                   return (
                     <div
                       key={tool.toolId}
