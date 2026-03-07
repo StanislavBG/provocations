@@ -31,6 +31,7 @@ import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
 import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
 import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
+import { FlowOverlayErrorBoundary } from "@/components/flow/FlowOverlayErrorBoundary";
 import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { LifecyclePreset } from "@/components/flow/FlowNodeRegistry";
@@ -59,6 +60,7 @@ import { StoreExpandedView } from "@/components/flow/expanded/StoreExpandedView"
 import { UploadExpandedView } from "@/components/flow/expanded/UploadExpandedView";
 import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
 import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
+import { serializeCanvas, serializeNodeForSave } from "@/components/flow/serializeCanvas";
 import { PlatformIntegrations } from "@/components/PlatformIntegrations";
 import { ContextStoreManager } from "@/components/ContextStoreManager";
 import {
@@ -967,8 +969,7 @@ function FlowWorkspaceInner() {
       if (!folderId) return;
 
       const now = Date.now();
-      const contentNodes = s.nodes.filter((n) => n.type !== "store");
-      const canvasData = { nodes: contentNodes, edges: s.edges, viewport: s.viewport };
+      const canvasPayload = serializeCanvas(s.nodes, s.edges, s.viewport);
       const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       const date = new Date().toLocaleDateString();
       const isHourlySave = now - lastHourlySaveRef.current >= 3600_000;
@@ -979,7 +980,7 @@ function FlowWorkspaceInner() {
           // Hourly save: always create a new document (kept permanently)
           await apiRequest("POST", "/api/documents", {
             title: `[Hourly] ${label} — ${date} ${time}`,
-            content: JSON.stringify(canvasData),
+            content: canvasPayload,
             folderId,
             docType: "chart",
           });
@@ -1011,12 +1012,12 @@ function FlowWorkspaceInner() {
           if (latest5MinDocIdRef.current) {
             await apiRequest("PUT", `/api/documents/${latest5MinDocIdRef.current}`, {
               title: `[5min] ${label} — ${date} ${time}`,
-              content: JSON.stringify(canvasData),
+              content: canvasPayload,
             });
           } else {
             const res = await apiRequest("POST", "/api/documents", {
               title: `[5min] ${label} — ${date} ${time}`,
-              content: JSON.stringify(canvasData),
+              content: canvasPayload,
               folderId,
               docType: "chart",
             });
@@ -1029,7 +1030,7 @@ function FlowWorkspaceInner() {
         if (canvasDocumentId) {
           await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, {
             title: canvasTitle || "Untitled Canvas",
-            content: JSON.stringify(canvasData),
+            content: canvasPayload,
           }).catch(() => {});
         }
       } catch {
@@ -1071,20 +1072,19 @@ function FlowWorkspaceInner() {
       if (isSavingRef.current) return;
       isSavingRef.current = true;
       try {
-        const contentNodes = stateRef.current.nodes.filter((n) => n.type !== "store");
-        const canvasData = { nodes: contentNodes, edges: stateRef.current.edges, viewport: stateRef.current.viewport };
+        const canvasPayload = serializeCanvas(stateRef.current.nodes, stateRef.current.edges, stateRef.current.viewport);
         const title = canvasTitleRef.current || `Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
         if (canvasDocIdRef.current) {
           await apiRequest("PUT", `/api/documents/${canvasDocIdRef.current}`, {
             title,
-            content: JSON.stringify(canvasData),
+            content: canvasPayload,
           });
         } else {
           // Auto-create canvas document on first change
           const res = await apiRequest("POST", "/api/documents", {
             title,
-            content: JSON.stringify(canvasData),
+            content: canvasPayload,
             docType: "chart",
           });
           const data = (await res.json()) as { id: number };
@@ -1129,12 +1129,11 @@ function FlowWorkspaceInner() {
       if (s.nodes.length === 0) return;
       const docId = canvasDocIdRef.current;
       if (!docId) return;
-      const contentNodes = s.nodes.filter((n) => n.type !== "store");
-      const canvasData = { nodes: contentNodes, edges: s.edges, viewport: s.viewport };
+      const canvasPayload = serializeCanvas(s.nodes, s.edges, s.viewport);
       const title = canvasTitleRef.current || "Untitled Canvas";
       // Use sendBeacon for reliability — it fires even as the page unloads
       const blob = new Blob(
-        [JSON.stringify({ title, content: JSON.stringify(canvasData) })],
+        [JSON.stringify({ title, content: canvasPayload })],
         { type: "application/json" },
       );
       navigator.sendBeacon(`/api/documents/${docId}/beacon`, blob);
@@ -2288,22 +2287,21 @@ function FlowWorkspaceInner() {
     }
     setIsSaving(true);
     try {
-      const contentNodes = state.nodes.filter((n) => n.type !== "store");
-      const canvasData = { nodes: contentNodes, edges: state.edges, viewport: state.viewport };
+      const canvasPayload = serializeCanvas(state.nodes, state.edges, state.viewport);
       const title = canvasTitle || `Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
       if (canvasDocumentId) {
         // Update existing
         await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, {
           title,
-          content: JSON.stringify(canvasData),
+          content: canvasPayload,
         });
         toast({ title: "Canvas saved" });
       } else {
         // Create new
         const res = await apiRequest("POST", "/api/documents", {
           title,
-          content: JSON.stringify(canvasData),
+          content: canvasPayload,
           docType: "chart",
         });
         const data = (await res.json()) as { id: number };
@@ -2835,11 +2833,16 @@ function FlowWorkspaceInner() {
           <BlueprintsMenu
             onLoadBlueprint={handleLoadBlueprint}
             onSaveBlueprint={async (label: string, description: string) => {
+              const originX = state.nodes[0]?.x ?? 0;
+              const originY = state.nodes[0]?.y ?? 0;
               const nodes = state.nodes
                 .filter((n) => n.type !== "zone" && n.type !== "label")
                 .map((n) => {
-                  const { id, type, x: nx, y: ny, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt } = n;
-                  return { id, type, x: nx - state.nodes[0].x, y: ny - state.nodes[0].y, width: nw, height: nh, label: nl, snippet, content, documentContent, llmPresetId, llmObjective, researchQuery, outputConfig, triggerMode, timerInterval, coherenceThreshold, coherenceChecks, coherenceStrictness, coherenceRetryCount, coherencePrompt };
+                  const s = serializeNodeForSave(n);
+                  // Normalize positions to 0,0 origin for blueprint portability
+                  s.x = (s.x ?? 0) - originX;
+                  s.y = (s.y ?? 0) - originY;
+                  return s;
                 });
               const edges = state.edges.map((e) => ({
                 fromNodeId: e.fromNodeId,
@@ -3952,18 +3955,20 @@ function FlowWorkspaceInner() {
         };
 
         return (
-          <FlowExpandedOverlay
-            nodeId={activeExpandedNodeId}
-            node={activeExpandedNode}
-            sourceRect={expandSourceRect}
-            nodes={state.nodes}
-            edges={state.edges}
-            onClose={handleOverlayClose}
-            onNavigate={navigateToNode}
-            onUpdateNode={updateNode}
-          >
-            {renderExpandedContent()}
-          </FlowExpandedOverlay>
+          <FlowOverlayErrorBoundary onClose={handleOverlayClose}>
+            <FlowExpandedOverlay
+              nodeId={activeExpandedNodeId}
+              node={activeExpandedNode}
+              sourceRect={expandSourceRect}
+              nodes={state.nodes}
+              edges={state.edges}
+              onClose={handleOverlayClose}
+              onNavigate={navigateToNode}
+              onUpdateNode={updateNode}
+            >
+              {renderExpandedContent()}
+            </FlowExpandedOverlay>
+          </FlowOverlayErrorBoundary>
         );
       })()}
 
