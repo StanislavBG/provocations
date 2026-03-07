@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.7";
+export const APP_VERSION = "0.16.8";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.8",
+    date: "2026-03-06",
+    changes: [
+      "Fix LLM Base expanded view crash — /api/chat/models returns {models: [...]} not a flat array, causing .map() to fail",
+    ],
+  },
   {
     version: "0.16.7",
     date: "2026-03-06",
