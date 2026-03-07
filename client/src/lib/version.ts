@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.2";
+export const APP_VERSION = "0.16.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.3",
+    date: "2026-03-06",
+    changes: [
+      "Add crypto backward compatibility tests (19 tests): old random-salt → new master-salt decrypt, round-trips, error cases, field fallbacks",
+      "Add canvas compatibility tests (40 tests): load migration, unknown node types, missing fields, edge formats, realistic production canvases, old-encrypt → new-decrypt round-trip",
+      "Fix pre-existing crypto test that expected random salt (now correctly expects fixed master salt)",
+    ],
+  },
   {
     version: "0.16.2",
     date: "2026-03-06",
