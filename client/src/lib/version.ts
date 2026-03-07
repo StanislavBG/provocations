@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.8";
+export const APP_VERSION = "0.16.9";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.9",
+    date: "2026-03-07",
+    changes: [
+      "Fix canvas rename overwrite — user-set title no longer gets replaced by auto-save debounce race condition",
+      "Fix interview brainstorm audio — falls back to REST TTS when ElevenLabs is unavailable instead of silently skipping",
+      "Fix ESC key in expanded overlay — pressing ESC while renaming a label or folder no longer closes the entire overlay",
+    ],
+  },
   {
     version: "0.16.8",
     date: "2026-03-06",

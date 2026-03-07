@@ -488,11 +488,8 @@ export function FlowInterviewOverlay({
         speakQuestion(data.question);
       } else if (!data._hadAudio && trueInterview) {
         // Streamed but no audio was played (ElevenLabs unavailable) —
-        // manually advance the conversation turn so the cycle continues.
-        // Transition PROCESSING → AI_SPEAKING → LISTENING to start the mic.
-        conversationTurn.startSpeaking();
-        // No audio to play, so immediately finish speaking to enter LISTENING
-        setTimeout(() => conversationTurn.finishSpeaking(), 300);
+        // fall back to REST TTS so the question is still spoken aloud.
+        speakQuestion(data.question);
       }
     },
     onError: (error: Error) => {

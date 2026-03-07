@@ -213,8 +213,13 @@ export function FlowExpandedOverlay({
                     onUpdateNode(node.id, { label: val });
                   }
                   setRenamingLabel(false);
+                  e.stopPropagation();
                 }
-                if (e.key === "Escape") setRenamingLabel(false);
+                if (e.key === "Escape") {
+                  setRenamingLabel(false);
+                  e.stopPropagation();
+                  e.preventDefault();
+                }
               }}
             />
           ) : (
