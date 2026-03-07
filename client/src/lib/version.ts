@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.9";
+export const APP_VERSION = "0.16.10";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.10",
+    date: "2026-03-07",
+    changes: [
+      "Fix edge label backgrounds — use fully opaque colors so labels don't bleed through",
+      "Fix expanded overlay background — use inset-0 to cover entire viewport with solid background",
+      "Disable canvas keyboard shortcuts (WASD, zoom, delete, undo/redo) when node overlay is open",
+    ],
+  },
   {
     version: "0.16.9",
     date: "2026-03-07",

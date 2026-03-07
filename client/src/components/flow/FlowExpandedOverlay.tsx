@@ -174,7 +174,7 @@ export function FlowExpandedOverlay({
       <div
         ref={overlayRef}
         className={cn(
-          "fixed left-0 right-0 z-[45] flex flex-col bg-background overflow-hidden",
+          "fixed inset-0 z-[45] flex flex-col bg-background overflow-hidden",
           phase === "expanding" && "will-change-[left,top,width,height,opacity]",
         )}
         style={{

@@ -8,7 +8,7 @@
       "env": {
         "AIQA_API_KEY": "REDACTED",
         "AIQA_PROJECT_ID": "eacc71c9-f5f5-4d1b-a798-3f47b99a04da",
-        "AIQA_URL": "https://aiqastudio.com"
+        "AIQA_URL": "https://aiqastudio.replit.app"
       }
     }
   }
