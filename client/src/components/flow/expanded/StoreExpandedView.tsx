@@ -19,6 +19,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { FlowNode } from "../useFlowCanvas";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface StoreExpandedViewProps {
   node: FlowNode;
@@ -404,9 +405,11 @@ export function StoreExpandedView({
   };
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left panel: Configuration */}
-      <div className="w-80 border-r flex flex-col bg-card/50">
+    <>
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <div className="p-4 border-b border-border/50">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderInput className="w-4 h-4 text-primary" />
@@ -505,10 +508,10 @@ export function StoreExpandedView({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Right panel: Document Browser + Save Preview */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="p-4 border-b border-border/50 flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FileText className="w-4 h-4" />
@@ -624,7 +627,9 @@ export function StoreExpandedView({
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      }
+    />
 
       {/* Context menu for folders */}
       {contextMenu && (
@@ -731,6 +736,6 @@ export function StoreExpandedView({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

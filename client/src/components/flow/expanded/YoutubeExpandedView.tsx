@@ -22,6 +22,7 @@ import { ProvokeText } from "@/components/ProvokeText";
 import { useToast } from "@/hooks/use-toast";
 import type { FlowNode } from "../useFlowCanvas";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 type InputMode = "url" | "search" | "playlist";
 
@@ -339,9 +340,10 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
   const videoId = url ? extractVideoId(url) : null;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left: Config */}
-      <div className="w-80 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             {/* Upstream input hint */}
@@ -737,10 +739,10 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
             )}
           </div>
         </ScrollArea>
-      </div>
-
-      {/* Right: Transcript / Player */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         {/* Embedded player — from URL mode thumbnail click or search result preview */}
         {(showPlayer && videoId || previewVideoId) && (
           <div className="border-b bg-black relative">
@@ -837,7 +839,8 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
             </div>
           )}
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

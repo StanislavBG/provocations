@@ -16,6 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { LLM_PRESETS, getPreset } from "../llm-presets";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface LlmExpandedViewProps {
   node: FlowNode;
@@ -90,9 +91,10 @@ export function LlmExpandedView({ node, nodes, edges, onUpdateNode }: LlmExpande
   const status = node.llmStatus ?? "idle";
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left: Config panel */}
-      <div className="w-80 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={35}
+      left={
+        <div className="flex flex-col h-full">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             {/* Preset selector */}
@@ -155,10 +157,10 @@ export function LlmExpandedView({ node, nodes, edges, onUpdateNode }: LlmExpande
             </Button>
           </div>
         </ScrollArea>
-      </div>
-
-      {/* Right: Input + Output panels */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="flex-1 flex overflow-hidden">
           {/* Input preview */}
           <div className="flex-1 border-r flex flex-col min-w-0">
@@ -214,7 +216,8 @@ export function LlmExpandedView({ node, nodes, edges, onUpdateNode }: LlmExpande
             </ScrollArea>
           </div>
         </div>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

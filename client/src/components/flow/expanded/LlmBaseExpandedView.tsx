@@ -25,6 +25,7 @@ import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { edgeHasRole } from "../useFlowCanvas";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface LlmBaseExpandedViewProps {
   node: FlowNode;
@@ -244,9 +245,10 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   }, [streamingOutput, isRunning]);
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* ── Left: Config Panel ── */}
-      <div className="w-64 shrink-0 border-r bg-card/50 flex flex-col overflow-y-auto">
+    <ExpandedViewLayout
+      defaultLeftSize={25}
+      left={
+        <div className="flex flex-col overflow-y-auto h-full">
         <div className="p-4 space-y-5">
           <div className="flex items-center gap-2 mb-1">
             <BrainCircuit className="w-4 h-4 text-fuchsia-500" />
@@ -403,10 +405,10 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
             </p>
           </div>
         </div>
-      </div>
-
-      {/* ── Right: Main Area ── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
 
@@ -559,7 +561,8 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
             )}
           </div>
         </ScrollArea>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

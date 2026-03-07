@@ -339,10 +339,12 @@ export function edgeRoles(edge: FlowEdge): EdgeRole[] {
   return Array.isArray(edge.role) ? edge.role : [edge.role];
 }
 
-/** Node types that benefit from role-typed input edges */
-export const ROLE_AWARE_TARGETS = new Set([
-  "research", "interview", "llm", "painter", "social-post", "coherence-gate", "llm-base",
-]);
+/**
+ * Node types that benefit from role-typed input edges.
+ * Canonical version lives in FlowNodeRegistry (derived from acceptedRoles).
+ * This re-export kept for backward compat — prefer importing from FlowNodeRegistry.
+ */
+export { ROLE_AWARE_TARGETS } from "./FlowNodeRegistry";
 
 export interface FlowViewport {
   x: number;

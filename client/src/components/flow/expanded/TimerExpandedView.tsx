@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
+import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
 interface TimerExpandedViewProps {
   node: FlowNode;
@@ -84,9 +85,10 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
   }, [node.id, isRunning, onUpdateNode, onToggleTrigger]);
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left: Controls */}
-      <div className="w-72 border-r flex flex-col shrink-0 bg-card/50">
+    <ExpandedViewLayout
+      defaultLeftSize={25}
+      left={
+        <div className="flex flex-col h-full">
         <div className="p-4 space-y-4">
           {/* Mode toggle */}
           <div className="flex gap-1 bg-muted/40 rounded-lg p-1">
@@ -265,10 +267,10 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
             </Button>
           )}
         </div>
-      </div>
-
-      {/* Right: Event log */}
-      <div className="flex-1 flex flex-col min-w-0">
+        </div>
+      }
+      right={
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="px-4 py-2 border-b bg-muted/20 flex items-center gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {mode === "timed" ? "Pulse Log" : "Fire Log"}
@@ -312,7 +314,8 @@ export function TimerExpandedView({ node, onUpdateNode, onPlayNode, onToggleTrig
             <div ref={logEndRef} />
           </div>
         </ScrollArea>
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }

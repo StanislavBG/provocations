@@ -244,17 +244,15 @@ export function FlowExpandedOverlay({
           </Button>
         </div>
 
-        {/* Content area — children manage their own scroll; pb-[50vh] lets
-            the last line of a long document scroll to the top of the viewport */}
+        {/* Content area — overflow-hidden so ResizablePanelGroup children
+            get a bounded height and their internal ScrollAreas work correctly */}
         <div
           className={cn(
-            "flex-1 overflow-auto transition-opacity",
+            "flex-1 overflow-hidden transition-opacity",
             contentVisible ? "opacity-100" : "opacity-0",
           )}
         >
           {contentVisible && children}
-          {/* Scroll-past-end spacer so the bottom of long content can reach the top */}
-          {contentVisible && <div className="h-[50vh] shrink-0" />}
         </div>
       </div>
 
