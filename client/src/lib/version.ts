@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.16.12";
+export const APP_VERSION = "0.16.13";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.16.13",
+    date: "2026-03-07",
+    changes: [
+      "Brainstorm audio latency overhaul: LLM streaming and TTS WebSocket setup now run in parallel (saves 200-500ms)",
+      "ElevenLabs flushContext() called after each sentence to force immediate audio generation instead of buffering",
+      "First TTS send threshold lowered to 30 chars to prime audio pipeline earlier",
+      "Client audio playback switched from sequential Audio elements to Web Audio API AudioContext with gapless scheduling",
+      "Each audio chunk is decoded and scheduled at the exact microsecond the previous chunk ends — zero inter-chunk gaps",
+    ],
+  },
   {
     version: "0.16.12",
     date: "2026-03-07",

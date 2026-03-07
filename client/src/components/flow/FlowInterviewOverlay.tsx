@@ -172,13 +172,12 @@ export function FlowInterviewOverlay({
         brainstormAbortRef.current.abort();
         brainstormAbortRef.current = null;
       }
-      // Stop any playing audio
+      // Stop all scheduled audio chunks
+      stopAllScheduledAudio();
       if (ttsAudioRef.current) {
         ttsAudioRef.current.pause();
         ttsAudioRef.current.onended = null;
       }
-      audioQueueRef.current = [];
-      isPlayingQueueRef.current = false;
       setIsSpeaking(false);
     }, []),
   });
@@ -191,17 +190,6 @@ export function FlowInterviewOverlay({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [entries.length, currentQuestion]);
-
-  // Cleanup audio on unmount
-  useEffect(() => {
-    return () => {
-      if (ttsAudioRef.current) {
-        ttsAudioRef.current.pause();
-        const src = ttsAudioRef.current.src;
-        if (src.startsWith("blob:")) URL.revokeObjectURL(src);
-      }
-    };
-  }, []);
 
   // Auto-enable TTS in true interview mode or brainstorm mode
   useEffect(() => {
@@ -318,44 +306,76 @@ export function FlowInterviewOverlay({
     [node.id, node.type, node.label],
   );
 
-  // ── Audio queue for streaming TTS chunks ──
-  const audioQueueRef = useRef<string[]>([]);
-  const isPlayingQueueRef = useRef(false);
+  // ── Gapless audio via Web Audio API (AudioContext scheduling) ──
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const nextPlayTimeRef = useRef(0);
+  const allAudioReceivedRef = useRef(false);
 
-  const playAudioQueue = useCallback(async () => {
-    if (isPlayingQueueRef.current) return;
-    isPlayingQueueRef.current = true;
-    setIsSpeaking(true);
-    if (trueInterview) conversationTurn.startSpeaking();
+  const stopAllScheduledAudio = useCallback(() => {
+    scheduledSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+    scheduledSourcesRef.current = [];
+    nextPlayTimeRef.current = 0;
+    allAudioReceivedRef.current = false;
+  }, []);
 
-    while (audioQueueRef.current.length > 0) {
-      const base64Chunk = audioQueueRef.current.shift()!;
-      try {
-        const byteChars = atob(base64Chunk);
-        const byteArray = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-        const blob = new Blob([byteArray], { type: "audio/mp3" });
-        const url = URL.createObjectURL(blob);
-        const audio = mobileAudioRef.current ?? new Audio();
-        const prevSrc = audio.src;
-        if (prevSrc?.startsWith("blob:")) URL.revokeObjectURL(prevSrc);
-        audio.src = url;
-        ttsAudioRef.current = audio;
-        await new Promise<void>((resolve, reject) => {
-          audio.onended = () => resolve();
-          audio.onerror = () => reject();
-          audio.play().catch(reject);
-        });
-        URL.revokeObjectURL(url);
-      } catch {
-        // Skip failed chunk, continue with next
+  const scheduleAudioChunk = useCallback(async (base64Chunk: string) => {
+    try {
+      // Ensure AudioContext exists and is running
+      if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+        audioCtxRef.current = new AudioContext();
       }
-    }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
 
-    isPlayingQueueRef.current = false;
-    setIsSpeaking(false);
-    if (trueInterview) conversationTurn.finishSpeaking();
+      // Decode base64 → ArrayBuffer → AudioBuffer
+      const byteChars = atob(base64Chunk);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+      const audioBuffer = await ctx.decodeAudioData(byteArray.buffer.slice(0));
+
+      // Schedule playback at the exact end of the previous chunk (gapless)
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      const startTime = Math.max(now + 0.005, nextPlayTimeRef.current);
+      source.start(startTime);
+      nextPlayTimeRef.current = startTime + audioBuffer.duration;
+
+      scheduledSourcesRef.current.push(source);
+
+      source.onended = () => {
+        scheduledSourcesRef.current = scheduledSourcesRef.current.filter(s => s !== source);
+        // If all chunks received and no more sources scheduled → audio complete
+        if (scheduledSourcesRef.current.length === 0 && allAudioReceivedRef.current) {
+          setIsSpeaking(false);
+          if (trueInterview) conversationTurn.finishSpeaking();
+        }
+      };
+    } catch (err) {
+      // Skip failed chunk (e.g., malformed mp3 fragment)
+      console.warn("Failed to decode audio chunk:", err);
+    }
   }, [trueInterview, conversationTurn]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        const src = ttsAudioRef.current.src;
+        if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+      }
+      stopAllScheduledAudio();
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+      }
+    };
+  }, [stopAllScheduledAudio]);
 
   // ── Streaming question generation (uses SSE with inline TTS audio) ──
   const streamingQuestionRef = useRef(false);
@@ -410,8 +430,9 @@ export function FlowInterviewOverlay({
         let topic = isBrainstorm ? "Brainstorm" : "";
         let audioStarted = false;
 
-        // Reset audio queue
-        audioQueueRef.current = [];
+        // Reset audio state for new stream
+        stopAllScheduledAudio();
+        allAudioReceivedRef.current = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -432,12 +453,13 @@ export function FlowInterviewOverlay({
                   : questionText.replace(/[{}"]/g, "").replace(/question:\s*/i, "").trim()
                 );
               } else if (evt.type === "audio") {
-                // Queue audio chunk for playback
-                audioQueueRef.current.push(evt.data);
+                // Schedule audio chunk for gapless playback via AudioContext
                 if (!audioStarted) {
                   audioStarted = true;
-                  playAudioQueue();
+                  setIsSpeaking(true);
+                  if (trueInterview) conversationTurn.startSpeaking();
                 }
+                scheduleAudioChunk(evt.data);
               } else if (evt.type === "metadata") {
                 topic = evt.topic || topic;
               } else if (evt.type === "done") {
@@ -447,6 +469,14 @@ export function FlowInterviewOverlay({
               }
             } catch { /* skip malformed SSE lines */ }
           }
+        }
+
+        // Signal that all audio chunks have been received
+        allAudioReceivedRef.current = true;
+        // If no audio was scheduled or all already finished, finalize now
+        if (audioStarted && scheduledSourcesRef.current.length === 0) {
+          setIsSpeaking(false);
+          if (trueInterview) conversationTurn.finishSpeaking();
         }
 
         // Parse the final question text from JSON if needed (interview only)
