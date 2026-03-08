@@ -303,7 +303,91 @@ export function FtuxDock() {
           setSettingsOpen(true);
         }}
       >
-        {/* 2-row grid of tool slots */}
+        {/* Tool slots — grouped or flat grid */}
+        {shell.dockShowGroupLabels ? (() => {
+          // Grouped layout: group items by their group field
+          const groupedItems: Record<string, { item: DockItem; globalIndex: number }[]> = {};
+          const groupOrder: string[] = [];
+          dockItems.forEach((item, i) => {
+            const g = item.group || "other";
+            if (!groupedItems[g]) {
+              groupedItems[g] = [];
+              groupOrder.push(g);
+            }
+            groupedItems[g].push({ item, globalIndex: i });
+          });
+          return (
+            <div className={cn("flex", isHorizontal ? "flex-row gap-2" : "flex-col gap-2")}>
+              {groupOrder.map((groupName, groupIdx) => (
+                <div key={groupName} className={cn(
+                  "flex flex-col items-center",
+                  groupIdx > 0 && isHorizontal && "border-l border-border/20 pl-2",
+                  groupIdx > 0 && !isHorizontal && "border-t border-border/20 pt-2",
+                )}>
+                  <span className="text-[8px] uppercase tracking-wider text-muted-foreground/50 font-semibold mb-0.5 select-none">
+                    {groupName}
+                  </span>
+                  <div className={cn("flex gap-0.5", isHorizontal ? "flex-row" : "flex-col")}>
+                    {groupedItems[groupName].map(({ item, globalIndex }) => {
+                      const IconComponent = ICON_MAP[item.icon] || Sparkles;
+                      const isActive = activeTool === item.toolId;
+                      return (
+                        <div
+                          key={item.toolId}
+                          className={cn(
+                            "relative flex flex-col items-center justify-center rounded-lg transition-all",
+                            sz.slot,
+                            sz.slotH,
+                          )}
+                          draggable
+                          onDragStart={(e) => handleSlotDragStart(globalIndex, e)}
+                          onDragEnd={handleDragEnd}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setContextMenu({ x: e.clientX, y: e.clientY, toolId: item.toolId, label: item.label });
+                          }}
+                        >
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={item.label}
+                                className={cn(
+                                  sz.btn, "rounded-lg transition-transform duration-150 hover:scale-110",
+                                  isActive && "bg-primary/15 text-primary",
+                                  !isActive && "text-muted-foreground hover:text-foreground",
+                                )}
+                                onClick={() => setActiveTool(item.toolId)}
+                              >
+                                <IconComponent className={sz.icon} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs max-w-[220px]">
+                              <div className="font-medium">{item.label}</div>
+                              {item.description && (
+                                <p className="text-muted-foreground mt-0.5 font-normal">{item.description}</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                          {dockShowLabels && (
+                            <span className={cn(sz.label, "text-muted-foreground/70 leading-none truncate text-center mt-0.5", sz.labelMax)}>
+                              {item.label}
+                            </span>
+                          )}
+                          {isActive && (
+                            <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })() : (
         <div
           className={cn("grid", isLargeSnapped ? "gap-1 flex-1" : "gap-0.5")}
           style={{
@@ -403,6 +487,7 @@ export function FtuxDock() {
             );
           })}
         </div>
+        )}
 
         {/* System buttons */}
         <div className={cn(
