@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.22.0";
+export const APP_VERSION = "0.22.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,26 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.22.2",
+    date: "2026-03-08",
+    changes: [
+      "Make Document and Store canvas nodes resizable — resize handles on all 8 edges/corners, respects lock mode and min size constraints",
+    ],
+  },
+  {
+    version: "0.22.1",
+    date: "2026-03-08",
+    changes: [
+      "Remove Plain connection type — edges are always strongly typed; context is pre-selected as default role",
+      "Auto-assign role when target node accepts only one (no dialog needed)",
+      "Legacy roleless edges treated as context everywhere (backward-compatible)",
+      "Edge role pills now shown on all edges including legacy ones",
+      "Fix Expand tool failing silently with connected context (sessionNotes limit 10K → 100K)",
+      "Document toolbar now shows 'AI Remix' and 'Direct' group labels for clarity",
+      "Fix dock icon shuffling on lock/unlock toggle (stabilized mergedConfig memo)",
+    ],
+  },
   {
     version: "0.22.0",
     date: "2026-03-08",

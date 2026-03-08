@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { BookOpenCheck, Target, LayoutTemplate, Link, MessageSquareText } from "lucide-react";
+import { BookOpenCheck, Target, LayoutTemplate, MessageSquareText } from "lucide-react";
 import type { FlowNode, EdgeRole } from "./useFlowCanvas";
 import { FLOW_NODE_REGISTRY } from "./FlowNodeRegistry";
 
@@ -55,8 +55,6 @@ export function EdgeRolePickerDialog({
   onConfirm,
   onCancel,
 }: EdgeRolePickerDialogProps) {
-  const [selected, setSelected] = useState<Set<EdgeRole>>(new Set());
-
   // Filter roles to only those the target node actually processes
   const visibleRoles = useMemo(() => {
     if (!targetNode) return ROLE_OPTIONS;
@@ -64,6 +62,21 @@ export function EdgeRolePickerDialog({
     if (!def || def.acceptedRoles.length === 0) return ROLE_OPTIONS;
     return ROLE_OPTIONS.filter((opt) => def.acceptedRoles.includes(opt.role));
   }, [targetNode]);
+
+  // Pre-select "context" as default (or first visible role if context isn't available)
+  const [selected, setSelected] = useState<Set<EdgeRole>>(() => {
+    const defaultRole = visibleRoles.find((r) => r.role === "context")?.role ?? visibleRoles[0]?.role;
+    return defaultRole ? new Set([defaultRole]) : new Set();
+  });
+
+  // Sync default selection if visibleRoles change
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size > 0) return prev;
+      const defaultRole = visibleRoles.find((r) => r.role === "context")?.role ?? visibleRoles[0]?.role;
+      return defaultRole ? new Set([defaultRole]) : new Set();
+    });
+  }, [visibleRoles]);
 
   const toggle = (role: EdgeRole) => {
     setSelected((prev) => {
@@ -112,19 +125,9 @@ export function EdgeRolePickerDialog({
             );
           })}
         </div>
-        <div className="flex gap-2 mt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => onConfirm([])}
-          >
-            <Link className="w-3 h-3 mr-1.5" />
-            Plain
-          </Button>
+        <div className="flex justify-end mt-2">
           <Button
             size="sm"
-            className="flex-1"
             disabled={selected.size === 0}
             onClick={() => onConfirm(Array.from(selected))}
           >

@@ -350,8 +350,8 @@ export const writeRequestSchema = z.object({
   // Captured context items for grounding (from landing page context capture)
   capturedContext: z.array(contextItemSchema).optional(),
 
-  // Session notes — temporary working notes provided alongside the document (e.g. PM notes)
-  sessionNotes: z.string().max(10_000).optional(),
+  // Session notes — temporary working notes provided alongside the document (e.g. connected canvas context, PM notes)
+  sessionNotes: z.string().max(100_000).optional(),
 
   // Edit history for coherent iteration
   editHistory: z.array(editHistoryEntrySchema).optional(),
