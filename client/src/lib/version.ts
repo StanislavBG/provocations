@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.21.1";
+export const APP_VERSION = "0.21.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.21.2",
+    date: "2026-03-08",
+    changes: [
+      "New built-in blueprint: PRD to Reddit Post — 6-node chain that researches subreddit rules, drafts a Reddit-native post from a PRD, validates rule compliance, and outputs to a Reddit-configured social post node",
+      "Fix handleLoadBlueprint to carry social-post fields (socialPlatforms, socialIntent, socialTone, socialGenerateImages) through blueprint instantiation",
+    ],
+  },
   {
     version: "0.21.1",
     date: "2026-03-08",
