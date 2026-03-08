@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications, platformCredentials, socialPostLogs, agencyEvents, agencyCampaigns } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification, StoredPlatformCredential, StoredSocialPostLog, StoredAgencyEvent, StoredAgencyCampaign } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications, platformCredentials, socialPostLogs, agencyEvents, agencyCampaigns, subscriptions, usageRecords } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification, StoredPlatformCredential, StoredSocialPostLog, StoredAgencyEvent, StoredAgencyCampaign, StoredSubscription, StoredUsageRecord } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -2036,6 +2036,128 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(agencyCampaigns.userId, userId), eq(agencyCampaigns.campaignId, campaignId)))
       .returning();
     return result.length > 0;
+  }
+
+  // ── Subscriptions ──────────────────────────────────────────────────
+
+  async getSubscriptionByUserId(userId: string): Promise<StoredSubscription | null> {
+    const [row] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getSubscriptionByStripeCustomerId(customerId: string): Promise<StoredSubscription | null> {
+    const [row] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeCustomerId, customerId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getSubscriptionByStripeSubscriptionId(subId: string): Promise<StoredSubscription | null> {
+    const [row] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, subId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async upsertSubscription(data: {
+    userId: string;
+    stripeCustomerId: string;
+    stripeSubscriptionId?: string;
+    planTier: string;
+    status: string;
+    currentPeriodStart?: Date;
+    currentPeriodEnd?: Date;
+    cancelAtPeriodEnd?: boolean;
+  }): Promise<StoredSubscription> {
+    const existing = await this.getSubscriptionByUserId(data.userId);
+    if (existing) {
+      const [row] = await db
+        .update(subscriptions)
+        .set({
+          stripeCustomerId: data.stripeCustomerId,
+          stripeSubscriptionId: data.stripeSubscriptionId ?? existing.stripeSubscriptionId,
+          planTier: data.planTier,
+          status: data.status,
+          currentPeriodStart: data.currentPeriodStart ?? existing.currentPeriodStart,
+          currentPeriodEnd: data.currentPeriodEnd ?? existing.currentPeriodEnd,
+          cancelAtPeriodEnd: data.cancelAtPeriodEnd ?? existing.cancelAtPeriodEnd,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.userId, data.userId))
+        .returning();
+      return row;
+    }
+    const [row] = await db
+      .insert(subscriptions)
+      .values({
+        userId: data.userId,
+        stripeCustomerId: data.stripeCustomerId,
+        stripeSubscriptionId: data.stripeSubscriptionId ?? null,
+        planTier: data.planTier,
+        status: data.status,
+        currentPeriodStart: data.currentPeriodStart ?? null,
+        currentPeriodEnd: data.currentPeriodEnd ?? null,
+        cancelAtPeriodEnd: data.cancelAtPeriodEnd ?? false,
+      })
+      .returning();
+    return row;
+  }
+
+  async updateSubscriptionStatus(userId: string, status: string, planTier?: string): Promise<void> {
+    const updates: Record<string, unknown> = { status, updatedAt: new Date() };
+    if (planTier) updates.planTier = planTier;
+    await db
+      .update(subscriptions)
+      .set(updates)
+      .where(eq(subscriptions.userId, userId));
+  }
+
+  // ── Usage Records ──────────────────────────────────────────────────
+
+  async getUsageForDate(userId: string, resource: string, date: string): Promise<number> {
+    const [row] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${usageRecords.count}), 0)` })
+      .from(usageRecords)
+      .where(
+        and(
+          eq(usageRecords.userId, userId),
+          eq(usageRecords.resource, resource),
+          eq(usageRecords.date, date),
+        ),
+      );
+    return Number(row?.total ?? 0);
+  }
+
+  async getUsageForMonth(userId: string, resource: string, yearMonth: string): Promise<number> {
+    const [row] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${usageRecords.count}), 0)` })
+      .from(usageRecords)
+      .where(
+        and(
+          eq(usageRecords.userId, userId),
+          eq(usageRecords.resource, resource),
+          sql`to_char(${usageRecords.date}, 'YYYY-MM') = ${yearMonth}`,
+        ),
+      );
+    return Number(row?.total ?? 0);
+  }
+
+  async recordUsage(userId: string, resource: string, count: number = 1): Promise<void> {
+    const today = new Date().toISOString().split("T")[0];
+    await db.insert(usageRecords).values({
+      userId,
+      resource,
+      count,
+      date: today,
+    });
   }
 }
 

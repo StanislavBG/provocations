@@ -21,6 +21,7 @@ import MobilePreview from "@/pages/MobilePreview";
 import Admin from "@/pages/Admin";
 import ContextStore from "@/pages/ContextStore";
 import Pricing from "@/pages/Pricing";
+import Billing from "@/pages/Billing";
 import ComponentLibrary from "@/pages/ComponentLibrary";
 import ComponentShowcase from "@/pages/ComponentShowcase";
 import ProjectOverview from "@/pages/ProjectOverview";
@@ -43,6 +44,7 @@ function Router() {
       <Route path="/mobile" component={MobilePreview} />
       <Route path="/store" component={ContextStore} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/settings/billing" component={Billing} />
       <Route path="/admin" component={Admin} />
       <Route path="/project-overview" component={ProjectOverview} />
       <Route path="/project-component-compare" component={ComponentCompare} />

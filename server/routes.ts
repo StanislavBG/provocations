@@ -88,6 +88,7 @@ import { postToPlatform } from "./social-poster";
 import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
+import { getUsageSummary, getUserPlan, PLAN_LIMITS, type PlanTier } from "./usage";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
 import { YoutubeTranscript } from "youtube-transcript";
 import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable, userPreferences as userPreferencesTable } from "../shared/models/chat";
@@ -7285,9 +7286,107 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
           return res.status(400).json({ error: "Invalid signature" });
         }
 
+        // ── Subscription helper functions ──
+
+        async function activateSubscription(
+          stripeSubscription: Stripe.Subscription,
+          customerId: string,
+          userId?: string,
+        ) {
+          const resolvedUserId = userId || (await resolveUserIdFromCustomer(customerId));
+          if (!resolvedUserId) {
+            console.warn(`Cannot activate subscription — no userId for customer ${customerId}`);
+            return;
+          }
+
+          // Map Stripe price to plan tier
+          const priceId = stripeSubscription.items.data[0]?.price?.id;
+          const planTier = mapPriceToTier(priceId);
+
+          await storage.upsertSubscription({
+            userId: resolvedUserId,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: stripeSubscription.id,
+            planTier,
+            status: "active",
+            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+          });
+          console.log(`Subscription activated: user=${resolvedUserId} plan=${planTier}`);
+        }
+
+        async function renewSubscription(invoice: Stripe.Invoice) {
+          const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.toString() ?? "";
+          const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.toString() ?? "";
+          if (!subId) return;
+
+          const sub = await storage.getSubscriptionByStripeSubscriptionId(subId);
+          if (!sub) {
+            console.warn(`Renewal: no subscription found for ${subId}`);
+            return;
+          }
+
+          // Fetch latest subscription to get updated period dates
+          try {
+            const stripeSub = await stripe.subscriptions.retrieve(subId);
+            await storage.upsertSubscription({
+              userId: sub.userId,
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subId,
+              planTier: sub.planTier,
+              status: "active",
+              currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+              currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+            });
+            console.log(`Subscription renewed: user=${sub.userId}`);
+          } catch (err) {
+            console.error("Failed to fetch subscription for renewal:", err);
+          }
+        }
+
+        async function flagPaymentFailed(invoice: Stripe.Invoice) {
+          const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.toString() ?? "";
+          if (!subId) return;
+
+          const sub = await storage.getSubscriptionByStripeSubscriptionId(subId);
+          if (sub) {
+            await storage.updateSubscriptionStatus(sub.userId, "past_due");
+            console.log(`Subscription flagged past_due: user=${sub.userId}`);
+          }
+        }
+
+        async function downgradeToFree(stripeSubscription: Stripe.Subscription) {
+          const sub = await storage.getSubscriptionByStripeSubscriptionId(stripeSubscription.id);
+          if (sub) {
+            await storage.updateSubscriptionStatus(sub.userId, "cancelled", "free");
+            console.log(`Subscription cancelled, downgraded to free: user=${sub.userId}`);
+          }
+        }
+
+        function resolveUserIdFromCustomer(customerId: string): Promise<string | null> {
+          return storage.getSubscriptionByStripeCustomerId(customerId).then((s) => s?.userId ?? null);
+        }
+
+        function mapPriceToTier(priceId?: string): string {
+          // Map Stripe price IDs to plan tiers via env vars
+          const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
+          const teamPriceId = process.env.STRIPE_TEAM_PRICE_ID;
+          const proAnnualPriceId = process.env.STRIPE_PRO_ANNUAL_PRICE_ID;
+          const teamAnnualPriceId = process.env.STRIPE_TEAM_ANNUAL_PRICE_ID;
+
+          if (!priceId) return "free";
+          if (priceId === proPriceId || priceId === proAnnualPriceId) return "pro";
+          if (priceId === teamPriceId || priceId === teamAnnualPriceId) return "team";
+          return "pro"; // Default subscription to pro if unrecognized
+        }
+
+        // ── Event handling ──
+
         switch (event.type) {
           case "checkout.session.completed": {
             const session = event.data.object as Stripe.Checkout.Session;
+
+            // Update payment record
             await storage.updatePaymentBySessionId(session.id, {
               status: "completed",
               stripeCustomerId: session.customer as string | undefined,
@@ -7295,6 +7394,19 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
               amount: session.amount_total ?? undefined,
               currency: session.currency ?? undefined,
             });
+
+            // If this is a subscription checkout, activate the subscription
+            if (session.mode === "subscription" && session.subscription) {
+              const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.toString();
+              const customerId = typeof session.customer === "string" ? session.customer : session.customer?.toString() ?? "";
+              try {
+                const stripeSub = await stripe.subscriptions.retrieve(subId);
+                await activateSubscription(stripeSub, customerId, session.client_reference_id ?? undefined);
+              } catch (err) {
+                console.error("Failed to activate subscription from checkout:", err);
+              }
+            }
+
             console.log(`Payment completed for session ${session.id}`);
             break;
           }
@@ -7302,6 +7414,21 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
             const session = event.data.object as Stripe.Checkout.Session;
             await storage.updatePaymentBySessionId(session.id, { status: "failed" });
             console.log(`Payment expired for session ${session.id}`);
+            break;
+          }
+          case "invoice.paid": {
+            const invoice = event.data.object as Stripe.Invoice;
+            await renewSubscription(invoice);
+            break;
+          }
+          case "invoice.payment_failed": {
+            const invoice = event.data.object as Stripe.Invoice;
+            await flagPaymentFailed(invoice);
+            break;
+          }
+          case "customer.subscription.deleted": {
+            const subscription = event.data.object as Stripe.Subscription;
+            await downgradeToFree(subscription);
             break;
           }
           default:
@@ -7326,6 +7453,99 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       } catch (error) {
         console.error("Stripe list payments error:", error);
         res.status(500).json({ error: "Failed to list payments" });
+      }
+    });
+
+    // ── Billing status — current plan + usage ──
+    app.get("/api/billing/status", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const summary = await getUsageSummary(userId);
+        const sub = await storage.getSubscriptionByUserId(userId);
+
+        res.json({
+          ...summary,
+          subscription: sub ? {
+            stripeSubscriptionId: sub.stripeSubscriptionId,
+            currentPeriodStart: sub.currentPeriodStart,
+            currentPeriodEnd: sub.currentPeriodEnd,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+            status: sub.status,
+          } : null,
+        });
+      } catch (error) {
+        console.error("Billing status error:", error);
+        res.status(500).json({ error: "Failed to load billing status" });
+      }
+    });
+
+    // ── Stripe Customer Portal URL ──
+    app.get("/api/billing/portal", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const sub = await storage.getSubscriptionByUserId(userId);
+        if (!sub?.stripeCustomerId) {
+          return res.status(404).json({ error: "No billing account found" });
+        }
+
+        const origin = `${req.protocol}://${req.get("host")}`;
+        const portalSession = await stripe.billingPortal.sessions.create({
+          customer: sub.stripeCustomerId,
+          return_url: `${origin}/settings/billing`,
+        });
+
+        res.json({ url: portalSession.url });
+      } catch (error) {
+        console.error("Billing portal error:", error);
+        res.status(500).json({ error: "Failed to create portal session" });
+      }
+    });
+
+    // ── Subscription checkout session ──
+    app.post("/api/billing/checkout-session", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const { priceId } = req.body;
+        if (!priceId || typeof priceId !== "string") {
+          return res.status(400).json({ error: "priceId is required" });
+        }
+
+        const origin = `${req.protocol}://${req.get("host")}`;
+
+        // Check if user already has a Stripe customer
+        const existingSub = await storage.getSubscriptionByUserId(userId);
+        const customerOptions: Stripe.Checkout.SessionCreateParams = {
+          mode: "subscription",
+          line_items: [{ price: priceId, quantity: 1 }],
+          success_url: `${origin}/settings/billing?success=true`,
+          cancel_url: `${origin}/pricing?canceled=true`,
+          client_reference_id: userId,
+        };
+
+        if (existingSub?.stripeCustomerId) {
+          customerOptions.customer = existingSub.stripeCustomerId;
+        }
+
+        const session = await stripe.checkout.sessions.create(customerOptions);
+
+        // Record pending payment
+        await storage.createPayment({
+          userId,
+          stripeSessionId: session.id,
+          priceId,
+          status: "pending",
+        });
+
+        res.json({ sessionUrl: session.url });
+      } catch (error) {
+        console.error("Billing checkout session error:", error);
+        res.status(500).json({ error: "Failed to create checkout session" });
       }
     });
 
