@@ -1,5 +1,5 @@
 import { Switch, Route } from "wouter";
-import { useEffect, useLayoutEffect } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,21 +14,37 @@ import {
 import { Button } from "@/components/ui/button";
 import { LogIn, Quote, Brain, MessageCircleQuestion, Mic } from "lucide-react";
 import { ProvoIcon } from "@/components/ProvoIcon";
-import NotebookWorkspace from "@/pages/NotebookWorkspace";
-import FtuxWorkspace from "@/pages/FtuxWorkspace";
-import FlowWorkspace from "@/pages/FlowWorkspace";
-import MobilePreview from "@/pages/MobilePreview";
-import Admin from "@/pages/Admin";
-import ContextStore from "@/pages/ContextStore";
-import Pricing from "@/pages/Pricing";
-import Billing from "@/pages/Billing";
-import ComponentLibrary from "@/pages/ComponentLibrary";
-import ComponentShowcase from "@/pages/ComponentShowcase";
-import ProjectOverview from "@/pages/ProjectOverview";
-import ComponentCompare from "@/pages/ComponentCompare";
 import NotFound from "@/pages/not-found";
 import { trackEvent } from "@/lib/tracking";
 import { VerboseProvider } from "@/components/VerboseProvider";
+
+// ── Route-level code splitting (E4 optimization) ──
+// Heavy page components are lazy-loaded so the initial bundle only contains
+// the landing page and auth shell. Each route chunk loads on first navigation.
+const FlowWorkspace = lazy(() => import("@/pages/FlowWorkspace"));
+const NotebookWorkspace = lazy(() => import("@/pages/NotebookWorkspace"));
+const FtuxWorkspace = lazy(() => import("@/pages/FtuxWorkspace"));
+const MobilePreview = lazy(() => import("@/pages/MobilePreview"));
+const Admin = lazy(() => import("@/pages/Admin"));
+const ContextStore = lazy(() => import("@/pages/ContextStore"));
+const Pricing = lazy(() => import("@/pages/Pricing"));
+const Billing = lazy(() => import("@/pages/Billing"));
+const ComponentLibrary = lazy(() => import("@/pages/ComponentLibrary"));
+const ComponentShowcase = lazy(() => import("@/pages/ComponentShowcase"));
+const ProjectOverview = lazy(() => import("@/pages/ProjectOverview"));
+const ComponentCompare = lazy(() => import("@/pages/ComponentCompare"));
+
+/** Loading skeleton shown while lazy route chunks load */
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <ProvoIcon className="w-8 h-8 text-primary animate-pulse" />
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 /** Fires a "login" tracking event once when the signed-in shell mounts. */
 function LoginTracker() {
@@ -40,26 +56,28 @@ function LoginTracker() {
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/mobile" component={MobilePreview} />
-      <Route path="/store" component={ContextStore} />
-      <Route path="/pricing" component={Pricing} />
-      <Route path="/settings/billing" component={Billing} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/project-overview" component={ProjectOverview} />
-      <Route path="/project-component-compare" component={ComponentCompare} />
-      <Route path="/components/:componentId" component={ComponentShowcase} />
-      <Route path="/components" component={ComponentLibrary} />
-      <Route path="/canvas/:canvasId">{() => <FlowWorkspace />}</Route>
-      <Route path="/flow">{() => <FlowWorkspace />}</Route>
-      <Route path="/old" component={NotebookWorkspace} />
-      <Route path="/old/:templateId" component={NotebookWorkspace} />
-      <Route path="/ftux/:templateId" component={FtuxWorkspace} />
-      <Route path="/ftux" component={FtuxWorkspace} />
-      <Route path="/app/:templateId" component={NotebookWorkspace} />
-      <Route path="/">{() => <FlowWorkspace />}</Route>
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<RouteFallback />}>
+      <Switch>
+        <Route path="/mobile" component={MobilePreview} />
+        <Route path="/store" component={ContextStore} />
+        <Route path="/pricing" component={Pricing} />
+        <Route path="/settings/billing" component={Billing} />
+        <Route path="/admin" component={Admin} />
+        <Route path="/project-overview" component={ProjectOverview} />
+        <Route path="/project-component-compare" component={ComponentCompare} />
+        <Route path="/components/:componentId" component={ComponentShowcase} />
+        <Route path="/components" component={ComponentLibrary} />
+        <Route path="/canvas/:canvasId">{() => <FlowWorkspace />}</Route>
+        <Route path="/flow">{() => <FlowWorkspace />}</Route>
+        <Route path="/old" component={NotebookWorkspace} />
+        <Route path="/old/:templateId" component={NotebookWorkspace} />
+        <Route path="/ftux/:templateId" component={FtuxWorkspace} />
+        <Route path="/ftux" component={FtuxWorkspace} />
+        <Route path="/app/:templateId" component={NotebookWorkspace} />
+        <Route path="/">{() => <FlowWorkspace />}</Route>
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

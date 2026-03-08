@@ -27,6 +27,38 @@ interface FlowNodeRendererProps {
   onUpdateLabel?: (nodeId: string, label: string) => void;
 }
 
+/**
+ * Custom comparator for FlowNodeRenderer memo boundary (E2 optimization).
+ * Only re-renders when data-bearing props change — callback identity changes are ignored
+ * since they are stable useCallback references from the parent.
+ */
+function flowNodePropsAreEqual(
+  prev: FlowNodeRendererProps,
+  next: FlowNodeRendererProps,
+): boolean {
+  return (
+    prev.node.id === next.node.id &&
+    prev.node.x === next.node.x &&
+    prev.node.y === next.node.y &&
+    prev.node.width === next.node.width &&
+    prev.node.height === next.node.height &&
+    prev.node.label === next.node.label &&
+    prev.node.snippet === next.node.snippet &&
+    prev.node.content === next.node.content &&
+    prev.node.llmStatus === next.node.llmStatus &&
+    prev.node.paused === next.node.paused &&
+    prev.node.zIndex === next.node.zIndex &&
+    prev.node.type === next.node.type &&
+    prev.node.locked === next.node.locked &&
+    prev.node.lockMode === next.node.lockMode &&
+    prev.node.labelFontSize === next.node.labelFontSize &&
+    prev.node.labelBold === next.node.labelBold &&
+    prev.node.labelItalic === next.node.labelItalic &&
+    prev.node.labelColor === next.node.labelColor &&
+    prev.isSelected === next.isSelected
+  );
+}
+
 export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
   node,
   isSelected,
@@ -269,4 +301,4 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       )}
     </div>
   );
-});
+}, flowNodePropsAreEqual);
