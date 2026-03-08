@@ -1961,6 +1961,43 @@ function FlowWorkspaceInner() {
           return;
         }
 
+        // -- YouTube: multi-video output documents --
+        if (preset === "youtube") {
+          let parsed: { videos?: { videoId: string; title: string; transcript: string }[]; mode?: string } | null = null;
+          try { parsed = JSON.parse(outputText); } catch { /* not JSON = single transcript */ }
+
+          if (parsed?.videos && parsed.videos.length > 1) {
+            let idx = 0;
+            for (const video of parsed.videos) {
+              idx++;
+              const childId = scopedAddNode("document", node.x + node.width + 60, node.y + idx * 80, {
+                label: `Transcript: ${video.title.slice(0, 30)}${video.title.length > 30 ? "..." : ""}`,
+                documentContent: video.transcript,
+                snippet: video.transcript.slice(0, 200),
+              });
+              scopedAddEdge(nodeId, childId);
+            }
+            const merged = parsed.videos.map(v => `## ${v.title}\n\n${v.transcript}`).join("\n\n---\n\n");
+            scopedUpdate(nodeId, {
+              content: merged,
+              documentContent: merged,
+              llmStatus: "done",
+              snippet: `${idx} video transcripts`,
+              youtubeTitle: parsed.videos[0]?.title,
+              youtubeFetchStatus: "done",
+            });
+            lcLog(node, "process", "success", `Fetched ${idx} video transcripts`, { durationMs: elapsed });
+            toast({ title: "YouTube complete", description: `Created ${idx} transcript documents` });
+            return;
+          }
+
+          // Single video: set youtube-specific fields, then fall through to generic handler
+          scopedUpdate(nodeId, {
+            youtubeFetchStatus: "done",
+            youtubeTitle: node.youtubeTitle || "YouTube Video",
+          });
+        }
+
         // -- All other presets (stream, llm, logic, interview, generic): text output --
         if (!outputText?.trim()) {
           lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });
@@ -2322,6 +2359,7 @@ function FlowWorkspaceInner() {
         node.type === "youtube" &&
         node.youtubeFetchStatus === "done" &&
         node.content &&
+        node.llmStatus !== "done" &&
         !youtubeDocCreatedRef.current.has(node.id)
       ) {
         youtubeDocCreatedRef.current.add(node.id);

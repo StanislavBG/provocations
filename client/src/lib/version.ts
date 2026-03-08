@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.6";
+export const APP_VERSION = "0.20.7";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.7",
+    date: "2026-03-08",
+    changes: [
+      "Fix AIQA widget drifting off-screen during canvas pan/zoom — CSS containment isolates canvas transforms from fixed-position overlays",
+      "Store expanded view redesigned: 3-panel layout with full-height folder tree, document list, and document content preview using ProvokeText",
+      "YouTube node multi-video output: search mode fetches transcripts for all top-N results, creates one output document per video",
+      "Custom tool groups foundation: type definitions, localStorage persistence, and helper functions for group management",
+    ],
+  },
   {
     version: "0.20.6",
     date: "2026-03-08",
