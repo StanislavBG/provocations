@@ -92,6 +92,8 @@ export interface FlowNode {
   documentContent?: string;
   /** Document node: objective/purpose */
   documentObjective?: string;
+  /** Document node: version history for undo/revert */
+  documentVersions?: Array<{ content: string; label: string; timestamp: string }>;
   /** Zone node: ambient background color key */
   zoneColor?: string;
   /** Zone node: user-assigned label */

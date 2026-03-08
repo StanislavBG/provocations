@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.18.7";
+export const APP_VERSION = "0.19.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.19.0",
+    date: "2026-03-08",
+    changes: [
+      "Document fullscreen: Objective field — guides AI tools and provocations for better results",
+      "Document fullscreen: Version history — every tool/evolve operation auto-snapshots, with one-click revert to any previous version",
+      "Smart buttons (Expand, Condense, etc.) now include the objective and connected input context in API calls",
+      "Provo tab uses the document objective for more targeted provocations",
+      "Objective and version history persist on the node across sessions",
+    ],
+  },
   {
     version: "0.18.7",
     date: "2026-03-08",

@@ -340,6 +340,8 @@ function FlowWorkspaceInner() {
   const [pendingEdgeRole, setPendingEdgeRole] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [docEditorContent, setDocEditorContent] = useState("");
+  const [docObjective, setDocObjective] = useState("");
+  const [docVersions, setDocVersions] = useState<Array<{ content: string; label: string; timestamp: string }>>([]);
   const [docLeftTab, setDocLeftTab] = useState<"tools" | "provo">("tools");
   const [docActivePersonas, setDocActivePersonas] = useState<Set<ProvocationType>>(() => {
     const pool: ProvocationType[] = ["ceo", "product_manager", "quality_engineer", "ux_designer", "tech_writer", "growth_strategist", "brand_strategist", "content_strategist"];
@@ -1336,9 +1338,11 @@ function FlowWorkspaceInner() {
       // Non-expandable types
       if (def.expandMode === "none") return;
 
-      // Seed document editor content if opening a document node
+      // Seed document editor content + objective + versions if opening a document node
       if (node.type === "document" && !node.imageUrl) {
         setDocEditorContent(node.documentContent || "");
+        setDocObjective(node.documentObjective || "");
+        setDocVersions(node.documentVersions || []);
       }
 
       // Populate upstream input for YouTube nodes (for auto-mode detection)
@@ -1388,9 +1392,11 @@ function FlowWorkspaceInner() {
       const targetNode = state.nodes.find((n) => n.id === nodeId);
       if (!targetNode) return;
 
-      // Seed document editor content for document nodes
+      // Seed document editor content + objective + versions for document nodes
       if (targetNode.type === "document" && !targetNode.imageUrl) {
         setDocEditorContent(targetNode.documentContent || "");
+        setDocObjective(targetNode.documentObjective || "");
+        setDocVersions(targetNode.documentVersions || []);
       }
 
       // Switch overlay (no FLIP animation for chain nav)
@@ -2513,17 +2519,46 @@ function FlowWorkspaceInner() {
     );
   }, [setViewport]);
 
+  // ── Helper: gather connected input text for document node ──
+  const getDocConnectedContext = useCallback(() => {
+    if (!activeExpandedNodeId) return "";
+    const inputEdges = stateRef.current.edges.filter((e) => e.toNodeId === activeExpandedNodeId);
+    const inputNodes = inputEdges
+      .map((e) => stateRef.current.nodes.find((n) => n.id === e.fromNodeId))
+      .filter(Boolean) as FlowNode[];
+    return inputNodes
+      .map((n) => {
+        const text = n.documentContent || n.content || n.snippet || "";
+        return text.trim() ? `[${n.label || "Input"}]\n${text.trim()}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n---\n\n");
+  }, [activeExpandedNodeId]);
+
+  // ── Helper: snapshot current document as a version ──
+  const snapshotDocVersion = useCallback((label: string) => {
+    if (!docEditorContent.trim()) return;
+    setDocVersions((prev) => [
+      ...prev,
+      { content: docEditorContent, label, timestamp: new Date().toISOString() },
+    ]);
+  }, [docEditorContent]);
+
   // ── Document editor: run a tool ──
 
   const handleDocTool = useCallback(
     async (instruction: string, toolId: string) => {
       if (!docEditorContent.trim()) return;
+      snapshotDocVersion(`Before ${toolId}`);
       setDocToolRunning(toolId);
       try {
+        const connectedContext = getDocConnectedContext();
         const res = await apiRequest("POST", "/api/write", {
           document: docEditorContent,
           instruction,
           appType: "write-a-prompt",
+          ...(docObjective.trim() ? { objective: docObjective.trim() } : {}),
+          ...(connectedContext ? { sessionNotes: connectedContext } : {}),
         });
         const data = (await res.json()) as { document: string };
         if (data.document) {
@@ -2535,19 +2570,23 @@ function FlowWorkspaceInner() {
         setDocToolRunning(null);
       }
     },
-    [docEditorContent, toast],
+    [docEditorContent, docObjective, toast, snapshotDocVersion, getDocConnectedContext],
   );
 
   // ── Evolve document from provo thread (inline mode) ──
   const handleDocProvoEvolve = useCallback(
     async (instruction: string) => {
       if (!docEditorContent.trim()) return;
+      snapshotDocVersion("Before evolve");
       setDocProvoEvolving(true);
       try {
+        const connectedContext = getDocConnectedContext();
         const res = await apiRequest("POST", "/api/write", {
           document: docEditorContent,
           instruction,
           appType: "write-a-prompt",
+          ...(docObjective.trim() ? { objective: docObjective.trim() } : {}),
+          ...(connectedContext ? { sessionNotes: connectedContext } : {}),
         });
         const data = (await res.json()) as { document: string };
         if (data.document) {
@@ -2560,7 +2599,7 @@ function FlowWorkspaceInner() {
         setDocProvoEvolving(false);
       }
     },
-    [docEditorContent, toast],
+    [docEditorContent, docObjective, toast, snapshotDocVersion, getDocConnectedContext],
   );
 
   // ── Close document editor overlay ──
@@ -2582,14 +2621,18 @@ function FlowWorkspaceInner() {
 
         updateNode(activeExpandedNodeId, {
           documentContent: docEditorContent,
+          documentObjective: docObjective.trim() || undefined,
+          documentVersions: docVersions.length > 0 ? docVersions : undefined,
           snippet: docEditorContent.slice(0, 200) || "Double-click to edit",
           ...(wasManuallyRenamed ? {} : { label: autoLabel }),
         });
       }
     }
     setDocEditorContent("");
+    setDocObjective("");
+    setDocVersions([]);
     setDocLeftTab("tools");
-  }, [activeExpandedNodeId, docEditorContent, updateNode]);
+  }, [activeExpandedNodeId, docEditorContent, docObjective, docVersions, updateNode]);
 
   // ── Header actions for status bar ──
 
@@ -3767,7 +3810,7 @@ function FlowWorkspaceInner() {
                       ) : (
                         <ProvoThread
                           documentText={docEditorContent}
-                          objective={activeExpandedNode?.label || ""}
+                          objective={docObjective.trim() || activeExpandedNode?.label || ""}
                           activePersonas={docActivePersonas}
                           onTogglePersona={(id) =>
                             setDocActivePersonas((prev) => {
@@ -3787,6 +3830,25 @@ function FlowWorkspaceInner() {
                     </div>
                   </div>
                   <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    {/* Objective input */}
+                    <div className="px-4 pt-3 pb-2 border-b bg-muted/10 shrink-0">
+                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                        Objective
+                      </label>
+                      <textarea
+                        value={docObjective}
+                        onChange={(e) => setDocObjective(e.target.value)}
+                        placeholder="What is the purpose of this document? This guides the AI tools and provocations..."
+                        className="w-full bg-muted/30 border border-border/50 rounded-md text-xs text-foreground placeholder:text-muted-foreground/50 resize-none outline-none px-2.5 py-1.5 min-h-[36px] max-h-[80px] leading-relaxed focus:ring-1 focus:ring-primary/50"
+                        rows={1}
+                        onInput={(e) => {
+                          const t = e.currentTarget;
+                          t.style.height = "auto";
+                          t.style.height = `${Math.min(t.scrollHeight, 80)}px`;
+                        }}
+                      />
+                    </div>
+                    {/* Document editor */}
                     <div className="flex-1 min-h-0 overflow-auto p-4">
                       <ProvokeText
                         value={docEditorContent}
@@ -3799,6 +3861,33 @@ function FlowWorkspaceInner() {
                         placeholder="Start writing your document..."
                       />
                     </div>
+                    {/* Version history bar */}
+                    {docVersions.length > 0 && (
+                      <div className="px-4 py-2 border-t bg-muted/10 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0">
+                            Versions ({docVersions.length})
+                          </span>
+                          <div className="flex-1 flex gap-1 overflow-x-auto">
+                            {docVersions.map((v, i) => (
+                              <button
+                                key={i}
+                                className="shrink-0 px-2 py-0.5 rounded text-[9px] border border-border/50 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                                title={`${v.label} — ${new Date(v.timestamp).toLocaleTimeString()}`}
+                                onClick={() => {
+                                  // Snapshot current before reverting
+                                  snapshotDocVersion("Before revert");
+                                  setDocEditorContent(v.content);
+                                  toast({ title: "Reverted", description: `Restored: ${v.label}` });
+                                }}
+                              >
+                                v{i + 1}: {v.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
