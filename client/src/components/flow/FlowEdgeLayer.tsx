@@ -25,10 +25,12 @@ function computeEndpoints(from: FlowNode, to: FlowNode, role?: EdgeRole | EdgeRo
   const fromCy = from.y + from.height / 2;
 
   // For research nodes with a known role, target a specific vertical zone (use first role)
+  // Legacy roleless edges target the context zone
   const primaryRole = Array.isArray(role) ? role[0] : role;
+  const effectiveRole = primaryRole || "context";
   let toCy = to.y + to.height / 2;
-  if (to.type === "research" && primaryRole && RESEARCH_ZONE_Y[primaryRole] !== undefined) {
-    toCy = to.y + to.height * RESEARCH_ZONE_Y[primaryRole];
+  if (to.type === "research" && RESEARCH_ZONE_Y[effectiveRole] !== undefined) {
+    toCy = to.y + to.height * RESEARCH_ZONE_Y[effectiveRole];
   }
   const toCx = to.x + to.width / 2;
 
@@ -289,10 +291,11 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
               }}
             />
 
-            {/* Role label(s) on edge */}
-            {edge.role && !isHovered && (() => {
+            {/* Role label(s) on edge — legacy roleless edges show as context */}
+            {!isHovered && (() => {
               const roles = edgeRoles(edge);
-              if (roles.length === 0) return null;
+              // Legacy roleless edges are treated as context
+              const displayRoles = roles.length > 0 ? roles : (["context"] as EdgeRole[]);
               const ROLE_COLORS: Record<string, string> = {
                 objective: "rgba(59,130,246,1)",
                 "output-format": "rgba(139,92,246,1)",
@@ -305,11 +308,11 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
               };
               const pillW = 32;
               const gap = 3;
-              const totalW = roles.length * pillW + (roles.length - 1) * gap;
+              const totalW = displayRoles.length * pillW + (displayRoles.length - 1) * gap;
               const startX = mx - totalW / 2;
               return (
                 <g>
-                  {roles.map((r, i) => (
+                  {displayRoles.map((r, i) => (
                     <g key={r}>
                       <rect
                         x={startX + i * (pillW + gap)}
