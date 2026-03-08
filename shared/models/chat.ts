@@ -570,3 +570,51 @@ export const socialPostLogs = pgTable("social_post_logs", {
 
 export type StoredSocialPostLog = typeof socialPostLogs.$inferSelect;
 
+// Agency events — event queue for local marketing agency orchestration.
+// Provocations creates events (e.g. timer fires), local Claude Code agents claim and process them.
+export const agencyEvents = pgTable("agency_events", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  eventType: varchar("event_type", { length: 64 }).notNull(), // 'search_x', 'search_reddit', 'craft_reply', etc.
+  platform: varchar("platform", { length: 32 }), // 'x', 'reddit', 'facebook'
+  status: varchar("status", { length: 32 }).default("pending").notNull(), // pending, claimed, processing, completed, failed, cancelled
+  payload: text("payload"), // JSON: search params, brand config, target URLs
+  result: text("result"), // JSON: agency output (drafted posts, search findings)
+  priority: integer("priority").default(0).notNull(),
+  claimToken: varchar("claim_token", { length: 128 }),
+  claimedAt: timestamp("claimed_at"),
+  completedAt: timestamp("completed_at"),
+  expiresAt: timestamp("expires_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_agency_events_user").on(table.userId),
+  index("idx_agency_events_status").on(table.status),
+  index("idx_agency_events_type").on(table.eventType),
+  index("idx_agency_events_created").on(table.createdAt),
+]);
+
+export type StoredAgencyEvent = typeof agencyEvents.$inferSelect;
+
+// Agency campaigns — configuration for marketing agency campaigns.
+// Each campaign defines brand voice, target topics, platforms, and schedule.
+export const agencyCampaigns = pgTable("agency_campaigns", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  campaignId: varchar("campaign_id", { length: 128 }).notNull().unique(),
+  name: text("name").notNull(),
+  brandVoice: text("brand_voice"), // JSON: tone, vocabulary, forbidden words, example posts
+  targetTopics: text("target_topics"), // JSON: keywords, subreddits, hashtags, communities
+  platforms: text("platforms"), // JSON: ['x', 'reddit']
+  scheduleCron: varchar("schedule_cron", { length: 64 }), // e.g. '0 */1 * * *'
+  active: boolean("active").default(true).notNull(),
+  stats: text("stats"), // JSON: posts_sent, engagement, etc.
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_agency_campaigns_user").on(table.userId),
+]);
+
+export type StoredAgencyCampaign = typeof agencyCampaigns.$inferSelect;
+

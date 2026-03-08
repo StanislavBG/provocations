@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.17.3";
+export const APP_VERSION = "0.18.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,20 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.18.0",
+    date: "2026-03-08",
+    changes: [
+      "Local Marketing Agency infrastructure: event queue system with MCP server for orchestrating local Claude Code agents",
+      "New API endpoints: /api/agency/events (CRUD + poll/claim/complete/fail) and /api/agency/campaigns (CRUD)",
+      "Database tables: agency_events (event queue) and agency_campaigns (campaign configuration)",
+      "MCP Agency Server: bridges Provocations REST API to MCP protocol for local Claude Code consumption",
+      "Social poster: added Reddit comment/reply support (commentOnReddit) and X reply support (replyToId on postToX)",
+      "Agency directory with 6-agent pipeline prompts (Scout, Analyst, Copywriter, Brand Strategist, QA/Anti-Detection, Creative Director)",
+      "Anti-detection writing rules and platform-specific content guidelines for human-grade social media content",
+      "Multi-project support: agency/projects/ directory for per-brand configuration",
+    ],
+  },
   {
     version: "0.17.3",
     date: "2026-03-07",
