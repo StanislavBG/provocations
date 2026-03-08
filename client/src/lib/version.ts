@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.18.5";
+export const APP_VERSION = "0.18.6";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.18.6",
+    date: "2026-03-08",
+    changes: [
+      "Document fullscreen Provo pane now operates in inline mode — advice and responses accumulate in-place instead of being sent to Notes",
+      "Accept button in inline mode marks advice as accepted without leaving the fullscreen view",
+      "New 'Evolve Document' button merges all accepted advice and user responses into the document via the writer API",
+    ],
+  },
   {
     version: "0.18.5",
     date: "2026-03-08",
