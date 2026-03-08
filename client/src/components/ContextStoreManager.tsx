@@ -922,9 +922,12 @@ export function ContextStoreManager({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex flex-col bg-background transition-all duration-200",
+        "fixed inset-0 z-[45] flex flex-col bg-background transition-all duration-200",
         visible ? "opacity-100 scale-100" : "opacity-0 scale-[0.98]"
       )}
+      style={{
+        top: "var(--ftux-status-bar-height, 44px)",
+      }}
       onWheel={(e) => e.stopPropagation()}
     >
       {/* Top bar */}
@@ -946,11 +949,11 @@ export function ContextStoreManager({
         </Button>
       </div>
 
-      {/* Two-column layout */}
+      {/* Three-column layout: folders | file list | preview */}
       <div className="flex flex-1 min-h-0">
-        {/* Left sidebar: Folder tree + file list */}
-        <div className="w-[280px] border-r border-border/50 flex flex-col bg-card/30 shrink-0">
-          {/* Folder tree section */}
+        {/* Left sidebar: Folder tree */}
+        <div className="w-[220px] border-r border-border/50 flex flex-col bg-card/30 shrink-0">
+          {/* Folder tree header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
             <span className="text-xs font-semibold">Folders</span>
             <Button
@@ -964,7 +967,7 @@ export function ContextStoreManager({
             </Button>
           </div>
 
-          <ScrollArea className="max-h-[200px] shrink-0">
+          <ScrollArea className="flex-1">
             <div className="py-1">
               {/* All Files */}
               <button
@@ -1018,10 +1021,11 @@ export function ContextStoreManager({
               )}
             </div>
           </ScrollArea>
+        </div>
 
-          {/* File list section */}
-          <div className="flex-1 flex flex-col min-h-0 border-t border-border/30">
-            {/* File list header */}
+        {/* Center column: File list */}
+        <div className="w-[280px] border-r border-border/50 flex flex-col bg-card/20 shrink-0">
+          {/* File list header */}
             <div
               className="flex items-center gap-2 px-3 py-2 border-b border-border/30 shrink-0"
               onDragOver={handleDragOver}
@@ -1246,7 +1250,7 @@ export function ContextStoreManager({
                         )}
                         onClick={() => setSelectedDocId(doc.id)}
                       >
-                        <div className="flex items-center justify-center h-10 mb-1.5 bg-muted/20 rounded">
+                        <div className="flex items-center justify-center h-12 mb-1.5 bg-muted/20 rounded overflow-hidden">
                           <Icon className="w-5 h-5 text-muted-foreground/30" />
                         </div>
                         <div className="text-[10px] font-medium truncate">
@@ -1278,10 +1282,9 @@ export function ContextStoreManager({
                 </div>
               )}
             </ScrollArea>
-          </div>
         </div>
 
-        {/* Main area: Document preview/editor */}
+        {/* Right area: Document preview/editor */}
         <div className="flex-1 flex flex-col min-w-0">
           {renderMainArea()}
         </div>

@@ -33,6 +33,7 @@ import {
   ChevronRight,
   HardDrive,
   Blocks,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { FlowNodeType } from "@/components/flow/useFlowCanvas";
 import { CANVAS_STYLES } from "@/lib/canvas-styles";
 import { DebugButton } from "@/components/DebugButton";
+import { ManageToolGroupsDialog } from "./ManageToolGroupsDialog";
 
 /**
  * Icons for virtual dock toolIds that don't map to a FlowNodeType in the registry.
@@ -125,6 +127,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gearDropdownOpen, setGearDropdownOpen] = useState(false);
   const [themeExpanded, setThemeExpanded] = useState(false);
+  const [toolGroupsOpen, setToolGroupsOpen] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const shell = useFtuxShell();
@@ -464,6 +467,19 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                   className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
                   onClick={() => {
                     setGearDropdownOpen(false);
+                    setToolGroupsOpen(true);
+                  }}
+                >
+                  <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium">Manage Tools</div>
+                    <div className="text-[10px] text-muted-foreground">Organize tool groups</div>
+                  </div>
+                </button>
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                  onClick={() => {
+                    setGearDropdownOpen(false);
                     onOpenActivityLogs?.();
                   }}
                 >
@@ -544,6 +560,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
       </div>
 
       <FtuxSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ManageToolGroupsDialog open={toolGroupsOpen} onOpenChange={setToolGroupsOpen} />
     </div>
   );
 }

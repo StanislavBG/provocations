@@ -821,7 +821,7 @@ export interface DockToolCatalogEntry {
   label: string;
   icon: React.ElementType;
   iconName: string;
-  group: "gather" | "workshop" | "build";
+  group: string;
   description: string;
 }
 
