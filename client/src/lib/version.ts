@@ -22,6 +22,9 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: "0.21.1",
     date: "2026-03-08",
     changes: [
+      "Open Canvas dialog now shows auto-save canvases ([5min]/[Hourly]) in a collapsible section so they match the Context Store",
+      "Status bar dropdowns and tooltips now open upwards when the bar is positioned at the bottom",
+      "Dock positioning is now aware of status bar position — offsets correctly whether the bar is at top or bottom",
       "Restore Mail system to Flow workspace status bar — bell icon with unread notification count badge",
       "Mailbox drawer accessible from status bar for connection requests, share invitations, and system events",
       "Canvas sharing persists to original owner's context store (Google Drive-style — no copy created)",
