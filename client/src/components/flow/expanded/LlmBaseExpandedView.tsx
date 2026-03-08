@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Play, Loader2, Square, Copy, BrainCircuit, Search, Shield,
   Thermometer, SlidersHorizontal, Zap, ChevronDown, ChevronRight,
@@ -245,6 +246,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   }, [streamingOutput, isRunning]);
 
   return (
+  <>
     <ExpandedViewLayout
       defaultLeftSize={25}
       left={
@@ -458,34 +460,6 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
               />
             </div>
 
-            {/* Run / Stop button */}
-            <div className="flex items-center gap-2">
-              {isRunning ? (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={handleStop}
-                  className="gap-1.5"
-                >
-                  <Square className="w-3.5 h-3.5" />
-                  Stop
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={handleRun}
-                  className="gap-1.5 bg-fuchsia-600 hover:bg-fuchsia-700 text-white"
-                  disabled={!userPrompt.trim() && contextInputs.length === 0 && userPromptInputs.length === 0}
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  Run
-                </Button>
-              )}
-              <span className="text-[10px] text-muted-foreground">
-                {model} · {streaming ? "streaming" : "batch"} · {maxTokens.toLocaleString()} max tokens
-              </span>
-            </div>
-
             {/* Output */}
             {(displayOutput || isRunning) && (
               <div className="space-y-1.5">
@@ -538,6 +512,77 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
         </div>
       }
     />
+      <HeaderRunButton
+        isRunning={isRunning}
+        onRun={handleRun}
+        onStop={handleStop}
+        disabled={!userPrompt.trim() && contextInputs.length === 0 && userPromptInputs.length === 0}
+        model={model}
+        streaming={streaming}
+        maxTokens={maxTokens}
+      />
+  </>
+  );
+}
+
+// ── Run/Stop button portaled into the overlay header bar ──
+
+function HeaderRunButton({
+  isRunning,
+  onRun,
+  onStop,
+  disabled,
+  model,
+  streaming,
+  maxTokens,
+}: {
+  isRunning: boolean;
+  onRun: () => void;
+  onStop: () => void;
+  disabled: boolean;
+  model: string;
+  streaming: boolean;
+  maxTokens: number;
+}) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Find the portal target in the overlay header
+    const el = document.getElementById("expanded-header-actions");
+    setTarget(el);
+  }, []);
+
+  if (!target) return null;
+
+  return createPortal(
+    <div className="flex items-center gap-2">
+      {isRunning ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onStop}
+          className="h-7 gap-1.5 text-white bg-white/20 hover:bg-white/30 hover:text-white text-xs"
+        >
+          <Square className="w-3 h-3" />
+          Stop
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onRun}
+          disabled={disabled}
+          className="h-7 gap-1.5 text-white bg-white/20 hover:bg-white/30 hover:text-white text-xs disabled:opacity-40"
+        >
+          <Play className="w-3 h-3" />
+          Run
+        </Button>
+      )}
+      <span className="text-[10px] text-white/60 hidden sm:inline">
+        {model} · {streaming ? "stream" : "batch"} · {maxTokens.toLocaleString()}
+      </span>
+    </div>,
+    target,
   );
 }
 
