@@ -42,6 +42,8 @@ import {
   Layers,
   Pin,
   PinOff,
+  Lock,
+  LockOpen,
   type LucideIcon,
 } from "lucide-react";
 import { FtuxSettingsDialog } from "./FtuxSettingsDialog";
@@ -99,6 +101,8 @@ export function FtuxDock() {
     activeTool,
     setActiveTool,
     setDockItems,
+    dockLocked,
+    setDockLocked,
     statusBarPinnedItems,
     addStatusBarPinnedItem,
     removeStatusBarPinnedItem,
@@ -153,23 +157,30 @@ export function FtuxDock() {
   const handleSlotDragStart = useCallback((slotIndex: number, e: React.DragEvent) => {
     const item = slots[slotIndex];
     if (!item) return;
-    dragSourceSlot.current = slotIndex;
+    // When locked, still allow dragging to canvas but mark as copy-only (no reorder)
+    dragSourceSlot.current = dockLocked ? null : slotIndex;
     e.dataTransfer.setData("application/x-flow-tool", item.toolId);
-    e.dataTransfer.effectAllowed = "copyMove";
+    e.dataTransfer.effectAllowed = dockLocked ? "copy" : "copyMove";
     // Show only the icon button as the drag ghost, not the entire slot wrapper
     const button = e.currentTarget.querySelector("button");
     if (button) {
       e.dataTransfer.setDragImage(button, button.offsetWidth / 2, button.offsetHeight / 2);
     }
-  }, [slots]);
+  }, [slots, dockLocked]);
 
   const handleSlotDragOver = useCallback((slotIndex: number, e: React.DragEvent) => {
+    if (dockLocked) return; // No reorder when locked
     e.preventDefault();
     setDragOverSlot(slotIndex);
-  }, []);
+  }, [dockLocked]);
 
   const handleSlotDrop = useCallback((toSlot: number, e: React.DragEvent) => {
     e.preventDefault();
+    if (dockLocked) {
+      dragSourceSlot.current = null;
+      setDragOverSlot(null);
+      return;
+    }
     const fromSlot = dragSourceSlot.current;
     if (fromSlot === null || fromSlot === toSlot) {
       dragSourceSlot.current = null;
@@ -195,7 +206,7 @@ export function FtuxDock() {
 
     dragSourceSlot.current = null;
     setDragOverSlot(null);
-  }, [setDockItems]);
+  }, [setDockItems, dockLocked]);
 
   const handleDragEnd = useCallback(() => {
     dragSourceSlot.current = null;
@@ -304,7 +315,8 @@ export function FtuxDock() {
             const isDropTarget = dragOverSlot === slotIndex && dragSourceSlot.current !== slotIndex;
 
             if (!item) {
-              // Empty slot — can receive drops
+              // Empty slot — can receive drops (hidden when locked)
+              if (dockLocked) return null;
               return (
                 <div
                   key={`empty-${slotIndex}`}
@@ -331,12 +343,12 @@ export function FtuxDock() {
                   "relative flex flex-col items-center justify-center rounded-lg transition-all",
                   sz.slot,
                   sz.slotH,
-                  isDropTarget && "ring-2 ring-primary/40",
+                  !dockLocked && isDropTarget && "ring-2 ring-primary/40",
                 )}
                 draggable
                 onDragStart={(e) => handleSlotDragStart(slotIndex, e)}
-                onDragOver={(e) => handleSlotDragOver(slotIndex, e)}
-                onDrop={(e) => handleSlotDrop(slotIndex, e)}
+                onDragOver={dockLocked ? undefined : (e) => handleSlotDragOver(slotIndex, e)}
+                onDrop={dockLocked ? undefined : (e) => handleSlotDrop(slotIndex, e)}
                 onDragEnd={handleDragEnd}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -397,6 +409,27 @@ export function FtuxDock() {
           "flex gap-0.5 border-border/30",
           isHorizontal ? "flex-col border-l pl-1.5 ml-0.5" : "flex-row border-t pt-1.5 mt-0.5 justify-center",
         )}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={dockLocked ? "Unlock dock reordering" : "Lock dock reordering"}
+                className={cn(
+                  "w-8 h-8 rounded-lg transition-colors",
+                  dockLocked
+                    ? "text-muted-foreground/50 hover:text-muted-foreground"
+                    : "text-primary/70 hover:text-primary",
+                )}
+                onClick={() => setDockLocked(!dockLocked)}
+              >
+                {dockLocked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
+              {dockLocked ? "Unlock to reorder items" : "Lock item positions"}
+            </TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
