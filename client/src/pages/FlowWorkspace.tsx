@@ -347,6 +347,7 @@ function FlowWorkspaceInner() {
     return new Set<ProvocationType>(["thinking_bigger", "architect", random]);
   });
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
+  const [docProvoEvolving, setDocProvoEvolving] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
@@ -2537,6 +2538,31 @@ function FlowWorkspaceInner() {
     [docEditorContent, toast],
   );
 
+  // ── Evolve document from provo thread (inline mode) ──
+  const handleDocProvoEvolve = useCallback(
+    async (instruction: string) => {
+      if (!docEditorContent.trim()) return;
+      setDocProvoEvolving(true);
+      try {
+        const res = await apiRequest("POST", "/api/write", {
+          document: docEditorContent,
+          instruction,
+          appType: "write-a-prompt",
+        });
+        const data = (await res.json()) as { document: string };
+        if (data.document) {
+          setDocEditorContent(data.document);
+          toast({ title: "Document evolved", description: "Provocation insights merged into your document" });
+        }
+      } catch {
+        toast({ title: "Evolve failed", variant: "destructive" });
+      } finally {
+        setDocProvoEvolving(false);
+      }
+    },
+    [docEditorContent, toast],
+  );
+
   // ── Close document editor overlay ──
 
   const handleCloseDocumentEditor = useCallback(() => {
@@ -3742,14 +3768,11 @@ function FlowWorkspaceInner() {
                               return next;
                             })
                           }
-                          onCaptureToContext={(text, label) => {
-                            setDocEditorContent((prev) =>
-                              prev
-                                ? `${prev}\n\n---\n\n### ${label}\n\n${text}`
-                                : `### ${label}\n\n${text}`,
-                            );
-                          }}
+                          onCaptureToContext={() => {}}
                           hasDocument={!!docEditorContent.trim()}
+                          mode="inline"
+                          onEvolveWithProvocations={handleDocProvoEvolve}
+                          isEvolving={docProvoEvolving}
                         />
                       )}
                     </div>
