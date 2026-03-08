@@ -527,6 +527,26 @@ const APP_CONFIGS: Record<TemplateId, AppFlowConfig> = {
       feedbackTone: "chronologically precise and analytically curious",
     },
   },
+
+  "product-owner": {
+    ...DEFAULT_CONFIG,
+    autoStartInterview: true,
+    autoStartPersonas: ["thinking_bigger" as ProvocationType],
+    flowSteps: [
+      { id: "select", label: "Select Application", description: "Choose your document type" },
+      { id: "identity", label: "Define Identity", description: "Establish what the product IS and IS NOT" },
+      { id: "draft", label: "Build Guide", description: "Flesh out values, quality bar, and decision framework" },
+      { id: "challenge", label: "Challenge & Refine", description: "Stress-test the guide with expert personas" },
+    ],
+    leftPanelTabs: [TAB_PROVOKE, TAB_GENERATE, TAB_CONTEXT, TAB_CHAT],
+    rightPanelTabs: [RIGHT_DISCUSSION, RIGHT_TRANSCRIPT],
+    writer: {
+      mode: "edit",
+      outputFormat: "markdown",
+      documentType: "product owner agent guide",
+      feedbackTone: "precise and alignment-focused",
+    },
+  },
 };
 
 // ---------------------------------------------------------------------------

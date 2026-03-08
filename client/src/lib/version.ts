@@ -28,6 +28,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Monetization: subscriptions DB, usage metering (Free/Pro/Team), Stripe webhooks, billing page",
       "Performance: CSS viewport transforms, React.memo, edge caching, route splitting, lazy views, diff-based save",
       "AI/LLM: context budgets, prompt optimization (30% reduction), prompt templates, output validation, model routing, fallback retry",
+      "New app template: Product Owner Agent — 10-section PO guide framework with LLM guidance",
     ],
   },
   {
