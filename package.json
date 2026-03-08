@@ -10,7 +10,8 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "husky"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
@@ -116,6 +117,7 @@
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.9",
     "esbuild": "^0.25.0",
+    "husky": "^9.1.7",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",

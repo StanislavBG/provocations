@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.21.2";
+export const APP_VERSION = "0.21.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.21.3",
+    date: "2026-03-08",
+    changes: [
+      "Add GET /api/health endpoint — returns server status, DB connectivity, LLM provider availability, version, and uptime (no auth required)",
+      "Add structured logging middleware with request IDs, JSON output in production, pretty-printed in development",
+      "Add environment variable validation at startup — required vars (DATABASE_URL, ENCRYPTION_SECRET, CLERK_SECRET_KEY) cause exit(1) if missing",
+      "Add GitHub Actions CI pipeline with lint, test (postgres service), and build jobs",
+      "Add husky pre-commit hook running npm run check",
+    ],
+  },
   {
     version: "0.21.2",
     date: "2026-03-08",
