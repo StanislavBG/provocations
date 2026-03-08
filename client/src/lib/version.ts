@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.6";
+export const APP_VERSION = "0.20.7";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.7",
+    date: "2026-03-08",
+    changes: [
+      "Add Writer Voice + Writer Text to document node expanded view — dictate or type feedback to evolve the document",
+      "Smart keys (Expand, Condense, Restructure, Clarify, Style, Correct) now call /api/write with full context (objective, document, connected inputs)",
+      "Writer feedback uses same pattern as main SplitDocumentEditor — AI remixes intent into the document",
+    ],
+  },
   {
     version: "0.20.6",
     date: "2026-03-08",
