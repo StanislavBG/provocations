@@ -741,8 +741,8 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     lifecyclePreset: "llm-base",
     minWidth: 180,
     minHeight: 140,
-    acceptedRoles: ["system-instruction", "context"],
-    inputDescription: "Accepts system-instruction edges (become system prompt) and context edges (become user context). Full model configuration with temperature, top-p, top-k, safety, and search grounding.",
+    acceptedRoles: ["system-instruction", "context", "user-prompt"],
+    inputDescription: "Accepts system-instruction edges (become system prompt), context edges (become user context), and user-prompt edges (become the user message). Full model configuration with temperature, top-p, top-k, safety, and search grounding.",
     outputDescription: "Raw LLM output text. Supports any model (Gemini, OpenAI, Anthropic) with unrestricted defaults for maximum flexibility.",
   },
 };
