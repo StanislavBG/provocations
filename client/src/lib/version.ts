@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.19.3";
+export const APP_VERSION = "0.19.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.19.4",
+    date: "2026-03-08",
+    changes: [
+      "Move LLM Base Run/Stop button into overlay header bar via portal",
+    ],
+  },
   {
     version: "0.19.3",
     date: "2026-03-08",

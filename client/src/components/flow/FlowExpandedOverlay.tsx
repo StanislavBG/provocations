@@ -236,6 +236,8 @@ export function FlowExpandedOverlay({
               {node.label || style.badge}
             </h2>
           )}
+          {/* Portal target for expanded view header actions (e.g. Run button) */}
+          <div id="expanded-header-actions" className="flex items-center gap-2" />
           <span className="text-[10px] uppercase tracking-wider opacity-75 font-semibold">
             {style.badge}
           </span>
