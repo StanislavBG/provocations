@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.18.6";
+export const APP_VERSION = "0.18.7";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.18.7",
+    date: "2026-03-08",
+    changes: [
+      "Fix document node rename reverting on fullscreen close — manually renamed labels are now preserved instead of being overwritten by auto-derived labels from content",
+    ],
+  },
   {
     version: "0.18.6",
     date: "2026-03-08",
