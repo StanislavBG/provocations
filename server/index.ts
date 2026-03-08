@@ -6,9 +6,19 @@ import { clerkMiddleware, requireAuth } from "@clerk/express";
 import { ensureTables } from "./db";
 import { discoverModels } from "./llm";
 import { setupCanvasWebSocket, setSaveCanvasCallback } from "./canvas-collab";
+import { validateEnv } from "./env";
+import { requestLogger } from "./logger";
+import { APP_VERSION } from "../client/src/lib/version";
+import pg from "pg";
+
+// Validate environment variables before anything else
+validateEnv();
 
 const app = express();
 const httpServer = createServer(app);
+
+// Structured request logging middleware
+app.use(requestLogger());
 
 // Stripe webhooks need the raw body for signature verification.
 // All other routes get the usual JSON parser.
@@ -21,6 +31,46 @@ app.use((req, res, next) => {
 });
 app.use(clerkMiddleware());
 
+// Health check endpoint — no auth required
+app.get("/api/health", async (_req, res) => {
+  const checks: Record<string, string> = {};
+  let healthy = true;
+
+  // Database connectivity
+  try {
+    const pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 1,
+      connectionTimeoutMillis: 3_000,
+    });
+    const client = await pool.connect();
+    await client.query("SELECT 1");
+    client.release();
+    await pool.end();
+    checks.database = "ok";
+  } catch {
+    checks.database = "unavailable";
+    healthy = false;
+  }
+
+  // LLM provider availability
+  checks.llm = process.env.GEMINI_API_KEY
+    ? "ok"
+    : process.env.ANTHROPIC_API_KEY
+      ? "ok"
+      : "no_api_key";
+  if (checks.llm !== "ok") healthy = false;
+
+  const status = healthy ? 200 : 503;
+  res.status(status).json({
+    status: healthy ? "healthy" : "degraded",
+    version: APP_VERSION,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    checks,
+  });
+});
+
 app.get("/api/clerk-config", (_req, res) => {
   const key = process.env.CLERK_PUBLISHABLE_KEY;
   if (!key) {
@@ -30,7 +80,7 @@ app.get("/api/clerk-config", (_req, res) => {
 });
 
 app.use("/api", (req, _res, next) => {
-  if (req.path === "/clerk-config" || req.path === "/stripe/webhook") {
+  if (req.path === "/clerk-config" || req.path === "/stripe/webhook" || req.path === "/health") {
     return next();
   }
   return requireAuth()(req, _res, next);
