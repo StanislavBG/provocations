@@ -174,6 +174,8 @@ export function FlowExpandedOverlay({
       {/* Full-screen overlay */}
       <div
         ref={overlayRef}
+        role="dialog"
+        aria-label={`${node.type} expanded view: ${node.label}`}
         className={cn(
           "fixed inset-0 z-[45] flex flex-col bg-background overflow-hidden",
           phase === "expanding" && "will-change-[left,top,width,height,opacity]",

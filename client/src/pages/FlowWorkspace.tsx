@@ -72,6 +72,8 @@ import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { serializeCanvas, serializeNodeForSave } from "@/components/flow/serializeCanvas";
 import { PlatformIntegrations } from "@/components/PlatformIntegrations";
 import { ContextStoreManager } from "@/components/ContextStoreManager";
+import { WelcomeOverlay } from "@/components/WelcomeOverlay";
+import { KeyboardShortcutsOverlay } from "@/components/KeyboardShortcutsOverlay";
 import {
   Dialog,
   DialogContent,
@@ -353,6 +355,7 @@ function FlowWorkspaceInner() {
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
   const [canvasLoadError, setCanvasLoadError] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
+  const [blueprintsExternalOpen, setBlueprintsExternalOpen] = useState(false);
   // Resolve the active canvas theme
   const activeTheme = CANVAS_STYLES.find((t) => t.key === canvasTheme) ?? CANVAS_STYLES[0];
   const [storeFolderPickerNodeId, setStoreFolderPickerNodeId] = useState<string | null>(null);
@@ -3191,6 +3194,8 @@ function FlowWorkspaceInner() {
         blueprintsSlot={
           <BlueprintsMenu
             onLoadBlueprint={handleLoadBlueprint}
+            externalOpen={blueprintsExternalOpen}
+            onExternalOpenChange={setBlueprintsExternalOpen}
             onSaveBlueprint={async (label: string, description: string) => {
               const originX = state.nodes[0]?.x ?? 0;
               const originY = state.nodes[0]?.y ?? 0;
@@ -4866,6 +4871,18 @@ function FlowWorkspaceInner() {
           itemTitle={canvasTitle || "Untitled Canvas"}
         />
       )}
+
+      {/* Welcome overlay for first-time users */}
+      <WelcomeOverlay
+        onStartTour={() => {
+          // The FlowWorkspace forces tourCompleted=true, so we reset tips instead
+          toast({ title: "Tip: Drag tools from the dock below to get started!" });
+        }}
+        onLoadBlueprint={() => setBlueprintsExternalOpen(true)}
+      />
+
+      {/* Keyboard shortcuts overlay (triggered by ? or Ctrl+/) */}
+      <KeyboardShortcutsOverlay />
     </FtuxShell>
   );
 }

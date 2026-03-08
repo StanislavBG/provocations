@@ -254,6 +254,9 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   // ── Standard card rendering ──
   return (
     <div
+      role="article"
+      aria-label={`${node.type} node: ${node.label}`}
+      tabIndex={0}
       className={cn(
         "absolute select-none rounded-lg border-2 shadow-md transition-shadow group flex flex-col",
         "hover:shadow-lg",

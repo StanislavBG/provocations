@@ -1123,9 +1123,9 @@ export function ContextSidebar({
             <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground/50">
               <FileText className="w-6 h-6" />
               <p className="text-xs text-center">
-                No documents yet.
+                Pin documents from the Context Store to use as AI context.
                 <br />
-                Upload files or create new ones.
+                Upload files or create new ones to get started.
               </p>
             </div>
           )}

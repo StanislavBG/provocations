@@ -74,9 +74,12 @@ const SOURCE_COLORS: Record<string, string> = {
 interface BlueprintsMenuProps {
   onLoadBlueprint: (blueprintId: string) => void;
   onSaveBlueprint: (label: string, description: string) => Promise<any>;
+  /** External control to open the dropdown (e.g., from welcome overlay) */
+  externalOpen?: boolean;
+  onExternalOpenChange?: (open: boolean) => void;
 }
 
-export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsMenuProps) {
+export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint, externalOpen, onExternalOpenChange }: BlueprintsMenuProps) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveLabel, setSaveLabel] = useState("");
   const [saveDescription, setSaveDescription] = useState("");
@@ -185,7 +188,7 @@ export function BlueprintsMenu({ onLoadBlueprint, onSaveBlueprint }: BlueprintsM
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={externalOpen} onOpenChange={onExternalOpenChange}>
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>

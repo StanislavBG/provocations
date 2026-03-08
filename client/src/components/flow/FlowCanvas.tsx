@@ -411,6 +411,8 @@ export function FlowCanvas({
   return (
     <div
       ref={canvasRef}
+      role="application"
+      aria-label="Flow Canvas"
       className={`absolute inset-0 overflow-hidden ${transparentBg ? "bg-transparent" : "bg-background"} ${cursorClass}`}
       onMouseDown={frozen ? undefined : handleMouseDown}
       onMouseMove={frozen ? undefined : handleMouseMove}
@@ -594,7 +596,10 @@ export function FlowCanvas({
               <Sparkles className="w-8 h-8" />
             </div>
             <p className="text-sm text-muted-foreground/60 font-serif">
-              Drag items from the dock to the canvas, or click to add
+              Drag a tool from the dock to get started, or load a Blueprint
+            </p>
+            <p className="text-[11px] text-muted-foreground/40">
+              Press <kbd className="px-1 py-0.5 rounded bg-muted/50 text-[10px] font-mono">?</kbd> for keyboard shortcuts
             </p>
           </div>
         </div>
