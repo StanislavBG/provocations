@@ -162,7 +162,11 @@ export function gatherInputContentWithRoles(
     // Multi-role: a single edge can contribute to multiple buckets
     if (edgeHasRole(edge, "objective")) objectiveTexts.push(fullTxt);
     if (edgeHasRole(edge, "context")) contextTexts.push(fullTxt);
-    if (roles.length === 0) plainTexts.push(fullTxt);
+    // Edges with no role, or with roles not handled above (user-prompt, system-instruction),
+    // go into plainTexts so they're still included in combinedContent
+    if (roles.length === 0 || (!edgeHasRole(edge, "objective") && !edgeHasRole(edge, "context"))) {
+      plainTexts.push(fullTxt);
+    }
   }
 
   // Output-format template content
