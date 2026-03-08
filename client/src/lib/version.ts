@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.19.2";
+export const APP_VERSION = "0.19.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.19.3",
+    date: "2026-03-08",
+    changes: [
+      "Unified collapsible tabbed design for both Context and User Prompt connected inputs in LLM Base expanded view",
+      "Document fullscreen connected inputs use collapsible tabbed design to save space",
+    ],
+  },
   {
     version: "0.19.2",
     date: "2026-03-08",

@@ -10,7 +10,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   Play, Loader2, Square, Copy, BrainCircuit, Search, Shield,
-  Thermometer, SlidersHorizontal, Zap, ChevronDown,
+  Thermometer, SlidersHorizontal, Zap, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -412,27 +412,14 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
 
-            {/* Context — connections populate system prompt, manual appends */}
+            {/* Context — connections as collapsible tabs, manual appends */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Context
-                {contextInputs.length > 0 && (
-                  <span className="ml-1.5 text-[9px] font-normal text-amber-500">
-                    ({contextInputs.length} connected)
-                  </span>
-                )}
-              </label>
-              {contextInputs.length > 0 && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 max-h-40 overflow-y-auto space-y-2">
-                  {contextInputs.map((ci, i) => (
-                    <div key={i}>
-                      <Badge variant="outline" className="text-[9px] mb-1 border-amber-500/30 text-amber-500">{ci.label}</Badge>
-                      <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-4">
-                        {ci.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+              {contextInputs.length > 0 ? (
+                <ConnectedInputTabs inputs={contextInputs} sectionLabel="Context" accent="amber" />
+              ) : (
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Context
+                </label>
               )}
               <ProvokeText
                 value={systemPrompt}
@@ -448,53 +435,27 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
               />
             </div>
 
-            {/* User Prompt — connections populate, manual appends */}
+            {/* User Prompt — connections as collapsible tabs, manual appends */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                User Prompt
-                {userPromptInputs.length > 0 && (
-                  <span className="ml-1.5 text-[9px] font-normal text-emerald-500">
-                    ({userPromptInputs.length} connected)
-                  </span>
-                )}
-              </label>
               {userPromptInputs.length > 0 ? (
-                <>
-                  {/* Connection content shown as read-only populated area */}
-                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
-                    {userPromptInputs.map((up, i) => (
-                      <div key={i}>
-                        <Badge variant="outline" className="text-[9px] mb-1 border-emerald-500/30 text-emerald-500">{up.label}</Badge>
-                        <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-6">
-                          {up.content}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Optional additional prompt */}
-                  <ProvokeText
-                    value={userPrompt}
-                    onChange={(v) => patch({ llmBaseUserPrompt: v })}
-                    chrome="container"
-                    variant="textarea"
-                    placeholder="Additional instructions (appended after connected content)..."
-                    showCopy
-                    showClear
-                    readOnly={isRunning}
-                  />
-                </>
+                <ConnectedInputTabs inputs={userPromptInputs} sectionLabel="User Prompt" accent="emerald" />
               ) : (
-                <ProvokeText
-                  value={userPrompt}
-                  onChange={(v) => patch({ llmBaseUserPrompt: v })}
-                  chrome="container"
-                  variant="textarea"
-                  placeholder="Enter your prompt here..."
-                  showCopy
-                  showClear
-                  readOnly={isRunning}
-                />
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  User Prompt
+                </label>
               )}
+              <ProvokeText
+                value={userPrompt}
+                onChange={(v) => patch({ llmBaseUserPrompt: v })}
+                chrome="container"
+                variant="textarea"
+                placeholder={userPromptInputs.length > 0
+                  ? "Additional instructions (appended after connected content)..."
+                  : "Enter your prompt here..."}
+                showCopy
+                showClear
+                readOnly={isRunning}
+              />
             </div>
 
             {/* Run / Stop button */}
@@ -577,5 +538,74 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
         </div>
       }
     />
+  );
+}
+
+// ── Collapsible tabbed connected inputs (reusable for Context + User Prompt) ──
+
+function ConnectedInputTabs({
+  inputs,
+  sectionLabel,
+  accent = "amber",
+}: {
+  inputs: { label: string; content: string }[];
+  sectionLabel: string;
+  accent?: "amber" | "emerald";
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+
+  const colors = accent === "emerald"
+    ? { border: "border-emerald-500/30", bg: "bg-emerald-500/5", hover: "hover:bg-emerald-500/10", text: "text-emerald-500", borderActive: "border-emerald-500", borderInner: "border-emerald-500/20" }
+    : { border: "border-amber-500/30", bg: "bg-amber-500/5", hover: "hover:bg-amber-500/10", text: "text-amber-500", borderActive: "border-amber-500", borderInner: "border-amber-500/20" };
+
+  return (
+    <div className={`rounded-md border ${colors.border} ${colors.bg} overflow-hidden`}>
+      {/* Header — click to toggle */}
+      <button
+        className={`w-full flex items-center gap-1.5 px-3 py-1.5 text-left ${colors.hover} transition-colors`}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {expanded ? (
+          <ChevronDown className={`w-3 h-3 ${colors.text} shrink-0`} />
+        ) : (
+          <ChevronRight className={`w-3 h-3 ${colors.text} shrink-0`} />
+        )}
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {sectionLabel}
+        </span>
+        <span className={`text-[9px] font-normal ${colors.text}`}>
+          ({inputs.length} connected)
+        </span>
+      </button>
+
+      {/* Tabs + content — only when expanded */}
+      {expanded && (
+        <div className={`border-t ${colors.borderInner}`}>
+          {/* Tab row */}
+          <div className={`flex border-b ${colors.borderInner} overflow-x-auto`}>
+            {inputs.map((input, i) => (
+              <button
+                key={i}
+                className={`shrink-0 px-3 py-1.5 text-[10px] font-medium transition-colors border-b-2 ${
+                  activeTab === i
+                    ? `${colors.borderActive} ${colors.text}`
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab(i)}
+              >
+                {input.label.length > 20 ? input.label.slice(0, 20) + "…" : input.label}
+              </button>
+            ))}
+          </div>
+          {/* Active tab content */}
+          <div className="p-3 max-h-32 overflow-y-auto">
+            <p className="text-xs text-foreground/80 whitespace-pre-wrap">
+              {inputs[activeTab]?.content || ""}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

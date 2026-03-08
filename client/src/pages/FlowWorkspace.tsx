@@ -147,6 +147,77 @@ function treeIndent(depth: number): number {
 
 // ── Document editor tool buttons ──
 
+/** Collapsible tabbed connected inputs for Document fullscreen */
+function DocConnectedInputs({ nodeId, edges, nodes }: { nodeId: string; edges: FlowEdge[]; nodes: FlowNode[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+
+  const inputNodes = useMemo(() => {
+    const inputEdges = edges.filter((e) => e.toNodeId === nodeId);
+    return inputEdges
+      .map((e) => nodes.find((n) => n.id === e.fromNodeId))
+      .filter(Boolean) as FlowNode[];
+  }, [nodeId, edges, nodes]);
+
+  if (inputNodes.length === 0) {
+    return (
+      <div className="p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+          Connected Inputs
+        </h3>
+        <p className="text-[10px] text-muted-foreground/60 italic">
+          No connected inputs. Drag edges from other nodes to this document.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-3 my-2 rounded-md border border-border/50 overflow-hidden">
+      <button
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-muted/30 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {expanded ? (
+          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+        )}
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          Connected Inputs
+        </span>
+        <span className="text-[9px] text-muted-foreground/70">
+          ({inputNodes.length})
+        </span>
+      </button>
+      {expanded && (
+        <div className="border-t border-border/50">
+          <div className="flex border-b border-border/30 overflow-x-auto">
+            {inputNodes.map((n, i) => (
+              <button
+                key={n.id}
+                className={`shrink-0 px-2.5 py-1 text-[9px] font-medium transition-colors border-b-2 ${
+                  activeTab === i
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab(i)}
+              >
+                {(n.label || "Input").length > 18 ? (n.label || "Input").slice(0, 18) + "…" : (n.label || "Input")}
+              </button>
+            ))}
+          </div>
+          <div className="p-2.5 max-h-28 overflow-y-auto">
+            <p className="text-[10px] text-muted-foreground whitespace-pre-wrap">
+              {inputNodes[activeTab]?.documentContent || inputNodes[activeTab]?.content || inputNodes[activeTab]?.snippet || "No content"}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DOC_TOOLS = [
   { id: "expand", label: "Expand", icon: Expand, instruction: "Expand this text with more depth, examples, and supporting details" },
   { id: "condense", label: "Condense", icon: Shrink, instruction: "Remove redundancy, tighten prose, make concise" },
@@ -3776,36 +3847,11 @@ function FlowWorkspaceInner() {
                               ))}
                             </div>
                           </div>
-                          <div className="p-3 flex-1">
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                              Connected Inputs
-                            </h3>
-                            {(() => {
-                              const inputEdges = state.edges.filter((e) => e.toNodeId === activeExpandedNodeId);
-                              const inputNodes = inputEdges
-                                .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
-                                .filter(Boolean);
-                              if (inputNodes.length === 0) {
-                                return (
-                                  <p className="text-[10px] text-muted-foreground/60 italic">
-                                    No connected inputs. Drag edges from other nodes to this document.
-                                  </p>
-                                );
-                              }
-                              return (
-                                <div className="space-y-1.5">
-                                  {inputNodes.map((n) => n && (
-                                    <div key={n.id} className="px-2 py-1.5 rounded border border-border/50 bg-muted/30">
-                                      <p className="text-[10px] font-medium">{n.label}</p>
-                                      <p className="text-[9px] text-muted-foreground line-clamp-2 mt-0.5">
-                                        {n.content || n.snippet || "No content"}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </div>
+                          <DocConnectedInputs
+                            nodeId={activeExpandedNodeId!}
+                            edges={state.edges}
+                            nodes={state.nodes}
+                          />
                         </>
                       ) : (
                         <ProvoThread
