@@ -27,8 +27,9 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Security: helmet CSP, rate limiting (4 tiers), input validation, upload validation",
       "Monetization: subscriptions DB, usage metering (Free/Pro/Team), Stripe webhooks, billing page",
       "Performance: CSS viewport transforms, React.memo, edge caching, route splitting, lazy views, diff-based save",
-      "AI/LLM: context budgets, prompt optimization (30% reduction), prompt templates, output validation, model routing, fallback retry",
-      "New app template: Product Owner Agent — 10-section PO guide framework with LLM guidance",
+      "AI/LLM: context budgets, prompt optimization (30% reduction), prompt templates, model routing, fallback retry",
+      "New app template: Product Owner Agent — 10-section PO guide framework",
+      "Help system: 11 help pages at /help with sidebar, search, contextual ? buttons, What's New badge",
     ],
   },
   {

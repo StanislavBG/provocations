@@ -33,6 +33,7 @@ const ComponentLibrary = lazy(() => import("@/pages/ComponentLibrary"));
 const ComponentShowcase = lazy(() => import("@/pages/ComponentShowcase"));
 const ProjectOverview = lazy(() => import("@/pages/ProjectOverview"));
 const ComponentCompare = lazy(() => import("@/pages/ComponentCompare"));
+const Help = lazy(() => import("@/pages/Help"));
 
 /** Loading skeleton shown while lazy route chunks load */
 function RouteFallback() {
@@ -60,6 +61,8 @@ function Router() {
       <Switch>
         <Route path="/mobile" component={MobilePreview} />
         <Route path="/store" component={ContextStore} />
+        <Route path="/help/:pageSlug" component={Help} />
+        <Route path="/help" component={Help} />
         <Route path="/pricing" component={Pricing} />
         <Route path="/settings/billing" component={Billing} />
         <Route path="/admin" component={Admin} />
