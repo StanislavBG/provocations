@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.19.0";
+export const APP_VERSION = "0.19.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,27 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.19.2",
+    date: "2026-03-08",
+    changes: [
+      "Simplify LLM Base to two connection roles: Context (background material → system prompt) and User Prompt (the task → user message)",
+      "Remove system-instruction as a separate concept — context connections now serve the same purpose",
+      "Expanded view shows unified Context section with connected content + editable additional context",
+      "Remove system-instruction from connection dialog (no node accepts it anymore)",
+    ],
+  },
+  {
+    version: "0.19.1",
+    date: "2026-03-08",
+    changes: [
+      "Fix LLM Base expanded view — connections now populate fields directly instead of creating duplicate sections",
+      "System Prompt: connected system-instructions shown inline with color-coded border, manual text appends after",
+      "User Prompt: connected user-prompts shown inline with color-coded border, manual text appends after",
+      "Context: shown as read-only reference with amber accent (no duplicate)",
+      "Fix Run button from expanded view to include user-prompt connections in the message",
+    ],
+  },
   {
     version: "0.19.0",
     date: "2026-03-08",
