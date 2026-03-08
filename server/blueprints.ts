@@ -346,12 +346,116 @@ const researchBlueprint: Blueprint = {
   ],
 };
 
+// ═══════════════════════════════════════════════════════════════
+// Blueprint D: PRD to Reddit Post
+// ═══════════════════════════════════════════════════════════════
+
+const prdToRedditBlueprint: Blueprint = {
+  id: "prd-to-reddit",
+  label: "PRD to Reddit Post",
+  description: "Transform a PRD into a subreddit-compliant Reddit post: research rules, draft, compliance check, publish",
+  icon: "MessageSquare",
+  category: "business",
+  nodes: [
+    n({
+      id: "reddit-subreddit",
+      type: "document",
+      label: "Target Subreddit",
+      col: 0,
+      snippet: "Type the subreddit name (e.g. r/SaaS)",
+      documentContent: "r/",
+      width: 200,
+      height: 130,
+    }),
+    n({
+      id: "reddit-research",
+      type: "research",
+      label: "Subreddit Research",
+      col: 1,
+      snippet: "Research subreddit rules and culture",
+      researchQuery:
+        "Research the subreddit specified in the context. Find: 1) Posting rules and restrictions (self-promotion limits, required flair, formatting rules, minimum karma/age requirements). 2) Community culture and tone (what gets upvoted vs downvoted). 3) Successful post patterns and formats. 4) Common reasons posts get removed by moderators. 5) Whether the subreddit allows product/launch posts and under what conditions.",
+      outputConfig: {
+        format: "structured",
+        detail: "detailed",
+        focusMode: "gather",
+        audience: "general",
+        tone: "neutral",
+      },
+      width: 240,
+      height: 300,
+    }),
+    n({
+      id: "reddit-drafter",
+      type: "llm",
+      label: "Post Drafter",
+      col: 2,
+      snippet: "Draft Reddit post from PRD",
+      llmPresetId: "custom",
+      llmObjective:
+        "Draft a Reddit post based on the provided PRD and subreddit research. Follow these principles:\n\n1. NEVER sound like marketing copy — Reddit users downvote anything that feels like an ad\n2. Lead with the PROBLEM you solved, not your product\n3. Be authentic and conversational — write like a community member, not a brand\n4. Share genuine insights, lessons learned, or technical details that provide value even without clicking any link\n5. Follow all subreddit-specific rules from the research (flair, formatting, length limits)\n6. Include a clear, non-clickbait title\n7. If self-promotion rules require it, add appropriate disclaimers\n8. End with a genuine question or discussion prompt to encourage engagement\n\nOutput format:\n\nTITLE: [post title]\n\nFLAIR: [suggested flair if required]\n\nBODY:\n[full post body]\n\nCOMMENT: [optional first comment with links/details, if subreddit rules require links in comments rather than post body]",
+      llmStatus: "idle",
+      width: 240,
+      height: 160,
+    }),
+    n({
+      id: "reddit-gate",
+      type: "coherence-gate",
+      label: "Rule Compliance",
+      col: 3,
+      snippet: "Check subreddit rule compliance",
+      coherenceThreshold: 75,
+      coherenceChecks: { topicMatch: true, toneConsistency: true, factDrift: false, styleMatch: true },
+      coherenceStrictness: "strict",
+      coherenceRetryCount: 2,
+      coherencePrompt:
+        "Evaluate this Reddit post draft against the subreddit rules and culture from context. Check: 1) Does it follow all posting rules (flair, formatting, length)? 2) Does the tone sound like a genuine community member, NOT marketing copy? 3) Is there value for readers even without any product link? 4) Would a moderator likely remove this? 5) Does the title avoid clickbait patterns? Score below threshold if any rule violation is detected or if the post reads as promotional spam.",
+      width: 160,
+      height: 160,
+    }),
+    n({
+      id: "reddit-polish",
+      type: "llm",
+      label: "Final Polish",
+      col: 4,
+      snippet: "Polish formatting for Reddit",
+      llmPresetId: "custom",
+      llmObjective:
+        "Polish this Reddit post for final submission. Ensure:\n1. Reddit markdown formatting (bold, bullet points, headers use Reddit syntax)\n2. Appropriate paragraph breaks for readability (Reddit users skip walls of text)\n3. Title is compelling but not clickbait (under 300 chars)\n4. TL;DR section if the post exceeds ~200 words\n5. Any links use natural placement, not CTA-style\n6. Preserve the authentic, conversational tone\n\nOutput the final post exactly as it should be pasted into Reddit, with TITLE: and BODY: sections clearly separated.",
+      llmStatus: "idle",
+      width: 240,
+      height: 160,
+    }),
+    n({
+      id: "reddit-output",
+      type: "social-post",
+      label: "Reddit Post",
+      col: 5,
+      snippet: "Final Reddit-ready post",
+      socialPlatforms: { x: false, linkedin: false, facebook: false, instagram: false, reddit: true },
+      socialIntent: "thought-leadership",
+      socialTone: "casual",
+      socialGenerateImages: false,
+      width: 240,
+      height: 200,
+    }),
+  ],
+  edges: [
+    { fromNodeId: "reddit-subreddit", toNodeId: "reddit-research", role: "context" },
+    { fromNodeId: "reddit-research", toNodeId: "reddit-drafter" },
+    { fromNodeId: "reddit-drafter", toNodeId: "reddit-gate" },
+    { fromNodeId: "reddit-gate", toNodeId: "reddit-polish" },
+    { fromNodeId: "reddit-polish", toNodeId: "reddit-output" },
+  ],
+};
+
 // ── All blueprints ──
 
 export const BLUEPRINTS: Blueprint[] = [
   memeBlueprint,
   prdBlueprint,
   researchBlueprint,
+  prdToRedditBlueprint,
 ];
 
 /**

@@ -959,6 +959,10 @@ function FlowWorkspaceInner() {
           coherenceStrictness: src.coherenceStrictness,
           coherenceRetryCount: src.coherenceRetryCount,
           coherencePrompt: src.coherencePrompt,
+          socialPlatforms: src.socialPlatforms,
+          socialIntent: src.socialIntent,
+          socialTone: src.socialTone,
+          socialGenerateImages: src.socialGenerateImages,
         });
         idMap.set(src.id, newId);
       }
