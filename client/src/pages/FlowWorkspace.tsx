@@ -414,8 +414,9 @@ function FlowWorkspaceInner() {
   const [docEditorContent, setDocEditorContent] = useState("");
   const [docObjective, setDocObjective] = useState("");
   const [docVersions, setDocVersions] = useState<Array<{ content: string; label: string; timestamp: string }>>([]);
-  const [docLeftTab, setDocLeftTab] = useState<"tools" | "provo">("tools");
-  const [docSidebarOpen, setDocSidebarOpen] = useState(false);
+  const [docLeftTab, setDocLeftTab] = useState<"tools" | "provo">("provo");
+  const [docSidebarOpen, setDocSidebarOpen] = useState(true);
+  const [docSidebarWidth, setDocSidebarWidth] = useState(300);
   const [docActivePersonas, setDocActivePersonas] = useState<Set<ProvocationType>>(() => {
     const pool: ProvocationType[] = ["ceo", "product_manager", "quality_engineer", "ux_designer", "tech_writer", "growth_strategist", "brand_strategist", "content_strategist"];
     const random = pool[Math.floor(Math.random() * pool.length)];
@@ -3794,9 +3795,12 @@ function FlowWorkspaceInner() {
               // Document editor — premium notebook experience
               return (
                 <div className="flex-1 flex overflow-hidden">
-                  {/* ── Collapsible sidebar ── */}
+                  {/* ── Collapsible resizable sidebar ── */}
                   {docSidebarOpen && (
-                    <div className="w-72 max-w-[280px] border-r border-border/30 bg-card/30 flex flex-col min-h-0 overflow-hidden shrink-0">
+                    <div
+                      className="border-r border-border/30 bg-card/30 flex flex-col min-h-0 overflow-hidden shrink-0 relative"
+                      style={{ width: docSidebarWidth, minWidth: 220, maxWidth: 500 }}
+                    >
                       {/* Tab bar */}
                       <div className="flex border-b border-border/30">
                         <button
@@ -3875,6 +3879,25 @@ function FlowWorkspaceInner() {
                           />
                         )}
                       </div>
+                      {/* Resize handle */}
+                      <div
+                        className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          const startX = e.clientX;
+                          const startW = docSidebarWidth;
+                          const onMove = (ev: MouseEvent) => {
+                            const delta = ev.clientX - startX;
+                            setDocSidebarWidth(Math.max(220, Math.min(500, startW + delta)));
+                          };
+                          const onUp = () => {
+                            window.removeEventListener("mousemove", onMove);
+                            window.removeEventListener("mouseup", onUp);
+                          };
+                          window.addEventListener("mousemove", onMove);
+                          window.addEventListener("mouseup", onUp);
+                        }}
+                      />
                     </div>
                   )}
 
