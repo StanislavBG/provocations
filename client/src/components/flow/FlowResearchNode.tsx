@@ -86,11 +86,10 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
     onUpdateNode,
   });
 
-  // Resolve connected inputs by role
+  // Resolve connected inputs by role (legacy roleless edges count as context)
   const objectiveEdges = edges.filter((e) => e.toNodeId === node.id && e.role === "objective");
-  const contextEdges = edges.filter((e) => e.toNodeId === node.id && e.role === "context");
+  const contextEdges = edges.filter((e) => e.toNodeId === node.id && (e.role === "context" || !e.role));
   const outputFormatEdges = edges.filter((e) => e.toNodeId === node.id && e.role === "output-format");
-  const plainEdges = edges.filter((e) => e.toNodeId === node.id && !e.role);
 
   const updateConfig = useCallback(
     (patch: Partial<NonNullable<FlowNode["outputConfig"]>>) => {
@@ -155,8 +154,8 @@ export const FlowResearchNode = React.memo(function FlowResearchNode({
       <div className="px-2 py-1 border-b border-blue-500/20">
         <div className="flex items-center gap-1">
           <span className="text-[8px] font-semibold uppercase tracking-wider text-amber-400/70">Context</span>
-          {(contextEdges.length + plainEdges.length) > 0 && (
-            <span className="text-[7px] text-amber-400/50">{contextEdges.length + plainEdges.length} sources</span>
+          {contextEdges.length > 0 && (
+            <span className="text-[7px] text-amber-400/50">{contextEdges.length} sources</span>
           )}
         </div>
       </div>

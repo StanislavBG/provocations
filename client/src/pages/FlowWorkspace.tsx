@@ -1516,6 +1516,12 @@ function FlowWorkspaceInner() {
       const fromNode = state.nodes.find((n) => n.id === fromNodeId);
       const toNode = state.nodes.find((n) => n.id === toNodeId);
       if (fromNode && toNode && ROLE_AWARE_TARGETS.has(toNode.type)) {
+        const def = FLOW_NODE_REGISTRY[toNode.type];
+        // If the target only accepts a single role, auto-assign it — no dialog needed
+        if (def && def.acceptedRoles.length === 1) {
+          addEdge(fromNodeId, toNodeId, def.acceptedRoles[0]);
+          return;
+        }
         setPendingEdgeRole({ fromNodeId, toNodeId });
         return;
       }
@@ -2679,7 +2685,11 @@ function FlowWorkspaceInner() {
       snapshotDocVersion(`Before ${toolId}`);
       setDocToolRunning(toolId);
       try {
-        const connectedContext = getDocConnectedContext();
+        let connectedContext = getDocConnectedContext();
+        // Truncate to 90K to stay within sessionNotes schema limit (100K) with margin
+        if (connectedContext.length > 90_000) {
+          connectedContext = connectedContext.slice(0, 90_000) + "\n\n[...context truncated]";
+        }
         const res = await apiRequest("POST", "/api/write", {
           document: docEditorContent,
           instruction,
@@ -2690,9 +2700,12 @@ function FlowWorkspaceInner() {
         const data = (await res.json()) as { document: string };
         if (data.document) {
           setDocEditorContent(data.document);
+        } else {
+          toast({ title: "No changes produced", description: "The AI returned an empty result. Try a more specific instruction.", variant: "destructive" });
         }
-      } catch {
-        toast({ title: "Tool failed", variant: "destructive" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        toast({ title: "Tool failed", description: msg.includes("400") ? "Request too large — try disconnecting some inputs" : undefined, variant: "destructive" });
       } finally {
         setDocToolRunning(null);
       }
@@ -3825,7 +3838,7 @@ function FlowWorkspaceInner() {
           pendingEdge={pendingEdgeRole}
           targetNode={state.nodes.find((n) => n.id === pendingEdgeRole.toNodeId)}
           onConfirm={(roles) => {
-            addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, roles.length > 0 ? roles : undefined);
+            addEdge(pendingEdgeRole.fromNodeId, pendingEdgeRole.toNodeId, roles);
             setPendingEdgeRole(null);
           }}
           onCancel={() => setPendingEdgeRole(null)}
@@ -4181,6 +4194,9 @@ function FlowWorkspaceInner() {
                       {/* Spacer */}
                       <div className="flex-1" />
 
+                      {/* ── AI Remix group label ── */}
+                      <span className="text-[8px] uppercase tracking-wider text-primary/50 font-semibold mr-1">AI Remix</span>
+
                       {/* Writer Voice — dictate feedback to evolve the document */}
                       <div
                         className={cn(
@@ -4231,6 +4247,9 @@ function FlowWorkspaceInner() {
 
                       {/* Separator between remix and direct groups */}
                       <div className="w-px h-5 bg-border/40 mx-1" />
+
+                      {/* ── Direct Edit group label ── */}
+                      <span className="text-[8px] uppercase tracking-wider text-emerald-500/50 font-semibold mr-1">Direct</span>
 
                       {/* Direct Voice — dictate text that gets inserted at cursor, no AI */}
                       <div
@@ -4894,28 +4913,39 @@ export default function FlowWorkspace() {
   // Preserve user's dock item ordering but ensure all catalog tools are present.
   // New tools from FLOW_DOCK_ITEMS are appended; removed tools are dropped.
   // Hotkeys 1-9 are tied to POSITIONS, not icons — reordering changes which tool a number activates.
-  const mergedConfig = useMemo<FtuxShellConfig>(() => {
+
+  // Stabilize dock items with ref — only recompute when the actual toolId order changes.
+  // This prevents the FtuxShellProvider sync effect from re-applying merged order
+  // when unrelated config properties (like dockLocked) change.
+  const prevDockRef = useRef<DockItem[]>();
+  const mergedDockItems = useMemo(() => {
     const userItems = shellConfig.dockItems ?? [];
+    const userKey = userItems.map((i) => i.toolId).join(",");
+    const prevKey = prevDockRef.current?.map((i) => i.toolId).join(",");
+    if (userKey === prevKey && prevDockRef.current) return prevDockRef.current;
+
     const catalogSet = new Set(FLOW_DOCK_ITEMS.map((d) => d.toolId));
-    // Keep user's order, filtering out tools no longer in catalog
     const ordered = userItems.filter((item) => catalogSet.has(item.toolId));
     const existingIds = new Set(ordered.map((d) => d.toolId));
-    // Append any new catalog tools the user doesn't have yet
     for (const item of FLOW_DOCK_ITEMS) {
-      if (!existingIds.has(item.toolId)) {
-        ordered.push(item);
-      }
+      if (!existingIds.has(item.toolId)) ordered.push(item);
     }
+    const result = ordered.length > 0 ? ordered : FLOW_DOCK_ITEMS;
+    prevDockRef.current = result;
+    return result;
+  }, [shellConfig.dockItems]);
+
+  const mergedConfig = useMemo<FtuxShellConfig>(() => {
     return {
       ...shellConfig,
-      dockItems: ordered.length > 0 ? ordered : FLOW_DOCK_ITEMS,
+      dockItems: mergedDockItems,
       dockShowLabels: shellConfig.dockShowLabels ?? FLOW_SHELL_CONFIG.dockShowLabels,
       dockSnapped: shellConfig.dockSnapped ?? FLOW_SHELL_CONFIG.dockSnapped,
       dockButtonSize: shellConfig.dockButtonSize ?? FLOW_SHELL_CONFIG.dockButtonSize,
       tourCompleted: true,
       tipsEnabled: false,
     };
-  }, [shellConfig]);
+  }, [shellConfig, mergedDockItems]);
 
   return (
     <FtuxShellProvider initialConfig={mergedConfig} onConfigChange={setShellConfig}>
