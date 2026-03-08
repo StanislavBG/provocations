@@ -89,7 +89,7 @@ import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } f
 import Stripe from "stripe";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
 import { YoutubeTranscript } from "youtube-transcript";
-import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable } from "../shared/models/chat";
+import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable, userPreferences as userPreferencesTable } from "../shared/models/chat";
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -111,6 +111,32 @@ async function isAdminUser(userId: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Get a Clerk user's primary email address (or null). */
+async function getUserPrimaryEmail(uid: string): Promise<string | null> {
+  try {
+    const user = await clerkClient.users.getUser(uid);
+    const addr = user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId);
+    return addr?.emailAddress?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check whether two Clerk userIds belong to the same person (same primary
+ * email).  Used when a user signs in via a different auth provider (e.g.
+ * Google after previously using email) and gets a new Clerk userId.
+ * When a match is found the caller can migrate ownership so the check only
+ * happens once per document.
+ */
+async function isSamePersonByEmail(uidA: string, uidB: string): Promise<boolean> {
+  const [emailA, emailB] = await Promise.all([
+    getUserPrimaryEmail(uidA),
+    getUserPrimaryEmail(uidB),
+  ]);
+  return !!emailA && !!emailB && emailA === emailB;
 }
 
 // ── Effective persona resolution ──
@@ -5752,7 +5778,29 @@ RULES:
         return res.status(404).json({ error: "Document not found" });
       }
       if (doc.userId !== userId) {
-        return res.status(403).json({ error: "Not authorized to access this document" });
+        // Auth-provider migration: user may have switched sign-in method
+        // (e.g. email → Google) and received a new Clerk userId.  Check if
+        // the requesting user's email matches the document owner's email.
+        const sameOwner = await isSamePersonByEmail(userId, doc.userId);
+        if (!sameOwner) {
+          return res.status(403).json({ error: "Not authorized to access this document" });
+        }
+        // Auto-migrate: reassign all documents, folders, and preferences
+        // from the old userId to the new one so the check only happens once.
+        try {
+          const { eq } = await import("drizzle-orm");
+          const { db } = await import("./db");
+          const oldUid = doc.userId;
+          await Promise.all([
+            db.update(documentsTable).set({ userId }).where(eq(documentsTable.userId, oldUid)),
+            db.update(foldersTable).set({ userId }).where(eq(foldersTable.userId, oldUid)),
+            db.update(userPreferencesTable).set({ userId }).where(eq(userPreferencesTable.userId, oldUid)),
+          ]);
+          console.log(`Migrated ownership: ${oldUid} → ${userId} (documents, folders, preferences)`);
+        } catch (migErr) {
+          // Non-fatal — allow access even if migration fails
+          console.error("Ownership migration error:", migErr);
+        }
       }
 
       const key = getEncryptionKey();
