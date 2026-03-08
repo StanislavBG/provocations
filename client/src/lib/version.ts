@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.7";
+export const APP_VERSION = "0.20.8";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.8",
+    date: "2026-03-08",
+    changes: [
+      "Documentation restructure: root CLAUDE.md reduced from 53K to 11K chars by extracting implementation details into docs/ (architecture, ADRs, API reference, development guide, flow canvas, component patterns)",
+      "Streamlined replit.md to deployment-only (9K → 2K chars), retired APPLICATION_DEEP_DIVE.md and UNUSED_APIS.md into docs/audits/",
+      "Slimmed 10 smaller app CLAUDE.md files by removing three-layer boilerplate, keeping only purpose and unique behaviors",
+    ],
+  },
   {
     version: "0.20.7",
     date: "2026-03-08",
