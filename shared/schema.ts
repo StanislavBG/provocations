@@ -184,13 +184,13 @@ export type ProvocationRound = z.infer<typeof provocationRoundSchema>;
 // ── Generate challenge request ──
 
 export const generateChallengeRequestSchema = z.object({
-  document: z.string().min(1, "Document is required"),         // current draft to challenge
-  objective: z.string().optional(),                            // what the document is trying to achieve (LLM infers if missing)
-  personaIds: z.array(z.string()).optional(),                  // filter to specific personas; empty = all
-  guidance: z.string().optional(),                             // user-specific focus area
+  document: z.string().min(1, "Document is required").max(500_000),  // current draft to challenge
+  objective: z.string().max(2_000).optional(),                       // what the document is trying to achieve (LLM infers if missing)
+  personaIds: z.array(z.string()).optional(),                        // filter to specific personas; empty = all
+  guidance: z.string().max(2_000).optional(),                        // user-specific focus area
   referenceDocuments: z.array(z.lazy(() => referenceDocumentSchema)).optional(),
-  appType: z.enum(templateIds).optional(),                      // application template — must match a templateIds entry
-  provocationHistory: z.array(provocationRoundSchema).optional(), // previous rounds for chain continuity
+  appType: z.enum(templateIds).optional(),                            // application template — must match a templateIds entry
+  provocationHistory: z.array(provocationRoundSchema).optional(),     // previous rounds for chain continuity
 });
 
 export type GenerateChallengeRequest = z.infer<typeof generateChallengeRequestSchema>;
@@ -198,17 +198,17 @@ export type GenerateChallengeRequest = z.infer<typeof generateChallengeRequestSc
 // ── Generate advice request ──
 
 export const generateAdviceRequestSchema = z.object({
-  document: z.string().min(1, "Document is required"),        // current draft — the persona reads this
-  objective: z.string().optional(),                           // what the document is trying to achieve (LLM infers if missing)
-  appType: z.enum(templateIds).optional(),                     // application template — must match a templateIds entry
-  challengeId: z.string().min(1, "Challenge ID is required"), // which challenge to advise on
-  challengeTitle: z.string().min(1, "Challenge title is required"),
-  challengeContent: z.string().min(1, "Challenge content is required"),
-  personaId: z.string().min(1, "Persona ID is required"),     // which persona generates the advice
+  document: z.string().min(1, "Document is required").max(500_000),  // current draft — the persona reads this
+  objective: z.string().max(2_000).optional(),                       // what the document is trying to achieve (LLM infers if missing)
+  appType: z.enum(templateIds).optional(),                            // application template — must match a templateIds entry
+  challengeId: z.string().min(1, "Challenge ID is required"),         // which challenge to advise on
+  challengeTitle: z.string().min(1, "Challenge title is required").max(500),
+  challengeContent: z.string().min(1, "Challenge content is required").max(5_000),
+  personaId: z.string().min(1, "Persona ID is required"),             // which persona generates the advice
   discussionHistory: z.array(z.object({
-    role: z.string(),
-    content: z.string(),
-    topic: z.string().optional(),
+    role: z.string().max(100),
+    content: z.string().max(5_000),
+    topic: z.string().max(500).optional(),
   })).optional(), // recent discussion for grounding
 });
 
@@ -324,17 +324,17 @@ export type EditHistoryEntry = z.infer<typeof editHistoryEntrySchema>;
 
 export const writeRequestSchema = z.object({
   // Foundation
-  document: z.string().min(1, "Document is required"),
-  objective: z.string().optional(),
+  document: z.string().min(1, "Document is required").max(500_000),
+  objective: z.string().max(2_000).optional(),
 
   // Application type — tells the LLM what kind of document this is (e.g. "query-editor")
   appType: z.enum(templateIds).optional(),
 
   // Focus (optional - what part of document)
-  selectedText: z.string().optional(),
+  selectedText: z.string().max(50_000).optional(),
 
   // Intent (required - what user wants)
-  instruction: z.string().min(1, "Instruction is required"),
+  instruction: z.string().min(1, "Instruction is required").max(5_000),
 
   // Context (optional - additional grounding)
   provocation: provocationContextSchema.optional(),
@@ -350,7 +350,7 @@ export const writeRequestSchema = z.object({
   capturedContext: z.array(contextItemSchema).optional(),
 
   // Session notes — temporary working notes provided alongside the document (e.g. PM notes)
-  sessionNotes: z.string().optional(),
+  sessionNotes: z.string().max(10_000).optional(),
 
   // Edit history for coherent iteration
   editHistory: z.array(editHistoryEntrySchema).optional(),
@@ -443,10 +443,10 @@ export type DiscussionMessage = z.infer<typeof discussionMessageSchema>;
 
 // Ask question request — user asks a question to the persona team
 export const askQuestionRequestSchema = z.object({
-  question: z.string().min(1, "Question is required"),
-  document: z.string().min(1, "Document is required"),
-  objective: z.string().min(1, "Objective is required"),
-  secondaryObjective: z.string().optional(),
+  question: z.string().min(1, "Question is required").max(5_000),
+  document: z.string().min(1, "Document is required").max(500_000),
+  objective: z.string().min(1, "Objective is required").max(2_000),
+  secondaryObjective: z.string().max(2_000).optional(),
   activePersonas: z.array(z.string()).optional(),
   previousMessages: z.array(discussionMessageSchema).optional(),
   appType: z.enum(templateIds).optional(),
@@ -466,26 +466,26 @@ export interface AskQuestionResponse {
 
 // Interview question request - generates the next provocative question
 export const interviewQuestionRequestSchema = z.object({
-  objective: z.string().default(""),
-  document: z.string().optional(),
+  objective: z.string().max(2_000).default(""),
+  document: z.string().max(500_000).optional(),
   appType: z.enum(templateIds).optional(),
-  template: z.string().optional(),
+  template: z.string().max(10_000).optional(),
   previousEntries: z.array(interviewEntrySchema).optional(),
   provocations: z.array(provocationSchema).optional(),
   // Direction parameters for the provoke panel
   directionMode: z.enum(directionModes).optional(),
   directionPersonas: z.array(z.enum(provocationType)).optional(),
-  directionGuidance: z.string().optional(),
+  directionGuidance: z.string().max(2_000).optional(),
   thinkBigVectors: z.array(z.enum(thinkBigVectors)).optional(),
   // Timeline context for autobiography interviews — date ranges, places, themes from existing events
   timelineContext: z.object({
     dateRange: z.object({ earliest: z.string(), latest: z.string() }).optional(),
-    places: z.array(z.string()).optional(),
-    themes: z.array(z.string()).optional(),
+    places: z.array(z.string().max(500)).optional(),
+    themes: z.array(z.string().max(500)).optional(),
     eventCount: z.number().optional(),
   }).optional(),
   // Chain context — additional context from previous chain steps or external sources
-  chainContext: z.string().optional(),
+  chainContext: z.string().max(500_000).optional(),
 });
 
 export type InterviewQuestionRequest = z.infer<typeof interviewQuestionRequestSchema>;
@@ -499,9 +499,9 @@ export interface InterviewQuestionResponse {
 
 // Interview summary request - summarize all entries for merge
 export const interviewSummaryRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
+  objective: z.string().min(1, "Objective is required").max(2_000),
   entries: z.array(interviewEntrySchema).min(1, "At least one entry is required"),
-  document: z.string().optional(),
+  document: z.string().max(500_000).optional(),
   appType: z.enum(templateIds).optional(),
 });
 
@@ -509,9 +509,9 @@ export type InterviewSummaryRequest = z.infer<typeof interviewSummaryRequestSche
 
 // Podcast generation request - generates a podcast from interview Q&A
 export const podcastRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
+  objective: z.string().min(1, "Objective is required").max(2_000),
   entries: z.array(interviewEntrySchema).min(1, "At least one entry is required"),
-  document: z.string().optional(),
+  document: z.string().max(500_000).optional(),
   appType: z.enum(templateIds).optional(),
 });
 
@@ -545,8 +545,8 @@ export type DocType = (typeof docTypes)[number];
 
 // Document save/load schemas (server-side encryption, Clerk auth for ownership)
 export const saveDocumentRequestSchema = z.object({
-  title: z.string().min(1, "Title is required").max(200),
-  content: z.string().min(1, "Content is required"),
+  title: z.string().min(1, "Title is required").max(500),
+  content: z.string().min(1, "Content is required").max(500_000),
   folderId: z.number().nullable().optional(),
   docType: z.enum(docTypes).optional(),
 });
@@ -554,13 +554,13 @@ export const saveDocumentRequestSchema = z.object({
 export type SaveDocumentRequest = z.infer<typeof saveDocumentRequestSchema>;
 
 export const updateDocumentRequestSchema = z.object({
-  title: z.string().min(1, "Title is required").max(200),
-  content: z.string().min(1, "Content is required"),
+  title: z.string().min(1, "Title is required").max(500),
+  content: z.string().min(1, "Content is required").max(500_000),
   folderId: z.number().nullable().optional(),
 });
 
 export const renameDocumentRequestSchema = z.object({
-  title: z.string().min(1, "Title is required").max(200),
+  title: z.string().min(1, "Title is required").max(500),
 });
 
 export type RenameDocumentRequest = z.infer<typeof renameDocumentRequestSchema>;
@@ -650,10 +650,10 @@ export type StreamingRequirement = z.infer<typeof streamingRequirementSchema>;
 
 // Request to generate the next streaming question
 export const streamingQuestionRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
-  document: z.string().optional(),
-  websiteUrl: z.string().optional(),
-  wireframeNotes: z.string().optional(),
+  objective: z.string().min(1, "Objective is required").max(2_000),
+  document: z.string().max(500_000).optional(),
+  websiteUrl: z.string().max(2_000).optional(),
+  wireframeNotes: z.string().max(10_000).optional(),
   previousEntries: z.array(streamingDialogueEntrySchema).optional(),
   requirements: z.array(streamingRequirementSchema).optional(),
 });
@@ -669,10 +669,10 @@ export interface StreamingQuestionResponse {
 
 // Request to analyze wireframe components
 export const wireframeAnalysisRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
-  websiteUrl: z.string().optional(),
-  wireframeNotes: z.string().optional(),
-  document: z.string().optional(),
+  objective: z.string().min(1, "Objective is required").max(2_000),
+  websiteUrl: z.string().max(2_000).optional(),
+  wireframeNotes: z.string().max(10_000).optional(),
+  document: z.string().max(500_000).optional(),
 });
 
 export type WireframeAnalysisRequest = z.infer<typeof wireframeAnalysisRequestSchema>;
@@ -725,11 +725,11 @@ export const wireframeAnalysisSchema = z.object({
 
 // Request to refine requirements from streaming dialogue
 export const streamingRefineRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
+  objective: z.string().min(1, "Objective is required").max(2_000),
   dialogueEntries: z.array(streamingDialogueEntrySchema).min(1, "At least one dialogue entry is required"),
   existingRequirements: z.array(streamingRequirementSchema).optional(),
-  document: z.string().optional(),
-  websiteUrl: z.string().optional(),
+  document: z.string().max(500_000).optional(),
+  websiteUrl: z.string().max(2_000).optional(),
   wireframeAnalysis: wireframeAnalysisSchema,
 });
 
@@ -1107,18 +1107,18 @@ export interface YouTubePlaylistResponse {
 
 // Request to process an uploaded voice transcript
 export const processTranscriptUploadRequestSchema = z.object({
-  transcript: z.string().min(1, "Transcript content is required"),
-  title: z.string().optional(),
-  objective: z.string().optional(),
+  transcript: z.string().min(1, "Transcript content is required").max(500_000),
+  title: z.string().max(500).optional(),
+  objective: z.string().max(2_000).optional(),
 });
 
 export type ProcessTranscriptUploadRequest = z.infer<typeof processTranscriptUploadRequestSchema>;
 
 // Request to generate a summary from a transcript
 export const generateSummaryRequestSchema = z.object({
-  transcript: z.string().min(1, "Transcript is required"),
-  title: z.string().optional(),
-  objective: z.string().optional(),
+  transcript: z.string().min(1, "Transcript is required").max(500_000),
+  title: z.string().max(500).optional(),
+  objective: z.string().max(2_000).optional(),
   sourceType: z.enum(artifactSourceTypes),
 });
 
@@ -1133,10 +1133,10 @@ export interface GenerateSummaryResponse {
 
 // Request to generate an infographic spec from a summary
 export const generateInfographicRequestSchema = z.object({
-  summary: z.string().min(1, "Summary is required"),
-  keyPoints: z.array(z.string()),
-  tips: z.array(z.string()),
-  title: z.string().optional(),
+  summary: z.string().min(1, "Summary is required").max(50_000),
+  keyPoints: z.array(z.string().max(2_000)),
+  tips: z.array(z.string().max(2_000)),
+  title: z.string().max(500).optional(),
   sourceType: z.enum(artifactSourceTypes),
 });
 
@@ -1210,7 +1210,7 @@ export type ResponseConfig = z.infer<typeof responseConfigSchema>;
 
 export const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string(),
+  content: z.string().max(50_000),
 });
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
@@ -1237,18 +1237,18 @@ export interface ResearchPlan {
 }
 
 export const chatRequestSchema = z.object({
-  message: z.string().min(1, "Message is required"),
-  objective: z.string().min(1, "Objective is required"),
-  researchTopic: z.string().optional(),
-  notes: z.string().optional(),
+  message: z.string().min(1, "Message is required").max(5_000),
+  objective: z.string().min(1, "Objective is required").max(2_000),
+  researchTopic: z.string().max(500).optional(),
+  notes: z.string().max(10_000).optional(),
   history: z.array(chatMessageSchema).optional(),
   appType: z.enum(templateIds).optional(),
-  chatModel: z.string().optional(),
+  chatModel: z.string().max(100).optional(),
   researchFocus: z.enum(researchFocusModes).optional(),
   responseConfig: responseConfigSchema.optional(),
-  researchPlan: z.string().optional(),
+  researchPlan: z.string().max(10_000).optional(),
   /** Additional context injected from connected document nodes with role="context" */
-  additionalContext: z.string().optional(),
+  additionalContext: z.string().max(500_000).optional(),
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
@@ -1258,13 +1258,13 @@ export interface ChatResponse {
 }
 
 export const summarizeSessionRequestSchema = z.object({
-  objective: z.string().min(1, "Objective is required"),
-  researchTopic: z.string().optional(),
-  notes: z.string().optional(),
+  objective: z.string().min(1, "Objective is required").max(2_000),
+  researchTopic: z.string().max(500).optional(),
+  notes: z.string().max(10_000).optional(),
   chatHistory: z.array(chatMessageSchema).min(1, "At least one message is required"),
-  currentSummary: z.string().optional(),
+  currentSummary: z.string().max(50_000).optional(),
   appType: z.enum(templateIds).optional(),
-  chatModel: z.string().optional(),
+  chatModel: z.string().max(100).optional(),
 });
 
 export type SummarizeSessionRequest = z.infer<typeof summarizeSessionRequestSchema>;
@@ -1277,15 +1277,15 @@ export interface SummarizeSessionResponse {
 
 export const saveChatSessionRequestSchema = z.object({
   /** Human-readable title for the saved session */
-  title: z.string().min(1, "Title is required").max(300),
+  title: z.string().min(1, "Title is required").max(500),
   /** Research topic that scoped the session */
-  researchTopic: z.string().optional(),
+  researchTopic: z.string().max(500).optional(),
   /** Objective the session worked toward */
-  objective: z.string().min(1, "Objective is required"),
+  objective: z.string().min(1, "Objective is required").max(2_000),
   /** Dynamic summary produced during the session */
-  summary: z.string().optional(),
+  summary: z.string().max(50_000).optional(),
   /** User's working notes captured during the session */
-  notes: z.string().optional(),
+  notes: z.string().max(10_000).optional(),
   /** Full chat history — stored as serialized reference */
   chatHistory: z.array(chatMessageSchema).optional(),
 });
@@ -1352,10 +1352,10 @@ export const agentStepSchema = z.object({
 });
 
 export const agentDefinitionSchema = z.object({
-  agentId: z.string(),
-  name: z.string(),
-  description: z.string(),
-  persona: z.string(),
+  agentId: z.string().max(200),
+  name: z.string().max(500),
+  description: z.string().max(2_000),
+  persona: z.string().max(10_000),
   steps: z.array(agentStepSchema),
 });
 
@@ -1572,7 +1572,7 @@ export const socialToneValues = ["professional", "casual", "witty", "inspiration
 export type SocialTone = typeof socialToneValues[number];
 
 export const socialGenerateRequestSchema = z.object({
-  content: z.string().min(1, "Content is required"),
+  content: z.string().min(1, "Content is required").max(500_000),
   platforms: z.array(z.enum(socialPlatformIds)).min(1, "At least one platform required"),
   intent: z.enum(socialIntentValues),
   tone: z.enum(socialToneValues),
@@ -1582,8 +1582,8 @@ export type SocialGenerateRequest = z.infer<typeof socialGenerateRequestSchema>;
 
 export const socialPostRequestSchema = z.object({
   platform: z.enum(socialPlatformIds),
-  content: z.string().min(1, "Content is required"),
-  imageUrl: z.string().optional(),
+  content: z.string().min(1, "Content is required").max(50_000),
+  imageUrl: z.string().max(2_000).optional(),
 });
 
 export type SocialPostRequest = z.infer<typeof socialPostRequestSchema>;
@@ -1603,7 +1603,7 @@ export type AgencyEventType = typeof agencyEventTypeValues[number];
 export const createAgencyEventSchema = z.object({
   eventType: z.enum(agencyEventTypeValues),
   platform: z.enum(socialPlatformIds).optional(),
-  payload: z.string().optional(), // JSON string
+  payload: z.string().max(500_000).optional(), // JSON string
   priority: z.number().int().min(0).max(10).optional(),
   expiresAt: z.string().datetime().optional(),
 });
@@ -1615,23 +1615,23 @@ export const claimAgencyEventSchema = z.object({
 });
 
 export const completeAgencyEventSchema = z.object({
-  claimToken: z.string().min(1, "Claim token is required"),
-  result: z.string().min(1, "Result is required"), // JSON string with drafted content
+  claimToken: z.string().min(1, "Claim token is required").max(500),
+  result: z.string().min(1, "Result is required").max(500_000), // JSON string with drafted content
 });
 
 export const failAgencyEventSchema = z.object({
-  claimToken: z.string().min(1, "Claim token is required"),
-  errorMessage: z.string().min(1, "Error message is required"),
+  claimToken: z.string().min(1, "Claim token is required").max(500),
+  errorMessage: z.string().min(1, "Error message is required").max(5_000),
 });
 
 // ── Agency Campaigns ──
 
 export const createAgencyCampaignSchema = z.object({
   campaignId: z.string().min(1).max(128),
-  name: z.string().min(1),
-  brandVoice: z.string().optional(), // JSON
-  targetTopics: z.string().optional(), // JSON
-  platforms: z.string().optional(), // JSON
+  name: z.string().min(1).max(500),
+  brandVoice: z.string().max(10_000).optional(), // JSON
+  targetTopics: z.string().max(10_000).optional(), // JSON
+  platforms: z.string().max(2_000).optional(), // JSON
   scheduleCron: z.string().max(64).optional(),
   active: z.boolean().optional(),
 });

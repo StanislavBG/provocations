@@ -1,5 +1,6 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 import { createServer, type Server } from "http";
 import { getAuth, clerkClient } from "@clerk/express";
 import { storage } from "./storage";
@@ -90,6 +91,87 @@ import Stripe from "stripe";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
 import { YoutubeTranscript } from "youtube-transcript";
 import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable, userPreferences as userPreferencesTable } from "../shared/models/chat";
+
+// ── Rate Limiters ──────────────────────────────────────────────────────────
+// Key generator: prefer authenticated userId, fall back to IP
+function rateLimitKeyGenerator(req: Request): string {
+  const auth = getAuth(req);
+  return auth?.userId || req.ip || "unknown";
+}
+
+/** General API rate limiter: 500 requests per 15 minutes per user */
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  keyGenerator: rateLimitKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+/** LLM endpoint rate limiter: 20 requests per minute per user */
+const llmLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyGenerator: rateLimitKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many LLM requests. Please wait before making more AI calls." },
+});
+
+/** Auth endpoint rate limiter: 50 requests per 15 minutes per IP */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  keyGenerator: (req: Request) => req.ip || "unknown",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many auth requests. Please try again later." },
+});
+
+/** Upload endpoint rate limiter: 50 requests per hour per user */
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 50,
+  keyGenerator: rateLimitKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many uploads. Please try again later." },
+});
+
+// ── File Upload Validation ─────────────────────────────────────────────────
+/** MIME type whitelist for file uploads */
+const ALLOWED_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "video/mp4",
+  "video/webm",
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+]);
+
+/** Maximum filename length after sanitization */
+const MAX_FILENAME_LENGTH = 200;
+
+/** Sanitize a filename: remove special characters, limit length */
+function sanitizeFilename(name: string): string {
+  // Strip directory traversal and non-printable characters
+  let sanitized = name
+    .replace(/[^\w\s.\-()]/g, "_") // replace special chars with underscore
+    .replace(/\.{2,}/g, ".") // collapse consecutive dots
+    .replace(/\s+/g, " ") // collapse whitespace
+    .trim();
+  // Limit length (preserve extension)
+  if (sanitized.length > MAX_FILENAME_LENGTH) {
+    const ext = sanitized.slice(sanitized.lastIndexOf("."));
+    const base = sanitized.slice(0, MAX_FILENAME_LENGTH - ext.length);
+    sanitized = base + ext;
+  }
+  return sanitized || "unnamed";
+}
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -559,6 +641,12 @@ export async function registerRoutes(
   // The AsyncLocalStorage scope ensures the gateway context flows through all
   // async operations within the request, even across await boundaries.
 
+  // ── Rate limiting ──────────────────────────────────────────────────────
+  // General limiter on all /api routes
+  app.use("/api", generalLimiter);
+  // Auth limiter on Clerk-related endpoints
+  app.use("/api/clerk-config", authLimiter);
+
   app.use("/api", async (req, res, next) => {
     const { userId } = getAuth(req);
     if (!userId) return next();
@@ -859,7 +947,7 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no expl
   // Generates challenges from selected personas. Each challenge includes the
   // full persona definition so the dialogue panel knows who is speaking.
   // Advice is generated separately via /api/generate-advice.
-  app.post("/api/generate-challenges", async (req, res) => {
+  app.post("/api/generate-challenges", llmLimiter, async (req, res) => {
     try {
       const parsed = generateChallengeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1045,7 +1133,7 @@ Output only valid JSON, no markdown.`,
   // This is a separate invocation from challenge generation so that the advice
   // is not a reiteration of the provocation. The same persona speaks, but now
   // provides concrete, actionable guidance on how to address the challenge.
-  app.post("/api/generate-advice", async (req, res) => {
+  app.post("/api/generate-advice", llmLimiter, async (req, res) => {
     try {
       const parsed = generateAdviceRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -2491,7 +2579,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // IMAGE GENERATION — generates an image from a textual description
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-image", async (req, res) => {
+  app.post("/api/generate-image", llmLimiter, async (req, res) => {
     try {
       const { description } = req.body;
       if (!description || typeof description !== "string" || !description.trim()) {
@@ -2546,7 +2634,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // GEMINI IMAGEN — generates images using Google's Imagen via @google/genai
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-imagen", async (req, res) => {
+  app.post("/api/generate-imagen", llmLimiter, async (req, res) => {
     try {
       const {
         prompt, aspectRatio, negativePrompt, style, numberOfImages,
@@ -2752,7 +2840,7 @@ Output only valid JSON, no markdown.`;
   });
 
   // Unified write endpoint - single interface to the AI writer
-  app.post("/api/write", async (req, res) => {
+  app.post("/api/write", llmLimiter, async (req, res) => {
     try {
       const parsed = writeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3119,7 +3207,7 @@ INSTRUCTION APPLIED: ${instruction}`
   });
 
   // Streaming write endpoint for long documents
-  app.post("/api/write/stream", async (req, res) => {
+  app.post("/api/write/stream", llmLimiter, async (req, res) => {
     try {
       const parsed = writeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3596,7 +3684,7 @@ Return ONLY a JSON array of objects with "question" (string) and "category" (one
   });
 
   // Generate next interview question based on context
-  app.post("/api/interview/question", async (req, res) => {
+  app.post("/api/interview/question", llmLimiter, async (req, res) => {
     try {
       const parsed = interviewQuestionRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3894,7 +3982,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
 
   // Streaming interview question with interleaved TTS audio (SSE)
   // Same prompt logic as /api/interview/question but streams text + audio chunks.
-  app.post("/api/interview/question/stream", async (req, res) => {
+  app.post("/api/interview/question/stream", llmLimiter, async (req, res) => {
     try {
       const body = req.body;
       const parsed = interviewQuestionRequestSchema.safeParse(body);
@@ -4233,7 +4321,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
   // ── Brainstorm streaming endpoint (multi-context TTS with interruption) ──
   // Similar to /api/interview/question/stream but uses multi-context WS for
   // interrupt support and a more conversational brainstorm-style system prompt.
-  app.post("/api/interview/brainstorm/stream", async (req, res) => {
+  app.post("/api/interview/brainstorm/stream", llmLimiter, async (req, res) => {
     try {
       const body = req.body;
       const parsed = interviewQuestionRequestSchema.safeParse(body);
@@ -4443,7 +4531,7 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
   });
 
   // Summarize interview entries into a coherent instruction for the writer
-  app.post("/api/interview/summary", async (req, res) => {
+  app.post("/api/interview/summary", llmLimiter, async (req, res) => {
     try {
       const parsed = interviewSummaryRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -4496,7 +4584,7 @@ Output only the instruction text. No meta-commentary.`,
   // ── Generate podcast from interview Q&A ──
   // Creates a two-host conversational podcast script via LLM, then converts
   // each speaker turn to audio using TTS with distinct voices.
-  app.post("/api/interview/podcast", async (req, res) => {
+  app.post("/api/interview/podcast", llmLimiter, async (req, res) => {
     try {
       const parsed = podcastRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -5293,7 +5381,7 @@ Rules:
   });
 
   // Streaming chat endpoint (SSE)
-  app.post("/api/chat/stream", async (req, res) => {
+  app.post("/api/chat/stream", llmLimiter, async (req, res) => {
     try {
       const parsed = chatRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -5551,7 +5639,7 @@ RULES:
   });
 
   // Upload a file and save to Context Store as an encrypted document
-  app.post("/api/upload", uploadMiddleware.single("file"), async (req, res) => {
+  app.post("/api/upload", uploadLimiter, uploadMiddleware.single("file"), async (req, res) => {
     try {
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -5559,8 +5647,17 @@ RULES:
       const file = req.file;
       if (!file) return res.status(400).json({ error: "No file provided" });
 
+      // A6: Validate MIME type against whitelist
+      if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+        return res.status(400).json({
+          error: "Unsupported file type",
+          details: `MIME type '${file.mimetype}' is not allowed. Supported: ${Array.from(ALLOWED_MIME_TYPES).join(", ")}`,
+        });
+      }
+
       const { title, folderId, docType } = req.body;
-      const finalTitle = title || file.originalname;
+      // A6: Sanitize filename to prevent special character exploits
+      const finalTitle = sanitizeFilename(title || file.originalname);
 
       // Convert file to base64 data URL for storage
       const mimeType = file.mimetype;

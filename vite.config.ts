@@ -30,6 +30,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Security: never emit source maps in production builds
+    sourcemap: false,
   },
   server: {
     fs: {
