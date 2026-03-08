@@ -48,7 +48,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   const abortRef = useRef<AbortController | null>(null);
 
   // Fetch available models
-  const { data: models } = useQuery<ChatModelDef[]>({
+  const { data: rawModels } = useQuery<ChatModelDef[]>({
     queryKey: ["/api/chat/models"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/chat/models");
@@ -57,6 +57,8 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
     },
     staleTime: 60_000,
   });
+  // Defensive: ensure models is always an array (cache may hold unexpected shape)
+  const models = Array.isArray(rawModels) ? rawModels : [];
 
   // Current config values
   const model = node.llmBaseModel || "gemini-2.5-flash";
@@ -240,7 +242,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   }, [streamingOutput, isRunning]);
 
   // Model label for display
-  const modelLabel = models?.find((m) => m.id === model)?.label || model;
+  const modelLabel = models.find((m) => m.id === model)?.label || model;
 
   return (
   <>
@@ -266,7 +268,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(models || []).map((m) => (
+                  {models.map((m) => (
                     <SelectItem key={m.id} value={m.id} className="text-xs">
                       <span className="flex items-center gap-2">
                         {m.label}
@@ -276,7 +278,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
                       </span>
                     </SelectItem>
                   ))}
-                  {(!models || models.length === 0) && (
+                  {models.length === 0 && (
                     <SelectItem value="gemini-2.5-flash" className="text-xs">
                       Gemini 2.5 Flash
                     </SelectItem>
