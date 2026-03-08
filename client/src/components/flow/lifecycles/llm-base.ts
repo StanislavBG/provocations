@@ -1,7 +1,8 @@
 /**
  * LLM Base node lifecycle handlers.
  * Direct, unrestricted LLM access with full model configuration.
- * System-instruction edges become system prompt; context edges become user context.
+ * System-instruction edges → system prompt; user-prompt edges → user message;
+ * context edges → user context; manual prompts append after edge content.
  */
 
 import { apiRequest } from "@/lib/queryClient";
@@ -39,16 +40,32 @@ export function createLlmBaseHandlers(): NodeLifecycleHandlers {
 
       const system = systemParts.join("\n\n---\n\n") || "You are a helpful assistant.";
 
-      // Build user message from context edges + user prompt
+      // Build user message from user-prompt edges + context edges + manual user prompt
       const userParts: string[] = [];
 
-      // Context from non-system-instruction edges
-      const contextContent = ctx.combinedInputContent.trim();
-      if (contextContent) {
-        userParts.push(contextContent);
+      // 1. User-prompt edges (primary user message from connections)
+      for (const edge of ctx.inputEdges) {
+        if (edgeHasRole(edge, "user-prompt")) {
+          const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
+          if (sourceNode) {
+            const text = sourceNode.documentContent || sourceNode.content || sourceNode.snippet || "";
+            if (text.trim()) userParts.push(text.trim());
+          }
+        }
       }
 
-      // User prompt
+      // 2. Context edges (non-system-instruction, non-user-prompt)
+      for (const edge of ctx.inputEdges) {
+        if (!edgeHasRole(edge, "system-instruction") && !edgeHasRole(edge, "user-prompt")) {
+          const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
+          if (sourceNode) {
+            const text = sourceNode.documentContent || sourceNode.content || sourceNode.snippet || "";
+            if (text.trim()) userParts.push(text.trim());
+          }
+        }
+      }
+
+      // 3. Manual user prompt (appended after edge content)
       if (ctx.node.llmBaseUserPrompt?.trim()) {
         userParts.push(ctx.node.llmBaseUserPrompt.trim());
       }

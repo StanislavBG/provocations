@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.18.1";
+export const APP_VERSION = "0.18.5";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,36 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.18.5",
+    date: "2026-03-08",
+    changes: [
+      "Fix fullscreen overlay scrolling — content area now properly constrains height so ScrollAreas work inside expanded node views",
+      "Add 'User Prompt' connection role for LLM Base node — documents can now be connected as user prompts, not just context or system instructions",
+    ],
+  },
+  {
+    version: "0.18.4",
+    date: "2026-03-08",
+    changes: [
+      "Fix aurora/BG Labs effect visibility — body background is now fully transparent in aurora mode, preventing backdrop-filter stacking context from blocking the hero layer",
+      "Simplify z-index layers: backgrounds (z-0) → canvas/nodes (z-1) → AIQA (z-999999)",
+    ],
+  },
+  {
+    version: "0.18.3",
+    date: "2026-03-08",
+    changes: [
+      "Add lock/unlock toggle to dock — items are locked by default, preventing accidental reordering; click the lock icon to unlock and drag items to new positions",
+    ],
+  },
+  {
+    version: "0.18.2",
+    date: "2026-03-08",
+    changes: [
+      "Fix: auto-migrate document ownership when users switch auth providers (email → Google), restoring access to canvases lost after Google Auth upgrade",
+    ],
+  },
   {
     version: "0.18.1",
     date: "2026-03-08",

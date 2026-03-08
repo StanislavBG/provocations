@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { BookOpenCheck, Target, LayoutTemplate, Link, BrainCircuit } from "lucide-react";
+import { BookOpenCheck, Target, LayoutTemplate, Link, BrainCircuit, MessageSquareText } from "lucide-react";
 import type { FlowNode, EdgeRole } from "./useFlowCanvas";
 import { FLOW_NODE_REGISTRY } from "./FlowNodeRegistry";
 
@@ -46,6 +46,13 @@ const ROLE_OPTIONS: Array<{
     description: "Becomes part of the LLM system prompt",
     icon: BrainCircuit,
     iconClass: "text-fuchsia-500",
+  },
+  {
+    role: "user-prompt",
+    label: "User Prompt",
+    description: "Becomes the user message sent to the LLM",
+    icon: MessageSquareText,
+    iconClass: "text-emerald-500",
   },
 ];
 
