@@ -317,6 +317,195 @@ export function gatewayStream(
 }
 
 // ---------------------------------------------------------------------------
+// G4: LLM output validation
+// ---------------------------------------------------------------------------
+
+export interface ValidationResult {
+  valid: boolean;
+  parsed?: any;
+  error?: string;
+}
+
+/**
+ * Validate LLM output against an expected format.
+ *
+ * - json: tries JSON.parse, then extracts from ```json code blocks
+ * - markdown: valid if non-empty
+ * - text: valid if non-empty
+ */
+export function validateLlmOutput(
+  output: string,
+  expectedFormat: "json" | "markdown" | "text",
+): ValidationResult {
+  if (!output || !output.trim()) {
+    return { valid: false, error: "Empty response from LLM" };
+  }
+
+  if (expectedFormat === "text") {
+    return { valid: true };
+  }
+
+  if (expectedFormat === "markdown") {
+    return { valid: output.trim().length > 0 };
+  }
+
+  // JSON validation — try direct parse first
+  const trimmed = output.trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    return { valid: true, parsed };
+  } catch {
+    // Try extracting from ```json code block
+    const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      try {
+        const parsed = JSON.parse(codeBlockMatch[1].trim());
+        return { valid: true, parsed };
+      } catch {
+        // fall through
+      }
+    }
+
+    // Try extracting bare JSON object or array
+    const jsonMatch = trimmed.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]);
+        return { valid: true, parsed };
+      } catch {
+        // fall through
+      }
+    }
+
+    return { valid: false, error: `Expected JSON but got: ${trimmed.slice(0, 100)}...` };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// G5: Model routing by task complexity
+// ---------------------------------------------------------------------------
+
+export type TaskComplexity = "simple" | "moderate" | "complex";
+
+/** Classify a task's complexity based on type and input size */
+export function classifyComplexity(taskType: string, inputSize: number): TaskComplexity {
+  // Simple tasks: quick classification, cleanup, short completions
+  const simpleTasks = [
+    "summarize-intent", "extract-metrics", "classify-instruction",
+    "clean-transcript",
+  ];
+  if (simpleTasks.includes(taskType) && inputSize < 5000) return "simple";
+
+  // Complex tasks: full rewrites, multi-persona, research synthesis, large inputs
+  const complexTasks = [
+    "discussion-ask", "analyze-query", "wireframe-analysis",
+    "streaming-refine", "interview-summary",
+  ];
+  if (complexTasks.includes(taskType)) return "complex";
+  if (inputSize > 10000) return "complex";
+
+  return "moderate";
+}
+
+/**
+ * Select the best model for a task based on complexity and user preference.
+ * Falls back to sensible defaults when no preference is given.
+ */
+export function getModelForTask(
+  taskType: string,
+  inputSize: number,
+  userPreference?: string,
+): string {
+  // Always respect explicit user preference
+  if (userPreference) return userPreference;
+
+  const complexity = classifyComplexity(taskType, inputSize);
+
+  // Route by complexity — default to Gemini models since the project uses GEMINI_API_KEY
+  switch (complexity) {
+    case "simple":
+      return "gemini-2.5-flash";
+    case "complex":
+      return "gemini-2.5-pro";
+    case "moderate":
+    default:
+      return "gemini-2.5-flash";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// G6: Retry with model fallback
+// ---------------------------------------------------------------------------
+
+/** Fallback model chains — if primary fails, try the next */
+const MODEL_FALLBACK_CHAIN: Record<string, string[]> = {
+  "gemini-2.5-pro": ["gemini-2.5-flash", "gemini-2.0-flash"],
+  "gemini-2.5-flash": ["gemini-2.0-flash", "gemini-2.5-pro"],
+  "gemini-2.0-flash": ["gemini-2.5-flash"],
+  "gpt-4o": ["gpt-4o-mini"],
+  "gpt-4o-mini": ["gpt-4o"],
+  "claude-sonnet-4-5-20250929": ["claude-haiku-4-5"],
+  "claude-haiku-4-5": ["claude-sonnet-4-5-20250929"],
+};
+
+/** Check if an error is a provider-side error worth retrying (not a user error) */
+function isRetryableError(err: unknown): boolean {
+  if (!(err instanceof Error)) return true;
+  const msg = err.message.toLowerCase();
+  // Rate limits, server errors, network errors — retry
+  if (msg.includes("rate limit") || msg.includes("429")) return true;
+  if (msg.includes("500") || msg.includes("502") || msg.includes("503")) return true;
+  if (msg.includes("timeout") || msg.includes("econnreset") || msg.includes("fetch failed")) return true;
+  if (msg.includes("overloaded") || msg.includes("capacity")) return true;
+  // 400-level user errors — don't retry
+  if (msg.includes("400") || msg.includes("invalid") || msg.includes("bad request")) return false;
+  // Default: retry
+  return true;
+}
+
+/**
+ * Generate with automatic model fallback on provider errors.
+ * Tries the primary model first, then walks the fallback chain.
+ */
+export async function gatewayGenerateWithFallback(
+  req: LLMRequest,
+  ctx: GatewayContext,
+  opts?: { model?: string },
+): Promise<LLMResponse & { _verbose?: LlmVerboseMetadata; _fallbackUsed?: string }> {
+  const primaryModel = opts?.model || getDefaultModel();
+
+  // Try primary model
+  try {
+    return await gatewayGenerate(req, ctx, { model: primaryModel });
+  } catch (primaryErr) {
+    if (!isRetryableError(primaryErr)) throw primaryErr;
+
+    // Walk fallback chain
+    const fallbacks = MODEL_FALLBACK_CHAIN[primaryModel] || [];
+    for (const fallbackModel of fallbacks) {
+      console.warn(
+        `[llm-gateway] Primary model ${primaryModel} failed, falling back to ${fallbackModel}:`,
+        primaryErr instanceof Error ? primaryErr.message : String(primaryErr),
+      );
+      try {
+        const result = await gatewayGenerate(req, ctx, { model: fallbackModel });
+        return { ...result, _fallbackUsed: fallbackModel };
+      } catch (fallbackErr) {
+        if (!isRetryableError(fallbackErr)) throw fallbackErr;
+        // Continue to next fallback
+        console.warn(
+          `[llm-gateway] Fallback model ${fallbackModel} also failed:`,
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+        );
+      }
+    }
+
+    // All fallbacks exhausted — throw original error
+    throw primaryErr;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
