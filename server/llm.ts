@@ -16,6 +16,23 @@
  *   // Per-model (for chat model selector):
  *   const result = await llm.generateWithModel("gemini-2.5-pro", req);
  *   const stream = llm.streamWithModel("gpt-5-mini", req);
+ *
+ * ─── PROMPT INJECTION PREVENTION ─────────────────────────────────────────
+ * All LLM calls in this module enforce strict role separation:
+ *
+ *   - System instructions go into the `system` field of LLMRequest
+ *   - User content goes into `messages` with role="user"
+ *   - Assistant responses go into `messages` with role="assistant"
+ *
+ * This separation is preserved at the provider level:
+ *   - OpenAI: `system` → messages[0].role="system"; user content → role="user"
+ *   - Anthropic: `system` → top-level `system` param; user content → messages[]
+ *   - Gemini: `system` → `systemInstruction`; user content → `contents[]`
+ *
+ * NEVER concatenate system instructions and user content into a single string.
+ * Each provider function below maintains this boundary. The LLMRequest interface
+ * enforces that callers separate system from messages at the type level.
+ * ──────────────────────────────────────────────────────────────────────────
  */
 
 import OpenAI from "openai";
@@ -298,6 +315,9 @@ function getOpenAI(): OpenAI {
   return _openaiClient;
 }
 
+// SECURITY: System instructions (req.system) are passed in the "system" role,
+// separate from user-provided content in the "user" role. This prevents prompt
+// injection from user content overriding system instructions.
 async function openaiGenerate(req: LLMRequest): Promise<LLMResponse> {
   const client = getOpenAI();
 
@@ -365,6 +385,8 @@ function getAnthropic(): Anthropic {
 
 const ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929";
 
+// SECURITY: Anthropic SDK uses a dedicated top-level `system` parameter,
+// providing the strongest role separation. User content is in messages[].
 async function anthropicGenerate(req: LLMRequest): Promise<LLMResponse> {
   const client = getAnthropic();
 
@@ -458,6 +480,8 @@ function getSafetySettings(level?: "none" | "low" | "medium" | "high") {
   return GEMINI_SAFETY_OFF.map((s) => ({ ...s, threshold }));
 }
 
+// SECURITY: Gemini uses `systemInstruction` as a dedicated field separate from
+// `contents[]` (user messages). This prevents user content from hijacking system prompts.
 /** Build the native Gemini request body */
 function buildGeminiBody(req: LLMRequest, enableSearch = false): Record<string, unknown> {
   const genConfig: Record<string, unknown> = {

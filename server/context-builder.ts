@@ -5,6 +5,17 @@
  * Every task type uses this builder to assemble context sections
  * in a consistent format. This replaces the per-endpoint ad-hoc
  * context construction scattered across routes.ts.
+ *
+ * ─── PROMPT INJECTION PREVENTION ─────────────────────────────────────────
+ * This builder constructs SYSTEM-level context only. The output of these
+ * functions goes into the `system` field of LLMRequest, never into user
+ * messages. User-authored content (document text, interview answers, chat
+ * messages) is passed separately in the `messages` array with role="user".
+ *
+ * The separation is enforced at the LLMRequest type level in server/llm.ts:
+ *   - system: string — built by this module (instructions + context sections)
+ *   - messages: LLMMessage[] — user content with explicit role annotations
+ * ──────────────────────────────────────────────────────────────────────────
  */
 
 import type {

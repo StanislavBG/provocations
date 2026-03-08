@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -16,6 +17,64 @@ validateEnv();
 
 const app = express();
 const httpServer = createServer(app);
+
+// ── Security: disable x-powered-by header ──
+app.disable("x-powered-by");
+
+// ── Security: helmet middleware with CSP for trusted domains ──
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          "https://*.clerk.accounts.dev",
+          "https://clerk.com",
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com",
+        ],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https://*"],
+        mediaSrc: ["'self'", "blob:", "data:"],
+        connectSrc: [
+          "'self'",
+          "https://*.clerk.accounts.dev",
+          "https://clerk.com",
+          "https://generativelanguage.googleapis.com",
+          "https://api.anthropic.com",
+          "https://api.openai.com",
+          "https://api.elevenlabs.io",
+          "wss://api.elevenlabs.io",
+          "https://www.googleapis.com",
+          "wss:",
+          "ws:",
+        ],
+        workerSrc: ["'self'", "blob:"],
+        frameSrc: ["'self'", "https://*.clerk.accounts.dev", "https://clerk.com"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
+
+// Permissions-Policy: restrict sensitive browser APIs
+app.use((_req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(self), microphone=(self), geolocation=(), payment=()",
+  );
+  next();
+});
 
 // Structured request logging middleware
 app.use(requestLogger());
