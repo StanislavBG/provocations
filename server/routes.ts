@@ -7963,6 +7963,57 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
     }
   });
 
+  /** Update a shared document (write permission required — persists to owner's store) */
+  app.put("/api/shared/document/:id", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const docId = parseInt(req.params.id);
+      if (isNaN(docId)) return res.status(400).json({ error: "Invalid document ID" });
+
+      const access = await storage.hasAccess(userId, "document", docId);
+      if (!access) {
+        return res.status(403).json({ error: "No access to this document" });
+      }
+      if (access.permission !== "write") {
+        return res.status(403).json({ error: "Read-only access — cannot save changes" });
+      }
+
+      const parsed = updateDocumentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+
+      const doc = await storage.getDocument(docId);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+
+      const { title, content } = parsed.data;
+      const key = getEncryptionKey();
+      const encryptedContent = encrypt(content, key);
+      const encryptedTitle = encrypt(title, key);
+
+      const result = await storage.updateDocument(docId, {
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+        ciphertext: encryptedContent.ciphertext,
+        salt: encryptedContent.salt,
+        iv: encryptedContent.iv,
+      });
+
+      if (!result) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Update shared document error:", error);
+      res.status(500).json({ error: "Failed to update shared document" });
+    }
+  });
+
   /** List documents in a shared folder */
   app.get("/api/shared/folder/:id/documents", async (req, res) => {
     try {

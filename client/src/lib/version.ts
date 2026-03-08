@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.21.0";
+export const APP_VERSION = "0.21.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,18 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.21.1",
+    date: "2026-03-08",
+    changes: [
+      "Restore Mail system to Flow workspace status bar — bell icon with unread notification count badge",
+      "Mailbox drawer accessible from status bar for connection requests, share invitations, and system events",
+      "Canvas sharing persists to original owner's context store (Google Drive-style — no copy created)",
+      "Write-permission collaborators can save changes directly to the shared canvas via PUT /api/shared/document/:id",
+      "Shared canvas indicator badge in status bar shows permission level (edit/view)",
+      "Auto-save and debounced save respect shared canvas permissions — read-only canvases are never overwritten",
+    ],
+  },
   {
     version: "0.21.0",
     date: "2026-03-08",
