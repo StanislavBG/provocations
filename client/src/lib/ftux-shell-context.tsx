@@ -33,7 +33,7 @@ export type ToolId =
 
 export type DockPosition = "top" | "bottom" | "left" | "right";
 export type StatusBarPosition = "top" | "bottom";
-export type DockGroup = "gather" | "workshop" | "build";
+export type DockGroup = string;
 
 export type OutputType = "blog-post" | "infographic" | "prd" | "timeline" | "research-paper" | "slide-deck";
 
@@ -77,6 +77,7 @@ export interface FtuxShellConfig {
   canvasFontColor: string | null;  // hex override or null for theme default
   canvasBgColor: string | null;    // hex override or null for theme default
   canvasTheme: string;             // canvas theme key (default "aurora")
+  dockGroupOrder?: string[];       // ordered list of custom group names
   statusBarPosition: StatusBarPosition;
   statusBarPinnedItems: string[];
   statusBarTranslucency: number;   // 0-100
@@ -107,6 +108,7 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
   canvasFontColor: null,
   canvasBgColor: null,
   canvasTheme: "aurora",
+  dockGroupOrder: undefined,
   statusBarPosition: "top",
   statusBarPinnedItems: [],
   statusBarTranslucency: 85,

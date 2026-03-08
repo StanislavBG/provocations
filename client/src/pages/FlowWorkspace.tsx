@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCanvasCollab } from "@/hooks/use-canvas-collab";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ShareDialog } from "@/components/ShareDialog";
 import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
@@ -85,7 +86,7 @@ import {
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
   Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench, Info, Crosshair,
-  PanelLeft, PanelLeftClose,
+  PanelLeft, PanelLeftClose, Send, Mic,
 } from "lucide-react";
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
@@ -424,6 +425,25 @@ function FlowWorkspaceInner() {
   });
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [docProvoEvolving, setDocProvoEvolving] = useState(false);
+  const [docWriterTextOpen, setDocWriterTextOpen] = useState(false);
+  const [docWriterFeedbackText, setDocWriterFeedbackText] = useState("");
+  const [docWriterVoiceActive, setDocWriterVoiceActive] = useState(false);
+  const [docDirectVoiceActive, setDocDirectVoiceActive] = useState(false);
+  const [docDirectTextOpen, setDocDirectTextOpen] = useState(false);
+  const [docDirectText, setDocDirectText] = useState("");
+  const docWriterTextInputRef = useRef<HTMLInputElement>(null);
+  const docDirectTextInputRef = useRef<HTMLInputElement>(null);
+  const docEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  // Selection popover for quick actions on highlighted text
+  const [docSelectionPopover, setDocSelectionPopover] = useState<{
+    text: string;
+    top: number;
+    left: number;
+  } | null>(null);
+  const [docSelEditMode, setDocSelEditMode] = useState<"voice-remix" | "text-remix" | "voice-direct" | "text-direct" | null>(null);
+  const [docSelEditText, setDocSelEditText] = useState("");
+  const [docSelVoiceActive, setDocSelVoiceActive] = useState(false);
+  const docEditorContainerRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
@@ -2689,6 +2709,148 @@ function FlowWorkspaceInner() {
     [docEditorContent, docObjective, toast, snapshotDocVersion, getDocConnectedContext],
   );
 
+  // ── Document editor: writer feedback (Smart Text / Voice) ──
+  const handleDocWriterFeedback = useCallback(
+    async (feedback: string) => {
+      if (!feedback.trim() || !docEditorContent.trim()) return;
+      snapshotDocVersion("Before writer feedback");
+      setDocToolRunning("writer-feedback");
+      try {
+        const connectedContext = getDocConnectedContext();
+        const res = await apiRequest("POST", "/api/write", {
+          document: docEditorContent,
+          instruction: `WRITER FEEDBACK:\nThe author has provided the following feedback to be remixed into the document:\n\n${feedback}\n\nInterpret the author's intent and intelligently weave this feedback into the document. This is not a literal transcription to append — it is editorial direction from the author.`,
+          appType: "write-a-prompt",
+          ...(docObjective.trim() ? { objective: docObjective.trim() } : {}),
+          ...(connectedContext ? { sessionNotes: connectedContext } : {}),
+        });
+        const data = (await res.json()) as { document: string };
+        if (data.document) {
+          setDocEditorContent(data.document);
+          toast({ title: "Document evolved", description: "Writer feedback integrated" });
+        }
+      } catch {
+        toast({ title: "Writer feedback failed", variant: "destructive" });
+      } finally {
+        setDocToolRunning(null);
+      }
+    },
+    [docEditorContent, docObjective, toast, snapshotDocVersion, getDocConnectedContext],
+  );
+
+  // Auto-focus writer text input when opened
+  useEffect(() => {
+    if (docWriterTextOpen) {
+      setTimeout(() => docWriterTextInputRef.current?.focus(), 50);
+    }
+  }, [docWriterTextOpen]);
+
+  // Auto-focus direct text input when opened
+  useEffect(() => {
+    if (docDirectTextOpen) {
+      setTimeout(() => docDirectTextInputRef.current?.focus(), 50);
+    }
+  }, [docDirectTextOpen]);
+
+  // ── Direct insert at cursor (no AI remix) ──
+  const handleDocDirectInsert = useCallback(
+    (text: string) => {
+      if (!text.trim()) return;
+      const el = docEditorRef.current;
+      const cursor = el?.selectionStart ?? docEditorContent.length;
+      const before = docEditorContent.slice(0, cursor);
+      const after = docEditorContent.slice(cursor);
+      // Insert with spacing
+      const spacer = before.length > 0 && !before.endsWith("\n") && !before.endsWith(" ") ? " " : "";
+      setDocEditorContent(before + spacer + text.trim() + after);
+    },
+    [docEditorContent],
+  );
+
+  // ── Selection remix (AI remixes only the selected text) ──
+  const handleDocSelectionRemix = useCallback(
+    async (feedback: string, selectedText: string) => {
+      if (!feedback.trim() || !docEditorContent.trim()) return;
+      snapshotDocVersion("Before selection remix");
+      setDocToolRunning("sel-remix");
+      try {
+        const connectedContext = getDocConnectedContext();
+        const res = await apiRequest("POST", "/api/write", {
+          document: docEditorContent,
+          selectedText,
+          instruction: `WRITER FEEDBACK ON SELECTION:\nThe author has highlighted the following text and provided feedback to remix it:\n\nSELECTED TEXT: "${selectedText}"\n\nAUTHOR FEEDBACK: ${feedback}\n\nApply the author's feedback to improve the selected area while keeping the rest of the document intact.`,
+          appType: "write-a-prompt",
+          ...(docObjective.trim() ? { objective: docObjective.trim() } : {}),
+          ...(connectedContext ? { sessionNotes: connectedContext } : {}),
+        });
+        const data = (await res.json()) as { document: string };
+        if (data.document) {
+          setDocEditorContent(data.document);
+          toast({ title: "Selection remixed", description: "Feedback applied to highlighted text" });
+        }
+      } catch {
+        toast({ title: "Selection remix failed", variant: "destructive" });
+      } finally {
+        setDocToolRunning(null);
+        setDocSelectionPopover(null);
+      }
+    },
+    [docEditorContent, docObjective, toast, snapshotDocVersion, getDocConnectedContext],
+  );
+
+  // ── Selection direct replace (insert text replacing selected portion) ──
+  const handleDocSelectionDirectReplace = useCallback(
+    (newText: string, selectedText: string) => {
+      if (!newText.trim()) return;
+      const idx = docEditorContent.indexOf(selectedText);
+      if (idx === -1) return;
+      const before = docEditorContent.slice(0, idx);
+      const after = docEditorContent.slice(idx + selectedText.length);
+      setDocEditorContent(before + newText.trim() + after);
+      setDocSelectionPopover(null);
+    },
+    [docEditorContent],
+  );
+
+  // ── Handle text selection in the document editor ──
+  const handleDocTextSelect = useCallback(() => {
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim();
+    if (!selectedText || selectedText.length < 3) {
+      setDocSelectionPopover(null);
+      return;
+    }
+    const range = selection?.getRangeAt(0);
+    if (!range || !docEditorContainerRef.current) return;
+    const rect = range.getBoundingClientRect();
+    const containerRect = docEditorContainerRef.current.getBoundingClientRect();
+    setDocSelectionPopover({
+      text: selectedText,
+      top: rect.top - containerRect.top - 44,
+      left: rect.left - containerRect.left + rect.width / 2,
+    });
+    setDocSelEditMode(null);
+    setDocSelEditText("");
+    setDocSelVoiceActive(false);
+  }, []);
+
+  // Close selection popover on outside click
+  useEffect(() => {
+    if (!docSelectionPopover) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-doc-selection-popover]")) return;
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel?.toString().trim()) {
+          setDocSelectionPopover(null);
+        }
+      }, 100);
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [docSelectionPopover]);
+
   // ── Evolve document from provo thread (inline mode) ──
   const handleDocProvoEvolve = useCallback(
     async (instruction: string) => {
@@ -3945,7 +4107,7 @@ function FlowWorkspaceInner() {
 
                   {/* ── Main writing area ── */}
                   <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[hsl(var(--background))]">
-                    {/* Minimal toolbar — sidebar toggle only */}
+                    {/* Toolbar — sidebar toggle + writer voice/text */}
                     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/20 shrink-0 bg-muted/5">
                       <button
                         className="p-1.5 rounded-md hover:bg-muted/50 transition-colors text-muted-foreground"
@@ -3966,7 +4128,230 @@ function FlowWorkspaceInner() {
                           </span>
                         </>
                       )}
+
+                      {/* Spacer */}
+                      <div className="flex-1" />
+
+                      {/* Writer Voice — dictate feedback to evolve the document */}
+                      <div
+                        className={cn(
+                          "relative rounded-md transition-all",
+                          docWriterVoiceActive ? "ring-2 ring-primary/50 bg-primary/10" : "hover:bg-primary/10",
+                        )}
+                        title="Writer Voice — dictate feedback to evolve the document"
+                      >
+                        <VoiceRecorder
+                          onTranscript={(transcript: string) => {
+                            if (!transcript.trim()) return;
+                            handleDocWriterFeedback(transcript);
+                            setDocWriterVoiceActive(false);
+                            toast({ title: "Feedback sent", description: "Remixing your voice feedback into the document..." });
+                          }}
+                          onRecordingChange={setDocWriterVoiceActive}
+                          size="icon"
+                          variant="ghost"
+                          className={cn(
+                            "h-7 w-7",
+                            docWriterVoiceActive ? "text-primary animate-pulse" : "text-primary/80 hover:text-primary",
+                          )}
+                        />
+                        <span className={cn(
+                          "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background",
+                          docWriterVoiceActive ? "bg-destructive animate-ping" : "bg-primary",
+                        )} />
+                      </div>
+
+                      {/* Writer Text — toggle inline text input */}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn(
+                          "h-7 w-7 relative",
+                          docWriterTextOpen
+                            ? "text-primary bg-primary/10 ring-2 ring-primary/50"
+                            : "text-primary/80 hover:text-primary hover:bg-primary/10",
+                        )}
+                        onClick={() => setDocWriterTextOpen(!docWriterTextOpen)}
+                        title="Writer Edit — type feedback to evolve the document"
+                      >
+                        <PenLine className="w-3.5 h-3.5" />
+                        <span className={cn(
+                          "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background bg-primary",
+                        )} />
+                      </Button>
+
+                      {/* Separator between remix and direct groups */}
+                      <div className="w-px h-5 bg-border/40 mx-1" />
+
+                      {/* Direct Voice — dictate text that gets inserted at cursor, no AI */}
+                      <div
+                        className={cn(
+                          "relative rounded-md transition-all",
+                          docDirectVoiceActive ? "ring-2 ring-emerald-500/50 bg-emerald-500/10" : "hover:bg-emerald-500/10",
+                        )}
+                        title="Direct Voice — dictate text inserted at cursor (no AI)"
+                      >
+                        <VoiceRecorder
+                          onTranscript={(transcript: string) => {
+                            if (!transcript.trim()) return;
+                            handleDocDirectInsert(transcript);
+                            setDocDirectVoiceActive(false);
+                            toast({ title: "Inserted", description: "Voice text added at cursor position" });
+                          }}
+                          onRecordingChange={setDocDirectVoiceActive}
+                          size="icon"
+                          variant="ghost"
+                          className={cn(
+                            "h-7 w-7",
+                            docDirectVoiceActive ? "text-emerald-500 animate-pulse" : "text-emerald-500/80 hover:text-emerald-500",
+                          )}
+                        />
+                        <span className={cn(
+                          "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background",
+                          docDirectVoiceActive ? "bg-destructive animate-ping" : "bg-emerald-500",
+                        )} />
+                      </div>
+
+                      {/* Direct Text — toggle inline text input that appends at cursor, no AI */}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn(
+                          "h-7 w-7 relative",
+                          docDirectTextOpen
+                            ? "text-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/50"
+                            : "text-emerald-500/80 hover:text-emerald-500 hover:bg-emerald-500/10",
+                        )}
+                        onClick={() => setDocDirectTextOpen(!docDirectTextOpen)}
+                        title="Direct Edit — type text inserted at cursor (no AI)"
+                      >
+                        <Type className="w-3.5 h-3.5" />
+                        <span className={cn(
+                          "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background bg-emerald-500",
+                        )} />
+                      </Button>
+
+                      {/* Status indicators */}
+                      {(docWriterVoiceActive || docDirectVoiceActive) && (
+                        <span className={cn(
+                          "text-[11px] font-medium animate-pulse",
+                          docDirectVoiceActive ? "text-emerald-500" : "text-primary",
+                        )}>
+                          Listening...
+                        </span>
+                      )}
+
+                      {(docToolRunning === "writer-feedback" || docToolRunning === "sel-remix") && (
+                        <span className="text-[11px] text-muted-foreground animate-pulse flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Evolving...
+                        </span>
+                      )}
                     </div>
+
+                    {/* Writer text input bar (AI remix) */}
+                    {docWriterTextOpen && (
+                      <div className="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b bg-primary/5">
+                        <PenLine className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <input
+                          ref={docWriterTextInputRef}
+                          type="text"
+                          value={docWriterFeedbackText}
+                          onChange={(e) => setDocWriterFeedbackText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              if (docWriterFeedbackText.trim()) {
+                                handleDocWriterFeedback(docWriterFeedbackText.trim());
+                                setDocWriterFeedbackText("");
+                                setDocWriterTextOpen(false);
+                              }
+                            }
+                            if (e.key === "Escape") {
+                              setDocWriterTextOpen(false);
+                              setDocWriterFeedbackText("");
+                            }
+                          }}
+                          placeholder="Type feedback for the AI to remix into the document..."
+                          className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
+                          disabled={docToolRunning !== null}
+                        />
+                        {docWriterFeedbackText.trim() && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 shrink-0 text-primary"
+                            onClick={() => {
+                              handleDocWriterFeedback(docWriterFeedbackText.trim());
+                              setDocWriterFeedbackText("");
+                              setDocWriterTextOpen(false);
+                            }}
+                            disabled={docToolRunning !== null}
+                          >
+                            <Send className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-5 w-5 shrink-0 text-muted-foreground"
+                          onClick={() => { setDocWriterTextOpen(false); setDocWriterFeedbackText(""); }}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Direct text input bar (no AI, inserts at cursor) */}
+                    {docDirectTextOpen && (
+                      <div className="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b bg-emerald-500/5">
+                        <Type className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <input
+                          ref={docDirectTextInputRef}
+                          type="text"
+                          value={docDirectText}
+                          onChange={(e) => setDocDirectText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              if (docDirectText.trim()) {
+                                handleDocDirectInsert(docDirectText.trim());
+                                setDocDirectText("");
+                                setDocDirectTextOpen(false);
+                              }
+                            }
+                            if (e.key === "Escape") {
+                              setDocDirectTextOpen(false);
+                              setDocDirectText("");
+                            }
+                          }}
+                          placeholder="Type text to insert at cursor position (no AI)..."
+                          className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
+                        />
+                        {docDirectText.trim() && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 shrink-0 text-emerald-500"
+                            onClick={() => {
+                              handleDocDirectInsert(docDirectText.trim());
+                              setDocDirectText("");
+                              setDocDirectTextOpen(false);
+                            }}
+                          >
+                            <Send className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-5 w-5 shrink-0 text-muted-foreground"
+                          onClick={() => { setDocDirectTextOpen(false); setDocDirectText(""); }}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
 
                     {/* Scrollable page */}
                     <div className="flex-1 min-h-0 overflow-y-auto">
@@ -3990,16 +4375,172 @@ function FlowWorkspaceInner() {
                           />
                         </div>
 
-                        {/* Main document writing surface */}
-                        <ProvokeText
-                          value={docEditorContent}
-                          onChange={setDocEditorContent}
-                          chrome="bare"
-                          variant="editor"
-                          showCopy
-                          showClear={false}
-                          placeholder="Start writing..."
-                        />
+                        {/* Main document writing surface with selection popover */}
+                        <div ref={docEditorContainerRef} className="relative">
+                          {/* Selection quick actions popover */}
+                          {docSelectionPopover && (
+                            <div
+                              data-doc-selection-popover
+                              className="absolute z-50 bg-card border border-border/50 rounded-lg shadow-xl p-1.5 flex flex-col gap-1 min-w-[180px]"
+                              style={{
+                                top: docSelectionPopover.top,
+                                left: Math.max(10, docSelectionPopover.left - 90),
+                              }}
+                            >
+                              {/* Quick action row: 4 buttons */}
+                              {!docSelEditMode && (
+                                <div className="flex items-center gap-1">
+                                  {/* Remix with Voice */}
+                                  <div
+                                    className={cn(
+                                      "relative rounded-md transition-all",
+                                      docSelVoiceActive ? "ring-2 ring-primary/50 bg-primary/10" : "hover:bg-primary/10",
+                                    )}
+                                    title="Remix selection with voice"
+                                  >
+                                    <VoiceRecorder
+                                      onTranscript={(transcript: string) => {
+                                        if (!transcript.trim() || !docSelectionPopover) return;
+                                        handleDocSelectionRemix(transcript, docSelectionPopover.text);
+                                        setDocSelVoiceActive(false);
+                                        window.getSelection()?.removeAllRanges();
+                                        toast({ title: "Remixing selection...", description: "AI is applying your voice feedback" });
+                                      }}
+                                      onRecordingChange={setDocSelVoiceActive}
+                                      size="icon"
+                                      variant="ghost"
+                                      className={cn(
+                                        "h-7 w-7",
+                                        docSelVoiceActive ? "text-primary animate-pulse" : "text-primary/80 hover:text-primary",
+                                      )}
+                                    />
+                                  </div>
+                                  {/* Remix with Text */}
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-primary/80 hover:text-primary hover:bg-primary/10"
+                                    onClick={() => { setDocSelEditMode("text-remix"); setDocSelEditText(""); }}
+                                    title="Remix selection with text"
+                                  >
+                                    <PenLine className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <div className="w-px h-5 bg-border/40" />
+                                  {/* Direct Voice replace */}
+                                  <div
+                                    className="relative rounded-md transition-all hover:bg-emerald-500/10"
+                                    title="Replace selection with voice (no AI)"
+                                  >
+                                    <VoiceRecorder
+                                      onTranscript={(transcript: string) => {
+                                        if (!transcript.trim() || !docSelectionPopover) return;
+                                        handleDocSelectionDirectReplace(transcript, docSelectionPopover.text);
+                                        window.getSelection()?.removeAllRanges();
+                                        toast({ title: "Replaced", description: "Selection replaced with voice text" });
+                                      }}
+                                      onRecordingChange={(v) => { if (v) setDocSelEditMode("voice-direct"); else setDocSelEditMode(null); }}
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 text-emerald-500/80 hover:text-emerald-500"
+                                    />
+                                  </div>
+                                  {/* Direct Text replace */}
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-emerald-500/80 hover:text-emerald-500 hover:bg-emerald-500/10"
+                                    onClick={() => { setDocSelEditMode("text-direct"); setDocSelEditText(""); }}
+                                    title="Replace selection with text (no AI)"
+                                  >
+                                    <Type className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              )}
+
+                              {/* Inline text input for selection edit modes */}
+                              {(docSelEditMode === "text-remix" || docSelEditMode === "text-direct") && (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    value={docSelEditText}
+                                    onChange={(e) => setDocSelEditText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && !e.shiftKey && docSelEditText.trim() && docSelectionPopover) {
+                                        e.preventDefault();
+                                        if (docSelEditMode === "text-remix") {
+                                          handleDocSelectionRemix(docSelEditText.trim(), docSelectionPopover.text);
+                                        } else {
+                                          handleDocSelectionDirectReplace(docSelEditText.trim(), docSelectionPopover.text);
+                                        }
+                                        window.getSelection()?.removeAllRanges();
+                                      }
+                                      if (e.key === "Escape") {
+                                        setDocSelEditMode(null);
+                                        setDocSelEditText("");
+                                      }
+                                    }}
+                                    placeholder={docSelEditMode === "text-remix" ? "AI feedback on selection..." : "Replace selection with..."}
+                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50 min-w-[160px]"
+                                    disabled={docToolRunning !== null}
+                                  />
+                                  {docSelEditText.trim() && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className={cn(
+                                        "h-6 w-6 shrink-0",
+                                        docSelEditMode === "text-remix" ? "text-primary" : "text-emerald-500",
+                                      )}
+                                      onClick={() => {
+                                        if (!docSelEditText.trim() || !docSelectionPopover) return;
+                                        if (docSelEditMode === "text-remix") {
+                                          handleDocSelectionRemix(docSelEditText.trim(), docSelectionPopover.text);
+                                        } else {
+                                          handleDocSelectionDirectReplace(docSelEditText.trim(), docSelectionPopover.text);
+                                        }
+                                        window.getSelection()?.removeAllRanges();
+                                      }}
+                                      disabled={docToolRunning !== null}
+                                    >
+                                      <Send className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-5 w-5 shrink-0 text-muted-foreground"
+                                    onClick={() => { setDocSelEditMode(null); setDocSelEditText(""); }}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              )}
+
+                              {/* Status for voice modes */}
+                              {(docSelEditMode === "voice-direct" || docSelVoiceActive) && (
+                                <span className={cn(
+                                  "text-[10px] font-medium animate-pulse px-1",
+                                  docSelVoiceActive ? "text-primary" : "text-emerald-500",
+                                )}>
+                                  Listening...
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <ProvokeText
+                            ref={docEditorRef}
+                            value={docEditorContent}
+                            onChange={setDocEditorContent}
+                            onSelect={handleDocTextSelect}
+                            chrome="bare"
+                            variant="editor"
+                            showCopy
+                            showClear={false}
+                            placeholder="Start writing..."
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -4277,16 +4818,31 @@ export default function FlowWorkspace() {
   const { shellConfig, setShellConfig } = useFtuxShellConfig();
 
   // Merge user's persisted config with FlowWorkspace defaults:
-  // Always use FLOW_DOCK_ITEMS (not the FtuxWorkspace defaults) and force tourCompleted
-  const mergedConfig = useMemo<FtuxShellConfig>(() => ({
-    ...shellConfig,
-    dockItems: FLOW_DOCK_ITEMS,
-    dockShowLabels: shellConfig.dockShowLabels ?? FLOW_SHELL_CONFIG.dockShowLabels,
-    dockSnapped: shellConfig.dockSnapped ?? FLOW_SHELL_CONFIG.dockSnapped,
-    dockButtonSize: shellConfig.dockButtonSize ?? FLOW_SHELL_CONFIG.dockButtonSize,
-    tourCompleted: true,
-    tipsEnabled: false,
-  }), [shellConfig]);
+  // Preserve user's dock item ordering but ensure all catalog tools are present.
+  // New tools from FLOW_DOCK_ITEMS are appended; removed tools are dropped.
+  // Hotkeys 1-9 are tied to POSITIONS, not icons — reordering changes which tool a number activates.
+  const mergedConfig = useMemo<FtuxShellConfig>(() => {
+    const userItems = shellConfig.dockItems ?? [];
+    const catalogSet = new Set(FLOW_DOCK_ITEMS.map((d) => d.toolId));
+    // Keep user's order, filtering out tools no longer in catalog
+    const ordered = userItems.filter((item) => catalogSet.has(item.toolId));
+    const existingIds = new Set(ordered.map((d) => d.toolId));
+    // Append any new catalog tools the user doesn't have yet
+    for (const item of FLOW_DOCK_ITEMS) {
+      if (!existingIds.has(item.toolId)) {
+        ordered.push(item);
+      }
+    }
+    return {
+      ...shellConfig,
+      dockItems: ordered.length > 0 ? ordered : FLOW_DOCK_ITEMS,
+      dockShowLabels: shellConfig.dockShowLabels ?? FLOW_SHELL_CONFIG.dockShowLabels,
+      dockSnapped: shellConfig.dockSnapped ?? FLOW_SHELL_CONFIG.dockSnapped,
+      dockButtonSize: shellConfig.dockButtonSize ?? FLOW_SHELL_CONFIG.dockButtonSize,
+      tourCompleted: true,
+      tipsEnabled: false,
+    };
+  }, [shellConfig]);
 
   return (
     <FtuxShellProvider initialConfig={mergedConfig} onConfigChange={setShellConfig}>

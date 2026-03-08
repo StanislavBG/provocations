@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.8";
+export const APP_VERSION = "0.21.0";
 
 export interface ReleaseNote {
   version: string;
@@ -19,22 +19,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.20.8",
+    version: "0.21.0",
     date: "2026-03-08",
     changes: [
-      "Documentation restructure: root CLAUDE.md reduced from 53K to 11K chars by extracting implementation details into docs/ (architecture, ADRs, API reference, development guide, flow canvas, component patterns)",
-      "Streamlined replit.md to deployment-only (9K → 2K chars), retired APPLICATION_DEEP_DIVE.md and UNUSED_APIS.md into docs/audits/",
-      "Slimmed 10 smaller app CLAUDE.md files by removing three-layer boilerplate, keeping only purpose and unique behaviors",
-    ],
-  },
-  {
-    version: "0.20.7",
-    date: "2026-03-08",
-    changes: [
-      "Fix AIQA widget drifting off-screen during canvas pan/zoom — CSS containment isolates canvas transforms from fixed-position overlays",
-      "Store expanded view redesigned: 3-panel layout with full-height folder tree, document list, and document content preview using ProvokeText",
-      "YouTube node multi-video output: search mode fetches transcripts for all top-N results, creates one output document per video",
-      "Custom tool groups foundation: type definitions, localStorage persistence, and helper functions for group management",
+      "Merge document node voice/text features, dock persistence, and Context Store/tool group improvements into main",
+      "Fix dock reordering: user's custom item positions now persist across sessions",
+      "Hotkeys 1-9 tied to slot positions — moving an icon to a new slot changes its hotkey",
+      "Direct Voice + Direct Text on document toolbar — insert at cursor with no AI remix",
+      "Selection quick actions popover — highlight text for Voice Remix, Text Remix, Voice Replace, Text Replace",
+      "Writer Voice + Writer Text in document expanded view — dictate or type feedback to evolve the document",
+      "Smart keys call /api/write with full context (objective, document, connected inputs)",
+      "Context Store Manager: 3-column layout with full-height folder tree, file list, content preview",
+      "Context Store Manager respects status bar height offset",
+      "Manage Tool Groups dialog: rename/add/delete groups, drag tools between groups",
+      "Dock grouped layout with visual group labels",
+      "Fix AIQA widget drift via CSS containment",
+      "YouTube node multi-video output, Store expanded view redesign",
     ],
   },
   {
