@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.7";
+export const APP_VERSION = "0.20.9";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,24 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.9",
+    date: "2026-03-08",
+    changes: [
+      "Context Store Manager: 3-column layout — full-height folder tree, file list, and content preview side by side",
+      "Context Store Manager no longer renders over the status bar — respects --ftux-status-bar-height offset",
+      "Context Store Manager: removed 200px folder tree height cap, folders now use full panel height",
+    ],
+  },
+  {
+    version: "0.20.8",
+    date: "2026-03-08",
+    changes: [
+      "Manage Tool Groups dialog: rename groups, add/delete groups, drag tools between groups, reset to defaults — accessible from Settings gear menu",
+      "Dock grouped layout: when group labels are enabled, tools render in visually separated groups with labels instead of a flat grid",
+      "DockGroup type relaxed from union to string, enabling custom user-defined group names",
+    ],
+  },
   {
     version: "0.20.7",
     date: "2026-03-08",
