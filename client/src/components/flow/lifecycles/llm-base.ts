@@ -1,8 +1,8 @@
 /**
  * LLM Base node lifecycle handlers.
  * Direct, unrestricted LLM access with full model configuration.
- * System-instruction edges → system prompt; user-prompt edges → user message;
- * context edges → user context; manual prompts append after edge content.
+ * Context edges → system prompt; user-prompt edges → user message;
+ * manual system prompt and user prompt append after edge content.
  */
 
 import { apiRequest } from "@/lib/queryClient";
@@ -19,12 +19,12 @@ export function createLlmBaseHandlers(): NodeLifecycleHandlers {
     },
 
     onProcess: async (ctx: NodeProcessContext) => {
-      // Build system prompt from system-instruction edges + manual system prompt
+      // Build system prompt from context edges + manual system prompt
       const systemParts: string[] = [];
 
-      // Gather system instructions from edges with role="system-instruction"
+      // Context edges become system-level background material
       for (const edge of ctx.inputEdges) {
-        if (edgeHasRole(edge, "system-instruction")) {
+        if (!edgeHasRole(edge, "user-prompt")) {
           const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
           if (sourceNode) {
             const text = sourceNode.documentContent || sourceNode.content || sourceNode.snippet || "";
@@ -40,10 +40,10 @@ export function createLlmBaseHandlers(): NodeLifecycleHandlers {
 
       const system = systemParts.join("\n\n---\n\n") || "You are a helpful assistant.";
 
-      // Build user message from user-prompt edges + context edges + manual user prompt
+      // Build user message from user-prompt edges + manual user prompt
       const userParts: string[] = [];
 
-      // 1. User-prompt edges (primary user message from connections)
+      // User-prompt edges (the actual task/message)
       for (const edge of ctx.inputEdges) {
         if (edgeHasRole(edge, "user-prompt")) {
           const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
@@ -54,18 +54,7 @@ export function createLlmBaseHandlers(): NodeLifecycleHandlers {
         }
       }
 
-      // 2. Context edges (non-system-instruction, non-user-prompt)
-      for (const edge of ctx.inputEdges) {
-        if (!edgeHasRole(edge, "system-instruction") && !edgeHasRole(edge, "user-prompt")) {
-          const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
-          if (sourceNode) {
-            const text = sourceNode.documentContent || sourceNode.content || sourceNode.snippet || "";
-            if (text.trim()) userParts.push(text.trim());
-          }
-        }
-      }
-
-      // 3. Manual user prompt (appended after edge content)
+      // Manual user prompt (appended after edge content)
       if (ctx.node.llmBaseUserPrompt?.trim()) {
         userParts.push(ctx.node.llmBaseUserPrompt.trim());
       }
