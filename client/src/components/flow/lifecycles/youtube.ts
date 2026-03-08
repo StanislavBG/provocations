@@ -53,12 +53,13 @@ export function createYoutubeHandlers(): NodeLifecycleHandlers {
         const data = (await res.json()) as { transcript: string; videoTitle: string };
         return data.transcript || "";
       } else if (input) {
-        // Search mode — search, take top result, fetch transcript
+        // Search mode — search, fetch transcripts for top N results
+        const topN = ctx.node.youtubeTopN || 3;
         const searchRes = await fetch("/api/youtube/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ query: input, maxResults: 3 }),
+          body: JSON.stringify({ query: input, maxResults: topN }),
           signal: ctx.signal,
         });
         if (!searchRes.ok) throw new Error("YouTube search failed");
@@ -68,18 +69,33 @@ export function createYoutubeHandlers(): NodeLifecycleHandlers {
           throw new Error(`No YouTube results for: ${input}`);
         }
 
-        // Fetch transcript from top result
-        const top = searchData.results[0];
-        const res = await fetch("/api/youtube/process-video", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ videoId: top.videoId, videoUrl: `https://youtube.com/watch?v=${top.videoId}`, videoTitle: top.title }),
-          signal: ctx.signal,
-        });
-        if (!res.ok) throw new Error("Transcript fetch failed");
-        const data = (await res.json()) as { transcript: string; videoTitle: string };
-        return data.transcript || "";
+        const videos: { videoId: string; title: string; transcript: string }[] = [];
+        for (const result of searchData.results.slice(0, topN)) {
+          try {
+            const res = await fetch("/api/youtube/process-video", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ videoId: result.videoId, videoUrl: `https://youtube.com/watch?v=${result.videoId}`, videoTitle: result.title }),
+              signal: ctx.signal,
+            });
+            if (res.ok) {
+              const data = (await res.json()) as { transcript: string; videoTitle: string };
+              if (data.transcript) {
+                videos.push({ videoId: result.videoId, title: result.title, transcript: data.transcript });
+              }
+            }
+          } catch { /* skip failed video */ }
+        }
+
+        if (videos.length === 0) throw new Error("No transcripts available");
+
+        // Return enriched JSON for multi-output post-processing
+        if (videos.length > 1) {
+          return JSON.stringify({ videos, mode: "multi" });
+        } else {
+          return videos[0].transcript;
+        }
       }
 
       return ctx.node.content || "";

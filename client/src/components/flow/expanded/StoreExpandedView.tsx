@@ -14,10 +14,12 @@ import {
   X,
   Check,
   FolderPlus,
+  Eye,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ProvokeText } from "@/components/ProvokeText";
 import type { FlowNode } from "../useFlowCanvas";
 import { ExpandedViewLayout } from "./ExpandedViewLayout";
 
@@ -106,6 +108,14 @@ export function StoreExpandedView({
   const [deletingDoc, setDeletingDoc] = useState<{ id: number; title: string } | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string } | null>(null);
 
+  // Document preview state
+  const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
+  const [selectedDocContent, setSelectedDocContent] = useState<string>("");
+  const [loadingDoc, setLoadingDoc] = useState(false);
+
+  // Save config collapsed state
+  const [configCollapsed, setConfigCollapsed] = useState(false);
+
   // ── Data queries ──
 
   const { data: rawFolderData } = useQuery({
@@ -160,6 +170,18 @@ export function StoreExpandedView({
     }
     return parts.join(" > ") || "/ (Root)";
   };
+
+  // ── Document content fetch ──
+
+  useEffect(() => {
+    if (!selectedDocId) { setSelectedDocContent(""); return; }
+    setLoadingDoc(true);
+    apiRequest("GET", `/api/documents/${selectedDocId}`)
+      .then(res => res.json())
+      .then((data: any) => setSelectedDocContent(data.content || ""))
+      .catch(() => setSelectedDocContent(""))
+      .finally(() => setLoadingDoc(false));
+  }, [selectedDocId]);
 
   // ── Folder mutations ──
 
@@ -243,6 +265,9 @@ export function StoreExpandedView({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
       setDeletingDoc(null);
+      if (selectedDocId === deletingDoc?.id) {
+        setSelectedDocId(null);
+      }
       toast({ title: "Document deleted" });
     },
     onError: () => {
@@ -271,6 +296,7 @@ export function StoreExpandedView({
         storeFolderName: folderName,
         storeFolderPath: folderPath,
       });
+      setSelectedDocId(null);
     },
     [node.id, onUpdateNode],
   );
@@ -404,115 +430,114 @@ export function StoreExpandedView({
     return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   };
 
+  const selectedDocTitle = selectedDocId
+    ? documents.find(d => d.id === selectedDocId)?.title || "Document"
+    : "";
+
   return (
     <>
     <ExpandedViewLayout
-      defaultLeftSize={35}
+      defaultLeftSize={25}
       left={
         <div className="flex flex-col h-full">
-        <div className="p-4 border-b border-border/50">
+        <div className="p-3 border-b border-border/50 flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderInput className="w-4 h-4 text-primary" />
-            Store Configuration
+            Folders
           </h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 px-1.5 text-[10px] text-primary hover:text-primary"
+            onClick={() => setCreatingFolderIn(node.storeFolderId ?? null)}
+          >
+            <Plus className="w-3 h-3 mr-0.5" />
+            New
+          </Button>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-5">
-          {/* Document name */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-              Document Name
-            </label>
-            <input
-              className="w-full text-sm bg-muted/30 border border-border/50 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-primary/50"
-              value={docName}
-              onChange={(e) => setDocName(e.target.value)}
-              placeholder="Auto-generated if empty"
-            />
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Leave empty to auto-name from upstream node label.
-            </p>
-          </div>
+        {/* Full-height folder tree */}
+        <div className="flex-1 overflow-auto">
+          <button
+            className={`w-full flex items-center gap-2 px-2 py-1.5 text-left transition-colors ${
+              !node.storeFolderId ? "bg-primary/15" : "hover:bg-muted/50"
+            }`}
+            onClick={() => selectFolder(null, "Root", "/ (Root)")}
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="text-xs font-medium">/ (Root)</span>
+          </button>
 
-          {/* Auto-save toggle */}
-          <div className="flex items-center gap-2">
-            <button
-              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                autoSave ? "bg-primary border-primary" : "border-border"
-              }`}
-              onClick={() => setAutoSave(!autoSave)}
-            >
-              {autoSave && <Save className="w-2.5 h-2.5 text-white" />}
-            </button>
-            <span className="text-xs">Auto-save when chain completes</span>
-          </div>
-
-          {/* Destination folder */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Destination Folder
-              </label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 px-1.5 text-[10px] text-primary hover:text-primary"
-                onClick={() => setCreatingFolderIn(node.storeFolderId ?? null)}
-              >
-                <Plus className="w-3 h-3 mr-0.5" />
-                New Folder
-              </Button>
-            </div>
-
-            {/* Current selection */}
-            {node.storeFolderPath && (
-              <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs flex items-center gap-1.5">
-                <FolderOpen className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span className="truncate">{node.storeFolderPath}</span>
+          {/* Inline new folder at root */}
+          {creatingFolderIn === null && (
+            <div className="flex items-center gap-1.5 px-2 py-1" style={{ paddingLeft: "8px" }}>
+              <FolderPlus className="w-3.5 h-3.5 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <InlineInput
+                  value=""
+                  placeholder="Folder name..."
+                  onSubmit={(name) => createFolderMutation.mutate({ name, parentFolderId: null })}
+                  onCancel={() => setCreatingFolderIn(false)}
+                />
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Folder tree */}
-            <div className="border border-border/50 rounded-lg max-h-[250px] overflow-auto">
-              <button
-                className={`w-full flex items-center gap-2 px-2 py-1.5 text-left transition-colors ${
-                  !node.storeFolderId ? "bg-primary/15" : "hover:bg-muted/50"
-                }`}
-                onClick={() => selectFolder(null, "Root", "/ (Root)")}
-              >
-                <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                <span className="text-xs font-medium">/ (Root)</span>
-              </button>
+          {rootFolders.map((folder) => renderFolder(folder, 0, ""))}
+          {folders.length === 0 && creatingFolderIn === false && (
+            <p className="text-[10px] text-muted-foreground/60 py-3 text-center">
+              No folders yet.
+            </p>
+          )}
+        </div>
 
-              {/* Inline new folder at root */}
-              {creatingFolderIn === null && (
-                <div className="flex items-center gap-1.5 px-2 py-1" style={{ paddingLeft: "8px" }}>
-                  <FolderPlus className="w-3.5 h-3.5 text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <InlineInput
-                      value=""
-                      placeholder="Folder name..."
-                      onSubmit={(name) => createFolderMutation.mutate({ name, parentFolderId: null })}
-                      onCancel={() => setCreatingFolderIn(false)}
-                    />
-                  </div>
+        {/* Save config at bottom */}
+        <div className="border-t border-border/50">
+          <button
+            className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30"
+            onClick={() => setConfigCollapsed(!configCollapsed)}
+          >
+            <span className="flex items-center gap-1.5">
+              <Save className="w-3.5 h-3.5" />
+              Save Config
+            </span>
+            {configCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          {!configCollapsed && (
+            <div className="px-3 pb-3 space-y-2">
+              <input
+                className="w-full text-xs bg-muted/30 border border-border/50 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                value={docName}
+                onChange={(e) => setDocName(e.target.value)}
+                placeholder="Auto-name from upstream"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                    autoSave ? "bg-primary border-primary" : "border-border"
+                  }`}
+                  onClick={() => setAutoSave(!autoSave)}
+                >
+                  {autoSave && <Save className="w-2 h-2 text-white" />}
+                </button>
+                <span className="text-[10px]">Auto-save on chain complete</span>
+              </div>
+              {node.storeFolderPath && (
+                <div className="px-2 py-1 rounded bg-primary/10 border border-primary/20 text-[10px] flex items-center gap-1.5">
+                  <FolderOpen className="w-3 h-3 text-primary shrink-0" />
+                  <span className="truncate">{node.storeFolderPath}</span>
                 </div>
               )}
-
-              {rootFolders.map((folder) => renderFolder(folder, 0, ""))}
-              {folders.length === 0 && creatingFolderIn === false && (
-                <p className="text-[10px] text-muted-foreground/60 py-3 text-center">
-                  No folders yet. Click "New Folder" to create one.
-                </p>
-              )}
             </div>
-          </div>
+          )}
         </div>
         </div>
       }
       right={
-        <div className="flex-1 flex flex-col min-w-0">
-        <div className="p-4 border-b border-border/50 flex items-center justify-between">
+        <div className="flex h-full min-w-0">
+        {/* Document list */}
+        <div className="w-80 border-r flex flex-col min-w-0">
+        <div className="p-3 border-b border-border/50 flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FileText className="w-4 h-4" />
             Documents
@@ -520,10 +545,10 @@ export function StoreExpandedView({
               {filteredDocs.length}
             </span>
           </h3>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-[10px] text-muted-foreground truncate ml-2">
             {node.storeFolderId
-              ? `In: ${folderNameMap.get(node.storeFolderId) || "Selected folder"}`
-              : "All documents"}
+              ? folderNameMap.get(node.storeFolderId) || "Selected"
+              : "All"}
           </span>
         </div>
 
@@ -536,21 +561,22 @@ export function StoreExpandedView({
                   ? "No documents in this folder."
                   : "No documents yet."}
               </p>
-              <p className="text-[10px] text-muted-foreground/40 mt-1">
-                Documents saved by the store node will appear here.
-              </p>
             </div>
           ) : (
             <div className="divide-y divide-border/30">
               {filteredDocs.map((doc) => {
                 const isRenaming = renamingDocId === doc.id;
+                const isSelected = selectedDocId === doc.id;
 
                 return (
                   <div
                     key={doc.id}
-                    className="flex items-center gap-2 px-4 py-2.5 group hover:bg-muted/30 transition-colors"
+                    className={`flex items-center gap-2 px-3 py-2 group transition-colors cursor-pointer ${
+                      isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                    }`}
+                    onClick={() => !isRenaming && setSelectedDocId(doc.id)}
                   >
-                    <FileText className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                    <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-primary" : "text-muted-foreground/50"}`} />
 
                     {isRenaming ? (
                       <div className="flex-1 min-w-0">
@@ -584,14 +610,20 @@ export function StoreExpandedView({
                         <button
                           className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground"
                           title="Rename"
-                          onClick={() => setRenamingDocId(doc.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingDocId(doc.id);
+                          }}
                         >
                           <Pencil className="w-3 h-3" />
                         </button>
                         <button
                           className="p-1 rounded hover:bg-muted/80 text-muted-foreground hover:text-destructive"
                           title="Delete"
-                          onClick={() => setDeletingDoc({ id: doc.id, title: doc.title })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingDoc({ id: doc.id, title: doc.title });
+                          }}
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -603,30 +635,45 @@ export function StoreExpandedView({
             </div>
           )}
         </div>
+      </div>
 
-        {/* Save preview card at bottom */}
-        <div className="border-t border-border/50 p-4 bg-card/30">
-          <div className="border border-border rounded-xl p-3 bg-card shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                <Save className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium">
-                  {docName || "(auto-named)"}
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  {node.storeFolderPath || "/ (Root)"}
-                </div>
-                {autoSave && (
-                  <div className="text-[10px] text-primary mt-1">
-                    Auto-save enabled
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Right panel: Document content preview */}
+      {selectedDocId ? (
+        <div className="flex-1 flex flex-col min-w-0 border-l">
+          <div className="p-3 border-b border-border/50 flex items-center justify-between">
+            <h3 className="text-sm font-semibold truncate flex items-center gap-2">
+              <Eye className="w-4 h-4 text-primary" />
+              {selectedDocTitle}
+            </h3>
+            <button
+              className="p-1 rounded hover:bg-muted/50 text-muted-foreground"
+              onClick={() => setSelectedDocId(null)}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto p-4">
+            {loadingDoc ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">Loading...</div>
+            ) : (
+              <ProvokeText
+                value={selectedDocContent}
+                onChange={() => {}}
+                chrome="bare"
+                variant="editor"
+                readOnly
+                showCopy
+                showClear={false}
+              />
+            )}
           </div>
         </div>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center min-w-0 border-l text-muted-foreground">
+          <FileText className="w-10 h-10 opacity-20 mb-2" />
+          <p className="text-xs">Select a document to preview</p>
+        </div>
+      )}
         </div>
       }
     />
