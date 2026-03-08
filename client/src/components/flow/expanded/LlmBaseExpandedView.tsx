@@ -44,6 +44,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   const [isRunning, setIsRunning] = useState(false);
   const [streamingOutput, setStreamingOutput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
   const abortRef = useRef<AbortController | null>(null);
 
   // Fetch available models
@@ -244,9 +245,12 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   return (
   <>
     <div className="flex-1 flex overflow-hidden">
-      {/* ── Collapsible config sidebar ── */}
+      {/* ── Collapsible resizable config sidebar ── */}
       {sidebarOpen && (
-        <div className="w-72 max-w-[280px] border-r border-border/30 bg-card/30 flex flex-col min-h-0 overflow-hidden shrink-0">
+        <div
+          className="border-r border-border/30 bg-card/30 flex flex-col min-h-0 overflow-hidden shrink-0 relative"
+          style={{ width: sidebarWidth, minWidth: 220, maxWidth: 500 }}
+        >
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/30">
             <BrainCircuit className="w-3.5 h-3.5 text-fuchsia-500" />
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -393,6 +397,25 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
               </p>
             </div>
           </div>
+          {/* Resize handle */}
+          <div
+            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startW = sidebarWidth;
+              const onMove = (ev: MouseEvent) => {
+                const delta = ev.clientX - startX;
+                setSidebarWidth(Math.max(220, Math.min(500, startW + delta)));
+              };
+              const onUp = () => {
+                window.removeEventListener("mousemove", onMove);
+                window.removeEventListener("mouseup", onUp);
+              };
+              window.addEventListener("mousemove", onMove);
+              window.addEventListener("mouseup", onUp);
+            }}
+          />
         </div>
       )}
 
