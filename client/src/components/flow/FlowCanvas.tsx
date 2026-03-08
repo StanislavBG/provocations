@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, useEffect, useContext } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect, useContext, useLayoutEffect } from "react";
 import { useFtuxShell } from "@/lib/ftux-shell-context";
 import { getEffectiveKeys } from "@/lib/keybind-actions";
 import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical, Monitor } from "lucide-react";
@@ -113,6 +113,38 @@ export function FlowCanvas({
     left: (getEffectiveKeys("canvas.glideLeft", shellCtx.keyBinds)[0] ?? "a").toLowerCase(),
     right: (getEffectiveKeys("canvas.glideRight", shellCtx.keyBinds)[0] ?? "d").toLowerCase(),
   }), [shellCtx.keyBinds]);
+
+  // ── CSS-based viewport transform (E1 optimization) ──
+  // The transform layer ref is updated directly via style.transform to bypass
+  // React re-renders during continuous pan/zoom. The state.viewport is still
+  // the source of truth for virtualization, minimap, and grid calculations,
+  // but the CSS transform is applied imperatively for smoother animation.
+  const transformLayerRef = useRef<HTMLDivElement>(null);
+  const gridSvgRef = useRef<SVGSVGElement>(null);
+
+  // Sync CSS transform imperatively whenever viewport changes, without waiting for React render
+  useLayoutEffect(() => {
+    if (transformLayerRef.current) {
+      transformLayerRef.current.style.transform =
+        `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.zoom})`;
+    }
+    // Also update grid pattern position imperatively
+    if (gridSvgRef.current) {
+      const gs = GRID_SIZE * state.viewport.zoom;
+      const pattern = gridSvgRef.current.querySelector("pattern");
+      if (pattern) {
+        pattern.setAttribute("x", String(state.viewport.x % gs));
+        pattern.setAttribute("y", String(state.viewport.y % gs));
+        pattern.setAttribute("width", String(gs));
+        pattern.setAttribute("height", String(gs));
+        const circle = pattern.querySelector("circle");
+        if (circle) {
+          circle.setAttribute("cx", String(gs / 2));
+          circle.setAttribute("cy", String(gs / 2));
+        }
+      }
+    }
+  }, [state.viewport]);
 
   const {
     canvasRef,
@@ -385,7 +417,7 @@ export function FlowCanvas({
     >
       {/* Dot grid */}
       {gridOpacity > 0 && (
-        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        <svg ref={gridSvgRef} className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
             <pattern
               id="flow-grid"
@@ -408,12 +440,14 @@ export function FlowCanvas({
         </svg>
       )}
 
-      {/* Viewport transform layer */}
+      {/* Viewport transform layer — CSS transform applied imperatively via ref for perf */}
       <div
+        ref={transformLayerRef}
         className="absolute"
         style={{
           transform: `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.zoom})`,
           transformOrigin: "0 0",
+          willChange: "transform",
         }}
       >
         {/* Edges behind nodes */}
