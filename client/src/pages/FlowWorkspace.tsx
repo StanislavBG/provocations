@@ -2569,12 +2569,21 @@ function FlowWorkspaceInner() {
     if (activeExpandedNodeId) {
       const n = stateRef.current.nodes.find((nd) => nd.id === activeExpandedNodeId);
       if (n?.type === "document" && !n.imageUrl) {
+        // Auto-derive label from content, but only if the user hasn't manually renamed
+        const autoLabel = docEditorContent
+          ? docEditorContent.split("\n")[0]?.slice(0, 40) || "Document"
+          : "New Document";
+        // Check if current label looks auto-derived (matches previous auto-derive pattern)
+        // or is missing — if so, update it. If user manually renamed, preserve their label.
+        const prevAutoLabel = n.documentContent
+          ? n.documentContent.split("\n")[0]?.slice(0, 40) || "Document"
+          : "New Document";
+        const wasManuallyRenamed = n.label && n.label !== prevAutoLabel;
+
         updateNode(activeExpandedNodeId, {
           documentContent: docEditorContent,
           snippet: docEditorContent.slice(0, 200) || "Double-click to edit",
-          label: docEditorContent
-            ? docEditorContent.split("\n")[0]?.slice(0, 40) || "Document"
-            : "New Document",
+          ...(wasManuallyRenamed ? {} : { label: autoLabel }),
         });
       }
     }
