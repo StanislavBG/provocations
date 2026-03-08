@@ -37,7 +37,7 @@ export function LlmExpandedView({ node, nodes, edges, onUpdateNode }: LlmExpande
       .map((e) => nodes.find((n) => n.id === e.fromNodeId))
       .filter(Boolean) as FlowNode[];
     return inputNodes
-      .map((n) => n.documentContent || n.content || n.snippet || "")
+      .map((n) => n.documentContent || n.content || n.llmOutput || n.snippet || "")
       .filter((s) => s.trim())
       .join("\n\n---\n\n");
   }, [node.id, nodes, edges]);

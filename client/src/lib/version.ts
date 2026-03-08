@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.5";
+export const APP_VERSION = "0.20.6";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.6",
+    date: "2026-03-08",
+    changes: [
+      "Edge input = manual input: remove redundant generic empty-content blocker in handlePlayNode",
+      "The handler's onPreProcess is now the sole authority on whether a node has enough input",
+      "Fix LlmExpandedView missing llmOutput in content fallback chain",
+    ],
+  },
   {
     version: "0.20.5",
     date: "2026-03-08",
