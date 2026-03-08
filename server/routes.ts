@@ -67,6 +67,12 @@ import {
   type NotificationType,
   socialGenerateRequestSchema,
   socialPostRequestSchema,
+  createAgencyEventSchema,
+  claimAgencyEventSchema,
+  completeAgencyEventSchema,
+  failAgencyEventSchema,
+  createAgencyCampaignSchema,
+  updateAgencyCampaignSchema,
 } from "@shared/schema";
 import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
 import { personaSchema } from "@shared/schema";
@@ -8867,6 +8873,180 @@ Return ONLY valid JSON, no markdown fences.`;
       console.error("Message purge error:", err);
     }
   }, 60 * 60 * 1000); // every hour
+
+  // ─── Agency Event Queue ──────────────────────────────────────────────────
+  // Used by the local marketing agency (Claude Code) via MCP or direct REST.
+  // Supports API key auth (X-Agency-Key header) as alternative to Clerk session.
+
+  function getAgencyUserId(req: any): string | null {
+    // Try Clerk auth first
+    const auth = getAuth(req);
+    if (auth.userId) return auth.userId;
+    // Fall back to API key auth for local agency access
+    const apiKey = req.headers["x-agency-key"] as string | undefined;
+    if (apiKey && apiKey === process.env.AGENCY_API_KEY) {
+      return process.env.AGENCY_USER_ID || null;
+    }
+    return null;
+  }
+
+  app.get("/api/agency/events", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const filters: { status?: string; eventType?: string; platform?: string } = {};
+      if (req.query.status) filters.status = req.query.status as string;
+      if (req.query.eventType) filters.eventType = req.query.eventType as string;
+      if (req.query.platform) filters.platform = req.query.platform as string;
+      const events = await storage.listAgencyEvents(userId, filters);
+      return res.json({ events });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/agency/events/poll", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const events = await storage.pollAgencyEvents(userId);
+      return res.json({ events });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/agency/events", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const parsed = createAgencyEventSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    try {
+      const event = await storage.createAgencyEvent({
+        userId,
+        eventType: parsed.data.eventType,
+        platform: parsed.data.platform,
+        payload: parsed.data.payload,
+        priority: parsed.data.priority,
+        expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
+      });
+      return res.json({ event });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/agency/events/:id/claim", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const parsed = claimAgencyEventSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    try {
+      const eventId = parseInt(req.params.id);
+      if (isNaN(eventId)) return res.status(400).json({ error: "Invalid event ID" });
+      const event = await storage.claimAgencyEvent(eventId, parsed.data.claimToken);
+      if (!event) return res.status(404).json({ error: "Event not found or already claimed" });
+      return res.json({ event });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/agency/events/:id/complete", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const parsed = completeAgencyEventSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    try {
+      const eventId = parseInt(req.params.id);
+      if (isNaN(eventId)) return res.status(400).json({ error: "Invalid event ID" });
+      const event = await storage.completeAgencyEvent(eventId, parsed.data.claimToken, parsed.data.result);
+      if (!event) return res.status(404).json({ error: "Event not found or token mismatch" });
+      return res.json({ event });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/agency/events/:id/fail", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const parsed = failAgencyEventSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    try {
+      const eventId = parseInt(req.params.id);
+      if (isNaN(eventId)) return res.status(400).json({ error: "Invalid event ID" });
+      const event = await storage.failAgencyEvent(eventId, parsed.data.claimToken, parsed.data.errorMessage);
+      if (!event) return res.status(404).json({ error: "Event not found or token mismatch" });
+      return res.json({ event });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ─── Agency Campaigns ──────────────────────────────────────────────────
+
+  app.get("/api/agency/campaigns", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const campaigns = await storage.listAgencyCampaigns(userId);
+      return res.json({ campaigns });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/agency/campaigns", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const parsed = createAgencyCampaignSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    try {
+      const campaign = await storage.createAgencyCampaign({ userId, ...parsed.data });
+      return res.json({ campaign });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/agency/campaigns/:campaignId", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const campaign = await storage.getAgencyCampaign(userId, req.params.campaignId);
+      if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+      return res.json({ campaign });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.put("/api/agency/campaigns/:campaignId", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const parsed = updateAgencyCampaignSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    try {
+      const campaign = await storage.updateAgencyCampaign(userId, req.params.campaignId, parsed.data);
+      if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+      return res.json({ campaign });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.delete("/api/agency/campaigns/:campaignId", async (req, res) => {
+    const userId = getAgencyUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const deleted = await storage.deleteAgencyCampaign(userId, req.params.campaignId);
+      if (!deleted) return res.status(404).json({ error: "Campaign not found" });
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
 
   return httpServer;
 }

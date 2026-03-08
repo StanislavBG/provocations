@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications, platformCredentials, socialPostLogs } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification, StoredPlatformCredential, StoredSocialPostLog } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications, platformCredentials, socialPostLogs, agencyEvents, agencyCampaigns } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification, StoredPlatformCredential, StoredSocialPostLog, StoredAgencyEvent, StoredAgencyCampaign } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -173,6 +173,19 @@ export interface IStorage {
     imageIncluded?: boolean;
   }): Promise<StoredSocialPostLog>;
   getSocialPostLogs(userId: string, limit?: number): Promise<StoredSocialPostLog[]>;
+  // Agency events
+  createAgencyEvent(data: { userId: string; eventType: string; platform?: string | null; payload?: string | null; priority?: number; expiresAt?: Date | null }): Promise<StoredAgencyEvent>;
+  listAgencyEvents(userId: string, filters?: { status?: string; eventType?: string; platform?: string }): Promise<StoredAgencyEvent[]>;
+  pollAgencyEvents(userId: string): Promise<StoredAgencyEvent[]>;
+  claimAgencyEvent(eventId: number, claimToken: string): Promise<StoredAgencyEvent | null>;
+  completeAgencyEvent(eventId: number, claimToken: string, result: string): Promise<StoredAgencyEvent | null>;
+  failAgencyEvent(eventId: number, claimToken: string, errorMessage: string): Promise<StoredAgencyEvent | null>;
+  // Agency campaigns
+  createAgencyCampaign(data: { userId: string; campaignId: string; name: string; brandVoice?: string | null; targetTopics?: string | null; platforms?: string | null; scheduleCron?: string | null; active?: boolean }): Promise<StoredAgencyCampaign>;
+  listAgencyCampaigns(userId: string): Promise<StoredAgencyCampaign[]>;
+  getAgencyCampaign(userId: string, campaignId: string): Promise<StoredAgencyCampaign | null>;
+  updateAgencyCampaign(userId: string, campaignId: string, data: Partial<{ name: string; brandVoice: string | null; targetTopics: string | null; platforms: string | null; scheduleCron: string | null; active: boolean; stats: string | null }>): Promise<StoredAgencyCampaign | null>;
+  deleteAgencyCampaign(userId: string, campaignId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1867,6 +1880,162 @@ export class DatabaseStorage implements IStorage {
       .where(eq(socialPostLogs.userId, userId))
       .orderBy(desc(socialPostLogs.createdAt))
       .limit(limit);
+  }
+
+  // ── Agency Events ──
+
+  async createAgencyEvent(data: {
+    userId: string;
+    eventType: string;
+    platform?: string | null;
+    payload?: string | null;
+    priority?: number;
+    expiresAt?: Date | null;
+  }): Promise<StoredAgencyEvent> {
+    const [row] = await db
+      .insert(agencyEvents)
+      .values({
+        userId: data.userId,
+        eventType: data.eventType,
+        platform: data.platform ?? null,
+        payload: data.payload ?? null,
+        priority: data.priority ?? 0,
+        expiresAt: data.expiresAt ?? null,
+      })
+      .returning();
+    return row;
+  }
+
+  async listAgencyEvents(
+    userId: string,
+    filters?: { status?: string; eventType?: string; platform?: string },
+  ): Promise<StoredAgencyEvent[]> {
+    const conditions = [eq(agencyEvents.userId, userId)];
+    if (filters?.status) conditions.push(eq(agencyEvents.status, filters.status));
+    if (filters?.eventType) conditions.push(eq(agencyEvents.eventType, filters.eventType));
+    if (filters?.platform) conditions.push(eq(agencyEvents.platform, filters.platform));
+
+    return db
+      .select()
+      .from(agencyEvents)
+      .where(and(...conditions))
+      .orderBy(desc(agencyEvents.createdAt))
+      .limit(100);
+  }
+
+  async pollAgencyEvents(userId: string): Promise<StoredAgencyEvent[]> {
+    return db
+      .select()
+      .from(agencyEvents)
+      .where(and(eq(agencyEvents.userId, userId), eq(agencyEvents.status, "pending")))
+      .orderBy(agencyEvents.priority, agencyEvents.createdAt)
+      .limit(10);
+  }
+
+  async claimAgencyEvent(eventId: number, claimToken: string): Promise<StoredAgencyEvent | null> {
+    const [row] = await db
+      .update(agencyEvents)
+      .set({
+        status: "claimed",
+        claimToken,
+        claimedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(agencyEvents.id, eventId), eq(agencyEvents.status, "pending")))
+      .returning();
+    return row ?? null;
+  }
+
+  async completeAgencyEvent(eventId: number, claimToken: string, result: string): Promise<StoredAgencyEvent | null> {
+    const [row] = await db
+      .update(agencyEvents)
+      .set({
+        status: "completed",
+        result,
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(agencyEvents.id, eventId), eq(agencyEvents.claimToken, claimToken)))
+      .returning();
+    return row ?? null;
+  }
+
+  async failAgencyEvent(eventId: number, claimToken: string, errorMessage: string): Promise<StoredAgencyEvent | null> {
+    const [row] = await db
+      .update(agencyEvents)
+      .set({
+        status: "failed",
+        errorMessage,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(agencyEvents.id, eventId), eq(agencyEvents.claimToken, claimToken)))
+      .returning();
+    return row ?? null;
+  }
+
+  // ── Agency Campaigns ──
+
+  async createAgencyCampaign(data: {
+    userId: string;
+    campaignId: string;
+    name: string;
+    brandVoice?: string | null;
+    targetTopics?: string | null;
+    platforms?: string | null;
+    scheduleCron?: string | null;
+    active?: boolean;
+  }): Promise<StoredAgencyCampaign> {
+    const [row] = await db
+      .insert(agencyCampaigns)
+      .values({
+        userId: data.userId,
+        campaignId: data.campaignId,
+        name: data.name,
+        brandVoice: data.brandVoice ?? null,
+        targetTopics: data.targetTopics ?? null,
+        platforms: data.platforms ?? null,
+        scheduleCron: data.scheduleCron ?? null,
+        active: data.active ?? true,
+      })
+      .returning();
+    return row;
+  }
+
+  async listAgencyCampaigns(userId: string): Promise<StoredAgencyCampaign[]> {
+    return db
+      .select()
+      .from(agencyCampaigns)
+      .where(eq(agencyCampaigns.userId, userId))
+      .orderBy(desc(agencyCampaigns.createdAt));
+  }
+
+  async getAgencyCampaign(userId: string, campaignId: string): Promise<StoredAgencyCampaign | null> {
+    const [row] = await db
+      .select()
+      .from(agencyCampaigns)
+      .where(and(eq(agencyCampaigns.userId, userId), eq(agencyCampaigns.campaignId, campaignId)));
+    return row ?? null;
+  }
+
+  async updateAgencyCampaign(
+    userId: string,
+    campaignId: string,
+    data: Partial<{ name: string; brandVoice: string | null; targetTopics: string | null; platforms: string | null; scheduleCron: string | null; active: boolean; stats: string | null }>,
+  ): Promise<StoredAgencyCampaign | null> {
+    const [row] = await db
+      .update(agencyCampaigns)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(agencyCampaigns.userId, userId), eq(agencyCampaigns.campaignId, campaignId)))
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteAgencyCampaign(userId: string, campaignId: string): Promise<boolean> {
+    const result = await db
+      .delete(agencyCampaigns)
+      .where(and(eq(agencyCampaigns.userId, userId), eq(agencyCampaigns.campaignId, campaignId)))
+      .returning();
+    return result.length > 0;
   }
 }
 

@@ -1587,3 +1587,55 @@ export const socialPostRequestSchema = z.object({
 });
 
 export type SocialPostRequest = z.infer<typeof socialPostRequestSchema>;
+
+// ── Agency Event Queue ──
+
+export const agencyEventStatusValues = ["pending", "claimed", "processing", "completed", "failed", "cancelled"] as const;
+export type AgencyEventStatus = typeof agencyEventStatusValues[number];
+
+export const agencyEventTypeValues = [
+  "search_x", "search_reddit", "search_facebook",
+  "craft_reply", "craft_post",
+  "review_cycle", "full_cycle",
+] as const;
+export type AgencyEventType = typeof agencyEventTypeValues[number];
+
+export const createAgencyEventSchema = z.object({
+  eventType: z.enum(agencyEventTypeValues),
+  platform: z.enum(socialPlatformIds).optional(),
+  payload: z.string().optional(), // JSON string
+  priority: z.number().int().min(0).max(10).optional(),
+  expiresAt: z.string().datetime().optional(),
+});
+
+export type CreateAgencyEventRequest = z.infer<typeof createAgencyEventSchema>;
+
+export const claimAgencyEventSchema = z.object({
+  claimToken: z.string().min(1, "Claim token is required"),
+});
+
+export const completeAgencyEventSchema = z.object({
+  claimToken: z.string().min(1, "Claim token is required"),
+  result: z.string().min(1, "Result is required"), // JSON string with drafted content
+});
+
+export const failAgencyEventSchema = z.object({
+  claimToken: z.string().min(1, "Claim token is required"),
+  errorMessage: z.string().min(1, "Error message is required"),
+});
+
+// ── Agency Campaigns ──
+
+export const createAgencyCampaignSchema = z.object({
+  campaignId: z.string().min(1).max(128),
+  name: z.string().min(1),
+  brandVoice: z.string().optional(), // JSON
+  targetTopics: z.string().optional(), // JSON
+  platforms: z.string().optional(), // JSON
+  scheduleCron: z.string().max(64).optional(),
+  active: z.boolean().optional(),
+});
+
+export type CreateAgencyCampaignRequest = z.infer<typeof createAgencyCampaignSchema>;
+
+export const updateAgencyCampaignSchema = createAgencyCampaignSchema.partial().omit({ campaignId: true });
