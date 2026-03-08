@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.8";
+export const APP_VERSION = "0.20.9";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.9",
+    date: "2026-03-08",
+    changes: [
+      "Fix dock reordering: user's custom item positions now persist across sessions",
+      "Hotkeys 1-9 are tied to slot positions, not icons — moving an icon to a new slot changes its hotkey",
+      "New catalog tools auto-append to user's existing layout without resetting positions",
+    ],
+  },
   {
     version: "0.20.8",
     date: "2026-03-08",
