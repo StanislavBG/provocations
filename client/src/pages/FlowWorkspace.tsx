@@ -95,6 +95,8 @@ import {
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
 import { APP_VERSION, RELEASE_NOTES } from "@/lib/version";
+import { WhatsNew } from "@/components/WhatsNew";
+import { HelpButton } from "@/components/HelpButton";
 
 // ── Extracted modules (E7 decomposition) ──
 import { FLOW_DOCK_ITEMS, FLOW_SHELL_CONFIG } from "./flow-workspace/FlowDockConfig";
@@ -3345,6 +3347,8 @@ function FlowWorkspaceInner() {
         >
           v{APP_VERSION}
         </button>
+        <WhatsNew />
+        <HelpButton topic="canvas-basics" className="absolute bottom-1 left-24 z-10" />
 
         {/* Activity Logs overlay (full screen) */}
         {lifecycleConsoleOpen && (
