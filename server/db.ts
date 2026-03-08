@@ -377,6 +377,46 @@ export async function ensureTables(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_social_post_logs_user ON social_post_logs(user_id);
       CREATE INDEX IF NOT EXISTS idx_social_post_logs_status ON social_post_logs(status);
 
+      -- Agency events — event queue for local marketing agency orchestration
+      CREATE TABLE IF NOT EXISTS agency_events (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        event_type VARCHAR(64) NOT NULL,
+        platform VARCHAR(32),
+        status VARCHAR(32) DEFAULT 'pending' NOT NULL,
+        payload TEXT,
+        result TEXT,
+        priority INTEGER DEFAULT 0 NOT NULL,
+        claim_token VARCHAR(128),
+        claimed_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        expires_at TIMESTAMP,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agency_events_user ON agency_events(user_id);
+      CREATE INDEX IF NOT EXISTS idx_agency_events_status ON agency_events(status);
+      CREATE INDEX IF NOT EXISTS idx_agency_events_type ON agency_events(event_type);
+      CREATE INDEX IF NOT EXISTS idx_agency_events_created ON agency_events(created_at);
+
+      -- Agency campaigns — marketing campaign configurations
+      CREATE TABLE IF NOT EXISTS agency_campaigns (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        campaign_id VARCHAR(128) NOT NULL,
+        name TEXT NOT NULL,
+        brand_voice TEXT,
+        target_topics TEXT,
+        platforms TEXT,
+        schedule_cron VARCHAR(64),
+        active BOOLEAN DEFAULT true NOT NULL,
+        stats TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agency_campaigns_user ON agency_campaigns(user_id);
+
       -- Workspace sessions — saves full workspace state for resume functionality
       CREATE TABLE IF NOT EXISTS workspace_sessions (
         id SERIAL PRIMARY KEY,
@@ -464,6 +504,10 @@ export async function ensureTables(): Promise<void> {
       END $$;
       DO $$ BEGIN
         ALTER TABLE chat_preferences ADD CONSTRAINT chat_preferences_user_id_unique UNIQUE(user_id);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE agency_campaigns ADD CONSTRAINT agency_campaigns_campaign_id_unique UNIQUE(campaign_id);
       EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
       END $$;
     `);

@@ -41,5 +41,7 @@ export default defineConfig({
     "notifications",
     "platform_credentials",
     "social_post_logs",
+    "agency_events",
+    "agency_campaigns",
   ],
 });
