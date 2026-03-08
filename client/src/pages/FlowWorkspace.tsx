@@ -85,6 +85,7 @@ import {
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
   Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench, Info, Crosshair,
+  PanelLeft, PanelLeftClose,
 } from "lucide-react";
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
@@ -146,6 +147,77 @@ function treeIndent(depth: number): number {
 }
 
 // ── Document editor tool buttons ──
+
+/** Collapsible tabbed connected inputs for Document fullscreen */
+function DocConnectedInputs({ nodeId, edges, nodes }: { nodeId: string; edges: FlowEdge[]; nodes: FlowNode[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+
+  const inputNodes = useMemo(() => {
+    const inputEdges = edges.filter((e) => e.toNodeId === nodeId);
+    return inputEdges
+      .map((e) => nodes.find((n) => n.id === e.fromNodeId))
+      .filter(Boolean) as FlowNode[];
+  }, [nodeId, edges, nodes]);
+
+  if (inputNodes.length === 0) {
+    return (
+      <div className="p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+          Connected Inputs
+        </h3>
+        <p className="text-[10px] text-muted-foreground/60 italic">
+          No connected inputs. Drag edges from other nodes to this document.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-3 my-2 rounded-md border border-border/50 overflow-hidden">
+      <button
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-muted/30 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {expanded ? (
+          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+        )}
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          Connected Inputs
+        </span>
+        <span className="text-[9px] text-muted-foreground/70">
+          ({inputNodes.length})
+        </span>
+      </button>
+      {expanded && (
+        <div className="border-t border-border/50">
+          <div className="flex border-b border-border/30 overflow-x-auto">
+            {inputNodes.map((n, i) => (
+              <button
+                key={n.id}
+                className={`shrink-0 px-2.5 py-1 text-[9px] font-medium transition-colors border-b-2 ${
+                  activeTab === i
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab(i)}
+              >
+                {(n.label || "Input").length > 18 ? (n.label || "Input").slice(0, 18) + "…" : (n.label || "Input")}
+              </button>
+            ))}
+          </div>
+          <div className="p-2.5 max-h-28 overflow-y-auto">
+            <p className="text-[10px] text-muted-foreground whitespace-pre-wrap">
+              {inputNodes[activeTab]?.documentContent || inputNodes[activeTab]?.content || inputNodes[activeTab]?.snippet || "No content"}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const DOC_TOOLS = [
   { id: "expand", label: "Expand", icon: Expand, instruction: "Expand this text with more depth, examples, and supporting details" },
@@ -343,6 +415,7 @@ function FlowWorkspaceInner() {
   const [docObjective, setDocObjective] = useState("");
   const [docVersions, setDocVersions] = useState<Array<{ content: string; label: string; timestamp: string }>>([]);
   const [docLeftTab, setDocLeftTab] = useState<"tools" | "provo">("tools");
+  const [docSidebarOpen, setDocSidebarOpen] = useState(false);
   const [docActivePersonas, setDocActivePersonas] = useState<Set<ProvocationType>>(() => {
     const pool: ProvocationType[] = ["ceo", "product_manager", "quality_engineer", "ux_designer", "tech_writer", "growth_strategist", "brand_strategist", "content_strategist"];
     const random = pool[Math.floor(Math.random() * pool.length)];
@@ -3718,164 +3791,180 @@ function FlowWorkspaceInner() {
                   </div>
                 );
               }
-              // Document editor with tools panel
+              // Document editor — premium notebook experience
               return (
                 <div className="flex-1 flex overflow-hidden">
-                  <div className="w-1/3 max-w-[320px] border-r bg-card/50 flex flex-col min-h-0 overflow-hidden">
-                    {/* Tab bar */}
-                    <div className="flex border-b">
-                      <button
-                        className={cn(
-                          "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
-                          docLeftTab === "tools"
-                            ? "text-foreground border-b-2 border-primary"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                        onClick={() => setDocLeftTab("tools")}
-                      >
-                        <Wrench className="w-3.5 h-3.5" />
-                        Tools
-                      </button>
-                      <button
-                        className={cn(
-                          "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
-                          docLeftTab === "provo"
-                            ? "text-foreground border-b-2 border-primary"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                        onClick={() => setDocLeftTab("provo")}
-                      >
-                        <Swords className="w-3.5 h-3.5" />
-                        Provo
-                      </button>
-                    </div>
+                  {/* ── Collapsible sidebar ── */}
+                  {docSidebarOpen && (
+                    <div className="w-72 max-w-[280px] border-r border-border/30 bg-card/30 flex flex-col min-h-0 overflow-hidden shrink-0">
+                      {/* Tab bar */}
+                      <div className="flex border-b border-border/30">
+                        <button
+                          className={cn(
+                            "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
+                            docLeftTab === "tools"
+                              ? "text-foreground border-b-2 border-primary"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                          onClick={() => setDocLeftTab("tools")}
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          Tools
+                        </button>
+                        <button
+                          className={cn(
+                            "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors",
+                            docLeftTab === "provo"
+                              ? "text-foreground border-b-2 border-primary"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                          onClick={() => setDocLeftTab("provo")}
+                        >
+                          <Swords className="w-3.5 h-3.5" />
+                          Provo
+                        </button>
+                      </div>
 
-                    {/* Tab content */}
-                    <div className="flex-1 min-h-0 overflow-auto">
-                      {docLeftTab === "tools" ? (
-                        <>
-                          <div className="p-3 border-b">
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                              Tools
-                            </h3>
-                            <div className="grid grid-cols-2 gap-1.5">
-                              {DOC_TOOLS.map((tool) => (
-                                <button
-                                  key={tool.id}
-                                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
-                                  disabled={docToolRunning !== null}
-                                  onClick={() => handleDocTool(tool.instruction, tool.id)}
-                                >
-                                  {docToolRunning === tool.id ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
-                                  ) : (
-                                    <tool.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                  )}
-                                  <span className="text-[11px] font-medium">{tool.label}</span>
-                                </button>
-                              ))}
+                      {/* Tab content */}
+                      <div className="flex-1 min-h-0 overflow-auto">
+                        {docLeftTab === "tools" ? (
+                          <>
+                            <div className="p-3 border-b border-border/30">
+                              <div className="grid grid-cols-2 gap-1.5">
+                                {DOC_TOOLS.map((tool) => (
+                                  <button
+                                    key={tool.id}
+                                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-md border border-border/30 hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
+                                    disabled={docToolRunning !== null}
+                                    onClick={() => handleDocTool(tool.instruction, tool.id)}
+                                  >
+                                    {docToolRunning === tool.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+                                    ) : (
+                                      <tool.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                    )}
+                                    <span className="text-[11px] font-medium">{tool.label}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                          <div className="p-3 flex-1">
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                              Connected Inputs
-                            </h3>
-                            {(() => {
-                              const inputEdges = state.edges.filter((e) => e.toNodeId === activeExpandedNodeId);
-                              const inputNodes = inputEdges
-                                .map((e) => state.nodes.find((n) => n.id === e.fromNodeId))
-                                .filter(Boolean);
-                              if (inputNodes.length === 0) {
-                                return (
-                                  <p className="text-[10px] text-muted-foreground/60 italic">
-                                    No connected inputs. Drag edges from other nodes to this document.
-                                  </p>
-                                );
-                              }
-                              return (
-                                <div className="space-y-1.5">
-                                  {inputNodes.map((n) => n && (
-                                    <div key={n.id} className="px-2 py-1.5 rounded border border-border/50 bg-muted/30">
-                                      <p className="text-[10px] font-medium">{n.label}</p>
-                                      <p className="text-[9px] text-muted-foreground line-clamp-2 mt-0.5">
-                                        {n.content || n.snippet || "No content"}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </div>
+                            <DocConnectedInputs
+                              nodeId={activeExpandedNodeId!}
+                              edges={state.edges}
+                              nodes={state.nodes}
+                            />
+                          </>
+                        ) : (
+                          <ProvoThread
+                            documentText={docEditorContent}
+                            objective={docObjective.trim() || activeExpandedNode?.label || ""}
+                            activePersonas={docActivePersonas}
+                            onTogglePersona={(id) =>
+                              setDocActivePersonas((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(id)) next.delete(id);
+                                else next.add(id);
+                                return next;
+                              })
+                            }
+                            onCaptureToContext={() => {}}
+                            hasDocument={!!docEditorContent.trim()}
+                            mode="inline"
+                            onEvolveWithProvocations={handleDocProvoEvolve}
+                            isEvolving={docProvoEvolving}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Main writing area — centered notebook page ── */}
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[hsl(var(--background))]">
+                    {/* Toolbar strip — sidebar toggle + tools inline */}
+                    <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/20 shrink-0 bg-muted/5">
+                      <button
+                        className="p-1.5 rounded-md hover:bg-muted/50 transition-colors text-muted-foreground"
+                        onClick={() => setDocSidebarOpen((v) => !v)}
+                        title={docSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                      >
+                        {docSidebarOpen ? (
+                          <PanelLeftClose className="w-4 h-4" />
+                        ) : (
+                          <PanelLeft className="w-4 h-4" />
+                        )}
+                      </button>
+                      <div className="w-px h-4 bg-border/30 mx-1" />
+                      {DOC_TOOLS.map((tool) => (
+                        <button
+                          key={tool.id}
+                          className="px-2 py-1 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+                          disabled={docToolRunning !== null}
+                          onClick={() => handleDocTool(tool.instruction, tool.id)}
+                          title={tool.instruction}
+                        >
+                          {docToolRunning === tool.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
+                          ) : (
+                            <tool.icon className="w-3 h-3 inline mr-1" />
+                          )}
+                          {tool.label}
+                        </button>
+                      ))}
+                      {/* Version count */}
+                      {docVersions.length > 0 && (
+                        <>
+                          <div className="w-px h-4 bg-border/30 mx-1" />
+                          <span className="text-[9px] text-muted-foreground/60">
+                            {docVersions.length} version{docVersions.length !== 1 ? "s" : ""}
+                          </span>
                         </>
-                      ) : (
-                        <ProvoThread
-                          documentText={docEditorContent}
-                          objective={docObjective.trim() || activeExpandedNode?.label || ""}
-                          activePersonas={docActivePersonas}
-                          onTogglePersona={(id) =>
-                            setDocActivePersonas((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(id)) next.delete(id);
-                              else next.add(id);
-                              return next;
-                            })
-                          }
-                          onCaptureToContext={() => {}}
-                          hasDocument={!!docEditorContent.trim()}
-                          mode="inline"
-                          onEvolveWithProvocations={handleDocProvoEvolve}
-                          isEvolving={docProvoEvolving}
-                        />
                       )}
                     </div>
-                  </div>
-                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                    {/* Objective input */}
-                    <div className="px-4 pt-3 pb-2 border-b bg-muted/10 shrink-0">
-                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                        Objective
-                      </label>
-                      <textarea
-                        value={docObjective}
-                        onChange={(e) => setDocObjective(e.target.value)}
-                        placeholder="What is the purpose of this document? This guides the AI tools and provocations..."
-                        className="w-full bg-muted/30 border border-border/50 rounded-md text-xs text-foreground placeholder:text-muted-foreground/50 resize-none outline-none px-2.5 py-1.5 min-h-[36px] max-h-[80px] leading-relaxed focus:ring-1 focus:ring-primary/50"
-                        rows={1}
-                        onInput={(e) => {
-                          const t = e.currentTarget;
-                          t.style.height = "auto";
-                          t.style.height = `${Math.min(t.scrollHeight, 80)}px`;
-                        }}
-                      />
+
+                    {/* Scrollable page */}
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                      <div className="max-w-3xl mx-auto px-8 sm:px-12 md:px-16 py-8 sm:py-12">
+                        {/* Objective — subtle, inline at top of page */}
+                        <textarea
+                          value={docObjective}
+                          onChange={(e) => setDocObjective(e.target.value)}
+                          placeholder="What is the purpose of this document?"
+                          className="w-full bg-transparent border-none text-sm text-muted-foreground placeholder:text-muted-foreground/30 resize-none outline-none mb-6 leading-relaxed italic"
+                          rows={1}
+                          onInput={(e) => {
+                            const t = e.currentTarget;
+                            t.style.height = "auto";
+                            t.style.height = `${Math.min(t.scrollHeight, 80)}px`;
+                          }}
+                        />
+
+                        {/* Main document writing surface */}
+                        <ProvokeText
+                          value={docEditorContent}
+                          onChange={setDocEditorContent}
+                          chrome="bare"
+                          variant="editor"
+                          showCopy
+                          showClear={false}
+                          placeholder="Start writing..."
+                        />
+                      </div>
                     </div>
-                    {/* Document editor */}
-                    <div className="flex-1 min-h-0 overflow-auto p-4">
-                      <ProvokeText
-                        value={docEditorContent}
-                        onChange={setDocEditorContent}
-                        chrome="container"
-                        variant="editor"
-                        label="Document"
-                        showCopy
-                        showClear
-                        placeholder="Start writing your document..."
-                      />
-                    </div>
-                    {/* Version history bar */}
+
+                    {/* Version history — compact bottom bar, only if versions exist */}
                     {docVersions.length > 0 && (
-                      <div className="px-4 py-2 border-t bg-muted/10 shrink-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0">
-                            Versions ({docVersions.length})
+                      <div className="px-4 py-1.5 border-t border-border/20 shrink-0 bg-muted/5">
+                        <div className="flex items-center gap-2 max-w-3xl mx-auto">
+                          <span className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider shrink-0">
+                            History
                           </span>
                           <div className="flex-1 flex gap-1 overflow-x-auto">
                             {docVersions.map((v, i) => (
                               <button
                                 key={i}
-                                className="shrink-0 px-2 py-0.5 rounded text-[9px] border border-border/50 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                                className="shrink-0 px-2 py-0.5 rounded text-[9px] border border-border/30 hover:bg-muted/30 transition-colors text-muted-foreground/60 hover:text-foreground"
                                 title={`${v.label} — ${new Date(v.timestamp).toLocaleTimeString()}`}
                                 onClick={() => {
-                                  // Snapshot current before reverting
                                   snapshotDocVersion("Before revert");
                                   setDocEditorContent(v.content);
                                   toast({ title: "Reverted", description: `Restored: ${v.label}` });

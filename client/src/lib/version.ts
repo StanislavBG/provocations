@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.19.2";
+export const APP_VERSION = "0.20.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,42 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.1",
+    date: "2026-03-08",
+    changes: [
+      "Redesign LLM Base fullscreen as premium chat experience — centered conversation surface, collapsible config sidebar",
+      "System prompt as subtle italic field (like document objective), user prompt as main writing surface",
+      "Config sidebar starts collapsed, model info shown in compact toolbar strip",
+      "Response area with streaming indicator, no container chrome for clean reading",
+    ],
+  },
+  {
+    version: "0.20.0",
+    date: "2026-03-08",
+    changes: [
+      "Redesign Document fullscreen as premium notebook experience — centered page, generous margins, warm typography",
+      "Sidebar starts collapsed to maximize writing space, toggle with panel icon",
+      "Inline toolbar strip replaces sidebar-bound tools for quick access",
+      "Objective field integrates as subtle italic prompt at top of page",
+      "Document editor uses bare chrome for distraction-free writing",
+    ],
+  },
+  {
+    version: "0.19.4",
+    date: "2026-03-08",
+    changes: [
+      "Move LLM Base Run/Stop button into overlay header bar via portal",
+    ],
+  },
+  {
+    version: "0.19.3",
+    date: "2026-03-08",
+    changes: [
+      "Unified collapsible tabbed design for both Context and User Prompt connected inputs in LLM Base expanded view",
+      "Document fullscreen connected inputs use collapsible tabbed design to save space",
+    ],
+  },
   {
     version: "0.19.2",
     date: "2026-03-08",
