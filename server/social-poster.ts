@@ -28,13 +28,17 @@ function checkRateLimit(platform: string, maxPerHour: number): boolean {
 
 /**
  * Post to X (Twitter) using API v2.
+ * If replyToId is provided, creates a reply to that tweet.
  */
-export async function postToX(token: string, text: string, _imageBase64?: string): Promise<PostResult> {
+export async function postToX(token: string, text: string, _imageBase64?: string, replyToId?: string): Promise<PostResult> {
   if (!checkRateLimit("x", 50)) {
     return { success: false, error: "Rate limited — try again later" };
   }
   try {
     const body: Record<string, unknown> = { text };
+    if (replyToId) {
+      body.reply = { in_reply_to_tweet_id: replyToId };
+    }
     const res = await fetch("https://api.twitter.com/2/tweets", {
       method: "POST",
       headers: {
@@ -251,20 +255,71 @@ export async function postToReddit(
 }
 
 /**
+ * Comment on a Reddit post or reply to a comment.
+ * parentFullname is the thing_id (e.g. "t3_abc123" for a post, "t1_def456" for a comment).
+ */
+export async function commentOnReddit(
+  token: string,
+  parentFullname: string,
+  text: string,
+): Promise<PostResult> {
+  if (!checkRateLimit("reddit", 30)) {
+    return { success: false, error: "Rate limited — try again later" };
+  }
+  try {
+    const body = new URLSearchParams({
+      thing_id: parentFullname,
+      text,
+    });
+
+    const res = await fetch("https://oauth.reddit.com/api/comment", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Provocations/1.0",
+      },
+      body: body.toString(),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return { success: false, error: `Reddit comment error (${res.status}): ${err}` };
+    }
+
+    const data = (await res.json()) as { json?: { data?: { things?: Array<{ data?: { id?: string; name?: string } }> } } };
+    const commentId = data.json?.data?.things?.[0]?.data?.id;
+    return {
+      success: true,
+      externalPostId: commentId,
+      externalPostUrl: commentId ? `https://www.reddit.com/comments/${parentFullname.replace("t3_", "")}/_/${commentId}` : undefined,
+    };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+/**
  * Route to the correct platform poster.
+ * Options allow specifying reply targets for comment/reply workflows.
  */
 export async function postToPlatform(
   platform: string,
   token: string,
   text: string,
   imageBase64?: string,
+  options?: { replyToId?: string; subreddit?: string; title?: string; parentFullname?: string },
 ): Promise<PostResult> {
   switch (platform) {
-    case "x": return postToX(token, text, imageBase64);
+    case "x": return postToX(token, text, imageBase64, options?.replyToId);
     case "linkedin": return postToLinkedIn(token, text, imageBase64);
     case "facebook": return postToFacebook(token, text, imageBase64);
     case "instagram": return postToInstagram(token, text, imageBase64);
-    case "reddit": return postToReddit(token, text);
+    case "reddit":
+      if (options?.parentFullname) {
+        return commentOnReddit(token, options.parentFullname, text);
+      }
+      return postToReddit(token, text, options?.title, options?.subreddit);
     default: return { success: false, error: `Unsupported platform: ${platform}` };
   }
 }

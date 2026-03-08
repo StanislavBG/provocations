@@ -6,3 +6,5 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env.claude/worktrees/
+agency/knowledge/*
+!agency/knowledge/.gitkeep

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "provo-agency": {
+      "command": "npx",
+      "args": ["tsx", "../server/mcp-agency-server.ts"],
+      "env": {
+        "AGENCY_API_URL": "https://your-provo-instance.replit.app",
+        "AGENCY_API_KEY": "REPLACE_WITH_YOUR_API_KEY"
+      }
+    }
+  }
+}

@@ -137,6 +137,7 @@ See `CLAUDE.md` → "ADR: Dual Schema Management" for the full rules.
 - Voice: Web Speech API + custom audio worklets
 
 ## Recent Changes
+- March 8, 2026: v0.18.0 — Local Marketing Agency infrastructure: event queue (agency_events table), campaign config (agency_campaigns table), MCP agency server, /api/agency/* endpoints, Reddit comment/X reply support in social poster, agency/ directory with 6-agent pipeline for local Claude Code orchestration. Env vars: AGENCY_API_KEY, AGENCY_USER_ID.
 - March 1, 2026: Fixed recurring Drizzle migration items on deploy — aligned ensureTables() with Drizzle schema (DESC mismatch, FK refs, constraint naming). Added ADR for dual schema management.
 - February 24, 2026: GPT-to-Context chat endpoints now always use Gemini 2.5 Flash via GEMINI_API_KEY, independent of global LLM_PROVIDER
 - February 24, 2026: Added Stripe payment integration — webhook endpoint (`/api/stripe/webhook`), checkout session creation, pricing page (`/pricing`), payments DB table
