@@ -137,7 +137,7 @@ export function gatherInputContentWithRoles(
 
   const objectiveTexts: string[] = [];
   const contextTexts: string[] = [];
-  const plainTexts: string[] = [];
+  const userPromptTexts: string[] = [];
 
   for (const edge of inputEdges) {
     const srcNode = allNodes.find((n) => n.id === edge.fromNodeId);
@@ -161,11 +161,11 @@ export function gatherInputContentWithRoles(
 
     // Multi-role: a single edge can contribute to multiple buckets
     if (edgeHasRole(edge, "objective")) objectiveTexts.push(fullTxt);
-    if (edgeHasRole(edge, "context")) contextTexts.push(fullTxt);
-    // Edges with no role, or with roles not handled above (user-prompt, system-instruction),
-    // go into plainTexts so they're still included in combinedContent
-    if (roles.length === 0 || (!edgeHasRole(edge, "objective") && !edgeHasRole(edge, "context"))) {
-      plainTexts.push(fullTxt);
+    // Edges with no role (legacy) are treated as context
+    if (edgeHasRole(edge, "context") || roles.length === 0) contextTexts.push(fullTxt);
+    // user-prompt and system-instruction go into user prompt bucket
+    if (edgeHasRole(edge, "user-prompt") || edgeHasRole(edge, "system-instruction")) {
+      userPromptTexts.push(fullTxt);
     }
   }
 
@@ -179,8 +179,8 @@ export function gatherInputContentWithRoles(
     .filter((s) => s.trim())
     .join("\n\n");
 
-  const combinedContent = [...objectiveTexts, ...plainTexts, ...contextTexts].join("\n\n---\n\n");
-  const objectiveText = objectiveTexts.join("\n\n") || plainTexts[0] || combinedContent.slice(0, 500);
+  const combinedContent = [...objectiveTexts, ...userPromptTexts, ...contextTexts].join("\n\n---\n\n");
+  const objectiveText = objectiveTexts.join("\n\n") || userPromptTexts[0] || combinedContent.slice(0, 500);
   const contextText = contextTexts.join("\n\n---\n\n");
 
   return { inputNodes, inputEdges, combinedContent, objectiveText, contextText, templateContent };

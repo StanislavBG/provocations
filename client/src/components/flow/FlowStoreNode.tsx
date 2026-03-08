@@ -4,13 +4,17 @@ import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
+import { useNodeResize } from "./useNodeResize";
+import { ResizeHandles } from "./ResizeHandles";
 
 interface FlowStoreNodeProps {
   node: FlowNode;
   isSelected: boolean;
+  zoom: number;
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
   onDoubleClick: (e: React.MouseEvent, nodeId: string) => void;
   onDelete: (nodeId: string) => void;
+  onUpdateNode: (nodeId: string, patch: { x?: number; y?: number; width?: number; height?: number }) => void;
   onToggleLock?: (nodeId: string) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
 }
@@ -18,12 +22,21 @@ interface FlowStoreNodeProps {
 export const FlowStoreNode = React.memo(function FlowStoreNode({
   node,
   isSelected,
+  zoom,
   onMouseDown,
   onDoubleClick,
   onDelete,
+  onUpdateNode,
   onToggleLock,
   onPortMouseDown,
 }: FlowStoreNodeProps) {
+  const lockMode = getEffectiveLockMode(node);
+  const { handleResizeMouseDown } = useNodeResize({
+    nodeId: node.id, x: node.x, y: node.y,
+    width: node.width, height: node.height,
+    zoom, minWidth: 140, minHeight: 120, onUpdateNode,
+  });
+
   const hasFolder = !!node.storeFolderId || !!node.storeFolderName;
 
   return (
@@ -93,7 +106,7 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
 
       {/* Lock + Delete hover buttons */}
       {(() => {
-        const lm = getEffectiveLockMode(node);
+        const lm = lockMode;
         return (
           <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             {onToggleLock && (
@@ -126,6 +139,11 @@ export const FlowStoreNode = React.memo(function FlowStoreNode({
           </div>
         );
       })()}
+
+      {/* Resize handles — hidden when locked */}
+      {lockMode === "none" && (
+        <ResizeHandles isSelected={isSelected} onResizeMouseDown={handleResizeMouseDown} size="sm" />
+      )}
     </div>
   );
 });
