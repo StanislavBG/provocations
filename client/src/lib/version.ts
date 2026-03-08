@@ -22,12 +22,12 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: "0.22.0",
     date: "2026-03-08",
     changes: [
-      "Infrastructure: health check endpoint, structured logging, env validation, CI pipeline, pre-commit hooks",
-      "Testing foundation: 146 new tests (crypto, schema, LLM routing, context builder) with mock helpers",
-      "Security: helmet CSP, rate limiting (4 tiers), input validation limits, upload validation, x-powered-by disabled",
-      "Monetization: subscriptions + usage_records DB, usage metering (Free/Pro/Team), Stripe webhooks, billing page",
-      "Performance: CSS viewport transforms, React.memo, edge caching, route splitting, lazy expanded views, diff-based save",
-      "Architecture: FlowDockConfig.ts and FlowToolHandlers.ts extracted from FlowWorkspace",
+      "Infrastructure: health check, structured logging, env validation, CI pipeline, pre-commit hooks",
+      "Testing: 146 new tests (crypto, schema, LLM routing, context builder) with mock helpers",
+      "Security: helmet CSP, rate limiting (4 tiers), input validation, upload validation",
+      "Monetization: subscriptions DB, usage metering (Free/Pro/Team), Stripe webhooks, billing page",
+      "Performance: CSS viewport transforms, React.memo, edge caching, route splitting, lazy views, diff-based save",
+      "AI/LLM: context budgets, prompt optimization (30% reduction), prompt templates, output validation, model routing, fallback retry",
     ],
   },
   {
