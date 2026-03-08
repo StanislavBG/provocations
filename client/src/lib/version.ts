@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.4";
+export const APP_VERSION = "0.20.5";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.5",
+    date: "2026-03-08",
+    changes: [
+      "Fix LLM node producing no output — FlowLlmNode now reads documentContent (not just content/snippet)",
+      "Fix user-prompt and system-instruction edges silently dropped from combinedContent in gatherInputContentWithRoles",
+      "Add 11 regression tests: gatherInputContentWithRoles role coverage, FlowLlmNode content gathering priority",
+    ],
+  },
   {
     version: "0.20.4",
     date: "2026-03-08",

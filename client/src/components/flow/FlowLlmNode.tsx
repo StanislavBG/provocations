@@ -173,7 +173,7 @@ export const FlowLlmNode = React.memo(function FlowLlmNode({
 
     try {
       const combined = inputNodes
-        .map((n) => `## ${n.label}\n${n.content || n.snippet || ""}`)
+        .map((n) => `## ${n.label}\n${n.documentContent || n.content || n.llmOutput || n.snippet || ""}`)
         .join("\n\n---\n\n");
 
       const body = currentPreset.buildRequest(combined, node.llmObjective || "");
