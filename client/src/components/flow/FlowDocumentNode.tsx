@@ -3,24 +3,36 @@ import { FileEdit, Image as ImageIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
+import { useNodeResize } from "./useNodeResize";
+import { ResizeHandles } from "./ResizeHandles";
 
 interface FlowDocumentNodeProps {
   node: FlowNode;
   isSelected: boolean;
+  zoom: number;
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
   onDoubleClick: (e: React.MouseEvent, nodeId: string) => void;
   onDelete: (nodeId: string) => void;
+  onUpdateNode: (nodeId: string, patch: { x?: number; y?: number; width?: number; height?: number }) => void;
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
 }
 
 export const FlowDocumentNode = React.memo(function FlowDocumentNode({
   node,
   isSelected,
+  zoom,
   onMouseDown,
   onDoubleClick,
   onDelete,
+  onUpdateNode,
   onPortMouseDown,
 }: FlowDocumentNodeProps) {
+  const { handleResizeMouseDown } = useNodeResize({
+    nodeId: node.id, x: node.x, y: node.y,
+    width: node.width, height: node.height,
+    zoom, minWidth: 140, minHeight: 100, onUpdateNode,
+  });
+
   const isImage = !!node.imageUrl;
   const preview = node.documentContent
     ? node.documentContent.slice(0, 200)
@@ -102,6 +114,9 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
       >
         <X className="w-3 h-3" />
       </button>
+
+      {/* Resize handles */}
+      <ResizeHandles isSelected={isSelected} onResizeMouseDown={handleResizeMouseDown} size="sm" />
     </div>
   );
 });
