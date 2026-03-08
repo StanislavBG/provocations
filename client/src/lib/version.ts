@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.7";
+export const APP_VERSION = "0.20.8";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.8",
+    date: "2026-03-08",
+    changes: [
+      "Add Direct Voice + Direct Text to document toolbar — insert at cursor position with no AI remix (green accent)",
+      "Add selection quick actions popover — highlight text to get 4 actions: Voice Remix, Text Remix, Voice Replace, Text Replace",
+      "Selection remix uses /api/write with WRITER FEEDBACK ON SELECTION pattern for targeted AI editing",
+      "Selection direct replace lets users dictate or type replacement text without AI processing",
+    ],
+  },
   {
     version: "0.20.7",
     date: "2026-03-08",
