@@ -316,6 +316,10 @@ export interface FlowNode {
   approvalResponderName?: string;
   /** Approval node: timestamp of approval/rejection */
   approvalRespondedAt?: string;
+  /** Chain execution: status of this node within a chain run */
+  chainStatus?: "idle" | "running" | "completed" | "error" | "blocked" | "cancelled";
+  /** Chain execution: error message when chainStatus is 'error' */
+  chainErrorMessage?: string;
 }
 
 /** Named edge roles — how source data is used by the target node */
