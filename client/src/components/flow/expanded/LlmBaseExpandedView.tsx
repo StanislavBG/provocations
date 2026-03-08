@@ -132,8 +132,9 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
     ];
     const system = systemParts.join("\n\n---\n\n") || "You are a helpful assistant.";
 
-    // Build user message
+    // Build user message: user-prompt edges + context edges + manual prompt
     const userParts = [
+      ...userPromptInputs.map((u) => u.content),
       ...contextInputs.map((c) => c.content),
       ...(userPrompt.trim() ? [userPrompt.trim()] : []),
     ];
@@ -431,53 +432,69 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
 
-            {/* System Instructions from connections */}
-            {systemInstructions.length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  System Instructions (from connections)
-                </label>
-                <div className="rounded-md border bg-muted/30 p-3 max-h-40 overflow-y-auto">
-                  {systemInstructions.map((si, i) => (
-                    <div key={i} className="mb-2 last:mb-0">
-                      <Badge variant="outline" className="text-[9px] mb-1">{si.label}</Badge>
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4">
-                        {si.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* System Prompt (editable) */}
+            {/* System Prompt — connections populate, manual appends */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 System Prompt
+                {systemInstructions.length > 0 && (
+                  <span className="ml-1.5 text-[9px] font-normal text-fuchsia-500">
+                    ({systemInstructions.length} connected)
+                  </span>
+                )}
               </label>
-              <ProvokeText
-                value={systemPrompt}
-                onChange={(v) => patch({ llmBaseSystemPrompt: v })}
-                chrome="container"
-                variant="textarea"
-                placeholder="Optional system prompt — defines the LLM's behavior and role..."
-                showCopy
-                showClear
-                readOnly={isRunning}
-              />
+              {systemInstructions.length > 0 ? (
+                <>
+                  {/* Connection content shown as read-only populated area */}
+                  <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 space-y-2">
+                    {systemInstructions.map((si, i) => (
+                      <div key={i}>
+                        <Badge variant="outline" className="text-[9px] mb-1 border-fuchsia-500/30 text-fuchsia-500">{si.label}</Badge>
+                        <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-6">
+                          {si.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Optional additional system instructions */}
+                  <ProvokeText
+                    value={systemPrompt}
+                    onChange={(v) => patch({ llmBaseSystemPrompt: v })}
+                    chrome="container"
+                    variant="textarea"
+                    placeholder="Additional system instructions (appended after connected content)..."
+                    showCopy
+                    showClear
+                    readOnly={isRunning}
+                  />
+                </>
+              ) : (
+                <ProvokeText
+                  value={systemPrompt}
+                  onChange={(v) => patch({ llmBaseSystemPrompt: v })}
+                  chrome="container"
+                  variant="textarea"
+                  placeholder="Optional system prompt — defines the LLM's behavior and role..."
+                  showCopy
+                  showClear
+                  readOnly={isRunning}
+                />
+              )}
             </div>
 
-            {/* Context inputs preview */}
+            {/* Context inputs preview — read-only reference material */}
             {contextInputs.length > 0 && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Context Inputs
+                  Context
+                  <span className="ml-1.5 text-[9px] font-normal text-amber-500">
+                    ({contextInputs.length} connected)
+                  </span>
                 </label>
-                <div className="rounded-md border bg-muted/30 p-3 max-h-32 overflow-y-auto">
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 max-h-32 overflow-y-auto space-y-2">
                   {contextInputs.map((ci, i) => (
-                    <div key={i} className="mb-2 last:mb-0">
-                      <Badge variant="outline" className="text-[9px] mb-1">{ci.label}</Badge>
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                    <div key={i}>
+                      <Badge variant="outline" className="text-[9px] mb-1 border-amber-500/30 text-amber-500">{ci.label}</Badge>
+                      <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-3">
                         {ci.content}
                       </p>
                     </div>
@@ -486,40 +503,53 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
               </div>
             )}
 
-            {/* User Prompt inputs from connections */}
-            {userPromptInputs.length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  User Prompt (from connections)
-                </label>
-                <div className="rounded-md border bg-muted/30 p-3 max-h-32 overflow-y-auto">
-                  {userPromptInputs.map((up, i) => (
-                    <div key={i} className="mb-2 last:mb-0">
-                      <Badge variant="outline" className="text-[9px] mb-1">{up.label}</Badge>
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">
-                        {up.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* User Prompt (manual) */}
+            {/* User Prompt — connections populate, manual appends */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 User Prompt
+                {userPromptInputs.length > 0 && (
+                  <span className="ml-1.5 text-[9px] font-normal text-emerald-500">
+                    ({userPromptInputs.length} connected)
+                  </span>
+                )}
               </label>
-              <ProvokeText
-                value={userPrompt}
-                onChange={(v) => patch({ llmBaseUserPrompt: v })}
-                chrome="container"
-                variant="textarea"
-                placeholder="Enter your prompt here..."
-                showCopy
-                showClear
-                readOnly={isRunning}
-              />
+              {userPromptInputs.length > 0 ? (
+                <>
+                  {/* Connection content shown as read-only populated area */}
+                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+                    {userPromptInputs.map((up, i) => (
+                      <div key={i}>
+                        <Badge variant="outline" className="text-[9px] mb-1 border-emerald-500/30 text-emerald-500">{up.label}</Badge>
+                        <p className="text-xs text-foreground/80 whitespace-pre-wrap line-clamp-6">
+                          {up.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Optional additional prompt */}
+                  <ProvokeText
+                    value={userPrompt}
+                    onChange={(v) => patch({ llmBaseUserPrompt: v })}
+                    chrome="container"
+                    variant="textarea"
+                    placeholder="Additional instructions (appended after connected content)..."
+                    showCopy
+                    showClear
+                    readOnly={isRunning}
+                  />
+                </>
+              ) : (
+                <ProvokeText
+                  value={userPrompt}
+                  onChange={(v) => patch({ llmBaseUserPrompt: v })}
+                  chrome="container"
+                  variant="textarea"
+                  placeholder="Enter your prompt here..."
+                  showCopy
+                  showClear
+                  readOnly={isRunning}
+                />
+              )}
             </div>
 
             {/* Run / Stop button */}
@@ -539,7 +569,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
                   size="sm"
                   onClick={handleRun}
                   className="gap-1.5 bg-fuchsia-600 hover:bg-fuchsia-700 text-white"
-                  disabled={!userPrompt.trim() && contextInputs.length === 0}
+                  disabled={!userPrompt.trim() && contextInputs.length === 0 && userPromptInputs.length === 0}
                 >
                   <Play className="w-3.5 h-3.5" />
                   Run
