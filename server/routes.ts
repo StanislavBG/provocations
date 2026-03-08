@@ -1,5 +1,6 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 import { createServer, type Server } from "http";
 import { getAuth, clerkClient } from "@clerk/express";
 import { storage } from "./storage";
@@ -87,9 +88,91 @@ import { postToPlatform } from "./social-poster";
 import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
+import { getUsageSummary, getUserPlan, PLAN_LIMITS, type PlanTier } from "./usage";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
 import { YoutubeTranscript } from "youtube-transcript";
 import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable, userPreferences as userPreferencesTable } from "../shared/models/chat";
+
+// ── Rate Limiters ──────────────────────────────────────────────────────────
+// Key generator: prefer authenticated userId, fall back to IP
+function rateLimitKeyGenerator(req: Request): string {
+  const auth = getAuth(req);
+  return auth?.userId || req.ip || "unknown";
+}
+
+/** General API rate limiter: 500 requests per 15 minutes per user */
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  keyGenerator: rateLimitKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+/** LLM endpoint rate limiter: 20 requests per minute per user */
+const llmLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyGenerator: rateLimitKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many LLM requests. Please wait before making more AI calls." },
+});
+
+/** Auth endpoint rate limiter: 50 requests per 15 minutes per IP */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  keyGenerator: (req: Request) => req.ip || "unknown",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many auth requests. Please try again later." },
+});
+
+/** Upload endpoint rate limiter: 50 requests per hour per user */
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 50,
+  keyGenerator: rateLimitKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many uploads. Please try again later." },
+});
+
+// ── File Upload Validation ─────────────────────────────────────────────────
+/** MIME type whitelist for file uploads */
+const ALLOWED_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "video/mp4",
+  "video/webm",
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+]);
+
+/** Maximum filename length after sanitization */
+const MAX_FILENAME_LENGTH = 200;
+
+/** Sanitize a filename: remove special characters, limit length */
+function sanitizeFilename(name: string): string {
+  // Strip directory traversal and non-printable characters
+  let sanitized = name
+    .replace(/[^\w\s.\-()]/g, "_") // replace special chars with underscore
+    .replace(/\.{2,}/g, ".") // collapse consecutive dots
+    .replace(/\s+/g, " ") // collapse whitespace
+    .trim();
+  // Limit length (preserve extension)
+  if (sanitized.length > MAX_FILENAME_LENGTH) {
+    const ext = sanitized.slice(sanitized.lastIndexOf("."));
+    const base = sanitized.slice(0, MAX_FILENAME_LENGTH - ext.length);
+    sanitized = base + ext;
+  }
+  return sanitized || "unnamed";
+}
 
 function getEncryptionKey(): string {
   const secret = process.env.ENCRYPTION_SECRET;
@@ -559,6 +642,12 @@ export async function registerRoutes(
   // The AsyncLocalStorage scope ensures the gateway context flows through all
   // async operations within the request, even across await boundaries.
 
+  // ── Rate limiting ──────────────────────────────────────────────────────
+  // General limiter on all /api routes
+  app.use("/api", generalLimiter);
+  // Auth limiter on Clerk-related endpoints
+  app.use("/api/clerk-config", authLimiter);
+
   app.use("/api", async (req, res, next) => {
     const { userId } = getAuth(req);
     if (!userId) return next();
@@ -859,7 +948,7 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no expl
   // Generates challenges from selected personas. Each challenge includes the
   // full persona definition so the dialogue panel knows who is speaking.
   // Advice is generated separately via /api/generate-advice.
-  app.post("/api/generate-challenges", async (req, res) => {
+  app.post("/api/generate-challenges", llmLimiter, async (req, res) => {
     try {
       const parsed = generateChallengeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1045,7 +1134,7 @@ Output only valid JSON, no markdown.`,
   // This is a separate invocation from challenge generation so that the advice
   // is not a reiteration of the provocation. The same persona speaks, but now
   // provides concrete, actionable guidance on how to address the challenge.
-  app.post("/api/generate-advice", async (req, res) => {
+  app.post("/api/generate-advice", llmLimiter, async (req, res) => {
     try {
       const parsed = generateAdviceRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -2491,7 +2580,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // IMAGE GENERATION — generates an image from a textual description
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-image", async (req, res) => {
+  app.post("/api/generate-image", llmLimiter, async (req, res) => {
     try {
       const { description } = req.body;
       if (!description || typeof description !== "string" || !description.trim()) {
@@ -2546,7 +2635,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // GEMINI IMAGEN — generates images using Google's Imagen via @google/genai
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-imagen", async (req, res) => {
+  app.post("/api/generate-imagen", llmLimiter, async (req, res) => {
     try {
       const {
         prompt, aspectRatio, negativePrompt, style, numberOfImages,
@@ -2752,7 +2841,7 @@ Output only valid JSON, no markdown.`;
   });
 
   // Unified write endpoint - single interface to the AI writer
-  app.post("/api/write", async (req, res) => {
+  app.post("/api/write", llmLimiter, async (req, res) => {
     try {
       const parsed = writeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3119,7 +3208,7 @@ INSTRUCTION APPLIED: ${instruction}`
   });
 
   // Streaming write endpoint for long documents
-  app.post("/api/write/stream", async (req, res) => {
+  app.post("/api/write/stream", llmLimiter, async (req, res) => {
     try {
       const parsed = writeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3596,7 +3685,7 @@ Return ONLY a JSON array of objects with "question" (string) and "category" (one
   });
 
   // Generate next interview question based on context
-  app.post("/api/interview/question", async (req, res) => {
+  app.post("/api/interview/question", llmLimiter, async (req, res) => {
     try {
       const parsed = interviewQuestionRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3894,7 +3983,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
 
   // Streaming interview question with interleaved TTS audio (SSE)
   // Same prompt logic as /api/interview/question but streams text + audio chunks.
-  app.post("/api/interview/question/stream", async (req, res) => {
+  app.post("/api/interview/question/stream", llmLimiter, async (req, res) => {
     try {
       const body = req.body;
       const parsed = interviewQuestionRequestSchema.safeParse(body);
@@ -4233,7 +4322,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
   // ── Brainstorm streaming endpoint (multi-context TTS with interruption) ──
   // Similar to /api/interview/question/stream but uses multi-context WS for
   // interrupt support and a more conversational brainstorm-style system prompt.
-  app.post("/api/interview/brainstorm/stream", async (req, res) => {
+  app.post("/api/interview/brainstorm/stream", llmLimiter, async (req, res) => {
     try {
       const body = req.body;
       const parsed = interviewQuestionRequestSchema.safeParse(body);
@@ -4443,7 +4532,7 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
   });
 
   // Summarize interview entries into a coherent instruction for the writer
-  app.post("/api/interview/summary", async (req, res) => {
+  app.post("/api/interview/summary", llmLimiter, async (req, res) => {
     try {
       const parsed = interviewSummaryRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -4496,7 +4585,7 @@ Output only the instruction text. No meta-commentary.`,
   // ── Generate podcast from interview Q&A ──
   // Creates a two-host conversational podcast script via LLM, then converts
   // each speaker turn to audio using TTS with distinct voices.
-  app.post("/api/interview/podcast", async (req, res) => {
+  app.post("/api/interview/podcast", llmLimiter, async (req, res) => {
     try {
       const parsed = podcastRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -5293,7 +5382,7 @@ Rules:
   });
 
   // Streaming chat endpoint (SSE)
-  app.post("/api/chat/stream", async (req, res) => {
+  app.post("/api/chat/stream", llmLimiter, async (req, res) => {
     try {
       const parsed = chatRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -5551,7 +5640,7 @@ RULES:
   });
 
   // Upload a file and save to Context Store as an encrypted document
-  app.post("/api/upload", uploadMiddleware.single("file"), async (req, res) => {
+  app.post("/api/upload", uploadLimiter, uploadMiddleware.single("file"), async (req, res) => {
     try {
       const { userId } = getAuth(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -5559,8 +5648,17 @@ RULES:
       const file = req.file;
       if (!file) return res.status(400).json({ error: "No file provided" });
 
+      // A6: Validate MIME type against whitelist
+      if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+        return res.status(400).json({
+          error: "Unsupported file type",
+          details: `MIME type '${file.mimetype}' is not allowed. Supported: ${Array.from(ALLOWED_MIME_TYPES).join(", ")}`,
+        });
+      }
+
       const { title, folderId, docType } = req.body;
-      const finalTitle = title || file.originalname;
+      // A6: Sanitize filename to prevent special character exploits
+      const finalTitle = sanitizeFilename(title || file.originalname);
 
       // Convert file to base64 data URL for storage
       const mimeType = file.mimetype;
@@ -7188,9 +7286,107 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
           return res.status(400).json({ error: "Invalid signature" });
         }
 
+        // ── Subscription helper functions ──
+
+        async function activateSubscription(
+          stripeSubscription: Stripe.Subscription,
+          customerId: string,
+          userId?: string,
+        ) {
+          const resolvedUserId = userId || (await resolveUserIdFromCustomer(customerId));
+          if (!resolvedUserId) {
+            console.warn(`Cannot activate subscription — no userId for customer ${customerId}`);
+            return;
+          }
+
+          // Map Stripe price to plan tier
+          const priceId = stripeSubscription.items.data[0]?.price?.id;
+          const planTier = mapPriceToTier(priceId);
+
+          await storage.upsertSubscription({
+            userId: resolvedUserId,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: stripeSubscription.id,
+            planTier,
+            status: "active",
+            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+          });
+          console.log(`Subscription activated: user=${resolvedUserId} plan=${planTier}`);
+        }
+
+        async function renewSubscription(invoice: Stripe.Invoice) {
+          const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.toString() ?? "";
+          const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.toString() ?? "";
+          if (!subId) return;
+
+          const sub = await storage.getSubscriptionByStripeSubscriptionId(subId);
+          if (!sub) {
+            console.warn(`Renewal: no subscription found for ${subId}`);
+            return;
+          }
+
+          // Fetch latest subscription to get updated period dates
+          try {
+            const stripeSub = await stripe.subscriptions.retrieve(subId);
+            await storage.upsertSubscription({
+              userId: sub.userId,
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subId,
+              planTier: sub.planTier,
+              status: "active",
+              currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+              currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+            });
+            console.log(`Subscription renewed: user=${sub.userId}`);
+          } catch (err) {
+            console.error("Failed to fetch subscription for renewal:", err);
+          }
+        }
+
+        async function flagPaymentFailed(invoice: Stripe.Invoice) {
+          const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.toString() ?? "";
+          if (!subId) return;
+
+          const sub = await storage.getSubscriptionByStripeSubscriptionId(subId);
+          if (sub) {
+            await storage.updateSubscriptionStatus(sub.userId, "past_due");
+            console.log(`Subscription flagged past_due: user=${sub.userId}`);
+          }
+        }
+
+        async function downgradeToFree(stripeSubscription: Stripe.Subscription) {
+          const sub = await storage.getSubscriptionByStripeSubscriptionId(stripeSubscription.id);
+          if (sub) {
+            await storage.updateSubscriptionStatus(sub.userId, "cancelled", "free");
+            console.log(`Subscription cancelled, downgraded to free: user=${sub.userId}`);
+          }
+        }
+
+        function resolveUserIdFromCustomer(customerId: string): Promise<string | null> {
+          return storage.getSubscriptionByStripeCustomerId(customerId).then((s) => s?.userId ?? null);
+        }
+
+        function mapPriceToTier(priceId?: string): string {
+          // Map Stripe price IDs to plan tiers via env vars
+          const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
+          const teamPriceId = process.env.STRIPE_TEAM_PRICE_ID;
+          const proAnnualPriceId = process.env.STRIPE_PRO_ANNUAL_PRICE_ID;
+          const teamAnnualPriceId = process.env.STRIPE_TEAM_ANNUAL_PRICE_ID;
+
+          if (!priceId) return "free";
+          if (priceId === proPriceId || priceId === proAnnualPriceId) return "pro";
+          if (priceId === teamPriceId || priceId === teamAnnualPriceId) return "team";
+          return "pro"; // Default subscription to pro if unrecognized
+        }
+
+        // ── Event handling ──
+
         switch (event.type) {
           case "checkout.session.completed": {
             const session = event.data.object as Stripe.Checkout.Session;
+
+            // Update payment record
             await storage.updatePaymentBySessionId(session.id, {
               status: "completed",
               stripeCustomerId: session.customer as string | undefined,
@@ -7198,6 +7394,19 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
               amount: session.amount_total ?? undefined,
               currency: session.currency ?? undefined,
             });
+
+            // If this is a subscription checkout, activate the subscription
+            if (session.mode === "subscription" && session.subscription) {
+              const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.toString();
+              const customerId = typeof session.customer === "string" ? session.customer : session.customer?.toString() ?? "";
+              try {
+                const stripeSub = await stripe.subscriptions.retrieve(subId);
+                await activateSubscription(stripeSub, customerId, session.client_reference_id ?? undefined);
+              } catch (err) {
+                console.error("Failed to activate subscription from checkout:", err);
+              }
+            }
+
             console.log(`Payment completed for session ${session.id}`);
             break;
           }
@@ -7205,6 +7414,21 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
             const session = event.data.object as Stripe.Checkout.Session;
             await storage.updatePaymentBySessionId(session.id, { status: "failed" });
             console.log(`Payment expired for session ${session.id}`);
+            break;
+          }
+          case "invoice.paid": {
+            const invoice = event.data.object as Stripe.Invoice;
+            await renewSubscription(invoice);
+            break;
+          }
+          case "invoice.payment_failed": {
+            const invoice = event.data.object as Stripe.Invoice;
+            await flagPaymentFailed(invoice);
+            break;
+          }
+          case "customer.subscription.deleted": {
+            const subscription = event.data.object as Stripe.Subscription;
+            await downgradeToFree(subscription);
             break;
           }
           default:
@@ -7229,6 +7453,99 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       } catch (error) {
         console.error("Stripe list payments error:", error);
         res.status(500).json({ error: "Failed to list payments" });
+      }
+    });
+
+    // ── Billing status — current plan + usage ──
+    app.get("/api/billing/status", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const summary = await getUsageSummary(userId);
+        const sub = await storage.getSubscriptionByUserId(userId);
+
+        res.json({
+          ...summary,
+          subscription: sub ? {
+            stripeSubscriptionId: sub.stripeSubscriptionId,
+            currentPeriodStart: sub.currentPeriodStart,
+            currentPeriodEnd: sub.currentPeriodEnd,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+            status: sub.status,
+          } : null,
+        });
+      } catch (error) {
+        console.error("Billing status error:", error);
+        res.status(500).json({ error: "Failed to load billing status" });
+      }
+    });
+
+    // ── Stripe Customer Portal URL ──
+    app.get("/api/billing/portal", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const sub = await storage.getSubscriptionByUserId(userId);
+        if (!sub?.stripeCustomerId) {
+          return res.status(404).json({ error: "No billing account found" });
+        }
+
+        const origin = `${req.protocol}://${req.get("host")}`;
+        const portalSession = await stripe.billingPortal.sessions.create({
+          customer: sub.stripeCustomerId,
+          return_url: `${origin}/settings/billing`,
+        });
+
+        res.json({ url: portalSession.url });
+      } catch (error) {
+        console.error("Billing portal error:", error);
+        res.status(500).json({ error: "Failed to create portal session" });
+      }
+    });
+
+    // ── Subscription checkout session ──
+    app.post("/api/billing/checkout-session", async (req, res) => {
+      try {
+        const { userId } = getAuth(req);
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const { priceId } = req.body;
+        if (!priceId || typeof priceId !== "string") {
+          return res.status(400).json({ error: "priceId is required" });
+        }
+
+        const origin = `${req.protocol}://${req.get("host")}`;
+
+        // Check if user already has a Stripe customer
+        const existingSub = await storage.getSubscriptionByUserId(userId);
+        const customerOptions: Stripe.Checkout.SessionCreateParams = {
+          mode: "subscription",
+          line_items: [{ price: priceId, quantity: 1 }],
+          success_url: `${origin}/settings/billing?success=true`,
+          cancel_url: `${origin}/pricing?canceled=true`,
+          client_reference_id: userId,
+        };
+
+        if (existingSub?.stripeCustomerId) {
+          customerOptions.customer = existingSub.stripeCustomerId;
+        }
+
+        const session = await stripe.checkout.sessions.create(customerOptions);
+
+        // Record pending payment
+        await storage.createPayment({
+          userId,
+          stripeSessionId: session.id,
+          priceId,
+          status: "pending",
+        });
+
+        res.json({ sessionUrl: session.url });
+      } catch (error) {
+        console.error("Billing checkout session error:", error);
+        res.status(500).json({ error: "Failed to create checkout session" });
       }
     });
 

@@ -286,6 +286,8 @@ export function FtuxDock() {
       )}
 
       <div
+        role="toolbar"
+        aria-label="Tool Dock"
         className={cn(
           positionClasses[dockPosition],
           "flex gap-1.5 p-2 transition-all duration-300",
@@ -366,7 +368,7 @@ export function FtuxDock() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label={item.label}
+                                aria-label={`Add ${item.label} node`}
                                 className={cn(
                                   sz.btn, "rounded-lg transition-transform duration-150 hover:scale-110",
                                   isActive && "bg-primary/15 text-primary",
@@ -458,7 +460,7 @@ export function FtuxDock() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={item.label}
+                      aria-label={`Add ${item.label} node`}
                       className={cn(
                         sz.btn, "rounded-lg transition-transform duration-150 hover:scale-110",
                         isActive && "bg-primary/15 text-primary",

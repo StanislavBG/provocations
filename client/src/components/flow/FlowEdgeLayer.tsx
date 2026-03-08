@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { FlowEdge, FlowNode, EdgeRole } from "./useFlowCanvas";
 import { edgeRoles } from "./useFlowCanvas";
 import type { PreviewEdge } from "./useFlowInteraction";
@@ -96,6 +96,11 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
 
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
 
+  // ── Edge path cache (E3 optimization) ──
+  // Caches computed SVG path strings keyed by edge ID + endpoint positions.
+  // Only recalculates paths for edges connected to nodes that moved.
+  const edgePathCacheRef = useRef(new Map<string, { key: string; path: string; x1: number; y1: number; x2: number; y2: number; mx: number; my: number }>());
+
   // For one-at-a-time producers, track the latest (last) edge from each node.
   // Edges are appended in order, so the last edge in the array is the newest.
   const latestEdgeFromNode = useMemo(() => {
@@ -104,6 +109,15 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
       map.set(edge.fromNodeId, edge.id);
     }
     return map;
+  }, [edges]);
+
+  // Prune stale cache entries for removed edges
+  useMemo(() => {
+    const cache = edgePathCacheRef.current;
+    const activeIds = new Set(edges.map((e) => e.id));
+    for (const key of cache.keys()) {
+      if (!activeIds.has(key)) cache.delete(key);
+    }
   }, [edges]);
 
   const hasContent = edges.length > 0 || previewEdge;
@@ -172,21 +186,38 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         const to = nodeMap.get(edge.toNodeId);
         if (!from || !to) return null;
 
-        const { x1, y1, x2, y2 } = computeEndpoints(from, to, edge.role);
-        const mx = (x1 + x2) / 2;
-        const my = (y1 + y2) / 2;
+        // Build a cache key from endpoint node positions + role
+        const roleKey = Array.isArray(edge.role) ? edge.role.join(",") : (edge.role ?? "");
+        const cacheKey = `${from.x},${from.y},${from.width},${from.height},${to.x},${to.y},${to.width},${to.height},${to.type},${roleKey}`;
+        const cache = edgePathCacheRef.current;
+        let cached = cache.get(edge.id);
 
-        // Offset the control point perpendicular to the line for a gentle curve
-        const dx = Math.abs(x2 - x1);
-        const dy = Math.abs(y2 - y1);
-        const offset = Math.min(30, Math.max(dx, dy) * 0.2);
+        let x1: number, y1: number, x2: number, y2: number, mx: number, my: number, path: string;
 
-        // For vertical edges, offset horizontally; for horizontal, offset vertically
-        const isVertical = dy > dx;
-        const cx = isVertical ? mx + offset : mx;
-        const cy = isVertical ? my : my - offset;
+        if (cached && cached.key === cacheKey) {
+          // Reuse cached path — no recomputation needed
+          ({ x1, y1, x2, y2, mx, my, path } = cached);
+        } else {
+          // Compute endpoints and path
+          const ep = computeEndpoints(from, to, edge.role);
+          x1 = ep.x1; y1 = ep.y1; x2 = ep.x2; y2 = ep.y2;
+          mx = (x1 + x2) / 2;
+          my = (y1 + y2) / 2;
 
-        const path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`;
+          // Offset the control point perpendicular to the line for a gentle curve
+          const ddx = Math.abs(x2 - x1);
+          const ddy = Math.abs(y2 - y1);
+          const offset = Math.min(30, Math.max(ddx, ddy) * 0.2);
+
+          // For vertical edges, offset horizontally; for horizontal, offset vertically
+          const isVertical = ddy > ddx;
+          const cx = isVertical ? mx + offset : mx;
+          const cy = isVertical ? my : my - offset;
+
+          path = `M ${x1},${y1} Q ${cx},${cy} ${x2},${y2}`;
+          cache.set(edge.id, { key: cacheKey, path, x1, y1, x2, y2, mx, my });
+        }
+
         const isHovered = hoveredEdge === edge.id;
         const animation = getEdgeAnimation(from, edge.id, latestEdgeFromNode);
 

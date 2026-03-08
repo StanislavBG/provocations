@@ -13,6 +13,7 @@ import {
   Workflow,
   GitGraph,
   Clock,
+  Shield,
 } from "lucide-react";
 
 export interface TemplateStep {
@@ -792,6 +793,153 @@ How sections are ordered — most impactful insight first, supporting details be
       { id: "organize", label: "Organize & tag" },
       { id: "explore", label: "Explore timeline" },
     ],
+  },
+  {
+    id: "product-owner",
+    category: "build",
+    statusLabel: "under-dev",
+    title: "Product Owner Agent",
+    shortLabel: "PO Agent",
+    subtitle: "Product owner brain in a file",
+    description:
+      "Create a comprehensive Product Owner guide that gives AI agent teams the decision-making context, quality bar, and self-review protocol needed to build software autonomously while staying aligned with product goals. Uses a 10-section framework covering identity, values, quality, decisions, coordination, anti-patterns, and more.",
+    howTo: "Start by defining your product's identity — what it IS and IS NOT. Then work through ranked values, quality bar, decision framework, and coordination rules. The system challenges you to be specific: values must be ranked, anti-patterns must come from real incidents, and quality gates must use checkboxes, not prose.",
+    useCases: [
+      "Creating a product owner guide for an AI-assisted development team",
+      "Defining quality bar and decision framework for autonomous agents",
+      "Building institutional memory of anti-patterns and coordination rules",
+    ],
+    icon: Shield,
+    objective:
+      "Create a comprehensive Product Owner Agent guide that enables AI agent teams to make aligned decisions autonomously",
+    starterText: "",
+    draftQuestions: [
+      "What is your product? Describe it in 2-3 specific sentences.",
+      "What is your product NOT? Name the closest competitor category, common misconception, and adjacent category it should not be confused with.",
+      "What are your top 3 product values, ranked? Express each as 'X over Y' — e.g., 'Reliability over features'.",
+      "What does 'done' mean for your team? List the specific checkboxes, not prose.",
+    ],
+    templateContent: `# Product Owner Agent Guide
+
+## 1. Product Identity
+
+### What [Product] IS
+[Describe your product in 2-3 specific sentences]
+
+### What [Product] is NOT
+- Not a [closest competitor category]
+- Not a [common misconception]
+- Not a [adjacent category]
+
+### The Core Promise
+> "[One sentence a user would repeat to a friend]"
+
+### Who Uses This
+**Primary users:** [Role] who [activity]
+**What they struggle with:** [2-3 pain points]
+
+## 2. Product Values (Ranked)
+
+### 1. [Value A] over [Value B]
+[What this means in practice]
+
+### 2. [Value C] over [Value D]
+[What this means in practice]
+
+### 3. [Value E] over [Value F]
+[What this means in practice]
+
+## 3. Quality Bar
+
+### What "Done" Means
+- [ ] Feature works as described
+- [ ] Handles empty and error states
+- [ ] Type checking passes
+- [ ] No debugging artifacts
+- [ ] Integration with existing features verified
+
+### What "Done" Does NOT Mean
+- "The happy path works"
+- "It compiles"
+- "I'll clean it up later"
+
+## 4. Sprint Review Protocol
+
+### Self-Check (After Every Task)
+- Completeness: Did I build what was specified?
+- Quality: Does the build pass?
+- Integration: Do adjacent features still work?
+- Alignment: Does this reinforce the product promise?
+
+## 5. Decision Framework
+
+### Feature Decisions
+Does it serve the core promise? → No → DEFER
+Does it already exist? → Yes → HARDEN
+Is it in the current milestone? → No → DEFER
+Can I finish it completely? → No → SCOPE DOWN
+
+## 6. Cross-Team Coordination
+
+### File Ownership
+| File / Directory | Primary Owner | Touch With Caution |
+|-----------------|---------------|-------------------|
+| | | |
+
+## 7. Anti-Patterns
+[Add real incidents as you discover them]
+
+### 1. [Name]
+**What happened:** [Specific incident]
+**Why it was bad:** [Consequence]
+**Rule:** [What to do instead]
+
+## 8. Release Readiness
+
+### Non-Negotiable
+- [ ] [Critical requirement 1]
+- [ ] [Critical requirement 2]
+
+### Important
+- [ ] [Important requirement 1]
+
+### Nice-to-Have
+- [ ] [Optional requirement 1]
+
+## 9. Agent Protocol
+
+### Before Starting Work
+1. Read this guide
+2. Read the task spec
+3. Check for in-progress markers
+4. Mark your task in-progress
+
+### After Work
+5. Run the self-check
+6. Verify build passes
+7. Mark task done
+
+## 10. Evolution
+
+Update this guide when:
+- A new anti-pattern is discovered
+- A quality gate proves insufficient
+- Coordination rules need updating`,
+    provocationSources: [
+      "Quality Auditor",
+      "Agent Team Lead",
+      "Release Manager",
+      "Incident Responder",
+      "Cross-Team Coordinator",
+    ],
+    provocationExamples: [
+      "Your quality bar doesn't define what 'tested' means — is it unit tests, integration tests, or just 'it compiles'? — Quality Auditor",
+      "Your values aren't ranked — they're just listed. When reliability conflicts with speed, which wins? — Agent Team Lead",
+      "Your anti-patterns section has zero items from real incidents. This is a hypothetical guide, not institutional memory. — Incident Responder",
+      "Your readiness checklist has no security requirements. What about auth, data privacy, or dependency audits? — Release Manager",
+      "Can an agent resolve a scope question without asking the human? Your decision framework doesn't cover that. — Cross-Team Coordinator",
+    ],
+    steps: [{ id: "context", label: "Share your context" }],
   },
 ];
 

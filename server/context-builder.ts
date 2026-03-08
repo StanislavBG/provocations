@@ -5,6 +5,17 @@
  * Every task type uses this builder to assemble context sections
  * in a consistent format. This replaces the per-endpoint ad-hoc
  * context construction scattered across routes.ts.
+ *
+ * ─── PROMPT INJECTION PREVENTION ─────────────────────────────────────────
+ * This builder constructs SYSTEM-level context only. The output of these
+ * functions goes into the `system` field of LLMRequest, never into user
+ * messages. User-authored content (document text, interview answers, chat
+ * messages) is passed separately in the `messages` array with role="user".
+ *
+ * The separation is enforced at the LLMRequest type level in server/llm.ts:
+ *   - system: string — built by this module (instructions + context sections)
+ *   - messages: LLMMessage[] — user content with explicit role annotations
+ * ──────────────────────────────────────────────────────────────────────────
  */
 
 import type {
@@ -43,6 +54,97 @@ export const LIMITS = {
   historyEntries: 5,
   discussionEntries: 10,
 } as const;
+
+// ---------------------------------------------------------------------------
+// G1: Context budget allocation
+// ---------------------------------------------------------------------------
+
+/** Token limits per model (input context window) */
+export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "gemini-2.0-flash": 1_000_000,
+  "gemini-2.5-flash": 1_000_000,
+  "gemini-2.5-flash-lite": 1_000_000,
+  "gemini-2.5-pro": 1_000_000,
+  "gpt-4o": 128_000,
+  "gpt-4o-mini": 128_000,
+  "o4-mini": 128_000,
+  "claude-sonnet-4-6": 200_000,
+  "claude-sonnet-4-5-20250929": 200_000,
+  "claude-haiku-4-5": 200_000,
+};
+
+export interface ContextBudget {
+  systemPrompt: number;
+  userContent: number;
+  contextDocs: number;
+  conversationHistory: number;
+  outputBuffer: number;
+  total: number;
+}
+
+/**
+ * Allocate token budget across context sections based on model and task type.
+ *
+ * Strategy:
+ *   - Reserve 10% for output (clamped to 2000..8000)
+ *   - Reserve 2000 for system prompt
+ *   - Split remaining by task type
+ */
+export function allocateContextBudget(model: string, taskType: string): ContextBudget {
+  const total = MODEL_CONTEXT_LIMITS[model] ?? 128_000;
+  const outputBuffer = Math.min(8000, Math.max(2000, Math.floor(total * 0.1)));
+  const systemPrompt = 2000;
+  const remaining = total - outputBuffer - systemPrompt;
+
+  let userContent: number;
+  let contextDocs: number;
+  let conversationHistory: number;
+
+  switch (taskType) {
+    case "research-chat":
+    case "gpt-to-context":
+    case "chat":
+      // Conversation-heavy: 70% conversation, 30% context
+      conversationHistory = Math.floor(remaining * 0.7);
+      contextDocs = Math.floor(remaining * 0.3);
+      userContent = 0;
+      break;
+    case "write":
+    case "query-write":
+      // Document-heavy: 50% user content, 30% context, 20% conversation
+      userContent = Math.floor(remaining * 0.5);
+      contextDocs = Math.floor(remaining * 0.3);
+      conversationHistory = Math.floor(remaining * 0.2);
+      break;
+    default:
+      // Balanced: 40% user, 40% context, 20% conversation
+      userContent = Math.floor(remaining * 0.4);
+      contextDocs = Math.floor(remaining * 0.4);
+      conversationHistory = Math.floor(remaining * 0.2);
+      break;
+  }
+
+  return { systemPrompt, userContent, contextDocs, conversationHistory, outputBuffer, total };
+}
+
+/**
+ * Fit content to a token budget. Keeps 60% from beginning and 40% from end
+ * when truncation is needed. Uses a rough 4 chars/token estimate.
+ */
+export function fitToBudget(content: string, tokenBudget: number): string {
+  const estimatedTokens = Math.ceil(content.length / 4);
+  if (estimatedTokens <= tokenBudget) return content;
+
+  const charBudget = tokenBudget * 4;
+  const keepStart = Math.floor(charBudget * 0.6);
+  const keepEnd = Math.floor(charBudget * 0.4);
+
+  return (
+    content.slice(0, keepStart) +
+    "\n\n[... content truncated ...]\n\n" +
+    content.slice(-keepEnd)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Section builders — each returns a formatted string or empty
@@ -525,6 +627,40 @@ RULES:
     feedbackTone: "chronologically precise and analytically curious",
     outputFormat: "markdown",
   },
+
+  "product-owner": {
+    documentType: "product owner agent guide",
+    systemGuidance: `APPLICATION CONTEXT: Product Owner Agent Guide
+The document is a comprehensive Product Owner guide — a "product owner brain in a file" that gives AI agent teams the decision-making context, quality bar, and self-review protocol needed to build software autonomously while staying aligned with product goals.
+
+The document follows a 10-section framework:
+1. Product Identity — What the product IS and IS NOT, core promise, who uses it
+2. Product Values — Ranked "X over Y" decision tiebreakers (not just listed — ranked)
+3. Quality Bar — Objective "done" checklist (functional, code quality, integration, docs)
+4. Sprint Review Protocol — Self-check (2 min) + full review (15 min) procedures
+5. Decision Framework — Feature/architecture/scope decision flowcharts
+6. Cross-Team Coordination — Dependency map, file ownership, parallel work rules
+7. Anti-Patterns — Real incidents: what happened, why bad, what to do instead
+8. Release Readiness — Non-negotiable / important / nice-to-have gates
+9. Agent Protocol — Before/during/after workflow for AI agents
+10. Evolution — How and when to update the guide
+
+YOUR ROLE: Help the user create a specific, actionable PO guide that an AI agent team can use to make aligned decisions without human intervention.
+
+Key principles:
+- Values must be RANKED, not just listed. "Reliability over features" is useful; "Reliability is important" is not.
+- Anti-patterns must come from REAL incidents, not hypothetical scenarios.
+- Quality bar must use CHECKBOXES, not prose. "Done" is a fact, not a feeling.
+- The guide should get MORE specific with each sprint, not more generic.
+
+RULES:
+- When challenging the user's draft, focus on: Are values ranked or just listed? Does the quality bar have measurable criteria? Are anti-patterns from real history or theoretical? Can an agent resolve a scope question without asking the human? Is the readiness checklist specific to this project?
+- Push for specificity — generic guides are useless to agents
+- Challenge missing sections — every section matters for autonomous agent alignment
+- Preserve the user's domain expertise while enforcing structural rigor`,
+    feedbackTone: "precise and alignment-focused",
+    outputFormat: "markdown",
+  },
 };
 
 /** Get app-specific config, or undefined for default behavior */
@@ -617,6 +753,10 @@ export interface ContextInput {
 
   // Limits override
   maxDocLength?: number;
+
+  // Budget allocation
+  model?: string;
+  taskType?: string;
 }
 
 export interface BuiltContext {
@@ -647,6 +787,9 @@ export interface BuiltContext {
   /** App-type config for conditional logic in handlers */
   appConfig: AppTypeConfig | undefined;
 
+  /** Context budget allocation for the current model/task (G1) */
+  budget: ContextBudget | undefined;
+
   /**
    * All non-empty sections joined as a single CONTEXT block,
    * ready to embed in a system prompt.
@@ -659,7 +802,15 @@ export interface BuiltContext {
  * Returns individual sections plus the full assembled block.
  */
 export function buildContext(input: ContextInput): BuiltContext {
-  const doc = formatDocument(input.document, input.maxDocLength ?? LIMITS.document);
+  // G1: Compute budget if model is specified
+  const budget = input.model
+    ? allocateContextBudget(input.model, input.taskType ?? "default")
+    : undefined;
+
+  // Apply budget-aware truncation when budget is available
+  const docMaxLen = input.maxDocLength
+    ?? (budget ? budget.userContent * 4 : LIMITS.document);
+  const doc = formatDocument(input.document, docMaxLen);
   const obj = formatObjective(input.objective, input.secondaryObjective);
   const hist = formatEditHistory(input.editHistory);
   const interview = formatInterviewEntries(input.interviewEntries);
@@ -682,8 +833,13 @@ export function buildContext(input: ContextInput): BuiltContext {
     (s) => s.length > 0,
   );
 
-  const assembled =
+  let assembled =
     sections.length > 0 ? `\nCONTEXT:\n${sections.join("\n\n")}` : "";
+
+  // G1: Apply budget limit to assembled context block
+  if (budget) {
+    assembled = fitToBudget(assembled, budget.contextDocs);
+  }
 
   return {
     document: doc,
@@ -699,6 +855,7 @@ export function buildContext(input: ContextInput): BuiltContext {
     personas: personas,
     appContext: appCtx,
     appConfig: appConfig,
+    budget,
     assembled,
   };
 }

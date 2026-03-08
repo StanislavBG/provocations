@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { ProvocationType, Challenge, Advice, ProvocationRound } from "@shared/schema";
 import { Link } from "lucide-react";
+import { HelpButton } from "@/components/HelpButton";
 
 interface ProvoThreadProps {
   documentText: string;
@@ -303,6 +304,10 @@ export function ProvoThread({
     <div className="h-full flex flex-col">
       {/* ─── Persona selector + Generate button ─── */}
       <div className="px-3 py-2 border-b bg-muted/20 space-y-2 shrink-0">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Personas</span>
+          <HelpButton topic="personas" />
+        </div>
         <PersonaAvatarRow
           activePersonas={activePersonas}
           onToggle={onTogglePersona}

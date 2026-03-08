@@ -30,6 +30,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HelpButton } from "@/components/HelpButton";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -934,6 +935,7 @@ export function ContextStoreManager({
       <div className="flex items-center gap-3 px-5 py-3 border-b border-border/50 shrink-0 bg-card/50">
         <HardDrive className="w-4 h-4 text-primary" />
         <h2 className="text-sm font-semibold">Context Store</h2>
+        <HelpButton topic="context-store" />
         <span className="text-[10px] text-muted-foreground">
           {documents.length} files, {folders.length} folders
         </span>

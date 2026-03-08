@@ -8,3 +8,4 @@ vite.config.ts.*
 .env.claude/worktrees/
 agency/knowledge/*
 !agency/knowledge/.gitkeep
+.claude/worktrees/

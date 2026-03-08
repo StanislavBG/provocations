@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -6,9 +7,77 @@ import { clerkMiddleware, requireAuth } from "@clerk/express";
 import { ensureTables } from "./db";
 import { discoverModels } from "./llm";
 import { setupCanvasWebSocket, setSaveCanvasCallback } from "./canvas-collab";
+import { validateEnv } from "./env";
+import { requestLogger } from "./logger";
+import { APP_VERSION } from "../client/src/lib/version";
+import pg from "pg";
+
+// Validate environment variables before anything else
+validateEnv();
 
 const app = express();
 const httpServer = createServer(app);
+
+// ── Security: disable x-powered-by header ──
+app.disable("x-powered-by");
+
+// ── Security: helmet middleware with CSP for trusted domains ──
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          "https://*.clerk.accounts.dev",
+          "https://clerk.com",
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com",
+        ],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https://*"],
+        mediaSrc: ["'self'", "blob:", "data:"],
+        connectSrc: [
+          "'self'",
+          "https://*.clerk.accounts.dev",
+          "https://clerk.com",
+          "https://generativelanguage.googleapis.com",
+          "https://api.anthropic.com",
+          "https://api.openai.com",
+          "https://api.elevenlabs.io",
+          "wss://api.elevenlabs.io",
+          "https://www.googleapis.com",
+          "wss:",
+          "ws:",
+        ],
+        workerSrc: ["'self'", "blob:"],
+        frameSrc: ["'self'", "https://*.clerk.accounts.dev", "https://clerk.com"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
+
+// Permissions-Policy: restrict sensitive browser APIs
+app.use((_req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(self), microphone=(self), geolocation=(), payment=()",
+  );
+  next();
+});
+
+// Structured request logging middleware
+app.use(requestLogger());
 
 // Stripe webhooks need the raw body for signature verification.
 // All other routes get the usual JSON parser.
@@ -21,6 +90,46 @@ app.use((req, res, next) => {
 });
 app.use(clerkMiddleware());
 
+// Health check endpoint — no auth required
+app.get("/api/health", async (_req, res) => {
+  const checks: Record<string, string> = {};
+  let healthy = true;
+
+  // Database connectivity
+  try {
+    const pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 1,
+      connectionTimeoutMillis: 3_000,
+    });
+    const client = await pool.connect();
+    await client.query("SELECT 1");
+    client.release();
+    await pool.end();
+    checks.database = "ok";
+  } catch {
+    checks.database = "unavailable";
+    healthy = false;
+  }
+
+  // LLM provider availability
+  checks.llm = process.env.GEMINI_API_KEY
+    ? "ok"
+    : process.env.ANTHROPIC_API_KEY
+      ? "ok"
+      : "no_api_key";
+  if (checks.llm !== "ok") healthy = false;
+
+  const status = healthy ? 200 : 503;
+  res.status(status).json({
+    status: healthy ? "healthy" : "degraded",
+    version: APP_VERSION,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    checks,
+  });
+});
+
 app.get("/api/clerk-config", (_req, res) => {
   const key = process.env.CLERK_PUBLISHABLE_KEY;
   if (!key) {
@@ -30,7 +139,7 @@ app.get("/api/clerk-config", (_req, res) => {
 });
 
 app.use("/api", (req, _res, next) => {
-  if (req.path === "/clerk-config" || req.path === "/stripe/webhook") {
+  if (req.path === "/clerk-config" || req.path === "/stripe/webhook" || req.path === "/health") {
     return next();
   }
   return requireAuth()(req, _res, next);

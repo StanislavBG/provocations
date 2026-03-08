@@ -40,6 +40,16 @@ import {
   Sparkles,
   ChevronsUp,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import type { DocumentListItem, FolderItem } from "@shared/schema";
 
 // ── Drag-and-drop data types ──
@@ -164,6 +174,9 @@ export function StoragePanel({
 
   // Move-to dialog state
   const [moveTarget, setMoveTarget] = useState<DragData | null>(null);
+
+  // Confirmation dialog state (replaces window.confirm)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: "document" | "folder"; id: number; title: string } | null>(null);
 
   // Search & sort
   const [searchQuery, setSearchQuery] = useState("");
@@ -487,8 +500,8 @@ export function StoragePanel({
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedDocId) {
           const doc = allDocsQuery.data?.documents?.find((d) => d.id === selectedDocId);
-          if (doc && window.confirm(`Delete "${doc.title}"?`)) {
-            deleteDocMutation.mutate(doc.id);
+          if (doc) {
+            setDeleteConfirm({ type: "document", id: doc.id, title: doc.title });
           }
         }
       }
@@ -753,9 +766,8 @@ export function StoragePanel({
                   onCancelRename={() => { setRenamingFolderId(null); setRenameText(""); }}
                   onRenameTextChange={setRenameText}
                   onDelete={(id) => {
-                    if (window.confirm("Delete this folder and all its contents?")) {
-                      deleteFolderMutation.mutate(id);
-                    }
+                    const folder = allFolders.find((f: FolderItem) => f.id === id);
+                    setDeleteConfirm({ type: "folder", id, title: folder?.name || "this folder" });
                   }}
                   onMoveTo={(data) => setMoveTarget(data)}
                   isCreatingFolder={isCreatingFolder}
@@ -926,9 +938,7 @@ export function StoragePanel({
                   onClick={() => navigateToFolder(folder.id, folder.name)}
                   onDoubleClick={() => navigateToFolder(folder.id, folder.name)}
                   onDelete={() => {
-                    if (window.confirm(`Delete "${folder.name}" and all its contents?`)) {
-                      deleteFolderMutation.mutate(folder.id);
-                    }
+                    setDeleteConfirm({ type: "folder", id: folder.id, title: folder.name });
                   }}
                   onMoveTo={() => setMoveTarget({ type: "folder", id: folder.id, title: folder.name })}
                 />
@@ -974,9 +984,7 @@ export function StoragePanel({
                     onClick={() => handlePreviewDocument(doc.id)}
                     onDoubleClick={() => handleOpenDocument(doc.id)}
                     onDelete={() => {
-                      if (window.confirm(`Delete "${doc.title}"?`)) {
-                        deleteDocMutation.mutate(doc.id);
-                      }
+                      setDeleteConfirm({ type: "document", id: doc.id, title: doc.title });
                     }}
                     onMoveTo={() => setMoveTarget({ type: "document", id: doc.id, title: doc.title })}
                   />
@@ -1048,9 +1056,7 @@ export function StoragePanel({
                           className="h-7 w-7 text-destructive/60 hover:text-destructive"
                           title="Delete document"
                           onClick={() => {
-                            if (window.confirm(`Delete "${previewDoc.title}"?`)) {
-                              deleteDocMutation.mutate(previewDoc.id);
-                            }
+                            setDeleteConfirm({ type: "document", id: previewDoc.id, title: previewDoc.title });
                           }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1172,6 +1178,39 @@ export function StoragePanel({
           onCancel={() => setMoveTarget(null)}
         />
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {deleteConfirm?.type === "folder" ? "folder" : "document"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConfirm?.type === "folder"
+                ? `Are you sure you want to delete "${deleteConfirm?.title}" and all its contents? This cannot be undone.`
+                : `Are you sure you want to delete "${deleteConfirm?.title}"? This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!deleteConfirm) return;
+                if (deleteConfirm.type === "folder") {
+                  deleteFolderMutation.mutate(deleteConfirm.id);
+                } else {
+                  deleteDocMutation.mutate(deleteConfirm.id);
+                }
+                setDeleteConfirm(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
