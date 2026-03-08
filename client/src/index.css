@@ -736,6 +736,60 @@
   }
 }
 
+/* ── Aurora CSS Fallback Animation ──
+ * Provides a built-in aurora background when the external BG-Labs animation
+ * is unavailable. Animated gradient layers create a soft, shifting aurora.
+ * If BG-Labs loads, its canvas renders on top inside #hero.
+ */
+@keyframes aurora-shift-1 {
+  0%, 100% { transform: translate(0%, 0%) scale(1.5); }
+  25% { transform: translate(10%, -15%) scale(1.6); }
+  50% { transform: translate(-5%, 10%) scale(1.4); }
+  75% { transform: translate(-15%, -5%) scale(1.55); }
+}
+@keyframes aurora-shift-2 {
+  0%, 100% { transform: translate(0%, 0%) scale(1.4); }
+  25% { transform: translate(-12%, 8%) scale(1.5); }
+  50% { transform: translate(8%, -12%) scale(1.6); }
+  75% { transform: translate(5%, 15%) scale(1.45); }
+}
+@keyframes aurora-shift-3 {
+  0%, 100% { transform: translate(0%, 0%) scale(1.3); }
+  33% { transform: translate(15%, 10%) scale(1.5); }
+  66% { transform: translate(-10%, -8%) scale(1.4); }
+}
+
+html.canvas-aurora #hero {
+  background: #0a0618;
+  overflow: hidden;
+}
+
+html.canvas-aurora #hero::before,
+html.canvas-aurora #hero::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  pointer-events: none;
+}
+
+html.canvas-aurora #hero::before {
+  background: radial-gradient(ellipse at 30% 50%,
+    hsla(270, 60%, 25%, 0.6) 0%,
+    hsla(240, 50%, 15%, 0.3) 40%,
+    transparent 70%
+  );
+  animation: aurora-shift-1 20s ease-in-out infinite;
+}
+
+html.canvas-aurora #hero::after {
+  background: radial-gradient(ellipse at 70% 40%,
+    hsla(200, 70%, 20%, 0.5) 0%,
+    hsla(260, 40%, 12%, 0.25) 45%,
+    transparent 70%
+  );
+  animation: aurora-shift-2 25s ease-in-out infinite;
+}
+
 /* ── Aurora Glassmorphism ──
  * When the "Aurora" canvas style is active, UI surfaces become translucent
  * with backdrop blur so the BG-Labs animated background shows through.
