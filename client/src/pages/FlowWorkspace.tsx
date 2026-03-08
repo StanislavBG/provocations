@@ -4780,16 +4780,31 @@ export default function FlowWorkspace() {
   const { shellConfig, setShellConfig } = useFtuxShellConfig();
 
   // Merge user's persisted config with FlowWorkspace defaults:
-  // Always use FLOW_DOCK_ITEMS (not the FtuxWorkspace defaults) and force tourCompleted
-  const mergedConfig = useMemo<FtuxShellConfig>(() => ({
-    ...shellConfig,
-    dockItems: FLOW_DOCK_ITEMS,
-    dockShowLabels: shellConfig.dockShowLabels ?? FLOW_SHELL_CONFIG.dockShowLabels,
-    dockSnapped: shellConfig.dockSnapped ?? FLOW_SHELL_CONFIG.dockSnapped,
-    dockButtonSize: shellConfig.dockButtonSize ?? FLOW_SHELL_CONFIG.dockButtonSize,
-    tourCompleted: true,
-    tipsEnabled: false,
-  }), [shellConfig]);
+  // Preserve user's dock item ordering but ensure all catalog tools are present.
+  // New tools from FLOW_DOCK_ITEMS are appended; removed tools are dropped.
+  // Hotkeys 1-9 are tied to POSITIONS, not icons — reordering changes which tool a number activates.
+  const mergedConfig = useMemo<FtuxShellConfig>(() => {
+    const userItems = shellConfig.dockItems ?? [];
+    const catalogSet = new Set(FLOW_DOCK_ITEMS.map((d) => d.toolId));
+    // Keep user's order, filtering out tools no longer in catalog
+    const ordered = userItems.filter((item) => catalogSet.has(item.toolId));
+    const existingIds = new Set(ordered.map((d) => d.toolId));
+    // Append any new catalog tools the user doesn't have yet
+    for (const item of FLOW_DOCK_ITEMS) {
+      if (!existingIds.has(item.toolId)) {
+        ordered.push(item);
+      }
+    }
+    return {
+      ...shellConfig,
+      dockItems: ordered.length > 0 ? ordered : FLOW_DOCK_ITEMS,
+      dockShowLabels: shellConfig.dockShowLabels ?? FLOW_SHELL_CONFIG.dockShowLabels,
+      dockSnapped: shellConfig.dockSnapped ?? FLOW_SHELL_CONFIG.dockSnapped,
+      dockButtonSize: shellConfig.dockButtonSize ?? FLOW_SHELL_CONFIG.dockButtonSize,
+      tourCompleted: true,
+      tipsEnabled: false,
+    };
+  }, [shellConfig]);
 
   return (
     <FtuxShellProvider initialConfig={mergedConfig} onConfigChange={setShellConfig}>
