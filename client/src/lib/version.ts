@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.19.4";
+export const APP_VERSION = "0.20.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.0",
+    date: "2026-03-08",
+    changes: [
+      "Redesign Document fullscreen as premium notebook experience — centered page, generous margins, warm typography",
+      "Sidebar starts collapsed to maximize writing space, toggle with panel icon",
+      "Inline toolbar strip replaces sidebar-bound tools for quick access",
+      "Objective field integrates as subtle italic prompt at top of page",
+      "Document editor uses bare chrome for distraction-free writing",
+    ],
+  },
   {
     version: "0.19.4",
     date: "2026-03-08",
