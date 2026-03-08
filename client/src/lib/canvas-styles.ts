@@ -19,7 +19,7 @@ export const CANVAS_STYLES: CanvasStyleDef[] = [
   {
     key: "aurora",
     label: "Aurora",
-    description: "Animated particle field",
+    description: "Shifting aurora glow",
     background: null,
     gridOpacity: 0.2,
     gridColor: "currentColor",
