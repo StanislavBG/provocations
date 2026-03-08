@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.2";
+export const APP_VERSION = "0.20.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,23 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.4",
+    date: "2026-03-08",
+    changes: [
+      "Fix LLM Base expanded view crash — defensive Array.isArray guard on models query data",
+      "Add 26 unit tests for expanded view data logic: edge roles, context gathering, model list handling, prompt assembly",
+      "Update vitest config to include .test.tsx files",
+    ],
+  },
+  {
+    version: "0.20.3",
+    date: "2026-03-08",
+    changes: [
+      "Resizable left sidebar in Document and LLM Base expanded views — drag edge to resize (220–500px)",
+      "Document sidebar opens by default on the Provo tab for immediate provocation workflow",
+    ],
+  },
   {
     version: "0.20.2",
     date: "2026-03-08",
