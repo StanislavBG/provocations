@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.18.0";
+export const APP_VERSION = "0.18.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.18.1",
+    date: "2026-03-08",
+    changes: [
+      "Aurora canvas style: built-in CSS aurora animation replaces external BG-Labs dependency for reliable animated background",
+    ],
+  },
   {
     version: "0.18.0",
     date: "2026-03-08",
