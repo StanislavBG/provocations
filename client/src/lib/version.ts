@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.21.3";
+export const APP_VERSION = "0.22.0";
 
 export interface ReleaseNote {
   version: string;
@@ -19,12 +19,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.21.3",
+    version: "0.22.0",
     date: "2026-03-08",
     changes: [
       "Infrastructure: health check endpoint, structured logging, env validation, CI pipeline, pre-commit hooks",
       "Testing foundation: 146 new tests (crypto, schema, LLM routing, context builder) with mock helpers",
       "Security: helmet CSP, rate limiting (4 tiers), input validation limits, upload validation, x-powered-by disabled",
+      "Monetization: subscriptions + usage_records DB, usage metering (Free/Pro/Team), requireUsage() middleware",
+      "Stripe webhooks: invoice.paid, invoice.payment_failed, customer.subscription.deleted",
+      "Billing page at /settings/billing with usage dashboard, Stripe portal, plan comparison",
+      "Pricing redesign: tier cards, annual toggle (20% off), current plan indicator",
     ],
   },
   {
