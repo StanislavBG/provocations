@@ -135,11 +135,15 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
     statusBarPinnedItems,
     statusBarTranslucency,
     statusBarColor,
+    statusBarPosition,
     activeWorkflow,
     setActiveTool,
     removeStatusBarPinnedItem,
     dockItems,
   } = shell;
+
+  const isBottom = statusBarPosition === "bottom";
+  const tooltipSide = isBottom ? "top" : "bottom";
 
   const GROUP_LABELS: Record<string, string> = {
     gather: "Gather",
@@ -167,7 +171,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
 
   return (
     <div
-      className="relative z-50 flex items-center justify-between px-4 shrink-0 border-b border-border/50"
+      className={cn("relative z-50 flex items-center justify-between px-4 shrink-0", isBottom ? "border-t border-border/50" : "border-b border-border/50")}
       style={{
         height: "var(--ftux-status-bar-height, 44px)",
         background: bgColor,
@@ -221,7 +225,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
             {canvasDropdownOpen && !isRenaming && (
               <>
                 <div className="fixed inset-0 z-50" onClick={() => setCanvasDropdownOpen(false)} />
-                <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[200px] max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                <div className={cn("absolute left-0 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[200px] max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100", isBottom ? "bottom-full mb-1" : "top-full mt-1")}>
                   {(!savedCanvases || savedCanvases.length === 0) ? (
                     <div className="px-3 py-2 text-[10px] text-muted-foreground">No saved canvases</div>
                   ) : (
@@ -275,7 +279,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                 {jobCount} running
               </Badge>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs z-[60]">
+            <TooltipContent side={tooltipSide} className="text-xs z-[60]">
               {jobCount} AI {jobCount === 1 ? "job" : "jobs"} in progress
             </TooltipContent>
           </Tooltip>
@@ -316,7 +320,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                               <Icon className="w-3.5 h-3.5" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="bottom" className="text-xs z-[60]">
+                          <TooltipContent side={tooltipSide} className="text-xs z-[60]">
                             {label}
                             <span className="text-muted-foreground ml-1">(right-click to unpin)</span>
                           </TooltipContent>
@@ -354,14 +358,14 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
               </Button>
             </TooltipTrigger>
             {!gearDropdownOpen && (
-              <TooltipContent side="bottom" className="text-xs z-[60]">Settings</TooltipContent>
+              <TooltipContent side={tooltipSide} className="text-xs z-[60]">Settings</TooltipContent>
             )}
           </Tooltip>
 
           {gearDropdownOpen && (
             <>
               <div className="fixed inset-0 z-50" onClick={() => setGearDropdownOpen(false)} />
-              <div className="absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[220px] animate-in fade-in zoom-in-95 duration-100">
+              <div className={cn("absolute right-0 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[220px] animate-in fade-in zoom-in-95 duration-100", isBottom ? "bottom-full mb-1" : "top-full mt-1")}>
                 {/* Context Store */}
                 {onOpenContextStore && (
                   <button

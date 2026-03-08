@@ -104,9 +104,12 @@ export function FtuxDock() {
     dockLocked,
     setDockLocked,
     statusBarPinnedItems,
+    statusBarPosition,
     addStatusBarPinnedItem,
     removeStatusBarPinnedItem,
   } = shell;
+
+  const statusBarAtBottom = statusBarPosition === "bottom";
 
   // Button size dimensions — "large" expands when snapped
   const isLargeSnapped = dockButtonSize === "large" && dockSnapped;
@@ -229,16 +232,26 @@ export function FtuxDock() {
   const gridCols = isHorizontal ? COLS : ROWS;
   const gridRows = isHorizontal ? ROWS : COLS;
 
+  // When status bar is at the bottom, dock "bottom" must offset above it and dock "top" can use top-0.
+  // When status bar is at the top (default), dock "top" offsets below it and dock "bottom" sits at bottom-0.
   const positionClasses = dockSnapped
     ? {
-        bottom: "fixed bottom-0 left-0 right-0 z-40",
-        top: "fixed top-[var(--ftux-status-bar-height,44px)] left-0 right-0 z-40",
+        bottom: statusBarAtBottom
+          ? "fixed bottom-[var(--ftux-status-bar-height,44px)] left-0 right-0 z-40"
+          : "fixed bottom-0 left-0 right-0 z-40",
+        top: statusBarAtBottom
+          ? "fixed top-0 left-0 right-0 z-40"
+          : "fixed top-[var(--ftux-status-bar-height,44px)] left-0 right-0 z-40",
         left: "fixed left-0 top-0 bottom-0 z-40",
         right: "fixed right-0 top-0 bottom-0 z-40",
       }
     : {
-        bottom: "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
-        top: "fixed top-[calc(var(--ftux-status-bar-height,44px)+12px)] left-1/2 -translate-x-1/2 z-40",
+        bottom: statusBarAtBottom
+          ? "fixed bottom-[calc(var(--ftux-status-bar-height,44px)+12px)] left-1/2 -translate-x-1/2 z-40"
+          : "fixed bottom-4 left-1/2 -translate-x-1/2 z-40",
+        top: statusBarAtBottom
+          ? "fixed top-3 left-1/2 -translate-x-1/2 z-40"
+          : "fixed top-[calc(var(--ftux-status-bar-height,44px)+12px)] left-1/2 -translate-x-1/2 z-40",
         left: "fixed left-4 top-1/2 -translate-y-1/2 z-40",
         right: "fixed right-4 top-1/2 -translate-y-1/2 z-40",
       };
@@ -263,8 +276,8 @@ export function FtuxDock() {
         <div
           className={cn(
             "fixed z-39",
-            dockPosition === "bottom" && "bottom-0 left-0 right-0 h-4",
-            dockPosition === "top" && "top-[var(--ftux-status-bar-height,44px)] left-0 right-0 h-4",
+            dockPosition === "bottom" && (statusBarAtBottom ? "bottom-[var(--ftux-status-bar-height,44px)] left-0 right-0 h-4" : "bottom-0 left-0 right-0 h-4"),
+            dockPosition === "top" && (statusBarAtBottom ? "top-0 left-0 right-0 h-4" : "top-[var(--ftux-status-bar-height,44px)] left-0 right-0 h-4"),
             dockPosition === "left" && "left-0 top-0 bottom-0 w-4",
             dockPosition === "right" && "right-0 top-0 bottom-0 w-4",
           )}
