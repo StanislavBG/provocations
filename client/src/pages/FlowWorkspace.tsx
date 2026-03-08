@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCanvasCollab } from "@/hooks/use-canvas-collab";
 import { Button } from "@/components/ui/button";
 import { ProvokeText } from "@/components/ProvokeText";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ShareDialog } from "@/components/ShareDialog";
 import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
@@ -85,7 +86,7 @@ import {
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
   Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench, Info, Crosshair,
-  PanelLeft, PanelLeftClose,
+  PanelLeft, PanelLeftClose, Send,
 } from "lucide-react";
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
@@ -424,6 +425,10 @@ function FlowWorkspaceInner() {
   });
   const [docToolRunning, setDocToolRunning] = useState<string | null>(null);
   const [docProvoEvolving, setDocProvoEvolving] = useState(false);
+  const [docWriterTextOpen, setDocWriterTextOpen] = useState(false);
+  const [docWriterFeedbackText, setDocWriterFeedbackText] = useState("");
+  const [docWriterVoiceActive, setDocWriterVoiceActive] = useState(false);
+  const docWriterTextInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
@@ -2651,6 +2656,42 @@ function FlowWorkspaceInner() {
     [docEditorContent, docObjective, toast, snapshotDocVersion, getDocConnectedContext],
   );
 
+  // ── Document editor: writer feedback (Smart Text / Voice) ──
+  const handleDocWriterFeedback = useCallback(
+    async (feedback: string) => {
+      if (!feedback.trim() || !docEditorContent.trim()) return;
+      snapshotDocVersion("Before writer feedback");
+      setDocToolRunning("writer-feedback");
+      try {
+        const connectedContext = getDocConnectedContext();
+        const res = await apiRequest("POST", "/api/write", {
+          document: docEditorContent,
+          instruction: `WRITER FEEDBACK:\nThe author has provided the following feedback to be remixed into the document:\n\n${feedback}\n\nInterpret the author's intent and intelligently weave this feedback into the document. This is not a literal transcription to append — it is editorial direction from the author.`,
+          appType: "write-a-prompt",
+          ...(docObjective.trim() ? { objective: docObjective.trim() } : {}),
+          ...(connectedContext ? { sessionNotes: connectedContext } : {}),
+        });
+        const data = (await res.json()) as { document: string };
+        if (data.document) {
+          setDocEditorContent(data.document);
+          toast({ title: "Document evolved", description: "Writer feedback integrated" });
+        }
+      } catch {
+        toast({ title: "Writer feedback failed", variant: "destructive" });
+      } finally {
+        setDocToolRunning(null);
+      }
+    },
+    [docEditorContent, docObjective, toast, snapshotDocVersion, getDocConnectedContext],
+  );
+
+  // Auto-focus writer text input when opened
+  useEffect(() => {
+    if (docWriterTextOpen) {
+      setTimeout(() => docWriterTextInputRef.current?.focus(), 50);
+    }
+  }, [docWriterTextOpen]);
+
   // ── Evolve document from provo thread (inline mode) ──
   const handleDocProvoEvolve = useCallback(
     async (instruction: string) => {
@@ -3907,7 +3948,7 @@ function FlowWorkspaceInner() {
 
                   {/* ── Main writing area ── */}
                   <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[hsl(var(--background))]">
-                    {/* Minimal toolbar — sidebar toggle only */}
+                    {/* Toolbar — sidebar toggle + writer voice/text */}
                     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/20 shrink-0 bg-muted/5">
                       <button
                         className="p-1.5 rounded-md hover:bg-muted/50 transition-colors text-muted-foreground"
@@ -3928,7 +3969,124 @@ function FlowWorkspaceInner() {
                           </span>
                         </>
                       )}
+
+                      {/* Spacer */}
+                      <div className="flex-1" />
+
+                      {/* Writer Voice — dictate feedback to evolve the document */}
+                      <div
+                        className={cn(
+                          "relative rounded-md transition-all",
+                          docWriterVoiceActive ? "ring-2 ring-primary/50 bg-primary/10" : "hover:bg-primary/10",
+                        )}
+                        title="Writer Voice — dictate feedback to evolve the document"
+                      >
+                        <VoiceRecorder
+                          onTranscript={(transcript: string) => {
+                            if (!transcript.trim()) return;
+                            handleDocWriterFeedback(transcript);
+                            setDocWriterVoiceActive(false);
+                            toast({ title: "Feedback sent", description: "Remixing your voice feedback into the document..." });
+                          }}
+                          onRecordingChange={setDocWriterVoiceActive}
+                          size="icon"
+                          variant="ghost"
+                          className={cn(
+                            "h-7 w-7",
+                            docWriterVoiceActive ? "text-primary animate-pulse" : "text-primary/80 hover:text-primary",
+                          )}
+                        />
+                        <span className={cn(
+                          "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background",
+                          docWriterVoiceActive ? "bg-destructive animate-ping" : "bg-primary",
+                        )} />
+                      </div>
+
+                      {/* Writer Text — toggle inline text input */}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn(
+                          "h-7 w-7 relative",
+                          docWriterTextOpen
+                            ? "text-primary bg-primary/10 ring-2 ring-primary/50"
+                            : "text-primary/80 hover:text-primary hover:bg-primary/10",
+                        )}
+                        onClick={() => setDocWriterTextOpen(!docWriterTextOpen)}
+                        title="Writer Edit — type feedback to evolve the document"
+                      >
+                        <PenLine className="w-3.5 h-3.5" />
+                        <span className={cn(
+                          "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background bg-primary",
+                        )} />
+                      </Button>
+
+                      {docWriterVoiceActive && (
+                        <span className="text-[11px] text-primary font-medium animate-pulse">
+                          Listening...
+                        </span>
+                      )}
+
+                      {docToolRunning === "writer-feedback" && (
+                        <span className="text-[11px] text-muted-foreground animate-pulse flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Evolving...
+                        </span>
+                      )}
                     </div>
+
+                    {/* Writer text input bar (appears when Writer Edit clicked) */}
+                    {docWriterTextOpen && (
+                      <div className="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b bg-primary/5">
+                        <PenLine className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <input
+                          ref={docWriterTextInputRef}
+                          type="text"
+                          value={docWriterFeedbackText}
+                          onChange={(e) => setDocWriterFeedbackText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              if (docWriterFeedbackText.trim()) {
+                                handleDocWriterFeedback(docWriterFeedbackText.trim());
+                                setDocWriterFeedbackText("");
+                                setDocWriterTextOpen(false);
+                              }
+                            }
+                            if (e.key === "Escape") {
+                              setDocWriterTextOpen(false);
+                              setDocWriterFeedbackText("");
+                            }
+                          }}
+                          placeholder="Type feedback for the AI to remix into the document..."
+                          className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
+                          disabled={docToolRunning !== null}
+                        />
+                        {docWriterFeedbackText.trim() && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 shrink-0 text-primary"
+                            onClick={() => {
+                              handleDocWriterFeedback(docWriterFeedbackText.trim());
+                              setDocWriterFeedbackText("");
+                              setDocWriterTextOpen(false);
+                            }}
+                            disabled={docToolRunning !== null}
+                          >
+                            <Send className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-5 w-5 shrink-0 text-muted-foreground"
+                          onClick={() => { setDocWriterTextOpen(false); setDocWriterFeedbackText(""); }}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
 
                     {/* Scrollable page */}
                     <div className="flex-1 min-h-0 overflow-y-auto">
