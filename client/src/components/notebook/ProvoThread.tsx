@@ -21,6 +21,7 @@ import {
   FileText,
   Target,
   Users,
+  Sparkles,
 } from "lucide-react";
 import type { ProvocationType, Challenge, Advice, ProvocationRound } from "@shared/schema";
 import { Link } from "lucide-react";
@@ -33,6 +34,14 @@ interface ProvoThreadProps {
   onCaptureToContext: (text: string, label: string) => void;
   hasDocument: boolean;
   pinnedDocContents?: Record<number, { title: string; content: string }>;
+  /** "notes" (default) sends accepted advice/responses to Notes.
+   *  "inline" accumulates in the Provo pane without sending elsewhere. */
+  mode?: "notes" | "inline";
+  /** When provided, shows an "Evolve Document" button that passes all
+   *  accumulated advice + responses as a single instruction to the writer. */
+  onEvolveWithProvocations?: (instruction: string) => void;
+  /** True while an evolve is in progress */
+  isEvolving?: boolean;
 }
 
 interface AdviceState {
@@ -49,6 +58,9 @@ export function ProvoThread({
   onCaptureToContext,
   hasDocument,
   pinnedDocContents,
+  mode = "notes",
+  onEvolveWithProvocations,
+  isEvolving,
 }: ProvoThreadProps) {
   const { toast } = useToast();
 
@@ -161,29 +173,32 @@ export function ProvoThread({
     [documentText, objective, toast],
   );
 
-  // ── Accept advice → transcript ──
+  // ── Accept advice ──
   const handleAcceptAdvice = useCallback(
     (challenge: Challenge) => {
       const advice = adviceStates[challenge.id];
       if (!advice?.content) return;
 
-      onCaptureToContext(
-        `**${challenge.persona.label} — Advice on "${challenge.title}"**\n\n${advice.content}`,
-        `${challenge.persona.label}: ${challenge.title}`,
-      );
+      // In "notes" mode, send to Notes/context. In "inline" mode, just mark accepted.
+      if (mode === "notes") {
+        onCaptureToContext(
+          `**${challenge.persona.label} — Advice on "${challenge.title}"**\n\n${advice.content}`,
+          `${challenge.persona.label}: ${challenge.title}`,
+        );
+      }
       setAdviceStates((prev) => ({
         ...prev,
         [challenge.id]: { ...prev[challenge.id], accepted: true },
       }));
       toast({
-        title: "Sent to Notes",
-        description: "Advice added to your notes",
+        title: mode === "notes" ? "Sent to Notes" : "Accepted",
+        description: mode === "notes" ? "Advice added to your notes" : "Advice accepted — use Evolve to merge into document",
       });
     },
-    [adviceStates, onCaptureToContext, toast],
+    [adviceStates, onCaptureToContext, toast, mode],
   );
 
-  // ── Submit response to a challenge (auto-sends to Notes) ──
+  // ── Submit response to a challenge ──
   const handleSubmitResponse = useCallback(
     (challengeId: string) => {
       const text = responseText.trim();
@@ -192,13 +207,15 @@ export function ProvoThread({
       setResponseText("");
       setRespondingTo(null);
 
-      // Auto-add to Notes
       const challenge = challenges.find((c) => c.id === challengeId);
       if (challenge) {
-        onCaptureToContext(
-          `**Response to ${challenge.persona.label} — "${challenge.title}"**\n\n${text}`,
-          `Response: ${challenge.title}`,
-        );
+        // In "notes" mode, auto-add to Notes. In "inline" mode, just keep in state.
+        if (mode === "notes") {
+          onCaptureToContext(
+            `**Response to ${challenge.persona.label} — "${challenge.title}"**\n\n${text}`,
+            `Response: ${challenge.title}`,
+          );
+        }
         // Record round in provocation history
         setProvocationHistory((prev) => [...prev, {
           roundNumber: roundNumber,
@@ -210,7 +227,7 @@ export function ProvoThread({
         }]);
       }
     },
-    [responseText, challenges, onCaptureToContext, roundNumber],
+    [responseText, challenges, onCaptureToContext, roundNumber, mode],
   );
 
   const handleDismiss = useCallback((challengeId: string) => {
@@ -249,6 +266,38 @@ export function ProvoThread({
     { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Document", count: documentText.trim() ? 1 : 0, detail: documentText.trim() ? `${documentText.split(/\s+/).filter(Boolean).length} words` : undefined },
     { icon: <Target className="w-3 h-3 text-amber-400" />, label: "Objective", count: objective.trim() ? 1 : 0, detail: objective.trim() ? objective.slice(0, 60) + (objective.length > 60 ? "..." : "") : undefined },
   ], [activePersonas, documentText, objective]);
+
+  // ── Build evolve instruction from accumulated advice + responses ──
+  const evolveInstruction = useMemo(() => {
+    const parts: string[] = [];
+    for (const challenge of challenges) {
+      if (dismissedIds.has(challenge.id)) continue;
+      const advice = adviceStates[challenge.id];
+      const response = responses[challenge.id];
+      if (!advice?.accepted && !response) continue;
+
+      const section: string[] = [];
+      section.push(`### ${challenge.persona.label}: ${challenge.title}`);
+      section.push(challenge.content);
+      if (advice?.accepted && advice.content) {
+        section.push(`**Advice:** ${advice.content}`);
+      }
+      if (response) {
+        section.push(`**User response:** ${response}`);
+      }
+      parts.push(section.join("\n\n"));
+    }
+    return parts.join("\n\n---\n\n");
+  }, [challenges, adviceStates, responses, dismissedIds]);
+
+  const hasEvolveContent = evolveInstruction.trim().length > 0;
+
+  const handleEvolveDocument = useCallback(() => {
+    if (!onEvolveWithProvocations || !evolveInstruction.trim()) return;
+    onEvolveWithProvocations(
+      `Evolve the document by incorporating the following expert feedback, advice, and user responses. Weave the insights naturally into the document — don't just append them. Strengthen weak areas, add missing perspectives, and integrate the user's own responses:\n\n${evolveInstruction}`,
+    );
+  }, [onEvolveWithProvocations, evolveInstruction]);
 
   return (
     <div className="h-full flex flex-col">
@@ -295,6 +344,27 @@ export function ProvoThread({
             )}
           </Button>
         </LlmHoverButton>
+        {/* Evolve Document — only in inline mode when there's accepted content */}
+        {mode === "inline" && onEvolveWithProvocations && hasEvolveContent && (
+          <Button
+            variant="outline"
+            onClick={handleEvolveDocument}
+            disabled={isEvolving}
+            className="w-full gap-2 h-9 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/10"
+          >
+            {isEvolving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Evolving document...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                Evolve Document
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* ─── Challenges list ─── */}
@@ -364,6 +434,7 @@ export function ProvoThread({
                 onRequestAdvice={() => handleRequestAdvice(challenge)}
                 onAcceptAdvice={() => handleAcceptAdvice(challenge)}
                 onDismiss={() => handleDismiss(challenge.id)}
+                mode={mode}
               />
             ))}
           </div>
@@ -389,6 +460,7 @@ interface SmartBubbleProps {
   onRequestAdvice: () => void;
   onAcceptAdvice: () => void;
   onDismiss: () => void;
+  mode?: "notes" | "inline";
 }
 
 function SmartBubble({
@@ -403,6 +475,7 @@ function SmartBubble({
   onRequestAdvice,
   onAcceptAdvice,
   onDismiss,
+  mode = "notes",
 }: SmartBubbleProps) {
   const persona = challenge.persona;
   const accent = persona.color?.accent || "#888";
@@ -588,7 +661,7 @@ function SmartBubble({
                     onClick={onAcceptAdvice}
                   >
                     <Check className="w-3 h-3" />
-                    Accept → Notes
+                    {mode === "inline" ? "Accept" : "Accept → Notes"}
                   </Button>
                 )}
               </>
