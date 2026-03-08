@@ -27,6 +27,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Add environment variable validation at startup — required vars (DATABASE_URL, ENCRYPTION_SECRET, CLERK_SECRET_KEY) cause exit(1) if missing",
       "Add GitHub Actions CI pipeline with lint, test (postgres service), and build jobs",
       "Add husky pre-commit hook running npm run check",
+      "Testing foundation: test helpers (auth, db, LLM mocks), encryption round-trip tests (~25), schema validation tests (~20), LLM routing tests (~15), context builder tests (~15)",
+      "New tests/helpers/ directory with reusable mock factories for Clerk auth, in-memory storage, and LLM responses",
     ],
   },
   {
