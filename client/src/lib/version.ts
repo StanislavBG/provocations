@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.1";
+export const APP_VERSION = "0.20.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.20.2",
+    date: "2026-03-08",
+    changes: [
+      "Remove duplicated toolbar strip from Document and LLM Base expanded views — sidebar toggle only",
+      "Document objective now uses ProvokeText with smart buttons in a discoverable labeled container",
+      "LLM system prompt now uses ProvokeText in a discoverable fuchsia-accented container",
+      "Widen document and LLM content areas from max-w-3xl to max-w-5xl for better horizontal utilization",
+    ],
+  },
   {
     version: "0.20.1",
     date: "2026-03-08",

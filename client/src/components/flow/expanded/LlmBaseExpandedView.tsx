@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import {
   Play, Loader2, Square, Copy, BrainCircuit, Search, Shield,
   Thermometer, Zap, ChevronDown, ChevronRight,
-  PanelLeft, PanelLeftClose, Settings2,
+  PanelLeftClose, Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -398,7 +398,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
 
       {/* ── Main conversation surface ── */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[hsl(var(--background))]">
-        {/* Toolbar strip */}
+        {/* Minimal toolbar — sidebar toggle only */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/20 shrink-0 bg-muted/5">
           <button
             className="p-1.5 rounded-md hover:bg-muted/50 transition-colors text-muted-foreground"
@@ -411,49 +411,36 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
               <Settings2 className="w-4 h-4" />
             )}
           </button>
-          <div className="w-px h-4 bg-border/30" />
-          <span className="text-[10px] text-muted-foreground/60">
-            {modelLabel}
-          </span>
-          <span className="text-[10px] text-muted-foreground/40">·</span>
-          <span className="text-[10px] text-muted-foreground/60">
-            temp {temperature.toFixed(1)}
-          </span>
-          <span className="text-[10px] text-muted-foreground/40">·</span>
-          <span className="text-[10px] text-muted-foreground/60">
-            {maxTokens.toLocaleString()} tokens
-          </span>
-          {enableSearch && (
-            <>
-              <span className="text-[10px] text-muted-foreground/40">·</span>
-              <span className="text-[10px] text-blue-400/60">search</span>
-            </>
-          )}
         </div>
 
         {/* Scrollable conversation */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-8 sm:px-12 md:px-16 py-8 sm:py-10 space-y-6">
+          <div className="max-w-5xl mx-auto px-6 sm:px-10 py-6 sm:py-10 space-y-6">
 
             {/* Connected context — collapsible summary */}
             {contextInputs.length > 0 && (
               <ConnectedInputTabs inputs={contextInputs} sectionLabel="Context" accent="amber" />
             )}
 
-            {/* System prompt — subtle, like the document objective */}
-            <textarea
-              value={systemPrompt}
-              onChange={(e) => patch({ llmBaseSystemPrompt: e.target.value })}
-              placeholder="System prompt — persona, instructions, or constraints..."
-              className="w-full bg-transparent border-none text-sm text-muted-foreground placeholder:text-muted-foreground/30 resize-none outline-none leading-relaxed italic"
-              rows={1}
-              onInput={(e) => {
-                const t = e.currentTarget;
-                t.style.height = "auto";
-                t.style.height = `${Math.min(t.scrollHeight, 120)}px`;
-              }}
-              readOnly={isRunning}
-            />
+            {/* System prompt — discoverable container with smart buttons */}
+            <div className="rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5">
+              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-fuchsia-500/10">
+                <BrainCircuit className="w-3.5 h-3.5 text-fuchsia-500/60" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-500/60">
+                  System Prompt
+                </span>
+              </div>
+              <ProvokeText
+                value={systemPrompt}
+                onChange={(v) => patch({ llmBaseSystemPrompt: v })}
+                chrome="bare"
+                variant="textarea"
+                placeholder="Persona, instructions, or constraints — shapes every response..."
+                showCopy
+                showClear
+                readOnly={isRunning}
+              />
+            </div>
 
             {/* Connected user prompts — collapsible */}
             {userPromptInputs.length > 0 && (

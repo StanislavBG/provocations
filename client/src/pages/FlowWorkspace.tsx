@@ -3878,10 +3878,10 @@ function FlowWorkspaceInner() {
                     </div>
                   )}
 
-                  {/* ── Main writing area — centered notebook page ── */}
+                  {/* ── Main writing area ── */}
                   <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[hsl(var(--background))]">
-                    {/* Toolbar strip — sidebar toggle + tools inline */}
-                    <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/20 shrink-0 bg-muted/5">
+                    {/* Minimal toolbar — sidebar toggle only */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/20 shrink-0 bg-muted/5">
                       <button
                         className="p-1.5 rounded-md hover:bg-muted/50 transition-colors text-muted-foreground"
                         onClick={() => setDocSidebarOpen((v) => !v)}
@@ -3893,27 +3893,9 @@ function FlowWorkspaceInner() {
                           <PanelLeft className="w-4 h-4" />
                         )}
                       </button>
-                      <div className="w-px h-4 bg-border/30 mx-1" />
-                      {DOC_TOOLS.map((tool) => (
-                        <button
-                          key={tool.id}
-                          className="px-2 py-1 rounded text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
-                          disabled={docToolRunning !== null}
-                          onClick={() => handleDocTool(tool.instruction, tool.id)}
-                          title={tool.instruction}
-                        >
-                          {docToolRunning === tool.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
-                          ) : (
-                            <tool.icon className="w-3 h-3 inline mr-1" />
-                          )}
-                          {tool.label}
-                        </button>
-                      ))}
-                      {/* Version count */}
                       {docVersions.length > 0 && (
                         <>
-                          <div className="w-px h-4 bg-border/30 mx-1" />
+                          <div className="w-px h-4 bg-border/30" />
                           <span className="text-[9px] text-muted-foreground/60">
                             {docVersions.length} version{docVersions.length !== 1 ? "s" : ""}
                           </span>
@@ -3923,20 +3905,25 @@ function FlowWorkspaceInner() {
 
                     {/* Scrollable page */}
                     <div className="flex-1 min-h-0 overflow-y-auto">
-                      <div className="max-w-3xl mx-auto px-8 sm:px-12 md:px-16 py-8 sm:py-12">
-                        {/* Objective — subtle, inline at top of page */}
-                        <textarea
-                          value={docObjective}
-                          onChange={(e) => setDocObjective(e.target.value)}
-                          placeholder="What is the purpose of this document?"
-                          className="w-full bg-transparent border-none text-sm text-muted-foreground placeholder:text-muted-foreground/30 resize-none outline-none mb-6 leading-relaxed italic"
-                          rows={1}
-                          onInput={(e) => {
-                            const t = e.currentTarget;
-                            t.style.height = "auto";
-                            t.style.height = `${Math.min(t.scrollHeight, 80)}px`;
-                          }}
-                        />
+                      <div className="max-w-5xl mx-auto px-6 sm:px-10 py-6 sm:py-10">
+                        {/* Objective — ProvokeText with smart buttons, visually distinct */}
+                        <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5">
+                          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-primary/10">
+                            <Crosshair className="w-3.5 h-3.5 text-primary/60" />
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-primary/60">
+                              Objective
+                            </span>
+                          </div>
+                          <ProvokeText
+                            value={docObjective}
+                            onChange={(v) => setDocObjective(v)}
+                            chrome="bare"
+                            variant="textarea"
+                            placeholder="What is the purpose of this document? Define the goal to guide AI tools..."
+                            showCopy
+                            showClear
+                          />
+                        </div>
 
                         {/* Main document writing surface */}
                         <ProvokeText
@@ -3954,7 +3941,7 @@ function FlowWorkspaceInner() {
                     {/* Version history — compact bottom bar, only if versions exist */}
                     {docVersions.length > 0 && (
                       <div className="px-4 py-1.5 border-t border-border/20 shrink-0 bg-muted/5">
-                        <div className="flex items-center gap-2 max-w-3xl mx-auto">
+                        <div className="flex items-center gap-2 max-w-5xl mx-auto">
                           <span className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider shrink-0">
                             History
                           </span>
