@@ -820,6 +820,14 @@ html.canvas-aurora .bg-background {
   backdrop-filter: blur(24px);
 }
 
+/* Body must be fully transparent in aurora mode so #hero shows through.
+   backdrop-filter on body creates a stacking context that blocks the hero layer. */
+html.canvas-aurora body.bg-background {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
 html.canvas-aurora .bg-muted {
   background-color: hsl(var(--muted) / 0.4) !important;
   -webkit-backdrop-filter: blur(12px);

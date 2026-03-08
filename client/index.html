@@ -30,7 +30,7 @@
   </head>
   <body>
     <div id="hero" style="position:fixed;inset:0;z-index:0;pointer-events:none;"></div>
-    <div id="root" style="position:relative;z-index:1;"></div>
+    <div id="root" style="position:relative;z-index:1;background:transparent;"></div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- Background animation -->
     <script src="https://bglabs.app/api/embed-loader.js"
@@ -39,7 +39,15 @@
     <!-- AIQA QA Overlay -->
     <script src="https://aiqastudio.com/snippet.js" data-base-url="https://aiqastudio.com"></script>
     <style>
-      /* Ensure AIQA overlay renders above all app UI (z-index hierarchy: root=1, overlays=45-60, modals=9999) */
+      /*
+       * Z-index layers (simplified):
+       *   z-0:       #hero — background effects (BG Labs aurora, CSS fallback)
+       *   z-1:       #root — app UI (transparent bg so aurora shows through)
+       *     z-20-30:   Canvas badges, loading indicators
+       *     z-40:      Dock, details panel, chain nav bar
+       *     z-45-50:   Expanded overlays, fullscreen node views
+       *   z-999999:  AIQA — always on top
+       */
       [data-aiqa-root], #aiqa-root, #aiqa-overlay { z-index: 999999 !important; position: relative; }
     </style>
   </body>
