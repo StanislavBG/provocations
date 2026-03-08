@@ -317,7 +317,7 @@ export interface FlowNode {
 }
 
 /** Named edge roles — how source data is used by the target node */
-export type EdgeRole = "context" | "objective" | "output-format" | "system-instruction";
+export type EdgeRole = "context" | "objective" | "output-format" | "system-instruction" | "user-prompt";
 
 export interface FlowEdge {
   id: string;

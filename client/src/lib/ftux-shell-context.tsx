@@ -72,6 +72,7 @@ export interface FtuxShellConfig {
   dockShowGroupLabels: boolean;
   dockButtonSize: DockButtonSize;
   dockSnapped: boolean;            // snap to edge, full-width bar
+  dockLocked: boolean;             // lock dock item reordering (drag disabled)
   canvasFontSize: number;          // px (default 14)
   canvasFontColor: string | null;  // hex override or null for theme default
   canvasBgColor: string | null;    // hex override or null for theme default
@@ -101,6 +102,7 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
   dockShowGroupLabels: false,
   dockButtonSize: "medium",
   dockSnapped: false,
+  dockLocked: true,
   canvasFontSize: 14,
   canvasFontColor: null,
   canvasBgColor: null,
@@ -145,6 +147,7 @@ export interface FtuxShellContextValue extends FtuxShellConfig {
   setDockShowGroupLabels: (val: boolean) => void;
   setDockButtonSize: (val: DockButtonSize) => void;
   setDockSnapped: (val: boolean) => void;
+  setDockLocked: (val: boolean) => void;
   setCanvasFontSize: (val: number) => void;
   setCanvasFontColor: (val: string | null) => void;
   setCanvasBgColor: (val: string | null) => void;
@@ -289,6 +292,11 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     [updateConfig],
   );
 
+  const setDockLocked = useCallback(
+    (val: boolean) => updateConfig((c) => ({ ...c, dockLocked: val })),
+    [updateConfig],
+  );
+
   const setCanvasFontSize = useCallback(
     (val: number) => updateConfig((c) => ({ ...c, canvasFontSize: val })),
     [updateConfig],
@@ -427,6 +435,7 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
         dockColor: DEFAULT_SHELL_CONFIG.dockColor,
         dockShowLabels: DEFAULT_SHELL_CONFIG.dockShowLabels,
         dockShowGroupLabels: DEFAULT_SHELL_CONFIG.dockShowGroupLabels,
+        dockLocked: DEFAULT_SHELL_CONFIG.dockLocked,
       })),
     [updateConfig],
   );
@@ -547,6 +556,7 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     setDockShowGroupLabels,
     setDockButtonSize,
     setDockSnapped,
+    setDockLocked,
     setCanvasFontSize,
     setCanvasFontColor,
     setCanvasBgColor,

@@ -249,11 +249,11 @@ export function FlowExpandedOverlay({
           </Button>
         </div>
 
-        {/* Content area — overflow-hidden so ResizablePanelGroup children
+        {/* Content area — flex-col + overflow-hidden so children with flex-1
             get a bounded height and their internal ScrollAreas work correctly */}
         <div
           className={cn(
-            "flex-1 overflow-hidden transition-opacity",
+            "flex-1 flex flex-col overflow-hidden transition-opacity",
             contentVisible ? "opacity-100" : "opacity-0",
           )}
         >
