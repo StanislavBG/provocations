@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor } from "lucide-react";
+import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor, RotateCcw, AlertTriangle, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -25,6 +25,8 @@ interface FlowNodeRendererProps {
   onPortMouseDown?: (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => void;
   onPlayNode?: (nodeId: string) => void;
   onUpdateLabel?: (nodeId: string, label: string) => void;
+  /** I3: Retry callback for failed nodes in chain execution */
+  onRetryNode?: (nodeId: string) => void;
 }
 
 /**
@@ -69,6 +71,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
   onPortMouseDown,
   onPlayNode,
   onUpdateLabel,
+  onRetryNode,
 }: FlowNodeRendererProps) {
   const style = NODE_STYLES[node.type];
   const Icon = NODE_ICONS[node.type];
@@ -100,6 +103,12 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
   }, [editing]);
 
   const lockMode = getEffectiveLockMode(node);
+
+  // I2/I3: Chain error/blocked state
+  const chainError = node.chainStatus === "error";
+  const chainBlocked = node.chainStatus === "blocked";
+  const chainCancelled = node.chainStatus === "cancelled";
+  const hasChainIssue = chainError || chainBlocked || chainCancelled;
 
   // ── Shared inline Lock button ──
   const lockButton = onToggleLock && (
@@ -203,7 +212,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
         "absolute select-none rounded-lg border-2 shadow-md transition-shadow cursor-grab group",
         "hover:shadow-lg",
         style.bg,
-        style.border,
+        chainError ? "border-red-500" : chainBlocked ? "border-orange-400/60" : chainCancelled ? "border-muted-foreground/40" : style.border,
         isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{
@@ -293,10 +302,48 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       />
 
       {/* Pause indicator */}
-      {node.paused && (
+      {node.paused && !hasChainIssue && (
         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-yellow-500/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm">
           <Pause className="w-2 h-2" />
           Paused
+        </div>
+      )}
+
+      {/* I2: Chain error indicator with retry button (I3) */}
+      {chainError && (
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap">
+          <AlertTriangle className="w-2.5 h-2.5" />
+          Error
+          {onRetryNode && (
+            <button
+              className="ml-1 flex items-center gap-0.5 px-1 py-0.5 rounded bg-white/20 hover:bg-white/30 transition-colors text-[7px]"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRetryNode(node.id);
+              }}
+              title={node.chainErrorMessage ?? "Retry this node"}
+            >
+              <RotateCcw className="w-2 h-2" />
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* I2: Chain blocked indicator */}
+      {chainBlocked && (
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-400/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap">
+          <Ban className="w-2 h-2" />
+          Blocked
+        </div>
+      )}
+
+      {/* I6: Chain cancelled indicator */}
+      {chainCancelled && (
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted-foreground/70 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap">
+          <X className="w-2 h-2" />
+          Cancelled
         </div>
       )}
     </div>

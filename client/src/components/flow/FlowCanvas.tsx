@@ -38,6 +38,7 @@ interface FlowCanvasProps {
   onCreateEdge?: (fromNodeId: string, toNodeId: string) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onPlayNode?: (nodeId: string) => void;
+  onRetryNode?: (nodeId: string) => void;
   onToggleLock?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
@@ -94,6 +95,7 @@ export function FlowCanvas({
   onCreateEdge,
   onDeleteEdge,
   onPlayNode,
+  onRetryNode,
   onToggleLock,
   onDropTool,
   onDragStart,
@@ -310,6 +312,7 @@ export function FlowCanvas({
           onToggleLock={onToggleLock}
           onPortMouseDown={handlePortMouseDown}
           onPlayNode={onPlayNode}
+          onRetryNode={onRetryNode}
           onUpdateNode={onUpdateNode}
         >
           <div className="px-2 py-1.5 overflow-hidden flex-1 flex items-center gap-2">
@@ -348,6 +351,7 @@ export function FlowCanvas({
           onToggleLock={onToggleLock}
           onPortMouseDown={handlePortMouseDown}
           onPlayNode={onPlayNode}
+          onRetryNode={onRetryNode}
           onUpdateNode={onUpdateNode}
         >
           <div className="px-2 py-1.5 overflow-hidden flex-1 flex flex-col gap-1">
@@ -376,10 +380,11 @@ export function FlowCanvas({
         onToggleLock={onToggleLock}
         onPortMouseDown={handlePortMouseDown}
         onPlayNode={onPlayNode}
+        onRetryNode={onRetryNode}
         onUpdateNode={onUpdateNode}
       />
     );
-  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote, onToggleTrigger]);
+  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onRetryNode, onCreateNote, onToggleTrigger]);
 
   // Attach wheel handler as non-passive so preventDefault() works (Chrome passive default)
   useEffect(() => {

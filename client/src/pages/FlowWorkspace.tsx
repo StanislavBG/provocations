@@ -33,6 +33,9 @@ import { MailboxDrawer } from "@/components/MailboxDrawer";
 import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
 import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
+import { ChainProgressBar } from "@/components/flow/ChainProgressBar";
+import { useChainExecutor } from "@/components/flow/useChainExecutor";
+import type { ChainProgress } from "@/components/flow/useChainExecutor";
 import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
 import { FlowOverlayErrorBoundary } from "@/components/flow/FlowOverlayErrorBoundary";
 import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
@@ -2133,6 +2136,33 @@ function FlowWorkspaceInner() {
     executeNode: handlePlayNode,
   });
 
+  // ── Chain executor with reliability features (I1-I6) ──
+
+  const chainExecutor = useChainExecutor({
+    getState: () => ({ nodes: stateRef.current.nodes, edges: stateRef.current.edges }),
+    executeNode: handlePlayNode,
+    onStatusChange: (nodeId, status) => {
+      // Update the llmStatus for backward compatibility with existing status pulse system
+      if (status === "running") {
+        updateNode(nodeId, { llmStatus: "running" });
+      }
+      // done/error are handled by handlePlayNode already
+    },
+    onChainStatusChange: (nodeId, chainStatus, errorMessage) => {
+      updateNode(nodeId, {
+        chainStatus: chainStatus ?? "idle",
+        chainErrorMessage: errorMessage,
+      });
+    },
+  });
+
+  const handleRetryNode = useCallback(
+    (nodeId: string) => {
+      chainExecutor.retryNode(nodeId);
+    },
+    [chainExecutor],
+  );
+
   // ── Drop tool from dock onto canvas ──
 
   const handleDropTool = useCallback(
@@ -3310,6 +3340,7 @@ function FlowWorkspaceInner() {
           onCreateEdge={handleCreateEdge}
           onDeleteEdge={deleteEdge}
           onPlayNode={handlePlayNode}
+          onRetryNode={handleRetryNode}
           onBringToFront={bringToFront}
           onToggleTrigger={toggleTrigger}
           onToggleLock={(nodeId) => {
@@ -3338,6 +3369,12 @@ function FlowWorkspaceInner() {
 
         {!dockHidden && <FtuxDock />}
         <FlowLoadingBar active={canvasLoading || isSaving} progress={canvasLoading ? loadProgress : undefined} />
+
+        {/* Chain progress bar (I4 + I6) */}
+        <ChainProgressBar
+          progress={chainExecutor.progress}
+          onCancel={chainExecutor.abortChain}
+        />
 
         {/* Version watermark — bottom-left corner */}
         <button
