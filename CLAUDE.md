@@ -166,6 +166,7 @@ These are the core design decisions that shape the codebase. Each is documented 
 | `agent-editor` | Agent Editor | build | standard | edit |
 | `gpt-to-context` | GPT to Context | capture | research-chat | aggregate |
 | `bs-chart` | BS Chart | build | bs-chart | edit |
+| `product-owner` | Product Owner Agent | build | standard | edit |
 | `query-editor` | Query Editor | analyze | external | — |
 
 Per-app documentation: `apps/<templateId>/CLAUDE.md`. See `docs/architecture.md` for the three-layer pattern.

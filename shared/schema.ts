@@ -130,6 +130,7 @@ export const templateIds = [
   "agent-editor",
   "bs-chart",
   "timeline",
+  "product-owner",
 ] as const;
 
 export type TemplateId = typeof templateIds[number];
