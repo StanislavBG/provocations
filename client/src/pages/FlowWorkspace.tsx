@@ -86,7 +86,7 @@ import {
   Filter, ToggleRight, GitBranch, Merge as MergeIcon, Pause, Play as PlayIcon, ShieldCheck,
   Plus, Type, Target, BookOpenCheck, LayoutTemplate, Map as MapIcon,
   Search, Zap, Settings, ScrollText, Trash2, Swords, Wrench, Info, Crosshair,
-  PanelLeft, PanelLeftClose, Send, Mic,
+  PanelLeft, PanelLeftClose, Send, Mic, Clock,
 } from "lucide-react";
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
@@ -1276,6 +1276,7 @@ function FlowWorkspaceInner() {
   const docs = docsData?.documents ?? [];
   const allFolders = foldersData ?? [];
   const canvasDocs = docs.filter((d) => d.docType === "chart" && !d.title?.startsWith("[5min]") && !d.title?.startsWith("[Hourly]"));
+  const autoSaveCanvases = docs.filter((d) => d.docType === "chart" && (d.title?.startsWith("[5min]") || d.title?.startsWith("[Hourly]")));
 
   // Shared canvases (from other users)
   interface SharedCanvasItem { shareId: number; docId: number; title: string; ownerName?: string; permission: string }
@@ -3717,6 +3718,49 @@ function FlowWorkspaceInner() {
                       ))}
                     </div>
                   </div>
+                )}
+                {autoSaveCanvases.length > 0 && (
+                  <details className="group">
+                    <summary className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1 cursor-pointer select-none list-none flex items-center gap-1 hover:text-foreground transition-colors">
+                      <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" />
+                      Auto-Saves ({autoSaveCanvases.length})
+                    </summary>
+                    <div className="space-y-0.5">
+                      {autoSaveCanvases.map((doc) => {
+                        const isActive = doc.id === canvasDocumentId;
+                        return (
+                          <div
+                            key={doc.id}
+                            className={`group/item w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors ${isActive ? "ring-1 ring-blue-500/50 bg-muted/30" : ""}`}
+                          >
+                            <button
+                              className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                              onClick={() => handleOpenCanvas(doc.id, doc.title)}
+                            >
+                              <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <span className="text-xs truncate block">{doc.title}</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  #{doc.id}
+                                  {doc.updatedAt && (<> &middot; {new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</>)}
+                                </span>
+                              </div>
+                            </button>
+                            <button
+                              className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-destructive/20 hover:text-destructive transition-all shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm({ id: doc.id, title: doc.title });
+                              }}
+                              title="Delete auto-save"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
                 )}
               </div>
             )}
