@@ -34,6 +34,7 @@ import {
   HardDrive,
   Blocks,
   Layers,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -119,9 +120,17 @@ interface FtuxStatusBarProps {
   onOpenContextStore?: () => void;
   /** Slot for the BlueprintsMenu component, rendered before the gear button */
   blueprintsSlot?: React.ReactNode;
+  /** Unread mailbox notification count */
+  mailboxUnreadCount?: number;
+  /** Callback to open the Mailbox drawer */
+  onOpenMailbox?: () => void;
+  /** Whether the current canvas is shared (not owned by us) */
+  isSharedCanvas?: boolean;
+  /** Permission level for the shared canvas */
+  sharedPermission?: "read" | "write";
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations, appVersion, onOpenReleaseNotes, onOpenContextStore, blueprintsSlot }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations, appVersion, onOpenReleaseNotes, onOpenContextStore, blueprintsSlot, mailboxUnreadCount = 0, onOpenMailbox, isSharedCanvas, sharedPermission }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -217,6 +226,13 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
               </button>
             )}
 
+            {/* Shared canvas indicator */}
+            {isSharedCanvas && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal gap-1 border-emerald-400/50 text-emerald-400">
+                <Users className="w-2.5 h-2.5" />
+                {sharedPermission === "write" ? "Shared (edit)" : "Shared (view)"}
+              </Badge>
+            )}
             {/* Canvas switcher dropdown */}
             {canvasDropdownOpen && !isRenaming && (
               <>
@@ -341,6 +357,29 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
         {headerActions}
         {blueprintsSlot}
         <DebugButton />
+        {/* Mail / Notifications bell */}
+        {onOpenMailbox && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative w-7 h-7 rounded text-muted-foreground hover:text-foreground"
+                onClick={onOpenMailbox}
+              >
+                <Bell className="w-3.5 h-3.5" />
+                {mailboxUnreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[14px] h-[14px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold px-0.5 leading-none">
+                    {mailboxUnreadCount > 99 ? "99+" : mailboxUnreadCount}
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs z-[60]">
+              {mailboxUnreadCount > 0 ? `${mailboxUnreadCount} unread notification${mailboxUnreadCount === 1 ? "" : "s"}` : "Mailbox"}
+            </TooltipContent>
+          </Tooltip>
+        )}
         <div className="relative">
           <Tooltip>
             <TooltipTrigger asChild>
