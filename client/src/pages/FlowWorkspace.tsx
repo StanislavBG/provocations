@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect, useMemo, type ReactNode } from "react";
+import { Suspense, useCallback, useRef, useState, useEffect, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRoute, useLocation } from "wouter";
 import { cn, generateId } from "@/lib/utils";
@@ -17,7 +17,7 @@ import { DEFAULT_DIMENSIONS } from "@/components/flow/useFlowCanvas";
 import { ROLE_AWARE_TARGETS } from "@/components/flow/FlowNodeRegistry";
 import { useMinimapState } from "@/components/flow/useMinimapState";
 import { NotebookResearchChat } from "@/components/notebook/NotebookResearchChat";
-import { DEFAULT_SHELL_CONFIG } from "@/lib/ftux-shell-context";
+// DEFAULT_SHELL_CONFIG moved to flow-workspace/FlowDockConfig.ts
 import { useFtuxShellConfig } from "@/hooks/use-ftux-shell-config";
 import { getPreset } from "@/components/flow/llm-presets";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -33,12 +33,15 @@ import { MailboxDrawer } from "@/components/MailboxDrawer";
 import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
 import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
+import { ChainProgressBar } from "@/components/flow/ChainProgressBar";
+import { useChainExecutor } from "@/components/flow/useChainExecutor";
+import type { ChainProgress } from "@/components/flow/useChainExecutor";
 import { FlowExpandedOverlay } from "@/components/flow/FlowExpandedOverlay";
 import { FlowOverlayErrorBoundary } from "@/components/flow/FlowOverlayErrorBoundary";
 import { FlowDetailsPanel } from "@/components/flow/FlowDetailsPanel";
 import { FLOW_NODE_REGISTRY } from "@/components/flow/FlowNodeRegistry";
 import type { LifecyclePreset } from "@/components/flow/FlowNodeRegistry";
-import { DOCK_TOOL_CATALOG } from "@/components/flow/FlowNodeRegistry";
+// DOCK_TOOL_CATALOG moved to flow-workspace/FlowDockConfig.ts
 import { useLifecycleEngine } from "@/components/flow/useLifecycleEngine";
 import { getLifecycleHandlers } from "@/components/flow/lifecycles/index";
 import { gatherInputContentWithRoles, gatherChainContext, gatherStructuredChainContext } from "@/components/flow/useNodeLifecycle";
@@ -48,24 +51,29 @@ import { ActivityLogsOverlay } from "@/components/flow/ActivityLogsOverlay";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import type { LifecyclePhase, LifecycleStatus } from "@/lib/lifecycleLog";
 import { FlowLoadingBar } from "@/components/flow/FlowLoadingBar";
-import { LlmExpandedView } from "@/components/flow/expanded/LlmExpandedView";
-import { LlmBaseExpandedView } from "@/components/flow/expanded/LlmBaseExpandedView";
-import { AudioExpandedView } from "@/components/flow/expanded/AudioExpandedView";
-import { YoutubeExpandedView } from "@/components/flow/expanded/YoutubeExpandedView";
-import { TimerExpandedView } from "@/components/flow/expanded/TimerExpandedView";
-import { LogicExpandedView } from "@/components/flow/expanded/LogicExpandedView";
-import { SocialPostExpandedView } from "@/components/flow/expanded/SocialPostExpandedView";
-import { ApiConnectionExpandedView } from "@/components/flow/expanded/ApiConnectionExpandedView";
-import { CoherenceGateExpandedView } from "@/components/flow/expanded/CoherenceGateExpandedView";
-import { NotificationExpandedView } from "@/components/flow/expanded/NotificationExpandedView";
-import { ApprovalExpandedView } from "@/components/flow/expanded/ApprovalExpandedView";
-import { StoreExpandedView } from "@/components/flow/expanded/StoreExpandedView";
-import { UploadExpandedView } from "@/components/flow/expanded/UploadExpandedView";
+// ── Expanded views are lazy-loaded (E5 optimization) ──
+// See client/src/components/flow/expanded/lazyExpandedViews.ts
+import { lazyExpandedViews } from "@/components/flow/expanded/lazyExpandedViews";
+const LlmExpandedView = lazyExpandedViews["llm"];
+const LlmBaseExpandedView = lazyExpandedViews["llm-base"];
+const AudioExpandedView = lazyExpandedViews["audio"];
+const YoutubeExpandedView = lazyExpandedViews["youtube"];
+const TimerExpandedView = lazyExpandedViews["timer-event"];
+const LogicExpandedView = lazyExpandedViews["filter"]; // filter/gate/router/merge all use LogicExpandedView
+const SocialPostExpandedView = lazyExpandedViews["social-post"];
+const ApiConnectionExpandedView = lazyExpandedViews["api-connection"];
+const CoherenceGateExpandedView = lazyExpandedViews["coherence-gate"];
+const NotificationExpandedView = lazyExpandedViews["notification"];
+const ApprovalExpandedView = lazyExpandedViews["approval"];
+const StoreExpandedView = lazyExpandedViews["store"];
+const UploadExpandedView = lazyExpandedViews["upload"];
 import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
 import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { serializeCanvas, serializeNodeForSave } from "@/components/flow/serializeCanvas";
 import { PlatformIntegrations } from "@/components/PlatformIntegrations";
 import { ContextStoreManager } from "@/components/ContextStoreManager";
+import { WelcomeOverlay } from "@/components/WelcomeOverlay";
+import { KeyboardShortcutsOverlay } from "@/components/KeyboardShortcutsOverlay";
 import {
   Dialog,
   DialogContent,
@@ -92,27 +100,12 @@ import {
 import type { ChatMessageWithMeta, ProvocationType } from "@shared/schema";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
 import { APP_VERSION, RELEASE_NOTES } from "@/lib/version";
+import { WhatsNew } from "@/components/WhatsNew";
+import { HelpButton } from "@/components/HelpButton";
 
-// ── Dock config — derived from the single-source-of-truth catalog ──
-
-const FLOW_DOCK_ITEMS: DockItem[] = DOCK_TOOL_CATALOG.map((entry) => ({
-  toolId: entry.toolId as ToolId,
-  label: entry.label,
-  icon: entry.iconName,
-  group: entry.group,
-  description: entry.description,
-}));
-
-const FLOW_SHELL_CONFIG: FtuxShellConfig = {
-  ...DEFAULT_SHELL_CONFIG,
-  dockItems: FLOW_DOCK_ITEMS,
-  dockShowLabels: true,
-  dockSnapped: true,
-  dockButtonSize: "large",
-  dockPosition: "bottom",
-  tourCompleted: true,
-  tipsEnabled: false,
-};
+// ── Extracted modules (E7 decomposition) ──
+import { FLOW_DOCK_ITEMS, FLOW_SHELL_CONFIG } from "./flow-workspace/FlowDockConfig";
+import { DOC_TOOLS, splitOutputByDelimiters, splitOutputIntoSections, quickHash } from "./flow-workspace/FlowToolHandlers";
 
 // ── Canvas styles — re-exported from shared module to avoid circular deps ──
 export { CANVAS_STYLES, type CanvasStyleDef } from "@/lib/canvas-styles";
@@ -221,96 +214,8 @@ function DocConnectedInputs({ nodeId, edges, nodes }: { nodeId: string; edges: F
   );
 }
 
-const DOC_TOOLS = [
-  { id: "expand", label: "Expand", icon: Expand, instruction: "Expand this text with more depth, examples, and supporting details" },
-  { id: "condense", label: "Condense", icon: Shrink, instruction: "Remove redundancy, tighten prose, make concise" },
-  { id: "restructure", label: "Restructure", icon: AlignJustify, instruction: "Reorganize content, improve headings and section order" },
-  { id: "clarify", label: "Clarify", icon: Lightbulb, instruction: "Simplify language, improve accessibility and clarity" },
-  { id: "style", label: "Style", icon: Paintbrush2, instruction: "Adjust voice and tone for better reading experience" },
-  { id: "correct", label: "Correct", icon: PenLine, instruction: "Fix grammar, spelling, logic errors, and inconsistencies" },
-  { id: "aim", label: "AIM", icon: Crosshair, instruction: "Restructure into Actor (who performs), Input (what they receive), Mission (desired outcome) framework" },
-];
-
-/**
- * Split output by natural --- delimiters (as instructed to the LLM).
- * Falls back to heading-based splitting. Cap at maxSections.
- */
-function splitOutputByDelimiters(text: string, maxSections: number): string[] {
-  // Primary: split by horizontal rule delimiters (--- on its own line)
-  const hrParts = text.split(/\n-{3,}\n/).map(s => s.trim()).filter(Boolean);
-  if (hrParts.length > 1) {
-    return hrParts.slice(0, maxSections);
-  }
-
-  // Fallback: split by top-level markdown headings (## )
-  const headingSections: string[] = [];
-  const headingRegex = /^#{1,2}\s+.+$/gm;
-  let match: RegExpExecArray | null;
-  const indices: number[] = [];
-  while ((match = headingRegex.exec(text)) !== null) {
-    indices.push(match.index);
-  }
-  if (indices.length > 1) {
-    for (let i = 0; i < indices.length; i++) {
-      const start = indices[i];
-      const end = i + 1 < indices.length ? indices[i + 1] : text.length;
-      const section = text.slice(start, end).trim();
-      if (section) headingSections.push(section);
-    }
-    return headingSections.slice(0, maxSections);
-  }
-
-  // Last resort: return as single section
-  return [text.trim()];
-}
-
-/** Split output text into N sections by markdown headings, falling back to equal chunks */
-function splitOutputIntoSections(text: string, count: number): string[] {
-  // Try splitting by markdown headings (## or #)
-  const headingRegex = /^#{1,3}\s+/m;
-  const parts = text.split(headingRegex).filter((s) => s.trim());
-
-  if (parts.length >= count) {
-    // Re-attach heading markers and distribute
-    const sections: string[] = [];
-    const step = Math.ceil(parts.length / count);
-    for (let i = 0; i < count; i++) {
-      sections.push(parts.slice(i * step, (i + 1) * step).join("\n\n## ").trim());
-    }
-    return sections;
-  }
-
-  // Try splitting by horizontal rules (---)
-  const hrParts = text.split(/\n---+\n/).filter((s) => s.trim());
-  if (hrParts.length >= count) {
-    const sections: string[] = [];
-    const step = Math.ceil(hrParts.length / count);
-    for (let i = 0; i < count; i++) {
-      sections.push(hrParts.slice(i * step, (i + 1) * step).join("\n\n---\n\n").trim());
-    }
-    return sections;
-  }
-
-  // Fallback: split by paragraphs (double newlines), distribute evenly
-  const paragraphs = text.split(/\n\n+/).filter((s) => s.trim());
-  if (paragraphs.length >= count) {
-    const sections: string[] = [];
-    const step = Math.ceil(paragraphs.length / count);
-    for (let i = 0; i < count; i++) {
-      sections.push(paragraphs.slice(i * step, (i + 1) * step).join("\n\n").trim());
-    }
-    return sections;
-  }
-
-  // Last resort: equal character chunks
-  const chunkSize = Math.ceil(text.length / count);
-  const sections: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const chunk = text.slice(i * chunkSize, (i + 1) * chunkSize).trim();
-    if (chunk) sections.push(chunk);
-  }
-  return sections;
-}
+// DOC_TOOLS, splitOutputByDelimiters, splitOutputIntoSections, and quickHash
+// are now imported from ./flow-workspace/FlowToolHandlers.ts (E7 decomposition)
 
 // ── Inner workspace (needs shell context) ──
 
@@ -450,6 +355,7 @@ function FlowWorkspaceInner() {
   const [loadProgress, setLoadProgress] = useState<number | undefined>(undefined);
   const [canvasLoadError, setCanvasLoadError] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
+  const [blueprintsExternalOpen, setBlueprintsExternalOpen] = useState(false);
   // Resolve the active canvas theme
   const activeTheme = CANVAS_STYLES.find((t) => t.key === canvasTheme) ?? CANVAS_STYLES[0];
   const [storeFolderPickerNodeId, setStoreFolderPickerNodeId] = useState<string | null>(null);
@@ -1174,10 +1080,12 @@ function FlowWorkspaceInner() {
   // ── Debounced auto-save on every state change ──
   // Saves the canvas 2 seconds after the last node/edge change so work is never lost.
   // Skips the save cycle immediately after a canvas load (generation check).
+  // Uses a quick hash comparison (E6 optimization) to skip saves when content hasn't changed.
 
   const debounceSaveRef = useRef<ReturnType<typeof setTimeout>>();
   const lastSavedGenerationRef = useRef(canvasGenerationRef.current);
   const isSavingRef = useRef(false);
+  const lastSaveHashRef = useRef("");
   // Refs so the debounce callback always reads fresh values without re-registering the effect.
   const canvasDocIdRef = useRef(canvasDocumentId);
   canvasDocIdRef.current = canvasDocumentId;
@@ -1205,6 +1113,14 @@ function FlowWorkspaceInner() {
       isSavingRef.current = true;
       try {
         const canvasPayload = serializeCanvas(stateRef.current.nodes, stateRef.current.edges, stateRef.current.viewport);
+
+        // E6: Skip save if content hasn't changed since last save
+        const currentHash = quickHash(canvasPayload);
+        if (currentHash === lastSaveHashRef.current) {
+          isSavingRef.current = false;
+          return;
+        }
+
         const title = canvasTitleRef.current || `Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
         if (canvasDocIdRef.current) {
@@ -1236,6 +1152,8 @@ function FlowWorkspaceInner() {
           }
           queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
         }
+        // Update hash on successful save
+        lastSaveHashRef.current = currentHash;
       } catch {
         // Silent — debounce save should never break the UI
       } finally {
@@ -2220,6 +2138,33 @@ function FlowWorkspaceInner() {
     toast,
     executeNode: handlePlayNode,
   });
+
+  // ── Chain executor with reliability features (I1-I6) ──
+
+  const chainExecutor = useChainExecutor({
+    getState: () => ({ nodes: stateRef.current.nodes, edges: stateRef.current.edges }),
+    executeNode: handlePlayNode,
+    onStatusChange: (nodeId, status) => {
+      // Update the llmStatus for backward compatibility with existing status pulse system
+      if (status === "running") {
+        updateNode(nodeId, { llmStatus: "running" });
+      }
+      // done/error are handled by handlePlayNode already
+    },
+    onChainStatusChange: (nodeId, chainStatus, errorMessage) => {
+      updateNode(nodeId, {
+        chainStatus: chainStatus ?? "idle",
+        chainErrorMessage: errorMessage,
+      });
+    },
+  });
+
+  const handleRetryNode = useCallback(
+    (nodeId: string) => {
+      chainExecutor.retryNode(nodeId);
+    },
+    [chainExecutor],
+  );
 
   // ── Drop tool from dock onto canvas ──
 
@@ -3249,6 +3194,8 @@ function FlowWorkspaceInner() {
         blueprintsSlot={
           <BlueprintsMenu
             onLoadBlueprint={handleLoadBlueprint}
+            externalOpen={blueprintsExternalOpen}
+            onExternalOpenChange={setBlueprintsExternalOpen}
             onSaveBlueprint={async (label: string, description: string) => {
               const originX = state.nodes[0]?.x ?? 0;
               const originY = state.nodes[0]?.y ?? 0;
@@ -3398,6 +3345,7 @@ function FlowWorkspaceInner() {
           onCreateEdge={handleCreateEdge}
           onDeleteEdge={deleteEdge}
           onPlayNode={handlePlayNode}
+          onRetryNode={handleRetryNode}
           onBringToFront={bringToFront}
           onToggleTrigger={toggleTrigger}
           onToggleLock={(nodeId) => {
@@ -3427,6 +3375,12 @@ function FlowWorkspaceInner() {
         {!dockHidden && <FtuxDock />}
         <FlowLoadingBar active={canvasLoading || isSaving} progress={canvasLoading ? loadProgress : undefined} />
 
+        {/* Chain progress bar (I4 + I6) */}
+        <ChainProgressBar
+          progress={chainExecutor.progress}
+          onCancel={chainExecutor.abortChain}
+        />
+
         {/* Version watermark — bottom-left corner */}
         <button
           onClick={() => setReleaseNotesOpen(true)}
@@ -3435,6 +3389,8 @@ function FlowWorkspaceInner() {
         >
           v{APP_VERSION}
         </button>
+        <WhatsNew />
+        <HelpButton topic="canvas-basics" className="absolute bottom-1 left-24 z-10" />
 
         {/* Activity Logs overlay (full screen) */}
         {lifecycleConsoleOpen && (
@@ -4875,7 +4831,16 @@ function FlowWorkspaceInner() {
               onNavigate={navigateToNode}
               onUpdateNode={updateNode}
             >
-              {renderExpandedContent()}
+              <Suspense fallback={
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading view...</p>
+                  </div>
+                </div>
+              }>
+                {renderExpandedContent()}
+              </Suspense>
             </FlowExpandedOverlay>
           </FlowOverlayErrorBoundary>
         );
@@ -4906,6 +4871,18 @@ function FlowWorkspaceInner() {
           itemTitle={canvasTitle || "Untitled Canvas"}
         />
       )}
+
+      {/* Welcome overlay for first-time users */}
+      <WelcomeOverlay
+        onStartTour={() => {
+          // The FlowWorkspace forces tourCompleted=true, so we reset tips instead
+          toast({ title: "Tip: Drag tools from the dock below to get started!" });
+        }}
+        onLoadBlueprint={() => setBlueprintsExternalOpen(true)}
+      />
+
+      {/* Keyboard shortcuts overlay (triggered by ? or Ctrl+/) */}
+      <KeyboardShortcutsOverlay />
     </FtuxShell>
   );
 }

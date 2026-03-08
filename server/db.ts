@@ -510,6 +510,35 @@ export async function ensureTables(): Promise<void> {
         ALTER TABLE agency_campaigns ADD CONSTRAINT agency_campaigns_campaign_id_unique UNIQUE(campaign_id);
       EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
       END $$;
+
+      -- Subscriptions — Stripe subscription state per user
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        stripe_customer_id TEXT NOT NULL,
+        stripe_subscription_id TEXT,
+        plan_tier TEXT NOT NULL DEFAULT 'free',
+        status TEXT NOT NULL DEFAULT 'active',
+        current_period_start TIMESTAMP,
+        current_period_end TIMESTAMP,
+        cancel_at_period_end BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer ON subscriptions(stripe_customer_id);
+
+      -- Usage records — daily-bucketed usage counters
+      CREATE TABLE IF NOT EXISTS usage_records (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        resource TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 1,
+        date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_usage_records_user_date ON usage_records(user_id, date);
+      CREATE INDEX IF NOT EXISTS idx_usage_records_resource ON usage_records(resource);
     `);
     console.log("Database tables verified.");
   } catch (err) {

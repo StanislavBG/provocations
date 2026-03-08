@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.21.2";
+export const APP_VERSION = "0.22.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,22 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.22.0",
+    date: "2026-03-08",
+    changes: [
+      "Infrastructure: health check, structured logging, env validation, CI pipeline, pre-commit hooks",
+      "Testing: 146 new tests (crypto, schema, LLM routing, context builder) with mock helpers",
+      "Security: helmet CSP, rate limiting (4 tiers), input validation, upload validation",
+      "Monetization: subscriptions DB, usage metering (Free/Pro/Team), Stripe webhooks, billing page",
+      "Performance: CSS viewport transforms, React.memo, edge caching, route splitting, lazy views, diff-based save",
+      "AI/LLM: context budgets, prompt optimization (30% reduction), prompt templates, model routing, fallback retry",
+      "New app template: Product Owner Agent — 10-section PO guide framework",
+      "Help system: 11 help pages at /help with sidebar, search, contextual ? buttons, What's New badge",
+      "Chain reliability: execution locks, error propagation, retry button, progress bar, per-node timeouts, cancel",
+      "UX polish: welcome overlay, keyboard shortcuts (?), empty states, ARIA labels, reduced motion, confirmation dialogs",
+    ],
+  },
   {
     version: "0.21.2",
     date: "2026-03-08",

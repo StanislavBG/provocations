@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, useEffect, useContext } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect, useContext, useLayoutEffect } from "react";
 import { useFtuxShell } from "@/lib/ftux-shell-context";
 import { getEffectiveKeys } from "@/lib/keybind-actions";
 import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical, Monitor } from "lucide-react";
@@ -38,6 +38,7 @@ interface FlowCanvasProps {
   onCreateEdge?: (fromNodeId: string, toNodeId: string) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onPlayNode?: (nodeId: string) => void;
+  onRetryNode?: (nodeId: string) => void;
   onToggleLock?: (nodeId: string) => void;
   onDropTool?: (toolId: string, canvasX: number, canvasY: number) => void;
   onDragStart?: () => void;
@@ -94,6 +95,7 @@ export function FlowCanvas({
   onCreateEdge,
   onDeleteEdge,
   onPlayNode,
+  onRetryNode,
   onToggleLock,
   onDropTool,
   onDragStart,
@@ -113,6 +115,38 @@ export function FlowCanvas({
     left: (getEffectiveKeys("canvas.glideLeft", shellCtx.keyBinds)[0] ?? "a").toLowerCase(),
     right: (getEffectiveKeys("canvas.glideRight", shellCtx.keyBinds)[0] ?? "d").toLowerCase(),
   }), [shellCtx.keyBinds]);
+
+  // ── CSS-based viewport transform (E1 optimization) ──
+  // The transform layer ref is updated directly via style.transform to bypass
+  // React re-renders during continuous pan/zoom. The state.viewport is still
+  // the source of truth for virtualization, minimap, and grid calculations,
+  // but the CSS transform is applied imperatively for smoother animation.
+  const transformLayerRef = useRef<HTMLDivElement>(null);
+  const gridSvgRef = useRef<SVGSVGElement>(null);
+
+  // Sync CSS transform imperatively whenever viewport changes, without waiting for React render
+  useLayoutEffect(() => {
+    if (transformLayerRef.current) {
+      transformLayerRef.current.style.transform =
+        `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.zoom})`;
+    }
+    // Also update grid pattern position imperatively
+    if (gridSvgRef.current) {
+      const gs = GRID_SIZE * state.viewport.zoom;
+      const pattern = gridSvgRef.current.querySelector("pattern");
+      if (pattern) {
+        pattern.setAttribute("x", String(state.viewport.x % gs));
+        pattern.setAttribute("y", String(state.viewport.y % gs));
+        pattern.setAttribute("width", String(gs));
+        pattern.setAttribute("height", String(gs));
+        const circle = pattern.querySelector("circle");
+        if (circle) {
+          circle.setAttribute("cx", String(gs / 2));
+          circle.setAttribute("cy", String(gs / 2));
+        }
+      }
+    }
+  }, [state.viewport]);
 
   const {
     canvasRef,
@@ -278,6 +312,7 @@ export function FlowCanvas({
           onToggleLock={onToggleLock}
           onPortMouseDown={handlePortMouseDown}
           onPlayNode={onPlayNode}
+          onRetryNode={onRetryNode}
           onUpdateNode={onUpdateNode}
         >
           <div className="px-2 py-1.5 overflow-hidden flex-1 flex items-center gap-2">
@@ -316,6 +351,7 @@ export function FlowCanvas({
           onToggleLock={onToggleLock}
           onPortMouseDown={handlePortMouseDown}
           onPlayNode={onPlayNode}
+          onRetryNode={onRetryNode}
           onUpdateNode={onUpdateNode}
         >
           <div className="px-2 py-1.5 overflow-hidden flex-1 flex flex-col gap-1">
@@ -344,10 +380,11 @@ export function FlowCanvas({
         onToggleLock={onToggleLock}
         onPortMouseDown={handlePortMouseDown}
         onPlayNode={onPlayNode}
+        onRetryNode={onRetryNode}
         onUpdateNode={onUpdateNode}
       />
     );
-  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onCreateNote, onToggleTrigger]);
+  }, [state.selectedNodeIds, state.viewport.zoom, state.nodes, state.edges, handleNodeMouseDown, handleNodeDoubleClick, handlePortMouseDown, onDeleteNode, onUpdateNode, onToggleLock, onPlayNode, onRetryNode, onCreateNote, onToggleTrigger]);
 
   // Attach wheel handler as non-passive so preventDefault() works (Chrome passive default)
   useEffect(() => {
@@ -374,6 +411,8 @@ export function FlowCanvas({
   return (
     <div
       ref={canvasRef}
+      role="application"
+      aria-label="Flow Canvas"
       className={`absolute inset-0 overflow-hidden ${transparentBg ? "bg-transparent" : "bg-background"} ${cursorClass}`}
       onMouseDown={frozen ? undefined : handleMouseDown}
       onMouseMove={frozen ? undefined : handleMouseMove}
@@ -385,7 +424,7 @@ export function FlowCanvas({
     >
       {/* Dot grid */}
       {gridOpacity > 0 && (
-        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        <svg ref={gridSvgRef} className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
             <pattern
               id="flow-grid"
@@ -408,12 +447,14 @@ export function FlowCanvas({
         </svg>
       )}
 
-      {/* Viewport transform layer */}
+      {/* Viewport transform layer — CSS transform applied imperatively via ref for perf */}
       <div
+        ref={transformLayerRef}
         className="absolute"
         style={{
           transform: `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.zoom})`,
           transformOrigin: "0 0",
+          willChange: "transform",
         }}
       >
         {/* Edges behind nodes */}
@@ -555,7 +596,10 @@ export function FlowCanvas({
               <Sparkles className="w-8 h-8" />
             </div>
             <p className="text-sm text-muted-foreground/60 font-serif">
-              Drag items from the dock to the canvas, or click to add
+              Drag a tool from the dock to get started, or load a Blueprint
+            </p>
+            <p className="text-[11px] text-muted-foreground/40">
+              Press <kbd className="px-1 py-0.5 rounded bg-muted/50 text-[10px] font-mono">?</kbd> for keyboard shortcuts
             </p>
           </div>
         </div>

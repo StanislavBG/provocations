@@ -866,10 +866,10 @@ export function NotebookResearchChat({
             </div>
             <div className="text-center space-y-1.5 max-w-[260px]">
               <p className="text-sm font-medium text-foreground/60">
-                Research assistant
+                Ask a question to start researching
               </p>
               <p className="text-xs leading-relaxed">
-                Ask questions, explore ideas, and capture useful responses as
+                Explore ideas and capture useful responses as
                 context for your document. Click the{" "}
                 <BookmarkPlus className="inline w-3 h-3" /> button on any
                 response to save it.

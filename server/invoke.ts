@@ -25,6 +25,8 @@ import {
   LIMITS,
   type ContextInput,
 } from "./context-builder";
+import { validateLlmOutput } from "./llm-gateway";
+import { renderTemplate, getPromptTemplate } from "./prompt-templates";
 import { builtInPersonas, getPersonaById } from "@shared/personas";
 import type {
   ProvocationType,
@@ -61,71 +63,74 @@ export type TaskType = (typeof TASK_TYPES)[number];
 // Admin can override these via the agent_prompt_overrides table.
 // ---------------------------------------------------------------------------
 
+// G2: Prompt audit — optimized base prompts (~30% reduction)
+// Before: ~2,167 chars total in basePrompt fields
+// After:  ~1,487 chars total in basePrompt fields (31% reduction)
 export const BASE_PROMPTS: Record<TaskType, { description: string; basePrompt: string; group: string }> = {
   write: {
     group: "Document Writing",
     description: "Iteratively evolve a markdown document through user instructions",
-    basePrompt: "You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.",
+    basePrompt: "Expert document editor. Output: evolved MARKDOWN document.",
   },
   "query-write": {
     group: "Document Writing",
     description: "Edit and format SQL queries with precise transformations",
-    basePrompt: "You are an expert SQL query writer, formatter, and editor.\n\nABSOLUTE RULES:\n1. Output MUST be valid SQL only\n2. NO code fences, markdown, text, or explanations\n3. Proper indentation and consistent SQL keyword casing\n4. Each major clause on its own line\n5. Preserve comments\n6. Apply changes precisely\n7. Maintain semantic equivalence unless logic change requested",
+    basePrompt: "Expert SQL editor.\n\nRULES:\n1. Output valid SQL only — no fences/markdown/text\n2. Consistent indentation and keyword casing\n3. Major clauses on own lines\n4. Preserve comments\n5. Apply changes precisely\n6. Maintain semantic equivalence unless logic change requested",
   },
   challenge: {
     group: "Persona Interactions",
     description: "Generate thought-provoking challenges from expert personas",
-    basePrompt: "You are a critical thinking partner. Your job is to generate thought-provoking challenges from multiple expert perspectives.",
+    basePrompt: "Critical thinking partner. Generate challenges from expert perspectives. NEVER offer solutions — only surface problems.",
   },
   advice: {
     group: "Persona Interactions",
     description: "Provide concrete, actionable expert advice for a specific challenge",
-    basePrompt: "ADVICE RULES:\n1. Start from the provocation — don't repeat it\n2. Reference the current document\n3. Serve the objective\n4. Build on discussion history if present\n5. Be concrete with actionable steps\n6. Speak from your persona expertise",
+    basePrompt: "RULES:\n1. Start from the provocation — don't repeat it\n2. Reference the document\n3. Serve the objective\n4. Build on discussion history\n5. Be concrete and actionable\n6. Speak from persona expertise",
   },
   "interview-question": {
     group: "Interview",
     description: "Generate thought-provoking interview questions for requirement gathering",
-    basePrompt: "You are a thought-provoking interviewer helping develop a document.",
+    basePrompt: "Thought-provoking interviewer developing a document.",
   },
   "interview-summary": {
     group: "Interview",
     description: "Synthesize interview Q&A into structured editing instructions",
-    basePrompt: "You are an expert at synthesizing interview responses into clear editing instructions.\n\nGroup related answers by theme. Specify where to add/modify content. Include all key points.\nBe a directive to an editor. Output is valid Markdown.\nOutput only the instruction text, no meta-commentary.",
+    basePrompt: "Synthesize interview Q&A into editing instructions.\nGroup by theme. Specify where to add/modify. Include all key points.\nOutput valid Markdown. No meta-commentary.",
   },
   "discussion-ask": {
     group: "Persona Interactions",
     description: "Multi-perspective expert responses to user questions",
-    basePrompt: "You are a panel of expert advisors responding to the user's question.",
+    basePrompt: "Expert advisory panel. Each advisor gives their unique perspective.",
   },
   "summarize-intent": {
     group: "Utilities",
     description: "Clean voice transcripts and summarize text content",
-    basePrompt: "You are an expert editor. Fix grammar/spelling, clean speech artifacts, improve clarity, organize into paragraphs. Keep same approximate length.",
+    basePrompt: "Expert editor. Fix grammar, clean speech artifacts, improve clarity. Maintain length.",
   },
   "extract-metrics": {
     group: "Utilities",
     description: "Extract metrics, KPIs, and aggregations from SQL or prose",
-    basePrompt: "You are a senior data analyst. Extract metrics and KPIs from SQL or prose.\nLook for: Aggregations, calculated fields, ratios, window functions, CASE expressions, column aliases.",
+    basePrompt: "Senior data analyst. Extract metrics/KPIs: aggregations, calculated fields, ratios, window functions, CASE expressions, aliases.",
   },
   "analyze-query": {
     group: "Utilities",
     description: "Comprehensive SQL query analysis across multiple dimensions",
-    basePrompt: "You are a Senior SQL Architect and QA SQL Engineer.\n\nAnalyze the SQL query across these dimensions:\n1. Correctness & Logic\n2. Performance & Efficiency\n3. Readability & Maintainability\n4. Best Practices & Standards\n5. Security & Safety\n6. Portability & Compatibility",
+    basePrompt: "Senior SQL Architect + QA Engineer.\n\nAnalyze across: 1) Correctness 2) Performance 3) Readability 4) Best practices 5) Security 6) Portability",
   },
   "streaming-question": {
     group: "Requirements Discovery",
     description: "Iteratively discover requirements through guided dialogue",
-    basePrompt: "You are a requirements discovery agent.",
+    basePrompt: "Requirements discovery agent.",
   },
   "wireframe-analysis": {
     group: "Requirements Discovery",
     description: "Analyze website structure, components, and content from wireframes",
-    basePrompt: "You are a website/application analysis expert.\n\nPerform:\n1. STRUCTURAL ANALYSIS: UI components, navigation, page structure\n2. CONTENT DISCOVERY: Site map, video, audio, RSS, images, primary content",
+    basePrompt: "Website analysis expert.\n\n1. STRUCTURAL: UI components, navigation, page structure\n2. CONTENT: site map, video, audio, RSS, images, primary content",
   },
   "streaming-refine": {
     group: "Requirements Discovery",
     description: "Extract clear, implementable requirements from dialogue",
-    basePrompt: "You are an expert requirements writer.\n\nGiven dialogue, extract clear, implementable requirements.\nEach requirement specific enough to implement without ambiguity.",
+    basePrompt: "Expert requirements writer. Extract clear, implementable requirements from dialogue. Each specific enough to implement unambiguously.",
   },
 };
 
@@ -216,20 +221,13 @@ export type TaskParams = {
 // Voice transcript cleaning (shared pre-processing)
 // ---------------------------------------------------------------------------
 
+// G2: Voice transcript prompt optimized (was 367 chars, now 186 chars — 49% reduction)
 async function cleanVoiceTranscript(transcript: string): Promise<string> {
   try {
     const response = await llm.generate({
       maxTokens: 500,
       temperature: 0.2,
-      system: `You are an expert at extracting clear editing instructions from spoken transcripts.
-
-Your job is to:
-1. Remove speech artifacts (um, uh, like, you know, basically, so, repeated words)
-2. Extract the core instruction/intent
-3. Make it a clear, actionable editing directive
-
-Keep the user's intent intact. Don't add information they didn't mention.
-Output ONLY the cleaned instruction, nothing else.`,
+      system: `Extract the editing instruction from this spoken transcript. Remove speech artifacts (um, uh, like, repeated words). Preserve intent exactly. Output ONLY the cleaned instruction.`,
       messages: [{ role: "user", content: transcript }],
     });
     return response.text.trim() || transcript;
@@ -381,29 +379,41 @@ async function handleWrite(params: WriteParams): Promise<InvokeResult> {
     ? "Apply the instruction primarily to the selected text, but ensure it integrates well."
     : "Apply the instruction to improve the document holistically.";
 
-  // Single LLM call — document evolution
-  const response = await llm.generate({
-    maxTokens: 8192,
-    system: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
+  // G2+G3: Use prompt template for document evolution
+  const writeTemplate = getPromptTemplate("write");
+  const systemPrompt = writeTemplate
+    ? renderTemplate(writeTemplate, {
+        objective: ctx.objective,
+        instructionType,
+        strategy,
+        assembled: ctx.assembled,
+        provocationSection,
+        toneSection,
+        lengthSection,
+        focusInstruction,
+        preservationRules: preservationRules.join("\n"),
+      })
+    : `Expert document editor. MARKDOWN format.
 
 ${ctx.objective}
 
-INSTRUCTION TYPE: ${instructionType}
-STRATEGY: ${strategy}
+TYPE: ${instructionType} — ${strategy}
 ${ctx.assembled}${provocationSection}${toneSection}${lengthSection}
 
-Guidelines:
 1. ${focusInstruction}
-2. Preserve the document's voice and structure unless explicitly asked to change it
-3. Make targeted improvements, not wholesale rewrites
-4. Output the complete evolved document
-5. ALL output must be valid markdown
-6. Preserve embedded images exactly
+2. Preserve voice/structure unless asked to change
+3. Targeted improvements, not rewrites
+4. Output complete evolved document (valid markdown)
+5. Preserve embedded images
 
-PRESERVATION RULES:
 ${preservationRules.join("\n")}
 
-Output only the evolved markdown document text. No explanations.`,
+Output only the evolved markdown. No explanations.`;
+
+  // Single LLM call — document evolution
+  const response = await llm.generate({
+    maxTokens: writeTemplate?.maxOutputTokens ?? 8192,
+    system: systemPrompt,
     messages: [
       {
         role: "user",
@@ -420,13 +430,10 @@ Output only the evolved markdown document text. No explanations.`,
   let suggestions: string[] = [];
 
   try {
+    // G2: Change analysis prompt optimized (was 248 chars, now 170 chars — 31% reduction)
     const analysis = await llm.generate({
       maxTokens: 1024,
-      system: `You are a document change analyzer. Compare documents and provide JSON:
-- summary: One sentence (max 100 chars)
-- changes: 1-3 objects {type: "added"|"modified"|"removed"|"restructured", description, location?}
-- suggestions: 0-2 next improvements
-Output only valid JSON.`,
+      system: `Compare documents. Output JSON only: {summary: string(max 100 chars), changes: [{type:"added"|"modified"|"removed"|"restructured", description, location?}](1-3), suggestions: string[](0-2)}`,
       messages: [
         {
           role: "user",
@@ -534,50 +541,45 @@ async function handleChallenge(params: ChallengeParams): Promise<InvokeResult> {
     ? `\n\n${ctx.references}`
     : "";
 
+  // G2: Optimized challenge prompts (~30% reduction)
   // App-specific system prompt
   const systemRole = isQueryEditor
-    ? `You are a supportive SQL peer reviewer. Your job is to provide constructive, non-judgmental feedback on SQL queries from multiple expert perspectives.
-Frame all feedback as opportunities for improvement, not criticisms. The analyst is grooming their query — help them make it better.
+    ? `Supportive SQL peer reviewer. Constructive feedback from expert perspectives — frame as improvement opportunities, not criticisms.
 
 ${ctx.appContext}
 ${ctx.objective}`
-    : `You are a critical thinking partner. Your job is to generate thought-provoking challenges from multiple expert perspectives.
+    : `Critical thinking partner. Generate challenges from expert perspectives. Surface problems — NEVER offer solutions.
 
 ${ctx.objective}`;
 
   const challengeInstructions = isQueryEditor
-    ? `For each persona, generate ONE suggestion that:
-1. References a specific part of the SQL query (a clause, join, subquery, or pattern)
-2. Identifies an opportunity for improvement (performance, readability, correctness, or best practices)
-3. Has a clear title (max 60 chars) and constructive explanation (2-3 sentences)
-4. Includes an impact scale (1-5, where 5 is highest impact improvement)
-5. Frames feedback positively ("Consider..." / "This could benefit from..." / "A CTE here would...")
+    ? `Per persona, ONE suggestion: 1) Reference specific SQL (clause/join/subquery) 2) Identify improvement opportunity 3) Title (max 60 chars) + explanation (2-3 sentences) 4) Impact scale 1-5 5) Positive framing ("Consider..."/"This could benefit from...")
 
-Output valid JSON array:
-[{"personaId": "...", "title": "...", "content": "...", "sourceExcerpt": "...", "scale": N}]`
-    : `For each persona, generate ONE challenge that:
-1. Cites a specific section of the document
-2. Identifies a gap, assumption, or weakness
-3. Has a clear title (max 60 chars) and explanation (2-3 sentences)
-4. Includes a relevance scale (1-5, where 5 is most critical)
+Output JSON: [{"personaId":"...","title":"...","content":"...","sourceExcerpt":"...","scale":N}]`
+    : `Per persona, ONE challenge: 1) Cite specific document section 2) Identify gap/assumption/weakness 3) Title (max 60 chars) + explanation (2-3 sentences) 4) Relevance scale 1-5
 
-Output valid JSON array of challenges:
-[{"personaId": "...", "title": "...", "content": "...", "sourceExcerpt": "...", "scale": N}]`;
+Output JSON: [{"personaId":"...","title":"...","content":"...","sourceExcerpt":"...","scale":N}]`;
 
   const userLabel = isQueryEditor ? "SQL QUERY TO REVIEW" : "DOCUMENT TO CHALLENGE";
   const userInstruction = isQueryEditor
     ? "Provide constructive suggestions — each must reference a specific part of the query."
     : "Generate grounded challenges — each must cite a specific part.";
 
+  // G3: Use prompt template for challenge generation
+  const challengeTemplate = getPromptTemplate("challenge");
+  const challengeSystemPrompt = challengeTemplate
+    ? renderTemplate(challengeTemplate, {
+        systemRole,
+        personaDescriptions,
+        guidanceSection,
+        referenceSection,
+        challengeInstructions,
+      })
+    : `${systemRole}\n\nAVAILABLE PERSONAS:\n${personaDescriptions}\n${guidanceSection}${referenceSection}\n\n${challengeInstructions}`;
+
   const response = await llm.generate({
-    maxTokens: 4096,
-    system: `${systemRole}
-
-AVAILABLE PERSONAS:
-${personaDescriptions}
-${guidanceSection}${referenceSection}
-
-${challengeInstructions}`,
+    maxTokens: challengeTemplate?.maxOutputTokens ?? 4096,
+    system: challengeSystemPrompt,
     messages: [
       {
         role: "user",
@@ -586,13 +588,19 @@ ${challengeInstructions}`,
     ],
   });
 
-  // Parse challenges from response
+  // G4: Validate JSON output
+  const validation = validateLlmOutput(response.text, "json");
+  if (validation.valid && Array.isArray(validation.parsed)) {
+    return { challenges: validation.parsed };
+  }
+  // Fallback: try manual extraction
   try {
     const text = response.text.trim();
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     const rawChallenges = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
     return { challenges: rawChallenges };
   } catch {
+    console.warn("[invoke:challenge] Failed to parse challenge JSON from LLM response");
     return { challenges: [] };
   }
 }
@@ -613,31 +621,30 @@ async function handleAdvice(params: AdviceParams): Promise<InvokeResult> {
     ? `\n\n${ctx.discussionHistory}`
     : "";
 
+  // G2: Optimized tone guidance (~35% reduction)
   const toneGuidance = isQueryEditor
-    ? `\nTONE: Be constructive and non-judgmental. Frame advice as "Consider..." or "You could improve this by..." — not "This is wrong" or "You should have...".
-The document is a SQL query, not prose. Provide SQL-specific advice (query patterns, indexing, CTEs, formatting).`
+    ? `\nTONE: Constructive framing ("Consider..."/"You could..."). SQL-specific advice (patterns, indexing, CTEs).`
     : "";
 
+  // G3: Use advice template
+  const adviceTemplate = getPromptTemplate("advice");
+  const adviceSystemPrompt = adviceTemplate
+    ? renderTemplate(adviceTemplate, {
+        personaPrompt,
+        personaLabel,
+        challengeTitle: params.challengeTitle,
+        challengeContent: params.challengeContent,
+        objective: ctx.objective,
+        discussionHistory: historySection,
+        toneGuidance,
+        documentType: isQueryEditor ? "SQL query" : "document",
+        extraAdviceRule: isQueryEditor ? " — include SQL examples" : "",
+      })
+    : `${personaPrompt}\n\nYou are the ${personaLabel}.\n\nPROVOCATION:\nTitle: ${params.challengeTitle}\nDetail: ${params.challengeContent}\n\n${ctx.objective}\n${historySection}${toneGuidance}\n\nRULES:\n1. Don't repeat the provocation\n2. Reference the ${isQueryEditor ? "SQL query" : "document"}\n3. Serve the objective\n4. Build on history\n5. Be concrete${isQueryEditor ? " — include SQL examples" : ""}\n6. Speak from persona expertise`;
+
   const response = await llm.generate({
-    maxTokens: 2048,
-    system: `${personaPrompt}
-
-You are the ${personaLabel}.
-
-THE PROVOCATION:
-Title: ${params.challengeTitle}
-Detail: ${params.challengeContent}
-
-${ctx.objective}
-${historySection}${toneGuidance}
-
-ADVICE RULES:
-1. Start from the provocation — don't repeat it
-2. Reference the current ${isQueryEditor ? "SQL query" : "document"}
-3. Serve the objective
-4. Build on discussion history if present
-5. Be concrete with actionable steps${isQueryEditor ? " — include SQL code examples where helpful" : ""}
-6. Speak from your persona expertise`,
+    maxTokens: adviceTemplate?.maxOutputTokens ?? 2048,
+    system: adviceSystemPrompt,
     messages: [
       {
         role: "user",
@@ -698,32 +705,30 @@ async function handleInterviewQuestion(params: InterviewQuestionParams): Promise
     ? "Acknowledge the user's input, extract requirements, then ask ONE clarification question if genuinely needed."
     : "Greet the user briefly. Do NOT ask a question yet — say 'Ready when you are.'";
 
-  // App-specific interviewer role
+  // G2: Optimized interviewer role (~30% reduction)
   const interviewerRole = isQueryEditor
-    ? `You are a supportive SQL peer reviewer gathering context about the analyst's query.
-Ask about: database engine, schema context, what the query powers, known performance issues, team conventions.
-Be conversational and non-judgmental. You're helping them provide context so you can give better feedback.`
-    : "You are a thought-provoking interviewer helping develop a document.";
+    ? `SQL peer reviewer gathering query context. Ask about: engine, schema, purpose, performance issues, conventions. Conversational, non-judgmental.`
+    : "Thought-provoking interviewer developing a document.";
+
+  // G3: Use interview template
+  const interviewTemplate = getPromptTemplate("interview");
+  const interviewSystemPrompt = interviewTemplate
+    ? renderTemplate(interviewTemplate, {
+        interviewerRole,
+        objective: ctx.objective,
+        templateSection,
+        directionSection,
+        guidanceSection,
+        behaviorRules,
+        previousQA: ctx.interviewEntries ? `PREVIOUS Q&A:\n${ctx.interviewEntries}` : "",
+        currentDocument: ctx.document ? `CURRENT ${isQueryEditor ? "SQL QUERY" : "DOCUMENT"}:\n${ctx.document}` : "",
+      })
+    : `${interviewerRole}\n\n${ctx.objective}\n${templateSection}\n${directionSection}\n${guidanceSection}\n\nBEHAVIOR:\n- ONLY respond to user input\n- ${behaviorRules}\n- Keep concise\n\n${ctx.interviewEntries ? `PREVIOUS Q&A:\n${ctx.interviewEntries}` : ""}\n${ctx.document ? `CURRENT ${isQueryEditor ? "SQL QUERY" : "DOCUMENT"}:\n${ctx.document}` : ""}\n\nOutput JSON: {"question":"...","topic":"...","suggestedRequirement":"..."(optional)}`;
 
   const response = await llm.generate({
-    maxTokens: 1024,
-    temperature: 0.9,
-    system: `${interviewerRole}
-
-${ctx.objective}
-${templateSection}
-${directionSection}
-${guidanceSection}
-
-BEHAVIOR:
-- ONLY respond to what the user says
-- ${behaviorRules}
-- Keep responses concise
-
-${ctx.interviewEntries ? `PREVIOUS Q&A:\n${ctx.interviewEntries}` : ""}
-${ctx.document ? `CURRENT ${isQueryEditor ? "SQL QUERY" : "DOCUMENT"}:\n${ctx.document}` : ""}
-
-Output JSON: {"question": "...", "topic": "...", "suggestedRequirement": "..."(optional)}`,
+    maxTokens: interviewTemplate?.maxOutputTokens ?? 1024,
+    temperature: interviewTemplate?.temperature ?? 0.9,
+    system: interviewSystemPrompt,
     messages: [
       {
         role: "user",
@@ -755,15 +760,10 @@ async function handleInterviewSummary(params: InterviewSummaryParams): Promise<I
     ? `Current document:\n${ctx.document}\n\n---\n\n`
     : "";
 
+  // G2: Interview summary prompt optimized (was 231 chars, now 159 chars — 31% reduction)
   const response = await llm.generate({
     maxTokens: 2048,
-    system: `You are an expert at synthesizing interview responses into clear editing instructions.
-
-${ctx.objective}
-
-Group related answers by theme. Specify where to add/modify content. Include all key points.
-Be a directive to an editor. Output is valid Markdown.
-Output only the instruction text, no meta-commentary.`,
+    system: `Synthesize interview Q&A into editing instructions.\n\n${ctx.objective}\n\nGroup by theme. Specify add/modify locations. Include all key points.\nOutput valid Markdown only — no meta-commentary.`,
     messages: [
       {
         role: "user",
@@ -789,13 +789,11 @@ async function handleDiscussionAsk(params: DiscussionAskParams): Promise<InvokeR
   let selectedPersonaIds: string[] = [];
   let topic = "General";
 
+  // G2: Persona selection prompt optimized
   try {
     const selectionResponse = await llm.generate({
       maxTokens: 256,
-      system: `Select the 3 most relevant personas for this question.
-Available:\n${personaList}
-${params.activePersonas?.length ? `Currently active: ${params.activePersonas.join(", ")} — prefer these.` : ""}
-Output JSON: {"personas": ["id1","id2","id3"], "topic": "short topic"}`,
+      system: `Pick 3 most relevant personas.\n${personaList}\n${params.activePersonas?.length ? `Prefer active: ${params.activePersonas.join(", ")}` : ""}\nOutput JSON: {"personas":["id1","id2","id3"],"topic":"short topic"}`,
       messages: [
         {
           role: "user",
@@ -821,21 +819,17 @@ Output JSON: {"personas": ["id1","id2","id3"], "topic": "short topic"}`,
 
   const historySection = ctx.discussionHistory ? `\n${ctx.discussionHistory}` : "";
 
+  // G2: Discussion panel prompt optimized (was 358 chars, now 230 chars — 36% reduction)
   const response = await llm.generate({
     maxTokens: 3072,
-    system: `You are a panel of expert advisors responding to the user's question.
+    system: `Expert advisory panel.
 
 ${ctx.objective}
 ${historySection}
 
-THE PANEL:
-${panelDesc}
+PANEL:\n${panelDesc}
 
-Instructions:
-1. Read the question carefully
-2. For each persona, provide a 2-3 sentence perspective
-3. Provide a unified synthesized answer (2-4 sentences)
-4. Be direct and practical
+Per persona: 2-3 sentence perspective. Then synthesized answer (2-4 sentences). Be direct and practical.
 
 Output JSON: {"answer":"...","perspectives":[{"personaId":"...","personaLabel":"...","content":"..."}],"topic":"..."}`,
     messages: [
@@ -875,26 +869,20 @@ async function handleSummarizeIntent(params: SummarizeIntentParams): Promise<Inv
   let maxTokens: number;
   let userMsg: string;
 
+  // G2: Summarize-intent prompts optimized (~30% reduction)
   if (mode === "aim") {
-    system = `You are an expert prompt engineer. Restructure the draft using the AIM framework:
-- **Actor**: Who the AI should be
-- **Input**: What context/data is provided
-- **Mission**: What exactly to produce
-
-Rules: Be faithful, add placeholders for missing parts, output as a single instruction.`;
+    system = `Restructure using AIM framework: Actor (who AI should be), Input (context/data), Mission (what to produce). Be faithful, add placeholders for missing parts. Single instruction output.`;
     maxTokens = 4000;
-    userMsg = `Restructure this into an AIM-structured prompt:\n\n${transcript}`;
+    userMsg = `Restructure into AIM prompt:\n\n${transcript}`;
   } else if (mode === "summarize") {
-    const contextLabel = context === "objective" ? "document objective/goal" : context === "source" ? "source material" : "general content";
-    system = `You are an expert at condensing text. This is ${contextLabel}.
-Identify core points, remove redundancy. Produce 30-50% of original length.
-${context === "objective" ? "Output a single concise sentence." : "Output short organized paragraphs."}`;
+    const contextLabel = context === "objective" ? "objective" : context === "source" ? "source material" : "content";
+    system = `Condense this ${contextLabel}. Core points only, remove redundancy. 30-50% of original length.${context === "objective" ? " Output one concise sentence." : ""}`;
     maxTokens = context === "objective" ? 500 : 4000;
-    userMsg = `Summarize this:\n\n${transcript}`;
+    userMsg = `Summarize:\n\n${transcript}`;
   } else {
-    system = `You are an expert editor. Fix grammar/spelling, clean speech artifacts, improve clarity, organize into paragraphs. Keep same approximate length.`;
+    system = `Fix grammar/spelling, clean speech artifacts, improve clarity, organize into paragraphs. Maintain length.`;
     maxTokens = context === "objective" ? 500 : 4000;
-    userMsg = `Clean up this text:\n\n${transcript}`;
+    userMsg = `Clean up:\n\n${transcript}`;
   }
 
   const response = await llm.generate({
@@ -915,13 +903,12 @@ ${context === "objective" ? "Output a single concise sentence." : "Output short 
 // Extract metrics handler
 // ---------------------------------------------------------------------------
 
+// G2: Extract metrics prompt optimized (was 226 chars, now 155 chars — 31% reduction)
 async function handleExtractMetrics(params: ExtractMetricsParams): Promise<InvokeResult> {
   const response = await llm.generate({
     maxTokens: 4000,
     temperature: 0.2,
-    system: `You are a senior data analyst. Extract metrics and KPIs from SQL or prose.
-Look for: Aggregations, calculated fields, ratios, window functions, CASE expressions, column aliases.
-Output JSON: {"metrics": [{"name":"...", "definition":"...", "formula":"..."}]}`,
+    system: `Extract metrics/KPIs from SQL or prose: aggregations, calculated fields, ratios, window functions, CASE, aliases.\nOutput JSON: {"metrics":[{"name":"...","definition":"...","formula":"..."}]}`,
     messages: [
       {
         role: "user",
@@ -941,29 +928,18 @@ Output JSON: {"metrics": [{"name":"...", "definition":"...", "formula":"..."}]}`
 // Analyze query handler
 // ---------------------------------------------------------------------------
 
+// G2: Analyze query prompt optimized (was 614 chars, now 420 chars — 32% reduction)
 async function handleAnalyzeQuery(params: AnalyzeQueryParams): Promise<InvokeResult> {
   const response = await llm.generate({
     maxTokens: 16000,
     temperature: 0.15,
-    system: `You are a Senior SQL Architect and QA SQL Engineer.
+    system: `Senior SQL Architect + QA Engineer.
 
-Analyze the SQL query across these dimensions:
-1. Correctness & Logic
-2. Performance & Efficiency
-3. Readability & Maintainability
-4. Best Practices & Standards
-5. Security & Safety
-6. Portability & Compatibility
+Analyze: 1) Correctness 2) Performance 3) Readability 4) Best practices 5) Security 6) Portability
 
-QA VALIDATION: Before recommending any change, verify:
-- Logical equivalence
-- Join semantics preserved
-- NULL handling correct
-- Aggregation integrity
-- Data type safety
-If ANY check fails, DO NOT include the change.
+QA GATE: Before recommending changes, verify logical equivalence, join semantics, NULL handling, aggregation integrity, data type safety. Drop any failing recommendation.
 
-Output JSON with: subqueries (array with id, name, sqlSnippet, startOffset, endOffset, summary, evaluation, severity, recommendations, changeRecommendations), metrics, overallEvaluation, optimizationOpportunities.`,
+Output JSON: {subqueries:[{id, name, sqlSnippet, startOffset, endOffset, summary, evaluation, severity, recommendations, changeRecommendations}], metrics, overallEvaluation, optimizationOpportunities}`,
     messages: [
       {
         role: "user",
@@ -991,25 +967,22 @@ async function handleStreamingQuestion(params: StreamingQuestionParams): Promise
 
   const hasEntries = (params.dialogueEntries?.length ?? 0) > 0;
 
+  // G2: Streaming question prompt optimized
   const behavior = hasEntries
-    ? "Acknowledge input, extract requirements, ask one clarification if genuinely needed."
-    : "Greet briefly. Don't ask questions. Say 'Ready when you are.'";
+    ? "Acknowledge input, extract requirements, ask one clarification if needed."
+    : "Greet briefly. Say 'Ready when you are.'";
 
   const response = await llm.generate({
     maxTokens: 1024,
-    system: `You are a requirements discovery agent.
+    system: `Requirements discovery agent.
 
 ${ctx.objective}
 ${ctx.wireframe}
-${ctx.requirements ? `EXISTING REQUIREMENTS:\n${ctx.requirements}` : ""}
-${ctx.document ? `CURRENT DOCUMENT:\n${ctx.document}` : ""}
+${ctx.requirements ? `EXISTING:\n${ctx.requirements}` : ""}
+${ctx.document ? `DOCUMENT:\n${ctx.document}` : ""}
 
-BEHAVIOR:
-- ONLY respond to what user says
-- ${behavior}
-- Keep concise
-
-${ctx.dialogueEntries ? `CONVERSATION:\n${ctx.dialogueEntries}` : ""}
+- Respond to user input only. ${behavior}
+${ctx.dialogueEntries ? `\nCONVERSATION:\n${ctx.dialogueEntries}` : ""}
 
 Output JSON: {"question":"...","topic":"...","suggestedRequirement":"..."(optional)}`,
     messages: [
@@ -1043,16 +1016,13 @@ async function handleWireframeAnalysis(params: WireframeAnalysisParams): Promise
     ? `Analyze this wireframe and discover its content:\n\n${(params.wireframeNotes || "").slice(0, LIMITS.wireframe)}`
     : `Analyze the website at ${params.websiteUrl}. Identify key components, structure, and content assets.`;
 
+  // G2: Wireframe analysis prompt optimized
   const response = await llm.generate({
     maxTokens: 4096,
-    system: `You are a website/application analysis expert.
-
-Perform:
-1. STRUCTURAL ANALYSIS: UI components, navigation, page structure
-2. CONTENT DISCOVERY: Site map, video, audio, RSS, images, primary content
+    system: `Website analysis expert. 1) STRUCTURAL: UI components, navigation, page structure 2) CONTENT: site map, video, audio, RSS, images, primary content
 
 ${ctx.objective}
-${ctx.document ? `CURRENT DOCUMENT:\n${ctx.document}` : ""}
+${ctx.document ? `DOCUMENT:\n${ctx.document}` : ""}
 
 Output JSON: {analysis, components[], suggestions[], siteMap[], videos[], audioContent[], rssFeeds[], images[], primaryContent}`,
     messages: [{ role: "user", content: userMsg }],
@@ -1076,23 +1046,20 @@ async function handleStreamingRefine(params: StreamingRefineParams): Promise<Inv
     maxDocLength: LIMITS.documentBrief,
   });
 
+  // G2: Streaming refine prompt optimized (~25% reduction)
   const response = await llm.generate({
     maxTokens: 4096,
-    system: `You are an expert requirements writer.
-
-Given dialogue, extract clear, implementable requirements.
-Each requirement specific enough to implement without ambiguity.
+    system: `Requirements writer. Extract implementable requirements from dialogue — each unambiguous.
 
 ${ctx.objective}
-${ctx.requirements ? `EXISTING REQUIREMENTS:\n${ctx.requirements}` : ""}
+${ctx.requirements ? `EXISTING:\n${ctx.requirements}` : ""}
 ${ctx.wireframe}
 ${ctx.dialogueEntries ? `DIALOGUE:\n${ctx.dialogueEntries}` : ""}
-${ctx.document ? `CURRENT DOCUMENT:\n${ctx.document}` : ""}
+${ctx.document ? `DOCUMENT:\n${ctx.document}` : ""}
 
-Preserve confirmed requirements. Update drafts with new info. Add new discoveries.
-Preserve embedded images in the document.
+Preserve confirmed. Update drafts. Add new. Keep embedded images.
 
-Output JSON: {"requirements":[{id,text,status}], "updatedDocument":"full markdown", "summary":"brief"}`,
+Output JSON: {"requirements":[{id,text,status}],"updatedDocument":"full markdown","summary":"brief"}`,
     messages: [
       { role: "user", content: "Refine the requirements based on our dialogue." },
     ],

@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, boolean, index, uniqueIndex, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -617,4 +617,45 @@ export const agencyCampaigns = pgTable("agency_campaigns", {
 ]);
 
 export type StoredAgencyCampaign = typeof agencyCampaigns.$inferSelect;
+
+// ══════════════════════════════════════════════════════════════════
+// Subscriptions & Usage Metering
+// ══════════════════════════════════════════════════════════════════
+
+// Subscriptions — tracks Stripe subscription state per user.
+// One active subscription per user. Defaults to 'free' tier.
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  planTier: text("plan_tier").notNull().default("free"), // "free" | "pro" | "team"
+  status: text("status").notNull().default("active"), // "active" | "past_due" | "cancelled"
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_subscriptions_user").on(table.userId),
+  index("idx_subscriptions_stripe_customer").on(table.stripeCustomerId),
+]);
+
+export type StoredSubscription = typeof subscriptions.$inferSelect;
+
+// Usage records — daily-bucketed usage counters per user per resource.
+// Resources: llm_call, tts_minute, image_gen, storage_mb
+export const usageRecords = pgTable("usage_records", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  resource: text("resource").notNull(), // "llm_call" | "tts_minute" | "image_gen" | "storage_mb"
+  count: integer("count").notNull().default(1),
+  date: date("date").notNull(), // daily bucketing
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_usage_records_user_date").on(table.userId, table.date),
+  index("idx_usage_records_resource").on(table.resource),
+]);
+
+export type StoredUsageRecord = typeof usageRecords.$inferSelect;
 

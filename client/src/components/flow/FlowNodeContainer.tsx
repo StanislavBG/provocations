@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useState, useRef, useEffect } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Settings } from "lucide-react";
+import { Pause, Trash2, Lock, Unlock, Play, Loader2, Settings, AlertTriangle, Ban, X, RotateCcw } from "lucide-react";
 import { InputModeToggle } from "./InputModeToggle";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
@@ -45,6 +45,9 @@ export interface FlowNodeContainerProps {
   /** Whether header is the only draggable area (body stops propagation) */
   interactiveBody?: boolean;
 
+  /** I3: Retry callback for failed nodes in chain execution */
+  onRetryNode?: (nodeId: string) => void;
+
   /** Body content slot */
   children?: React.ReactNode;
 }
@@ -66,6 +69,7 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   badgeOverride,
   topLeftIndicator,
   interactiveBody,
+  onRetryNode,
   children,
 }: FlowNodeContainerProps) {
   const def = FLOW_NODE_REGISTRY[node.type];
@@ -74,6 +78,12 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   const isPlayable = PLAYABLE_TYPES.has(node.type);
   const isRunning = node.llmStatus === "running";
   const lockMode = getEffectiveLockMode(node);
+
+  // I2/I3: Chain error/blocked state
+  const chainError = node.chainStatus === "error";
+  const chainBlocked = node.chainStatus === "blocked";
+  const chainCancelled = node.chainStatus === "cancelled";
+  const hasChainIssue = chainError || chainBlocked || chainCancelled;
 
   const { handleResizeMouseDown } = useNodeResize({
     nodeId: node.id,
@@ -244,11 +254,14 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
   // ── Standard card rendering ──
   return (
     <div
+      role="article"
+      aria-label={`${node.type} node: ${node.label}`}
+      tabIndex={0}
       className={cn(
         "absolute select-none rounded-lg border-2 shadow-md transition-shadow group flex flex-col",
         "hover:shadow-lg",
         style.bg,
-        borderOverride || style.border,
+        chainError ? "border-red-500" : chainBlocked ? "border-orange-400/60" : chainCancelled ? "border-muted-foreground/40" : (borderOverride || style.border),
         isSelected && "ring-2 ring-primary shadow-lg",
       )}
       style={{
@@ -409,10 +422,48 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
       />
 
       {/* Pause indicator */}
-      {node.paused && (
+      {node.paused && !hasChainIssue && (
         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-yellow-500/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm">
           <Pause className="w-2 h-2" />
           Paused
+        </div>
+      )}
+
+      {/* I2: Chain error indicator with retry button (I3) */}
+      {chainError && (
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap">
+          <AlertTriangle className="w-2.5 h-2.5" />
+          Error
+          {onRetryNode && (
+            <button
+              className="ml-1 flex items-center gap-0.5 px-1 py-0.5 rounded bg-white/20 hover:bg-white/30 transition-colors text-[7px]"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRetryNode(node.id);
+              }}
+              title={node.chainErrorMessage ?? "Retry this node"}
+            >
+              <RotateCcw className="w-2 h-2" />
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* I2: Chain blocked indicator */}
+      {chainBlocked && (
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-400/90 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap">
+          <Ban className="w-2 h-2" />
+          Blocked
+        </div>
+      )}
+
+      {/* I6: Chain cancelled indicator */}
+      {chainCancelled && (
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted-foreground/70 text-white text-[7px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap">
+          <X className="w-2 h-2" />
+          Cancelled
         </div>
       )}
 

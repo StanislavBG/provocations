@@ -24,7 +24,7 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
   const isImage = !!node.imageUrl;
   const preview = node.documentContent
     ? node.documentContent.slice(0, 200)
-    : node.snippet || "Output document — contains text produced by upstream nodes. Double-click to view or edit content.";
+    : node.snippet || "Type your content or connect an upstream node. Double-click to open the editor.";
 
   return (
     <div

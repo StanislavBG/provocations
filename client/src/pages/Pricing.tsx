@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, ArrowLeft, Loader2, Zap, Flame, Rocket } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Check, ArrowLeft, Loader2, Zap, Flame, Rocket, Crown, Sparkles } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,8 +17,6 @@ interface StripeProduct {
   currency: string;
   type: "one_time" | "recurring";
 }
-
-const tierIcons = [Zap, Flame, Rocket];
 
 const dilbertQuotes = [
   '"I asked the AI for a summary. It gave me a novel. That\'ll be $47."',
@@ -45,7 +44,7 @@ const comicPanels = [
 
 function DilbertComicStrip() {
   return (
-    <div className="mx-auto">
+    <div className="mx-auto max-w-3xl">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border-2 border-foreground/20 rounded-lg overflow-hidden bg-card">
         {comicPanels.map((panel, i) => (
           <div
@@ -126,81 +125,155 @@ function RotatingQuote() {
   );
 }
 
-function TokenMeter({ amount }: { amount: number }) {
-  const tokens = Math.round(amount / 100 * 50000);
-  return (
-    <div className="mt-3 text-xs text-muted-foreground font-mono">
-      <div className="flex items-center gap-1.5">
-        <span>~{tokens.toLocaleString()} tokens</span>
-        <span className="text-muted-foreground/50">|</span>
-        <span>{Math.round(tokens / 750)} pages of "help"</span>
-      </div>
-      <div className="w-full bg-muted rounded-full h-1.5 mt-1.5">
-        <div
-          className="bg-primary rounded-full h-1.5 transition-all"
-          style={{ width: `${Math.min((amount / 5000) * 100, 100)}%` }}
-        />
-      </div>
-    </div>
-  );
+// ── Subscription plan definitions ──
+
+interface PlanDef {
+  id: string;
+  name: string;
+  description: string;
+  monthlyPrice: number;
+  annualPrice: number; // per month when billed annually
+  icon: typeof Zap;
+  popular?: boolean;
+  features: string[];
+  limits: string[];
 }
 
-const tierPerks: string[][] = [
-  [
-    "The AI acknowledges your existence",
-    "Tokens that vanish like your will to live",
-    "A warm feeling (briefly)",
-  ],
-  [
-    "AI pretends to respect your opinions",
-    "Enough tokens to argue with a chatbot",
-    "Priority access to existential dread",
-  ],
-  [
-    "AI writes your performance review",
-    "Tokens for days (approximately 1.5 days)",
-    "The PHB will never understand this",
-  ],
+const plans: PlanDef[] = [
+  {
+    id: "free",
+    name: "Free",
+    description: "Get started with AI-powered provocations",
+    monthlyPrice: 0,
+    annualPrice: 0,
+    icon: Zap,
+    features: [
+      "25 LLM calls per day",
+      "5 image generations per day",
+      "3 canvases, 15 nodes each",
+      "100 MB storage",
+      "14 expert personas",
+      "Voice capture",
+    ],
+    limits: [
+      "No text-to-speech",
+    ],
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    description: "For serious knowledge workers",
+    monthlyPrice: 19,
+    annualPrice: 15.20, // 20% discount
+    icon: Sparkles,
+    popular: true,
+    features: [
+      "200 LLM calls per day",
+      "50 image generations per day",
+      "Unlimited canvases & nodes",
+      "5 GB storage",
+      "50 TTS minutes per month",
+      "All expert personas",
+      "Priority support",
+    ],
+    limits: [],
+  },
+  {
+    id: "team",
+    name: "Team",
+    description: "For teams that ship together",
+    monthlyPrice: 39,
+    annualPrice: 31.20, // 20% discount
+    icon: Crown,
+    features: [
+      "500 LLM calls per day",
+      "200 image generations per day",
+      "Unlimited canvases & nodes",
+      "25 GB storage",
+      "200 TTS minutes per month",
+      "All expert personas",
+      "Team collaboration",
+      "Priority support",
+    ],
+    limits: [],
+  },
 ];
 
 export default function Pricing() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [products, setProducts] = useState<StripeProduct[]>([]);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [annual, setAnnual] = useState(false);
+  const [oneTimeProducts, setOneTimeProducts] = useState<StripeProduct[]>([]);
 
   const params = new URLSearchParams(window.location.search);
   const success = params.get("success") === "true";
   const canceled = params.get("canceled") === "true";
 
+  // Fetch current plan
+  useEffect(() => {
+    apiRequest("GET", "/api/billing/status")
+      .then((res) => res.json())
+      .then((data) => setCurrentPlan(data.plan ?? "free"))
+      .catch(() => setCurrentPlan("free"));
+  }, []);
+
+  // Fetch one-time products (Buy a Coffee, etc.)
   useEffect(() => {
     if (!success && !canceled) {
       apiRequest("GET", "/api/stripe/config")
         .then((res) => res.json())
-        .then((data) => setProducts(data.products || []))
-        .catch(() => {
-          // Stripe not configured
-        });
+        .then((data) => setOneTimeProducts(data.products || []))
+        .catch(() => {});
     }
   }, [success, canceled]);
 
-  async function handleCheckout(priceId: string) {
-    setLoading(true);
+  async function handleSubscribe(planId: string) {
+    if (planId === "free") return;
+
+    setLoading(planId);
     try {
-      const res = await apiRequest("POST", "/api/stripe/create-checkout-session", {
-        priceId,
+      // Determine price ID from env-configured Stripe prices
+      const envKey = annual
+        ? `STRIPE_${planId.toUpperCase()}_ANNUAL_PRICE_ID`
+        : `STRIPE_${planId.toUpperCase()}_PRICE_ID`;
+
+      // Use the billing checkout endpoint which creates subscription-mode sessions
+      const res = await apiRequest("POST", "/api/billing/checkout-session", {
+        priceId: envKey, // Server maps this to actual Stripe price
       });
       const data = await res.json();
       if (data.sessionUrl) {
         window.location.href = data.sessionUrl;
       }
-    } catch (error) {
+    } catch {
       toast({
-        title: "Token Purchase Failed",
+        title: "Checkout Failed",
+        description: "Could not start the checkout process. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function handleOneTimeCheckout(priceId: string) {
+    setLoading(priceId);
+    try {
+      const res = await apiRequest("POST", "/api/stripe/create-checkout-session", { priceId });
+      const data = await res.json();
+      if (data.sessionUrl) {
+        window.location.href = data.sessionUrl;
+      }
+    } catch {
+      toast({
+        title: "Purchase Failed",
         description: "The AI couldn't even take your money. That's a new low.",
         variant: "destructive",
       });
-      setLoading(false);
+    } finally {
+      setLoading(null);
     }
   }
 
@@ -220,17 +293,18 @@ export default function Pricing() {
    │ YAY │
    └─────┘`}
             </pre>
-            <CardTitle className="font-serif text-2xl">Tokens Acquired!</CardTitle>
+            <CardTitle className="font-serif text-2xl">Welcome Aboard!</CardTitle>
             <CardDescription className="font-serif italic">
-              "Money well spent," said no engineer ever about token pricing.
-              <br />
-              But seriously — thank you. The AI promises to be slightly less sarcastic now.
+              Your plan is now active. Go create something remarkable.
             </CardDescription>
           </CardHeader>
-          <CardFooter className="justify-center">
+          <CardFooter className="justify-center gap-3">
             <Button variant="outline" onClick={() => setLocation("/")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to the Cubicle
+              Back to Canvas
+            </Button>
+            <Button onClick={() => setLocation("/settings/billing")}>
+              View Billing
             </Button>
           </CardFooter>
         </Card>
@@ -278,7 +352,7 @@ export default function Pricing() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
+    <div className="min-h-screen bg-background overflow-auto">
       {/* Header */}
       <div className="border-b shrink-0">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -289,127 +363,186 @@ export default function Pricing() {
             <ArrowLeft className="h-4 w-4" />
             <span className="font-serif text-lg font-bold text-foreground">Provocations</span>
           </button>
+          {currentPlan && currentPlan !== "free" && (
+            <Button variant="ghost" size="sm" onClick={() => setLocation("/settings/billing")}>
+              Manage Billing
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Pricing Content — single-screen, no scroll */}
-      <div className="flex-1 flex flex-col justify-center max-w-6xl mx-auto px-6 w-full">
+      <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Title */}
-        <div className="text-center mb-4">
+        <div className="text-center mb-6">
           <h1 className="font-serif text-3xl font-bold tracking-tight mb-2">
-            Feed the AI. It's Hungry.
+            Choose Your Plan
           </h1>
           <p className="text-muted-foreground text-base max-w-2xl mx-auto">
             Every provocation, challenge, and piece of advice costs tokens.
-            Tokens cost money. Money comes from you. It's the circle of AI life.
+            Pick the plan that matches your ambition.
           </p>
           <RotatingQuote />
         </div>
 
-        {/* Product cards + Comic — side by side */}
-        <div className="flex gap-6 items-start mb-4">
-          {/* Product column */}
-          <div className="flex gap-4 shrink-0">
-            {products.map((product, index) => {
-              const TierIcon = tierIcons[index % tierIcons.length];
-              const perks = tierPerks[index % tierPerks.length];
-              return (
-                <Card
-                  key={product.id}
-                  className={`relative flex flex-col transition-transform hover:scale-[1.02] w-[260px] ${
-                    index === 1 ? "border-primary/50 shadow-lg" : ""
-                  }`}
-                >
-                  {index === 1 && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-primary text-primary-foreground font-mono text-xs">
-                        PHB's CHOICE
-                      </Badge>
-                    </div>
+        {/* Annual toggle */}
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <span className={`text-sm ${!annual ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+            Monthly
+          </span>
+          <Switch checked={annual} onCheckedChange={setAnnual} />
+          <span className={`text-sm ${annual ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+            Annual
+          </span>
+          {annual && (
+            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+              Save 20%
+            </Badge>
+          )}
+        </div>
+
+        {/* Plan cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          {plans.map((plan) => {
+            const isCurrent = currentPlan === plan.id;
+            const price = annual ? plan.annualPrice : plan.monthlyPrice;
+            const PlanIcon = plan.icon;
+
+            return (
+              <Card
+                key={plan.id}
+                className={`relative flex flex-col transition-transform hover:scale-[1.01] ${
+                  plan.popular ? "border-primary/50 shadow-lg" : ""
+                } ${isCurrent ? "ring-2 ring-primary" : ""}`}
+              >
+                {plan.popular && !isCurrent && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="bg-primary text-primary-foreground font-mono text-xs">
+                      MOST POPULAR
+                    </Badge>
+                  </div>
+                )}
+                {isCurrent && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="bg-green-600 text-white font-mono text-xs">
+                      CURRENT PLAN
+                    </Badge>
+                  </div>
+                )}
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <PlanIcon className="h-5 w-5 text-primary" />
+                    <CardTitle className="font-serif text-xl">{plan.name}</CardTitle>
+                  </div>
+                  <CardDescription className="text-xs">{plan.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 pt-0">
+                  <div className="mb-4">
+                    <span className="text-4xl font-bold">
+                      ${price === 0 ? "0" : price.toFixed(price % 1 === 0 ? 0 : 2)}
+                    </span>
+                    {price > 0 && (
+                      <span className="text-muted-foreground ml-1 text-sm">
+                        /mo{annual ? " (billed annually)" : ""}
+                      </span>
+                    )}
+                    {plan.id === "team" && (
+                      <span className="text-muted-foreground ml-1 text-sm">/user</span>
+                    )}
+                  </div>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    {plan.features.map((feature, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                    {plan.limits.map((limit, i) => (
+                      <li key={`limit-${i}`} className="flex items-start gap-2 text-muted-foreground/60">
+                        <span className="h-4 w-4 flex items-center justify-center shrink-0 mt-0.5">—</span>
+                        {limit}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter className="pt-0">
+                  {isCurrent ? (
+                    <Button className="w-full" variant="outline" disabled>
+                      Current Plan
+                    </Button>
+                  ) : plan.id === "free" ? (
+                    <Button className="w-full" variant="outline" disabled={currentPlan === "free"}>
+                      {currentPlan === "free" ? "Current Plan" : "Downgrade"}
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      onClick={() => handleSubscribe(plan.id)}
+                      disabled={loading === plan.id}
+                    >
+                      {loading === plan.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : currentPlan && currentPlan !== "free" ? (
+                        "Change Plan"
+                      ) : (
+                        "Get Started"
+                      )}
+                    </Button>
                   )}
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* One-time purchases (Buy a Coffee, etc.) */}
+        {oneTimeProducts.length > 0 && (
+          <div className="mb-10">
+            <h2 className="font-serif text-xl font-bold text-center mb-4">Support the Project</h2>
+            <div className="flex gap-4 justify-center">
+              {oneTimeProducts.map((product) => (
+                <Card key={product.id} className="w-[260px]">
                   <CardHeader className="pb-2">
-                    <div className="flex items-center gap-2 mb-1">
-                      <TierIcon className="h-4 w-4 text-primary" />
-                      <Badge variant="secondary" className="font-mono text-[10px]">
-                        {product.type === "one_time" ? "One-time" : "Recurring"}
-                      </Badge>
-                    </div>
                     <CardTitle className="font-serif text-lg">{product.name}</CardTitle>
                     <CardDescription className="text-xs">{product.description}</CardDescription>
                   </CardHeader>
-                  <CardContent className="flex-1 pt-0">
-                    <div className="mb-1">
-                      <span className="text-3xl font-bold">
-                        ${(product.amount / 100).toFixed(product.amount % 100 === 0 ? 0 : 2)}
-                      </span>
-                      <span className="text-muted-foreground ml-1 text-sm">
-                        {product.type === "one_time" ? "one-time" : "/month"}
-                      </span>
-                    </div>
-                    <TokenMeter amount={product.amount} />
-                    <ul className="space-y-1.5 text-xs text-muted-foreground mt-3">
-                      {perks.map((perk, i) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <Check className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                          {perk}
-                        </li>
-                      ))}
-                    </ul>
+                  <CardContent className="pt-0">
+                    <span className="text-2xl font-bold">
+                      ${(product.amount / 100).toFixed(product.amount % 100 === 0 ? 0 : 2)}
+                    </span>
+                    <span className="text-muted-foreground ml-1 text-sm">one-time</span>
                   </CardContent>
                   <CardFooter className="pt-0">
                     <Button
                       className="w-full"
+                      variant="outline"
                       size="sm"
-                      onClick={() => handleCheckout(product.priceId)}
-                      disabled={loading}
+                      onClick={() => handleOneTimeCheckout(product.priceId)}
+                      disabled={loading === product.priceId}
                     >
-                      {loading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Taking your money...
-                        </>
+                      {loading === product.priceId ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <>
-                          {index === 0
-                            ? "Sacrifice a Coffee"
-                            : index === 1
-                            ? "Appease the AI"
-                            : "Go Full Wally"}
-                        </>
+                        <Flame className="mr-2 h-4 w-4" />
                       )}
+                      Buy
                     </Button>
                   </CardFooter>
                 </Card>
-              );
-            })}
-
-            {products.length === 0 && (
-              <div className="w-[260px] text-center text-muted-foreground py-8">
-                <pre className="text-xs leading-tight font-mono mb-3 mx-auto inline-block select-none">
-{`   ┌─────┐
-   │ .  . │
-   │  __  │
-   │ /  \\ │
-   └──┬──┘
-      │
-   ┌──┴──┐
-   │zzz  │
-   └─────┘`}
-                </pre>
-                <p className="font-mono text-xs">Loading token packages...</p>
-                <Loader2 className="h-4 w-4 animate-spin mx-auto mt-2" />
-              </div>
-            )}
+              ))}
+            </div>
           </div>
+        )}
 
-          {/* Comic strip — fills remaining space */}
-          <div className="flex-1 min-w-0">
-            <DilbertComicStrip />
-          </div>
+        {/* Comic strip */}
+        <div className="mb-8">
+          <DilbertComicStrip />
         </div>
 
         {/* Footer quip */}
-        <div className="text-center text-[11px] text-muted-foreground font-mono space-y-0.5 shrink-0">
+        <div className="text-center text-[11px] text-muted-foreground font-mono space-y-0.5 pb-8">
           <p>No tokens were harmed in the making of this page.</p>
           <p>
             All proceeds go toward making the AI slightly more provocative
