@@ -29,6 +29,7 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ShareDialog } from "@/components/ShareDialog";
 import { ArtifyPanel } from "@/components/ArtifyPanel";
 import { ConnectionsManager } from "@/components/ConnectionsManager";
+import { MailboxDrawer } from "@/components/MailboxDrawer";
 import { FlowNodeFullscreen } from "@/components/flow/FlowNodeFullscreen";
 import { FlowInterviewOverlay } from "@/components/flow/FlowInterviewOverlay";
 import { FlowChainNavBar } from "@/components/flow/FlowChainNavBar";
@@ -485,6 +486,16 @@ function FlowWorkspaceInner() {
   const [connectionsDialogOpen, setConnectionsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [mailboxOpen, setMailboxOpen] = useState(false);
+  // Track whether the currently open canvas is shared (not owned by us)
+  const [isSharedCanvas, setIsSharedCanvas] = useState(false);
+  const [sharedPermission, setSharedPermission] = useState<"read" | "write">("read");
+
+  // Mailbox unread count for status bar badge
+  const { data: mailboxUnreadCount = 0 } = useQuery<number>({
+    queryKey: ["/api/mailbox/unread-count"],
+    refetchInterval: 30000,
+  });
   // Canvas is always live — collab is on whenever a canvas ID exists
   const collabEnabled = true;
   const [lifecycleConsoleOpen, setLifecycleConsoleOpen] = useState(false);
@@ -992,7 +1003,8 @@ function FlowWorkspaceInner() {
       setLoadProgress(20);
       try {
         // Try owned document first, fall back to shared endpoint
-        let data: { title: string; content: string };
+        let data: { title: string; content: string; permission?: string };
+        let loadedAsShared = false;
         try {
           const res = await apiRequest("GET", `/api/documents/${canvasDocumentId}`);
           setLoadProgress(60);
@@ -1001,8 +1013,11 @@ function FlowWorkspaceInner() {
           // May be a shared canvas — try shared endpoint
           const res = await apiRequest("GET", `/api/shared/document/${canvasDocumentId}`);
           setLoadProgress(60);
-          data = (await res.json()) as { title: string; content: string };
+          data = (await res.json()) as { title: string; content: string; permission?: string };
+          loadedAsShared = true;
         }
+        setIsSharedCanvas(loadedAsShared);
+        setSharedPermission((data.permission as "read" | "write") || "read");
         setLoadProgress(80);
         const parsed = JSON.parse(data.content);
         setLoadProgress(90);
@@ -1131,10 +1146,16 @@ function FlowWorkspaceInner() {
 
         // Also update the main canvas document if we have one
         if (canvasDocumentId) {
-          await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, {
-            title: canvasTitle || "Untitled Canvas",
-            content: canvasPayload,
-          }).catch(() => {});
+          const endpoint = isSharedCanvas && sharedPermission === "write"
+            ? `/api/shared/document/${canvasDocumentId}`
+            : `/api/documents/${canvasDocumentId}`;
+          // Skip auto-save for shared read-only canvases
+          if (!(isSharedCanvas && sharedPermission !== "write")) {
+            await apiRequest("PUT", endpoint, {
+              title: canvasTitle || "Untitled Canvas",
+              content: canvasPayload,
+            }).catch(() => {});
+          }
         }
       } catch {
         // Silent fail — auto-save should never break the UI
@@ -1144,7 +1165,7 @@ function FlowWorkspaceInner() {
     return () => {
       if (autoSaveTimerRef.current) clearInterval(autoSaveTimerRef.current);
     };
-  }, [canvasDocumentId, canvasTitle]);
+  }, [canvasDocumentId, canvasTitle, isSharedCanvas, sharedPermission]);
 
   // ── Debounced auto-save on every state change ──
   // Saves the canvas 2 seconds after the last node/edge change so work is never lost.
@@ -1158,6 +1179,10 @@ function FlowWorkspaceInner() {
   canvasDocIdRef.current = canvasDocumentId;
   const canvasTitleRef = useRef(canvasTitle);
   canvasTitleRef.current = canvasTitle;
+  const isSharedCanvasRef = useRef(isSharedCanvas);
+  isSharedCanvasRef.current = isSharedCanvas;
+  const sharedPermissionRef = useRef(sharedPermission);
+  sharedPermissionRef.current = sharedPermission;
 
   useEffect(() => {
     // Don't save if canvas is currently being loaded
@@ -1179,10 +1204,19 @@ function FlowWorkspaceInner() {
         const title = canvasTitleRef.current || `Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
         if (canvasDocIdRef.current) {
-          await apiRequest("PUT", `/api/documents/${canvasDocIdRef.current}`, {
-            title,
-            content: canvasPayload,
-          });
+          // Use shared endpoint for shared canvases with write access
+          if (isSharedCanvasRef.current) {
+            if (sharedPermissionRef.current !== "write") return; // read-only — skip
+            await apiRequest("PUT", `/api/shared/document/${canvasDocIdRef.current}`, {
+              title,
+              content: canvasPayload,
+            });
+          } else {
+            await apiRequest("PUT", `/api/documents/${canvasDocIdRef.current}`, {
+              title,
+              content: canvasPayload,
+            });
+          }
         } else {
           // Auto-create canvas document on first change
           const res = await apiRequest("POST", "/api/documents", {
@@ -2435,20 +2469,28 @@ function FlowWorkspaceInner() {
       toast({ title: "Nothing to save", description: "Canvas is empty" });
       return;
     }
+    // Shared canvas with read-only access — block save
+    if (isSharedCanvas && sharedPermission !== "write") {
+      toast({ title: "Read-only canvas", description: "You don't have write access to this shared canvas", variant: "destructive" });
+      return;
+    }
     setIsSaving(true);
     try {
       const canvasPayload = serializeCanvas(state.nodes, state.edges, state.viewport);
       const title = canvasTitle || `Canvas — ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
       if (canvasDocumentId) {
-        // Update existing
-        await apiRequest("PUT", `/api/documents/${canvasDocumentId}`, {
+        // Shared canvas — save to owner's store via shared endpoint
+        const endpoint = isSharedCanvas
+          ? `/api/shared/document/${canvasDocumentId}`
+          : `/api/documents/${canvasDocumentId}`;
+        await apiRequest("PUT", endpoint, {
           title,
           content: canvasPayload,
         });
-        toast({ title: "Canvas saved" });
+        toast({ title: isSharedCanvas ? "Shared canvas saved" : "Canvas saved" });
       } else {
-        // Create new
+        // Create new (only for own canvases)
         const res = await apiRequest("POST", "/api/documents", {
           title,
           content: canvasPayload,
@@ -2459,8 +2501,6 @@ function FlowWorkspaceInner() {
         setCanvasTitle(title);
         toast({ title: "Canvas saved", description: "Saved to Context Store" });
       }
-      // Update the specific doc in cache instead of refetching all documents
-      // (full invalidation triggers decryption of every document title — slow)
       if (canvasDocumentId) {
         queryClient.setQueryData(["/api/documents"], (old: unknown) =>
           Array.isArray(old) ? old.map((d: { id: number }) => d.id === canvasDocumentId ? { ...d, title } : d) : old,
@@ -2473,7 +2513,7 @@ function FlowWorkspaceInner() {
     } finally {
       setIsSaving(false);
     }
-  }, [state.nodes, state.edges, state.viewport, canvasDocumentId, canvasTitle, toast, setCanvasDocumentId]);
+  }, [state.nodes, state.edges, state.viewport, canvasDocumentId, canvasTitle, toast, setCanvasDocumentId, isSharedCanvas, sharedPermission]);
 
   // ── Open canvas from saved document ──
 
@@ -2482,12 +2522,11 @@ function FlowWorkspaceInner() {
       setCanvasLoading(true);
       setLoadProgress(20);
       try {
-        // Try owned document first, fall back to shared endpoint
-        let data: { title: string; content: string };
+        let data: { title: string; content: string; permission?: string };
         if (isShared) {
           const res = await apiRequest("GET", `/api/shared/document/${docId}`);
           setLoadProgress(60);
-          data = (await res.json()) as { title: string; content: string };
+          data = (await res.json()) as { title: string; content: string; permission?: string };
         } else {
           const res = await apiRequest("GET", `/api/documents/${docId}`);
           setLoadProgress(60);
@@ -2500,8 +2539,10 @@ function FlowWorkspaceInner() {
         setLoadProgress(100);
         setCanvasDocumentId(docId);
         setCanvasTitle(data.title || docTitle);
+        setIsSharedCanvas(!!isShared);
+        setSharedPermission((data.permission as "read" | "write") || "read");
         setOpenCanvasDialogOpen(false);
-        toast({ title: "Canvas loaded", description: data.title || docTitle });
+        toast({ title: isShared ? "Shared canvas loaded" : "Canvas loaded", description: data.title || docTitle });
       } catch {
         toast({ title: "Failed to load canvas", variant: "destructive" });
       } finally {
@@ -3197,6 +3238,10 @@ function FlowWorkspaceInner() {
         onOpenContextStore={() => setContextStoreOpen(true)}
         appVersion={APP_VERSION}
         onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
+        mailboxUnreadCount={mailboxUnreadCount}
+        onOpenMailbox={() => setMailboxOpen(true)}
+        isSharedCanvas={isSharedCanvas}
+        sharedPermission={sharedPermission}
         blueprintsSlot={
           <BlueprintsMenu
             onLoadBlueprint={handleLoadBlueprint}
@@ -4831,6 +4876,9 @@ function FlowWorkspaceInner() {
           </FlowOverlayErrorBoundary>
         );
       })()}
+
+      {/* Mailbox drawer */}
+      <MailboxDrawer open={mailboxOpen} onOpenChange={setMailboxOpen} />
 
       {/* Connections dialog */}
       <Dialog open={connectionsDialogOpen} onOpenChange={setConnectionsDialogOpen}>
