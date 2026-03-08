@@ -1771,7 +1771,11 @@ function FlowWorkspaceInner() {
         }
       }
 
-      if (!combinedContent.trim() && preset !== "stream") {
+      // Generic empty-input guard — only applies when the handler has no onPreProcess
+      // (all current handlers have one, but this is a safety net for future ones).
+      // If onPreProcess exists and returned true, it already confirmed the node has
+      // enough input (from edges, manual entry, or both) — don't override that decision.
+      if (!handlers.onPreProcess && !combinedContent.trim() && preset !== "stream") {
         lcLog(node, "pre-process", "error", "Input nodes have no content", { error: "Empty input" });
         toast({ title: "No content", description: "Input nodes have no content" });
         return;
