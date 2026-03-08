@@ -1,11 +1,11 @@
 /**
- * Tests for expanded view data logic.
+ * Tests for flow node data logic.
  *
  * These validate the pure functions and data contracts that power
- * Document and LLM Base expanded views. They guard against crashes
- * like "g?.find is not a function" by verifying that:
+ * flow node execution. They guard against crashes and silent failures:
  * - Edge role helpers handle all input shapes
- * - Context gathering from edges works with missing/empty nodes
+ * - gatherInputContentWithRoles includes ALL edge roles in combinedContent
+ * - FlowLlmNode content gathering reads documentContent (not just content/snippet)
  * - Model list defensive handling works with non-array data
  * - Node property defaults are correct
  */
@@ -329,5 +329,137 @@ describe("LLM Base prompt assembly", () => {
     const userParts: string[] = [];
     const userMessage = userParts.join("\n\n") || "Hello";
     expect(userMessage).toBe("Hello");
+  });
+});
+
+// ── gatherInputContentWithRoles: real function tests ──
+
+import { gatherInputContentWithRoles } from "../useNodeLifecycle";
+
+describe("gatherInputContentWithRoles", () => {
+  it("includes user-prompt edges in combinedContent", () => {
+    const target = makeNode({ id: "llm", type: "llm" });
+    const prompt = makeNode({ id: "prompt", type: "document", documentContent: "Write a blog post about AI" });
+    const edges: FlowEdge[] = [
+      { id: "e1", fromNodeId: "prompt", toNodeId: "llm", role: "user-prompt" },
+    ];
+
+    const result = gatherInputContentWithRoles("llm", [target, prompt], edges);
+    expect(result.combinedContent).toContain("Write a blog post about AI");
+    expect(result.inputNodes).toHaveLength(1);
+  });
+
+  it("includes context edges in combinedContent", () => {
+    const target = makeNode({ id: "llm", type: "llm" });
+    const ctx = makeNode({ id: "ctx", type: "document", documentContent: "Background info" });
+    const edges: FlowEdge[] = [
+      { id: "e1", fromNodeId: "ctx", toNodeId: "llm", role: "context" },
+    ];
+
+    const result = gatherInputContentWithRoles("llm", [target, ctx], edges);
+    expect(result.combinedContent).toContain("Background info");
+    expect(result.contextText).toContain("Background info");
+  });
+
+  it("includes system-instruction edges in combinedContent", () => {
+    const target = makeNode({ id: "llm", type: "llm-base" });
+    const sys = makeNode({ id: "sys", type: "document", documentContent: "You are a helpful coder." });
+    const edges: FlowEdge[] = [
+      { id: "e1", fromNodeId: "sys", toNodeId: "llm", role: "system-instruction" },
+    ];
+
+    const result = gatherInputContentWithRoles("llm", [target, sys], edges);
+    expect(result.combinedContent).toContain("You are a helpful coder.");
+  });
+
+  it("includes plain (no-role) edges in combinedContent", () => {
+    const target = makeNode({ id: "llm", type: "llm" });
+    const doc = makeNode({ id: "doc", type: "document", documentContent: "Some document text" });
+    const edges: FlowEdge[] = [
+      { id: "e1", fromNodeId: "doc", toNodeId: "llm" },
+    ];
+
+    const result = gatherInputContentWithRoles("llm", [target, doc], edges);
+    expect(result.combinedContent).toContain("Some document text");
+  });
+
+  it("combines multiple edges with different roles into one combinedContent", () => {
+    const target = makeNode({ id: "llm", type: "llm-base" });
+    const ctx1 = makeNode({ id: "c1", type: "document", documentContent: "Context A" });
+    const ctx2 = makeNode({ id: "c2", type: "document", documentContent: "Context B" });
+    const prompt = makeNode({ id: "p", type: "document", documentContent: "User question" });
+    const edges: FlowEdge[] = [
+      { id: "e1", fromNodeId: "c1", toNodeId: "llm", role: "context" },
+      { id: "e2", fromNodeId: "c2", toNodeId: "llm", role: "context" },
+      { id: "e3", fromNodeId: "p", toNodeId: "llm", role: "user-prompt" },
+    ];
+
+    const result = gatherInputContentWithRoles("llm", [target, ctx1, ctx2, prompt], edges);
+    expect(result.combinedContent).toContain("Context A");
+    expect(result.combinedContent).toContain("Context B");
+    expect(result.combinedContent).toContain("User question");
+  });
+
+  it("excludes output-format-only edges from combinedContent", () => {
+    const target = makeNode({ id: "llm", type: "llm" });
+    const tmpl = makeNode({ id: "tmpl", type: "document", documentContent: "## Template\n{content}" });
+    const edges: FlowEdge[] = [
+      { id: "e1", fromNodeId: "tmpl", toNodeId: "llm", role: "output-format" },
+    ];
+
+    const result = gatherInputContentWithRoles("llm", [target, tmpl], edges);
+    expect(result.combinedContent).toBe("");
+    expect(result.templateContent).toContain("## Template");
+  });
+});
+
+// ── FlowLlmNode content gathering pattern ──
+
+describe("FlowLlmNode content gathering (mirrors handleRun)", () => {
+  // This mirrors the exact pattern from FlowLlmNode.tsx handleRun
+  function gatherLlmNodeInput(inputNodes: FlowNode[]): string {
+    return inputNodes
+      .map((n) => `## ${n.label}\n${n.documentContent || n.content || n.llmOutput || n.snippet || ""}`)
+      .join("\n\n---\n\n");
+  }
+
+  it("reads documentContent from document nodes", () => {
+    const doc = makeNode({
+      id: "d1",
+      type: "document",
+      label: "My Doc",
+      documentContent: "Full document text here",
+      snippet: "Full doc...",
+    });
+
+    const result = gatherLlmNodeInput([doc]);
+    expect(result).toContain("Full document text here");
+    expect(result).not.toBe("## My Doc\n");
+  });
+
+  it("falls back to content when documentContent is missing", () => {
+    const node = makeNode({ id: "n1", label: "Note", content: "Some content" });
+    expect(gatherLlmNodeInput([node])).toContain("Some content");
+  });
+
+  it("falls back to llmOutput when content and documentContent are missing", () => {
+    const node = makeNode({ id: "n1", type: "llm", label: "LLM", llmOutput: "Generated text" });
+    expect(gatherLlmNodeInput([node])).toContain("Generated text");
+  });
+
+  it("falls back to snippet as last resort", () => {
+    const node = makeNode({ id: "n1", label: "Src", snippet: "preview text" });
+    expect(gatherLlmNodeInput([node])).toContain("preview text");
+  });
+
+  it("combines multiple nodes with separators", () => {
+    const nodes = [
+      makeNode({ id: "a", label: "A", documentContent: "Content A" }),
+      makeNode({ id: "b", label: "B", documentContent: "Content B" }),
+    ];
+    const result = gatherLlmNodeInput(nodes);
+    expect(result).toContain("Content A");
+    expect(result).toContain("Content B");
+    expect(result).toContain("---");
   });
 });
