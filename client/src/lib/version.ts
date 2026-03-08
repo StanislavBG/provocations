@@ -31,6 +31,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "New app template: Product Owner Agent — 10-section PO guide framework",
       "Help system: 11 help pages at /help with sidebar, search, contextual ? buttons, What's New badge",
       "Chain reliability: execution locks, error propagation, retry button, progress bar, per-node timeouts, cancel",
+      "UX polish: welcome overlay, keyboard shortcuts (?), empty states, ARIA labels, reduced motion, confirmation dialogs",
     ],
   },
   {
