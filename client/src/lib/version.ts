@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.18.4";
+export const APP_VERSION = "0.18.5";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.18.5",
+    date: "2026-03-08",
+    changes: [
+      "Fix fullscreen overlay scrolling — content area now properly constrains height so ScrollAreas work inside expanded node views",
+      "Add 'User Prompt' connection role for LLM Base node — documents can now be connected as user prompts, not just context or system instructions",
+    ],
+  },
   {
     version: "0.18.4",
     date: "2026-03-08",

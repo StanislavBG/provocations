@@ -87,12 +87,28 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
     return parts;
   }, [node.id, nodes, edges]);
 
-  // Gather context from non-system-instruction edges
+  // Gather user-prompt from user-prompt edges
+  const userPromptInputs = useMemo(() => {
+    const parts: { label: string; content: string }[] = [];
+    for (const edge of edges) {
+      if (edge.toNodeId !== node.id) continue;
+      if (!edgeHasRole(edge, "user-prompt")) continue;
+      const src = nodes.find((n) => n.id === edge.fromNodeId);
+      if (!src) continue;
+      const text = src.documentContent || src.content || src.snippet || "";
+      if (text.trim()) {
+        parts.push({ label: src.label || "Prompt", content: text.trim() });
+      }
+    }
+    return parts;
+  }, [node.id, nodes, edges]);
+
+  // Gather context from non-system-instruction, non-user-prompt edges
   const contextInputs = useMemo(() => {
     const parts: { label: string; content: string }[] = [];
     for (const edge of edges) {
       if (edge.toNodeId !== node.id) continue;
-      if (edgeHasRole(edge, "system-instruction")) continue;
+      if (edgeHasRole(edge, "system-instruction") || edgeHasRole(edge, "user-prompt")) continue;
       const src = nodes.find((n) => n.id === edge.fromNodeId);
       if (!src) continue;
       const text = src.documentContent || src.content || src.snippet || "";
@@ -403,6 +419,9 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
             <p className="text-[10px] text-muted-foreground">
               {contextInputs.length} context input{contextInputs.length !== 1 ? "s" : ""} connected
             </p>
+            <p className="text-[10px] text-muted-foreground">
+              {userPromptInputs.length} user prompt{userPromptInputs.length !== 1 ? "s" : ""} connected
+            </p>
           </div>
         </div>
         </div>
@@ -467,7 +486,26 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
               </div>
             )}
 
-            {/* User Prompt */}
+            {/* User Prompt inputs from connections */}
+            {userPromptInputs.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  User Prompt (from connections)
+                </label>
+                <div className="rounded-md border bg-muted/30 p-3 max-h-32 overflow-y-auto">
+                  {userPromptInputs.map((up, i) => (
+                    <div key={i} className="mb-2 last:mb-0">
+                      <Badge variant="outline" className="text-[9px] mb-1">{up.label}</Badge>
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                        {up.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* User Prompt (manual) */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 User Prompt
