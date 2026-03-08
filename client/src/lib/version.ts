@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.18.1";
+export const APP_VERSION = "0.18.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.18.2",
+    date: "2026-03-08",
+    changes: [
+      "Fix: auto-migrate document ownership when users switch auth providers (email → Google), restoring access to canvases lost after Google Auth upgrade",
+    ],
+  },
   {
     version: "0.18.1",
     date: "2026-03-08",
