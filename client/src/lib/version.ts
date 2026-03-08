@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.20.9";
+export const APP_VERSION = "0.21.0";
 
 export interface ReleaseNote {
   version: string;
@@ -19,31 +19,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.20.9",
+    version: "0.21.0",
     date: "2026-03-08",
     changes: [
-      "Context Store Manager: 3-column layout — full-height folder tree, file list, and content preview side by side",
-      "Context Store Manager no longer renders over the status bar — respects --ftux-status-bar-height offset",
-      "Context Store Manager: removed 200px folder tree height cap, folders now use full panel height",
-    ],
-  },
-  {
-    version: "0.20.8",
-    date: "2026-03-08",
-    changes: [
-      "Manage Tool Groups dialog: rename groups, add/delete groups, drag tools between groups, reset to defaults — accessible from Settings gear menu",
-      "Dock grouped layout: when group labels are enabled, tools render in visually separated groups with labels instead of a flat grid",
-      "DockGroup type relaxed from union to string, enabling custom user-defined group names",
-    ],
-  },
-  {
-    version: "0.20.7",
-    date: "2026-03-08",
-    changes: [
-      "Fix AIQA widget drifting off-screen during canvas pan/zoom — CSS containment isolates canvas transforms from fixed-position overlays",
-      "Store expanded view redesigned: 3-panel layout with full-height folder tree, document list, and document content preview using ProvokeText",
-      "YouTube node multi-video output: search mode fetches transcripts for all top-N results, creates one output document per video",
-      "Custom tool groups foundation: type definitions, localStorage persistence, and helper functions for group management",
+      "Merge document node voice/text features, dock persistence, and Context Store/tool group improvements into main",
+      "Fix dock reordering: user's custom item positions now persist across sessions",
+      "Hotkeys 1-9 tied to slot positions — moving an icon to a new slot changes its hotkey",
+      "Direct Voice + Direct Text on document toolbar — insert at cursor with no AI remix",
+      "Selection quick actions popover — highlight text for Voice Remix, Text Remix, Voice Replace, Text Replace",
+      "Writer Voice + Writer Text in document expanded view — dictate or type feedback to evolve the document",
+      "Smart keys call /api/write with full context (objective, document, connected inputs)",
+      "Context Store Manager: 3-column layout with full-height folder tree, file list, content preview",
+      "Context Store Manager respects status bar height offset",
+      "Manage Tool Groups dialog: rename/add/delete groups, drag tools between groups",
+      "Dock grouped layout with visual group labels",
+      "Fix AIQA widget drift via CSS containment",
+      "YouTube node multi-video output, Store expanded view redesign",
     ],
   },
   {
