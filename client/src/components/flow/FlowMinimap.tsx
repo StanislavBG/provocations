@@ -13,6 +13,39 @@ import {
 
 // ── Node type color map (exported for reuse) ──
 
+/** Resolve a CSS variable `--name` to a hex string at runtime. Falls back to provided default. */
+function cssVar(name: string, fallback: string): string {
+  if (typeof document === "undefined") return fallback;
+  const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!val) return fallback;
+  // val is an HSL triplet like "38 92% 50%" — convert to hsl() string
+  return `hsl(${val})`;
+}
+
+/** Build the node-type color map from CSS variables for theme consistency. */
+export function getNodeTypeColors(): Record<string, string> {
+  return {
+    "context-doc": cssVar("--node-context-doc", "#f59e0b"),
+    research: cssVar("--node-research", "#3b82f6"),
+    llm: cssVar("--node-llm", "#8b5cf6"),
+    store: cssVar("--node-store", "#b35c1e"),
+    painter: cssVar("--node-painter", "#f43f5e"),
+    interview: cssVar("--node-interview", "#06b6d4"),
+    timeline: cssVar("--node-timeline", "#f97316"),
+    document: cssVar("--node-document", "#6366f1"),
+    zone: cssVar("--node-zone", "#6b7280"),
+    audio: cssVar("--node-audio", "#ef4444"),
+    youtube: cssVar("--node-youtube", "#dc2626"),
+    "timer-event": cssVar("--node-timer-event", "#10b981"),
+    filter: cssVar("--node-filter", "#14b8a6"),
+    gate: cssVar("--node-gate", "#eab308"),
+    router: cssVar("--node-router", "#a855f7"),
+    merge: cssVar("--node-merge", "#0ea5e9"),
+    label: cssVar("--node-label", "#78716c"),
+  };
+}
+
+/** @deprecated Use getNodeTypeColors() for theme-aware colors. Static fallback for non-DOM contexts. */
 export const NODE_TYPE_COLORS: Record<string, string> = {
   "context-doc": "#f59e0b",
   research: "#3b82f6",
@@ -34,6 +67,12 @@ export const NODE_TYPE_COLORS: Record<string, string> = {
 };
 
 // ── Edge role colors ──
+function getEdgeRoleColors(): Record<string, string> {
+  return {
+    context: cssVar("--edge-context", "#f59e0b"),
+    objective: cssVar("--edge-objective", "#3b82f6"),
+  };
+}
 const EDGE_ROLE_COLORS: Record<string, string> = {
   context: "#f59e0b",
   objective: "#3b82f6",
@@ -137,7 +176,7 @@ export function FlowMinimap({
         y: (n.y - offsetY) * scale,
         w: Math.max(n.width * scale, 2),
         h: Math.max(n.height * scale, 1.5),
-        color: NODE_TYPE_COLORS[n.type] || "#888",
+        color: getNodeTypeColors()[n.type] || "#888",
         label: n.label,
         isSelected: selectedNodeIds.has(n.id),
         isZone: n.type === "zone",
@@ -161,9 +200,11 @@ export function FlowMinimap({
           y2: (to.y + to.height / 2 - offsetY) * scale,
           color: (() => {
             const r = e.role;
-            if (!r) return EDGE_DEFAULT_COLOR;
+            const edgeColors = getEdgeRoleColors();
+            const edgeDefault = cssVar("--edge-default", "#666");
+            if (!r) return edgeDefault;
             const primary = Array.isArray(r) ? r[0] : r;
-            return EDGE_ROLE_COLORS[primary] || EDGE_DEFAULT_COLOR;
+            return edgeColors[primary] || edgeDefault;
           })(),
         };
       })

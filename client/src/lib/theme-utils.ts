@@ -50,12 +50,12 @@ export function applyPaletteToDOM(id: PaletteId) {
 export function readThemeFromLS(): ThemePreference {
   const saved = localStorage.getItem(THEME_LS_KEY);
   if (saved === "dark" || saved === "light" || saved === "system") return saved;
-  return "system";
+  return "dark";
 }
 
 /** Read current palette from localStorage. */
 export function readPaletteFromLS(): PaletteId {
   const saved = localStorage.getItem(PALETTE_LS_KEY);
   if (saved && PALETTES.some((p) => p.id === saved)) return saved as PaletteId;
-  return "ember";
+  return "dusk";
 }
