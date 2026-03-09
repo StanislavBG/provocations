@@ -956,6 +956,39 @@ html.canvas-aurora select {
   50% { opacity: var(--pulse-opacity, 0.15); }
 }
 
+/* ── Prompt Editor: inline pill chips for context block references ── */
+
+.prompt-editor .prompt-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: hsl(var(--amber-pill-bg, 45 100% 51%) / 0.15);
+  color: hsl(45 90% 55%);
+  border: 1px solid hsl(45 100% 51% / 0.25);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  vertical-align: baseline;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.prompt-editor .prompt-pill--broken {
+  background: hsl(0 70% 50% / 0.1);
+  color: hsl(0 70% 60%);
+  border-color: hsl(0 70% 50% / 0.25);
+  text-decoration: underline wavy hsl(0 70% 50% / 0.5);
+  text-underline-offset: 2px;
+}
+
+.prompt-editor[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground) / 0.4);
+  pointer-events: none;
+}
+
 /* Reduced motion support — respect user's system preferences */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

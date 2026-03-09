@@ -64,6 +64,7 @@ app.use(
           "https://*.clerk.com",
           "https://clerk.provocations.app",
           "https://aiqastudio.com",
+          "https://bglabs.app",
           "https://generativelanguage.googleapis.com",
           "https://api.anthropic.com",
           "https://api.openai.com",

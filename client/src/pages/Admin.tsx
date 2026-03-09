@@ -57,12 +57,6 @@ export default function Admin() {
     enabled: isAdmin,
   });
 
-  const { data: staleData } = useQuery<{ stalePersonas: { id: string; label: string; domain: string; lastResearchedAt: string | null }[] }>({
-    queryKey: ["/api/personas/stale"],
-    queryFn: () => apiRequest("GET", "/api/personas/stale").then((r) => r.json()),
-    enabled: isAdmin,
-  });
-
   const { data: userMetrics, isLoading: metricsLoading } = useQuery<UserMetricsMatrix>({
     queryKey: ["/api/admin/user-metrics"],
     queryFn: () => apiRequest("GET", "/api/admin/user-metrics").then((r) => r.json()),
@@ -318,7 +312,7 @@ export default function Admin() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <PersonaNodeDiagram stalePersonas={staleData?.stalePersonas} />
+                <PersonaNodeDiagram />
               </CardContent>
             </Card>
 
