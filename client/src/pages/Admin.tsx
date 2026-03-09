@@ -467,7 +467,7 @@ function DailyTimeline({ data, categories }: { data: EventCategoryReport["dailyT
                       key={catId}
                       style={{
                         height: `${segPct}%`,
-                        backgroundColor: catColorMap.get(catId) ?? "#94a3b8",
+                        backgroundColor: catColorMap.get(catId) ?? "hsl(var(--muted-foreground))",
                         minHeight: "1px",
                       }}
                     />

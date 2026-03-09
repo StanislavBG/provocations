@@ -245,7 +245,7 @@ export function ApiConnectionExpandedView({ node, nodes, edges, onUpdateNode, on
                       <div className="flex items-center gap-1.5 mb-1">
                         <div
                           className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: conn?.connected ? "#22c55e" : "#666" }}
+                          style={{ backgroundColor: conn?.connected ? "hsl(var(--status-success))" : "hsl(var(--status-idle))" }}
                         />
                         <span className="text-[11px] font-medium">{meta.name}</span>
                       </div>

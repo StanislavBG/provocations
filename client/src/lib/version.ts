@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.22.3";
+export const APP_VERSION = "0.22.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.22.4",
+    date: "2026-03-09",
+    changes: [
+      "Set BG Labs Aurora as the default theme (dark mode + dusk palette + canvas-aurora) for all new users",
+      "Add semantic CSS variables for status, node-type, and edge colors so every UI element respects the global theme",
+      "Convert hardcoded hex/rgb colors in FlowMinimap, FlowEdgeLayer, FlowNodeContainer, LlmCallPreview, BSNodeRenderer, and expanded views to theme-aware CSS variables",
+      "Extend aurora glassmorphism coverage to secondary, sidebar, input, and border surfaces for consistent translucent UI",
+      "Replace hardcoded Tailwind status colors (online/away/busy/offline) with CSS variable references",
+    ],
+  },
   {
     version: "0.22.3",
     date: "2026-03-09",
