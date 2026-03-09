@@ -21,6 +21,15 @@ const httpServer = createServer(app);
 // ── Security: disable x-powered-by header ──
 app.disable("x-powered-by");
 
+// ── Redirect legacy replit.app domain to provocations.app ──
+app.use((req, res, next) => {
+  const host = req.hostname;
+  if (host === "provocations.replit.app" || host.endsWith(".provocations.replit.app")) {
+    return res.redirect(301, `https://provocations.app${req.originalUrl}`);
+  }
+  next();
+});
+
 // ── Security: helmet middleware with CSP for trusted domains ──
 app.use(
   helmet({
