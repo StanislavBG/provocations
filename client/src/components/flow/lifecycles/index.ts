@@ -20,6 +20,7 @@ import { createYoutubeHandlers } from "./youtube";
 import { createNotificationHandlers } from "./notification";
 import { createApprovalHandlers } from "./approval";
 import { createLlmBaseHandlers } from "./llm-base";
+import { createWebpageHandlers } from "./webpage";
 
 /** No-op handlers for passive nodes (document, context-doc, store, audio, label, zone) */
 function createPassiveHandlers(): NodeLifecycleHandlers {
@@ -43,6 +44,7 @@ const LIFECYCLE_FACTORIES: Record<LifecyclePreset, () => NodeLifecycleHandlers> 
   notification: createNotificationHandlers,
   approval: createApprovalHandlers,
   "llm-base": createLlmBaseHandlers,
+  webpage: createWebpageHandlers,
 };
 
 /** Get lifecycle handlers for a given lifecycle preset */
@@ -64,3 +66,4 @@ export { createCoherenceHandlers } from "./coherence";
 export { createNotificationHandlers } from "./notification";
 export { createApprovalHandlers } from "./approval";
 export { createLlmBaseHandlers } from "./llm-base";
+export { createWebpageHandlers } from "./webpage";

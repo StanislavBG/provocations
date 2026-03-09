@@ -155,6 +155,7 @@ export async function getUsageSummary(userId: string) {
 /**
  * Express middleware factory that checks usage before allowing the request.
  * Returns 429 Too Many Requests if the user has exceeded their quota.
+ * Records one unit of usage when the check passes (pre-decrement pattern).
  *
  * Usage: app.post("/api/challenge", requireUsage("llm_call"), handler);
  */
@@ -180,6 +181,9 @@ export function requireUsage(resource: UsageResource) {
           upgradeUrl: "/pricing",
         });
       }
+
+      // Record usage pre-decrement (count the call even if downstream fails)
+      await recordUsage(userId, resource);
 
       next();
     } catch (err) {

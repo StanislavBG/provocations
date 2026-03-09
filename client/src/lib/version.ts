@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.22.4";
+export const APP_VERSION = "0.23.0";
 
 export interface ReleaseNote {
   version: string;
@@ -19,14 +19,23 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.23.0",
+    date: "2026-03-09",
+    changes: [
+      "New Webpage node — auto-layout content as a styled, self-contained HTML page with live iframe preview, download, and 4 style presets (Modern Minimal, Corporate, Creative, Technical Docs)",
+      "Context block references in LLM prompts — type @ to insert inline pill chips referencing connected context blocks; referenced blocks expand to their content at prompt assembly time, unreferenced blocks are auto-injected as before",
+      "PromptEditor component — contentEditable-based prompt editor with @-autocomplete, pill chip rendering, broken-ref detection (red underline), and paste support",
+      "Fix CSP: add bglabs.app to connectSrc to unblock BGLabs embed-loader fetch requests",
+    ],
+  },
+  {
     version: "0.22.4",
     date: "2026-03-09",
     changes: [
-      "Set BG Labs Aurora as the default theme (dark mode + dusk palette + canvas-aurora) for all new users",
-      "Add semantic CSS variables for status, node-type, and edge colors so every UI element respects the global theme",
-      "Convert hardcoded hex/rgb colors in FlowMinimap, FlowEdgeLayer, FlowNodeContainer, LlmCallPreview, BSNodeRenderer, and expanded views to theme-aware CSS variables",
-      "Extend aurora glassmorphism coverage to secondary, sidebar, input, and border surfaces for consistent translucent UI",
-      "Replace hardcoded Tailwind status colors (online/away/busy/offline) with CSS variable references",
+      "Remove 23 unused API endpoints (persona CRUD, agent CRUD, admin analytics) — ~500 lines of dead code",
+      "Delete 10 dead replit_integrations route files (chat, image, batch dirs; audio/routes + audio/index)",
+      "Wire usage metering into 15 LLM/TTS/image endpoints — requireUsage middleware enforces plan limits with pre-decrement recording",
+      "Update development guide: testing, CI/CD, and structured logging are now implemented (v0.22.0+)",
     ],
   },
   {

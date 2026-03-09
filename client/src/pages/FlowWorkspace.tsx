@@ -67,6 +67,7 @@ const NotificationExpandedView = lazyExpandedViews["notification"];
 const ApprovalExpandedView = lazyExpandedViews["approval"];
 const StoreExpandedView = lazyExpandedViews["store"];
 const UploadExpandedView = lazyExpandedViews["upload"];
+const WebpageExpandedView = lazyExpandedViews["webpage"];
 import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
 import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { serializeCanvas, serializeNodeForSave } from "@/components/flow/serializeCanvas";
@@ -1981,6 +1982,23 @@ function FlowWorkspaceInner() {
           });
         }
 
+        // -- Webpage: HTML output stays in the node (preview in overlay) --
+        if (preset === "webpage") {
+          let html = outputText;
+          html = html.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+          scopedUpdate(nodeId, {
+            htmlOutput: html,
+            webpageStatus: "done",
+            llmStatus: "done",
+            content: html,
+            snippet: `HTML page (${(html.length / 1024).toFixed(1)}KB)`,
+          });
+          lcLog(node, "process", "success", `Webpage generated (${html.length} chars)`, { durationMs: elapsed });
+          lcLog(node, "post-process", "success", "HTML output stored in node");
+          toast({ title: "Webpage generated", description: `${(html.length / 1024).toFixed(1)}KB HTML page` });
+          return;
+        }
+
         // -- All other presets (stream, llm, logic, interview, generic): text output --
         if (!outputText?.trim()) {
           lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });
@@ -2333,6 +2351,15 @@ function FlowWorkspaceInner() {
           approvalStatus: "idle",
           approvalMessage: "Approval required for: {label}",
           approvalUserIds: [],
+        });
+        return;
+      }
+      if (toolId === "webpage") {
+        addNode("webpage", canvasX, canvasY, {
+          label: "Webpage",
+          snippet: "Connect content → Run to generate a styled webpage",
+          webpageStylePreference: "modern-minimal",
+          webpageStatus: "idle",
         });
         return;
       }
@@ -4749,6 +4776,16 @@ function FlowWorkspaceInner() {
               return (
                 <StoreExpandedView
                   node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                />
+              );
+
+            case "webpage":
+              return (
+                <WebpageExpandedView
+                  node={activeExpandedNode}
+                  nodes={state.nodes}
+                  edges={state.edges}
                   onUpdateNode={updateNode}
                 />
               );
