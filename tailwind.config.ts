@@ -76,11 +76,15 @@ export default {
           border: "var(--sidebar-accent-border)"
         },
         status: {
-          online: "rgb(34 197 94)",
-          away: "rgb(245 158 11)",
-          busy: "rgb(239 68 68)",
-          offline: "rgb(156 163 175)",
+          online: "hsl(var(--status-success) / <alpha-value>)",
+          away: "hsl(var(--status-warning) / <alpha-value>)",
+          busy: "hsl(var(--status-error) / <alpha-value>)",
+          offline: "hsl(var(--status-idle) / <alpha-value>)",
         },
+        "status-success": "hsl(var(--status-success) / <alpha-value>)",
+        "status-warning": "hsl(var(--status-warning) / <alpha-value>)",
+        "status-error": "hsl(var(--status-error) / <alpha-value>)",
+        "status-info": "hsl(var(--status-info) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

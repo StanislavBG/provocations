@@ -80,6 +80,37 @@
   --font-serif: 'Libre Baskerville', 'Georgia', serif;
   --font-mono: 'JetBrains Mono', monospace;
 
+  /* Semantic status colors — themed globally */
+  --status-success: 142 71% 45%;
+  --status-warning: 38 92% 50%;
+  --status-error: 0 84% 60%;
+  --status-info: 217 91% 60%;
+  --status-idle: 220 9% 46%;
+
+  /* Node type identity colors */
+  --node-context-doc: 38 92% 50%;
+  --node-research: 217 91% 60%;
+  --node-llm: 258 90% 66%;
+  --node-store: 25 75% 42%;
+  --node-painter: 347 94% 61%;
+  --node-interview: 189 94% 43%;
+  --node-timeline: 25 95% 53%;
+  --node-document: 239 84% 67%;
+  --node-zone: 220 9% 46%;
+  --node-audio: 0 84% 60%;
+  --node-youtube: 0 72% 51%;
+  --node-timer-event: 160 84% 39%;
+  --node-filter: 172 66% 50%;
+  --node-gate: 48 96% 53%;
+  --node-router: 271 91% 65%;
+  --node-merge: 199 89% 48%;
+  --node-label: 30 7% 44%;
+
+  /* Edge role colors */
+  --edge-context: 38 92% 50%;
+  --edge-objective: 217 91% 60%;
+  --edge-default: 0 0% 40%;
+
   /* FTUX shell variables */
   --ftux-status-bar-height: 44px;
   --ftux-dock-height: 56px;
@@ -192,6 +223,37 @@
   --chart-3: 150 45% 50%;
   --chart-4: 280 45% 60%;
   --chart-5: 45 75% 60%;
+
+  /* Semantic status colors — dark */
+  --status-success: 142 60% 50%;
+  --status-warning: 38 85% 55%;
+  --status-error: 0 75% 58%;
+  --status-info: 217 80% 62%;
+  --status-idle: 220 8% 55%;
+
+  /* Node type identity colors — brighter for dark bg */
+  --node-context-doc: 38 85% 55%;
+  --node-research: 217 85% 65%;
+  --node-llm: 258 80% 70%;
+  --node-store: 25 65% 50%;
+  --node-painter: 347 88% 65%;
+  --node-interview: 189 80% 50%;
+  --node-timeline: 25 90% 58%;
+  --node-document: 239 78% 72%;
+  --node-zone: 220 8% 55%;
+  --node-audio: 0 75% 62%;
+  --node-youtube: 0 65% 55%;
+  --node-timer-event: 160 72% 48%;
+  --node-filter: 172 58% 55%;
+  --node-gate: 48 90% 58%;
+  --node-router: 271 82% 70%;
+  --node-merge: 199 82% 55%;
+  --node-label: 30 8% 52%;
+
+  /* Edge role colors — dark */
+  --edge-context: 38 85% 55%;
+  --edge-objective: 217 85% 65%;
+  --edge-default: 0 0% 50%;
 
   --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.10);
   --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.15);
@@ -836,6 +898,34 @@ html.canvas-aurora .bg-muted {
 
 html.canvas-aurora .border-border {
   border-color: hsl(var(--border) / 0.35);
+}
+
+html.canvas-aurora .bg-secondary {
+  background-color: hsl(var(--secondary) / 0.45) !important;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+html.canvas-aurora .bg-sidebar {
+  background-color: hsl(var(--sidebar) / 0.45) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+html.canvas-aurora .border-card-border {
+  border-color: hsl(var(--card-border) / 0.4);
+}
+
+html.canvas-aurora .border-popover-border {
+  border-color: hsl(var(--popover-border) / 0.4);
+}
+
+html.canvas-aurora input,
+html.canvas-aurora textarea,
+html.canvas-aurora select {
+  background-color: hsl(var(--input) / 0.35);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 /* Flow canvas loading bar animation */

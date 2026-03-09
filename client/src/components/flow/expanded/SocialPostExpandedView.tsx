@@ -218,7 +218,7 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
                       <div className="flex items-center gap-2">
                         <div
                           className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: conn?.connected ? "#22c55e" : meta.brandColor + "60" }}
+                          style={{ backgroundColor: conn?.connected ? "hsl(var(--status-success))" : meta.brandColor + "60" }}
                         />
                         <span className="text-sm font-medium">{meta.name}</span>
                         {conn && !conn.connected && conn.status !== "none" && (

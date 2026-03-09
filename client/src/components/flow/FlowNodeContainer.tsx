@@ -284,10 +284,15 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
       {node.llmStatus && node.llmStatus !== "idle" && (() => {
         const speed = node.pulseSpeed ?? 2;
         const opacity = (node.pulseOpacity ?? 10) / 100;
+        const getStatusColor = (varName: string, fallback: string) => {
+          if (typeof document === "undefined") return fallback;
+          const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+          return v ? `hsl(${v})` : fallback;
+        };
         const colorMap: Record<string, string> = {
-          running: node.statusColorRunning ?? "#2196F3",
-          done: node.statusColorSuccess ?? "#4CAF50",
-          error: node.statusColorFailure ?? "#F44336",
+          running: node.statusColorRunning ?? getStatusColor("--status-info", "#2196F3"),
+          done: node.statusColorSuccess ?? getStatusColor("--status-success", "#4CAF50"),
+          error: node.statusColorFailure ?? getStatusColor("--status-error", "#F44336"),
         };
         const color = colorMap[node.llmStatus!] ?? "transparent";
         const shouldPulse = node.llmStatus === "running" || (node.llmStatus === "error" && !node.failureAcknowledged);

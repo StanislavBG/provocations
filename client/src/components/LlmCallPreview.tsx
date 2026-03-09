@@ -134,20 +134,20 @@ export function LlmCallPreview({ title, blocks, summaryItems }: LlmCallPreviewPr
   }, [blocks, model]);
 
   return (
-    <div className="w-[420px] border border-amber-500/30 bg-[#1a1412] rounded-lg text-xs font-mono shadow-2xl overflow-hidden">
+    <div className="w-[420px] border border-primary/30 bg-card rounded-lg text-xs font-mono shadow-2xl overflow-hidden">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-amber-500/20 bg-amber-950/30">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-primary/20 bg-muted/30">
         <div className="flex items-center gap-2">
-          <Cpu className="w-3.5 h-3.5 text-amber-500" />
-          <span className="text-amber-400 font-semibold text-[11px]">{title} — Context Preview</span>
+          <Cpu className="w-3.5 h-3.5 text-primary" />
+          <span className="text-primary font-semibold text-[11px]">{title} — Context Preview</span>
         </div>
         <div className="flex items-center gap-1.5 text-[9px]">
           <span className={`flex items-center gap-1 ${getProviderColor(modelInfo.provider)}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${getProviderColor(modelInfo.provider).replace("text-", "bg-")}`} />
             <span className="capitalize">{modelInfo.provider}</span>
           </span>
-          <span className="text-gray-500">/</span>
-          <span className="text-amber-300 font-semibold">{modelInfo.label}</span>
+          <span className="text-muted-foreground">/</span>
+          <span className="text-primary font-semibold">{modelInfo.label}</span>
           <Badge
             variant="outline"
             className={`text-[8px] py-0 px-1 ${
@@ -163,17 +163,17 @@ export function LlmCallPreview({ title, blocks, summaryItems }: LlmCallPreviewPr
 
       {/* ── Tabs ── */}
       <Tabs defaultValue="perf" className="w-full">
-        <TabsList className="w-full h-7 rounded-none bg-amber-950/20 border-b border-amber-500/15 p-0 gap-0">
+        <TabsList className="w-full h-7 rounded-none bg-muted/20 border-b border-primary/15 p-0 gap-0">
           <TabsTrigger
             value="perf"
-            className="flex-1 h-7 rounded-none text-[10px] font-semibold uppercase tracking-wider data-[state=active]:bg-amber-950/40 data-[state=active]:text-amber-400 data-[state=active]:shadow-none text-gray-500 hover:text-gray-300 transition-colors gap-1"
+            className="flex-1 h-7 rounded-none text-[10px] font-semibold uppercase tracking-wider data-[state=active]:bg-muted/40 data-[state=active]:text-primary data-[state=active]:shadow-none text-muted-foreground hover:text-foreground transition-colors gap-1"
           >
             <Gauge className="w-3 h-3" />
             Perf
           </TabsTrigger>
           <TabsTrigger
             value="summary"
-            className="flex-1 h-7 rounded-none text-[10px] font-semibold uppercase tracking-wider data-[state=active]:bg-amber-950/40 data-[state=active]:text-amber-400 data-[state=active]:shadow-none text-gray-500 hover:text-gray-300 transition-colors gap-1"
+            className="flex-1 h-7 rounded-none text-[10px] font-semibold uppercase tracking-wider data-[state=active]:bg-muted/40 data-[state=active]:text-primary data-[state=active]:shadow-none text-muted-foreground hover:text-foreground transition-colors gap-1"
           >
             <Layers className="w-3 h-3" />
             Summary
@@ -196,7 +196,7 @@ export function LlmCallPreview({ title, blocks, summaryItems }: LlmCallPreviewPr
 
           {/* Context block table */}
           <div className="space-y-0.5">
-            <div className="flex items-center justify-between text-[9px] text-gray-600 uppercase tracking-wider px-1 pb-0.5">
+            <div className="flex items-center justify-between text-[9px] text-muted-foreground/60 uppercase tracking-wider px-1 pb-0.5">
               <span>Block</span>
               <div className="flex items-center gap-4">
                 <span className="w-14 text-right">Chars</span>
@@ -207,41 +207,41 @@ export function LlmCallPreview({ title, blocks, summaryItems }: LlmCallPreviewPr
             {enrichedBlocks.map((b) => (
               <div
                 key={b.label}
-                className="flex items-center justify-between px-1 py-0.5 rounded hover:bg-amber-950/20 transition-colors"
+                className="flex items-center justify-between px-1 py-0.5 rounded hover:bg-muted/20 transition-colors"
               >
                 <div className="flex items-center gap-1.5">
                   <div className={`w-1.5 h-1.5 rounded-full ${b.color.replace("text-", "bg-")}`} />
-                  <span className="text-gray-400">{b.label}</span>
+                  <span className="text-muted-foreground/80">{b.label}</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="w-14 text-right text-gray-500">{b.chars.toLocaleString()}</span>
-                  <span className="w-12 text-right text-gray-300">{formatTokens(b.tokens)}</span>
-                  <span className="w-8 text-right text-gray-500">{b.pct}%</span>
+                  <span className="w-14 text-right text-muted-foreground">{b.chars.toLocaleString()}</span>
+                  <span className="w-12 text-right text-foreground/80">{formatTokens(b.tokens)}</span>
+                  <span className="w-8 text-right text-muted-foreground">{b.pct}%</span>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Totals bar */}
-          <div className="border-t border-amber-500/15 pt-2 flex items-center justify-between">
+          <div className="border-t border-primary/15 pt-2 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1 text-amber-300">
+              <span className="flex items-center gap-1 text-primary">
                 <FileText className="w-3 h-3" />
                 <span className="font-semibold">{formatTokens(totalTokens)}</span>
-                <span className="text-gray-600">tokens</span>
+                <span className="text-muted-foreground/60">tokens</span>
               </span>
-              <span className="text-gray-600">|</span>
-              <span className="text-gray-500">{totalChars.toLocaleString()} chars</span>
+              <span className="text-muted-foreground/60">|</span>
+              <span className="text-muted-foreground">{totalChars.toLocaleString()} chars</span>
             </div>
             <span className="flex items-center gap-1 text-green-400 font-semibold">
               <DollarSign className="w-3 h-3" />
               {estimatedCost > 0 ? formatCost(estimatedCost) : "—"}
-              <span className="text-gray-600 font-normal text-[9px] ml-0.5">est.</span>
+              <span className="text-muted-foreground/60 font-normal text-[9px] ml-0.5">est.</span>
             </span>
           </div>
 
           {/* Model & pricing info */}
-          <div className="text-[9px] text-gray-600 flex items-center justify-between">
+          <div className="text-[9px] text-muted-foreground/60 flex items-center justify-between">
             <span>Input pricing: {LLM_COST_TABLE[model] ? `$${(LLM_COST_TABLE[model].input / 1_000_000).toFixed(2)}/1M tok` : "unknown"}</span>
             <span>~{CHARS_PER_TOKEN} chars/token</span>
           </div>
@@ -270,22 +270,22 @@ function SummaryRow({
 }: SummaryItem) {
   const active = count > 0;
   return (
-    <div className={`px-1 py-1 rounded transition-colors ${active ? "bg-amber-950/15" : ""}`}>
+    <div className={`px-1 py-1 rounded transition-colors ${active ? "bg-muted/15" : ""}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {icon}
-          <span className={active ? "text-gray-300" : "text-gray-600"}>{label}</span>
+          <span className={active ? "text-foreground/80" : "text-muted-foreground/60"}>{label}</span>
         </div>
         <div className="flex items-center gap-2">
           {detail && (
-            <span className="text-[10px] text-gray-500 max-w-[180px] truncate">{detail}</span>
+            <span className="text-[10px] text-muted-foreground max-w-[180px] truncate">{detail}</span>
           )}
           {active ? (
-            <Badge variant="outline" className="text-[9px] py-0 px-1.5 min-w-[20px] text-center border-amber-500/30 text-amber-300">
+            <Badge variant="outline" className="text-[9px] py-0 px-1.5 min-w-[20px] text-center border-primary/30 text-primary">
               {count}
             </Badge>
           ) : (
-            <span className="text-[10px] text-gray-600">{emptyLabel ?? "none"}</span>
+            <span className="text-[10px] text-muted-foreground/60">{emptyLabel ?? "none"}</span>
           )}
         </div>
       </div>

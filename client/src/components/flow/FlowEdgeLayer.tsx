@@ -72,15 +72,15 @@ function getEdgeAnimation(
   // Painter and YouTube produce one output at a time — only animate the newest edge
   if (from.type === "painter" && from.llmStatus === "running") {
     if (latestEdgeFromNode.get(from.id) !== edgeId) return null;
-    return { color: "#f43f5e", markerSuffix: "painter", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.2", blobShape: "circle", blobCount: 3, glow: true };
+    return { color: "hsl(var(--node-painter))", markerSuffix: "painter", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.2", blobShape: "circle", blobCount: 3, glow: true };
   }
   if (from.type === "youtube" && from.youtubeFetchStatus === "fetching") {
     if (latestEdgeFromNode.get(from.id) !== edgeId) return null;
-    return { color: "#dc2626", markerSuffix: "youtube", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.0", blobShape: "rect", blobCount: 3, glow: true };
+    return { color: "hsl(var(--node-youtube))", markerSuffix: "youtube", dashArray: "8 4 2 4", animClass: "conveyor-edge", speed: "1.0", blobShape: "rect", blobCount: 3, glow: true };
   }
   // Timer-Event is a continuous broadcaster — all edges animate
   if (from.type === "timer-event" && from.timerRunning) {
-    return { color: "#10b981", markerSuffix: "timer", dashArray: "4 4", animClass: "kafka-edge", speed: "0.6", blobShape: "rect", blobCount: 4, glow: false };
+    return { color: "hsl(var(--node-timer-event))", markerSuffix: "timer", dashArray: "4 4", animClass: "kafka-edge", speed: "0.6", blobShape: "rect", blobCount: 4, glow: false };
   }
   return null;
 }
@@ -117,7 +117,7 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
   useMemo(() => {
     const cache = edgePathCacheRef.current;
     const activeIds = new Set(edges.map((e) => e.id));
-    for (const key of cache.keys()) {
+    for (const key of Array.from(cache.keys())) {
       if (!activeIds.has(key)) cache.delete(key);
     }
   }, [edges]);
@@ -146,15 +146,15 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         </marker>
         {/* Painter conveyor arrow — rose colored */}
         <marker id="flow-arrow-painter" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0,0 8,3 0,6" fill="#f43f5e" opacity={0.7} />
+          <polygon points="0,0 8,3 0,6" fill="hsl(var(--node-painter))" opacity={0.7} />
         </marker>
         {/* YouTube conveyor arrow — red */}
         <marker id="flow-arrow-youtube" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0,0 8,3 0,6" fill="#dc2626" opacity={0.7} />
+          <polygon points="0,0 8,3 0,6" fill="hsl(var(--node-youtube))" opacity={0.7} />
         </marker>
         {/* Timer/Kafka stream arrow — emerald */}
         <marker id="flow-arrow-timer" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0,0 8,3 0,6" fill="#10b981" opacity={0.7} />
+          <polygon points="0,0 8,3 0,6" fill="hsl(var(--node-timer-event))" opacity={0.7} />
         </marker>
       </defs>
 
