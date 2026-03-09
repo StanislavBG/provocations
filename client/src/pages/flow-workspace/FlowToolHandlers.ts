@@ -20,6 +20,18 @@ export const DOC_TOOLS = [
   { id: "aim", label: "AIM", icon: Crosshair, instruction: "Restructure into Actor (who performs), Input (what they receive), Mission (desired outcome) framework" },
 ] as const;
 
+// ── LLM Base system-prompt tools (mirrors DOC_TOOLS for prompt authoring) ──
+
+export const LLM_TOOLS = [
+  { id: "expand", label: "Expand", icon: Expand, instruction: "Expand this system prompt with more depth, edge cases, and behavioral details" },
+  { id: "condense", label: "Condense", icon: Shrink, instruction: "Remove redundancy, tighten the system prompt, make it more concise and token-efficient" },
+  { id: "restructure", label: "Restructure", icon: AlignJustify, instruction: "Reorganize sections of this system prompt for better clarity, flow, and logical grouping" },
+  { id: "clarify", label: "Clarify", icon: Lightbulb, instruction: "Simplify language, reduce ambiguity, improve clarity of instructions in this system prompt" },
+  { id: "style", label: "Style", icon: Paintbrush2, instruction: "Adjust the voice and tone of this system prompt for the intended audience and use case" },
+  { id: "correct", label: "Correct", icon: PenLine, instruction: "Fix grammar, spelling, logic errors, and inconsistencies in this system prompt" },
+  { id: "aim", label: "AIM", icon: Crosshair, instruction: "Restructure into Actor (who the AI is), Input (what it receives), Mission (what it should achieve) framework" },
+] as const;
+
 // ── Text splitting utilities ──
 
 /**

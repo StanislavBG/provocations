@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.23.2";
+export const APP_VERSION = "0.24.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,22 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.24.0",
+    date: "2026-03-09",
+    changes: [
+      "Redesign LLM Base expanded view to mirror Document editor UX — system prompt is now the main writing surface with full AI remix tools",
+      "Add Objective field to LLM Base nodes (guides AI tools when evolving the system prompt)",
+      "Add 3-tab sidebar: Tools (Expand/Condense/Restructure/Clarify/Style/Correct/AIM), Provo (provocations), Config (model/temperature/safety)",
+      "Add AI Remix toolbar: voice and text feedback to evolve the system prompt via /api/write",
+      "Add Direct Edit toolbar: voice and text insertion at cursor without AI processing",
+      "Add selection popover on system prompt: remix or direct-replace highlighted text via voice or text",
+      "Add version history bar with one-click revert for system prompt edits",
+      "LLM_TOOLS constant for system-prompt-specific tool instructions",
+      "ProvoThread integration for challenging system prompt blind spots",
+      "Connected context auto-injected as sessionNotes in all AI tool calls",
+    ],
+  },
   {
     version: "0.23.2",
     date: "2026-03-09",
