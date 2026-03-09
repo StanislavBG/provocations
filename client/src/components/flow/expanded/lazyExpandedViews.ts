@@ -31,6 +31,7 @@ export const lazyExpandedViews = {
   approval: lazy(() => import("./ApprovalExpandedView").then((m) => ({ default: m.ApprovalExpandedView }))),
   store: lazy(() => import("./StoreExpandedView").then((m) => ({ default: m.StoreExpandedView }))),
   upload: lazy(() => import("./UploadExpandedView").then((m) => ({ default: m.UploadExpandedView }))),
+  webpage: lazy(() => import("./WebpageExpandedView").then((m) => ({ default: m.WebpageExpandedView }))),
 } as const;
 
 export type LazyExpandedViewType = keyof typeof lazyExpandedViews;

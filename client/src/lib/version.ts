@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.22.4";
+export const APP_VERSION = "0.23.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.23.0",
+    date: "2026-03-09",
+    changes: [
+      "New Webpage node — auto-layout content as a styled, self-contained HTML page with live iframe preview, download, and 4 style presets (Modern Minimal, Corporate, Creative, Technical Docs)",
+      "Context block references in LLM prompts — type @ to insert inline pill chips referencing connected context blocks; referenced blocks expand to their content at prompt assembly time, unreferenced blocks are auto-injected as before",
+      "PromptEditor component — contentEditable-based prompt editor with @-autocomplete, pill chip rendering, broken-ref detection (red underline), and paste support",
+      "Fix CSP: add bglabs.app to connectSrc to unblock BGLabs embed-loader fetch requests",
+    ],
+  },
   {
     version: "0.22.4",
     date: "2026-03-09",

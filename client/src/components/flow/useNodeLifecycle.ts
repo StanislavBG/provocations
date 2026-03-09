@@ -81,7 +81,7 @@ export interface NodeLifecycleReturn {
 // ── Helper: extract text content from a node ──
 
 function nodeContent(n: FlowNode): string {
-  return n.documentContent || n.content || n.llmOutput || n.snippet || "";
+  return n.documentContent || n.content || n.llmOutput || n.htmlOutput || n.snippet || "";
 }
 
 // ── Helper: gather input content from connected upstream nodes (+ their child outputs) ──

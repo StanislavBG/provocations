@@ -8,6 +8,7 @@
 import { apiRequest } from "@/lib/queryClient";
 import type { NodeLifecycleHandlers, NodeProcessContext } from "../useNodeLifecycle";
 import { edgeHasRole } from "../useFlowCanvas";
+import { expandContextRefs, getReferencedLabels } from "../PromptEditor";
 
 export function createLlmBaseHandlers(): NodeLifecycleHandlers {
   return {
@@ -19,44 +20,67 @@ export function createLlmBaseHandlers(): NodeLifecycleHandlers {
     },
 
     onProcess: async (ctx: NodeProcessContext) => {
-      // Build system prompt from context edges + manual system prompt
+      // Gather all available context blocks for ref expansion
+      const allBlocks: Array<{ label: string; content: string }> = [];
+      for (const edge of ctx.inputEdges) {
+        const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
+        if (sourceNode) {
+          const text = sourceNode.documentContent || sourceNode.content || sourceNode.snippet || "";
+          if (text.trim()) allBlocks.push({ label: sourceNode.label || "Input", content: text.trim() });
+        }
+      }
+
+      const rawSystem = ctx.node.llmBaseSystemPrompt || "";
+      const rawUser = ctx.node.llmBaseUserPrompt || "";
+
+      // Expand @[label] references to actual block content
+      const expandedSystem = expandContextRefs(rawSystem, allBlocks);
+      const expandedUser = expandContextRefs(rawUser, allBlocks);
+
+      // Find which blocks are explicitly referenced (skip them from auto-injection)
+      const referencedLabels = new Set([
+        ...getReferencedLabels(rawSystem),
+        ...getReferencedLabels(rawUser),
+      ]);
+
+      // Build system prompt from unreferenced context edges + expanded manual system prompt
       const systemParts: string[] = [];
 
-      // Context edges become system-level background material
       for (const edge of ctx.inputEdges) {
         if (!edgeHasRole(edge, "user-prompt")) {
           const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
           if (sourceNode) {
+            const label = (sourceNode.label || "Input").trim().toLowerCase();
+            if (referencedLabels.has(label)) continue; // Skip — explicitly referenced
             const text = sourceNode.documentContent || sourceNode.content || sourceNode.snippet || "";
             if (text.trim()) systemParts.push(text.trim());
           }
         }
       }
 
-      // Add manual system prompt
-      if (ctx.node.llmBaseSystemPrompt?.trim()) {
-        systemParts.push(ctx.node.llmBaseSystemPrompt.trim());
+      if (expandedSystem.trim()) {
+        systemParts.push(expandedSystem.trim());
       }
 
       const system = systemParts.join("\n\n---\n\n") || "You are a helpful assistant.";
 
-      // Build user message from user-prompt edges + manual user prompt
+      // Build user message from unreferenced user-prompt edges + expanded manual user prompt
       const userParts: string[] = [];
 
-      // User-prompt edges (the actual task/message)
       for (const edge of ctx.inputEdges) {
         if (edgeHasRole(edge, "user-prompt")) {
           const sourceNode = ctx.inputNodes.find((n) => n.id === edge.fromNodeId);
           if (sourceNode) {
+            const label = (sourceNode.label || "Prompt").trim().toLowerCase();
+            if (referencedLabels.has(label)) continue; // Skip — explicitly referenced
             const text = sourceNode.documentContent || sourceNode.content || sourceNode.snippet || "";
             if (text.trim()) userParts.push(text.trim());
           }
         }
       }
 
-      // Manual user prompt (appended after edge content)
-      if (ctx.node.llmBaseUserPrompt?.trim()) {
-        userParts.push(ctx.node.llmBaseUserPrompt.trim());
+      if (expandedUser.trim()) {
+        userParts.push(expandedUser.trim());
       }
 
       const userMessage = userParts.join("\n\n") || "Hello";
