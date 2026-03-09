@@ -15,13 +15,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <script>
-      // Apply saved palette + theme before first paint to prevent flash
+      // Apply saved palette + theme before first paint to prevent flash.
+      // Default: Aurora theme (dark mode + dusk palette + canvas-aurora class).
       (function(){
-        var p=localStorage.getItem('provocations-palette');
-        if(p&&p!=='ember')document.documentElement.classList.add('palette-'+p);
-        var t=localStorage.getItem('theme');
-        if(t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches))
+        var p=localStorage.getItem('provocations-palette')||'dusk';
+        if(p!=='ember')document.documentElement.classList.add('palette-'+p);
+        var t=localStorage.getItem('theme')||'dark';
+        if(t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme:dark)').matches))
           document.documentElement.classList.add('dark');
+        // Apply canvas-aurora class by default for glassmorphism/hero.
+        // FTUX shell context will override once React mounts if a different theme is selected.
+        document.documentElement.classList.add('canvas-aurora');
       })();
     </script>
     <style>

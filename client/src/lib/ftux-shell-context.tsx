@@ -118,8 +118,8 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
   tipsTranslucency: 90,
   tipsColor: null,
   tourCompleted: false,
-  theme: "system",
-  palette: "ember",
+  theme: "dark",
+  palette: "dusk",
 };
 
 // ---------------------------------------------------------------------------

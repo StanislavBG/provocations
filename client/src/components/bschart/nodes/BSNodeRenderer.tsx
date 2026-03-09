@@ -165,7 +165,7 @@ export const BSNodeRenderer = memo(function BSNodeRenderer({
           {/* Header */}
           <div
             className="px-2 py-1.5 flex items-center justify-between"
-            style={{ backgroundColor: node.tableData?.headerBgColor || "#334155" }}
+            style={{ backgroundColor: node.tableData?.headerBgColor || "hsl(var(--muted))" }}
           >
             {editing ? (
               <input
