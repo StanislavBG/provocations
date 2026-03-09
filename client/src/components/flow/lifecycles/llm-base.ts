@@ -38,10 +38,9 @@ export function createLlmBaseHandlers(): NodeLifecycleHandlers {
       const expandedUser = expandContextRefs(rawUser, allBlocks);
 
       // Find which blocks are explicitly referenced (skip them from auto-injection)
-      const referencedLabels = new Set([
-        ...getReferencedLabels(rawSystem),
-        ...getReferencedLabels(rawUser),
-      ]);
+      const referencedLabels = new Set(
+        Array.from(getReferencedLabels(rawSystem)).concat(Array.from(getReferencedLabels(rawUser))),
+      );
 
       // Build system prompt from unreferenced context edges + expanded manual system prompt
       const systemParts: string[] = [];

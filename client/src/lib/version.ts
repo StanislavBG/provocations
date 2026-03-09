@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.23.0";
+export const APP_VERSION = "0.23.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.23.1",
+    date: "2026-03-09",
+    changes: [
+      "Fix AIQA overlay flying off-screen on infinite canvas — force all AIQA elements to fixed positioning with transform reset, add CSS containment to canvas root to prevent transform context leaking",
+    ],
+  },
   {
     version: "0.23.0",
     date: "2026-03-09",
