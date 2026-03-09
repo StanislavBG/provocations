@@ -7,6 +7,7 @@ import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowNodeContainer } from "./FlowNodeContainer";
 import { FlowNodeRenderer } from "./FlowNodeRenderer";
 import { FlowStoreNode } from "./FlowStoreNode";
+import { FlowWebpageNode } from "./FlowWebpageNode";
 import { FlowLlmNode } from "./FlowLlmNode";
 import { FlowDocumentNode } from "./FlowDocumentNode";
 import { FlowZoneNode } from "./FlowZoneNode";
@@ -293,6 +294,9 @@ export function FlowCanvas({
     );
     if (node.type === "store") return (
       <FlowStoreNode key={node.id} node={node} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} />
+    );
+    if (node.type === "webpage") return (
+      <FlowWebpageNode key={node.id} node={node} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onToggleLock={onToggleLock} onPortMouseDown={handlePortMouseDown} onPlayNode={onPlayNode} />
     );
     if (node.type === "document") return (
       <FlowDocumentNode key={node.id} node={node} isSelected={sel} zoom={state.viewport.zoom} onMouseDown={handleNodeMouseDown} onDoubleClick={handleNodeDoubleClick} onDelete={onDeleteNode} onUpdateNode={onUpdateNode} onPortMouseDown={handlePortMouseDown} />
