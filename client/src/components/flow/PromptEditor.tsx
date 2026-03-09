@@ -210,8 +210,36 @@ export function PromptEditor({
       }
     }
 
+    // Fallback @ detection: if autocomplete isn't open, check if the character
+    // just before the cursor is '@'. This handles keyboards/input methods where
+    // e.key !== "@" in keyDown (e.g. AltGr combos, dead keys, mobile keyboards).
+    if (!acOpen && contextBlocks.length > 0) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        const textNode = range.startContainer;
+        const offset = range.startOffset;
+        if (textNode.nodeType === Node.TEXT_NODE && offset > 0) {
+          const char = (textNode.textContent || "")[offset - 1];
+          if (char === "@") {
+            atAnchor.current = { node: textNode, offset };
+            const caretRect = range.getBoundingClientRect();
+            const editorRect = editorRef.current?.getBoundingClientRect();
+            if (editorRect) {
+              setAcPosition({
+                top: caretRect.bottom - editorRect.top + 4,
+                left: caretRect.left - editorRect.left,
+              });
+            }
+            setAcQuery("");
+            setAcOpen(true);
+          }
+        }
+      }
+    }
+
     emitChange();
-  }, [acOpen, emitChange]);
+  }, [acOpen, contextBlocks.length, emitChange]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
