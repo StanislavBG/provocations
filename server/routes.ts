@@ -75,8 +75,7 @@ import {
   createAgencyCampaignSchema,
   updateAgencyCampaignSchema,
 } from "@shared/schema";
-import { builtInPersonas, getPersonaById, getAllPersonas, getPersonasByDomain, getPersonaHierarchy, getStalePersonas, getAllPersonasWithRoot } from "@shared/personas";
-import { personaSchema } from "@shared/schema";
+import { builtInPersonas, getPersonaById } from "@shared/personas";
 import { trackingEventSchema } from "@shared/schema";
 import { invoke, TASK_TYPES, BASE_PROMPTS, type TaskType } from "./invoke";
 import { runWithGateway, isVerboseEnabled, getActiveScope as getActiveGatewayScope, type GatewayContext, type LlmVerboseMetadata } from "./llm-gateway";
@@ -88,7 +87,7 @@ import { postToPlatform } from "./social-poster";
 import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
-import { getUsageSummary, getUserPlan, PLAN_LIMITS, type PlanTier } from "./usage";
+import { getUsageSummary, getUserPlan, PLAN_LIMITS, type PlanTier, requireUsage, recordUsage } from "./usage";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
 import { YoutubeTranscript } from "youtube-transcript";
 import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable, userPreferences as userPreferencesTable } from "../shared/models/chat";
@@ -694,22 +693,6 @@ export async function registerRoutes(
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // LLM STATUS — diagnostic endpoint to verify active provider
-  // ═══════════════════════════════════════════════════════════════════════
-  app.get("/api/llm-status", (_req, res) => {
-    res.json({
-      provider: llm.provider,
-      keys: {
-        AI_INTEGRATIONS_OPENAI_API_KEY: !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        AI_INTEGRATIONS_OPENAI_BASE_URL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || null,
-        ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
-        ANTHROPIC_KEY: !!process.env.ANTHROPIC_KEY,
-        GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
-        LLM_PROVIDER: process.env.LLM_PROVIDER || null,
-      },
-    });
-  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // UNIFIED INVOKE ENDPOINT — single entry point for all LLM interactions
@@ -1246,92 +1229,6 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // ── Persona listing endpoint ──
-  // Returns all user-facing personas (excludes master_researcher).
-  // Merges code defaults with DB overrides.
-  app.get("/api/personas", async (_req, res) => {
-    try {
-      const all = await getEffectivePersonas();
-      const personas = Object.values(all).filter((p) => p.id !== "master_researcher");
-      res.json({ personas });
-    } catch {
-      // Fallback to code defaults if DB unavailable
-      res.json({ personas: getAllPersonas() });
-    }
-  });
-
-  // ── Persona hierarchy endpoint ──
-  // Returns the full hierarchy tree rooted at master_researcher.
-  app.get("/api/personas/hierarchy", async (_req, res) => {
-    try {
-      const all = await getEffectivePersonas();
-      const root = all["master_researcher"] ?? builtInPersonas.master_researcher;
-      const children = Object.values(all)
-        .filter((p) => p.parentId === "master_researcher")
-        .map((p) => ({
-          persona: p,
-          children: Object.values(all)
-            .filter((child) => child.parentId === p.id)
-            .map((child) => ({ persona: child, children: [] })),
-        }));
-      res.json({ persona: root, children });
-    } catch {
-      res.json(getPersonaHierarchy());
-    }
-  });
-
-  // ── All personas including root (for admin) ──
-  app.get("/api/personas/all", async (_req, res) => {
-    try {
-      const all = await getEffectivePersonas();
-      res.json({ personas: Object.values(all) });
-    } catch {
-      res.json({ personas: getAllPersonasWithRoot() });
-    }
-  });
-
-  // ── Personas by domain ──
-  app.get("/api/personas/domain/:domain", async (req, res) => {
-    const domain = req.params.domain;
-    if (!["root", "technology", "business", "marketing"].includes(domain)) {
-      return res.status(400).json({ error: "Invalid domain. Must be: root, technology, business, or marketing" });
-    }
-    try {
-      const all = await getEffectivePersonas();
-      const personas = Object.values(all).filter((p) => p.domain === domain);
-      res.json({ personas });
-    } catch {
-      res.json({ personas: getPersonasByDomain(domain as any) });
-    }
-  });
-
-  // ── Stale personas (need research refresh) ──
-  app.get("/api/personas/stale", async (_req, res) => {
-    try {
-      const all = await getEffectivePersonas();
-      const threshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const stale = Object.values(all).filter((p) => {
-        if (p.id === "master_researcher") return false;
-        if (!p.lastResearchedAt) return true;
-        return new Date(p.lastResearchedAt).getTime() < threshold;
-      });
-      res.json({ stalePersonas: stale.map((p) => ({ id: p.id, label: p.label, domain: p.domain, lastResearchedAt: p.lastResearchedAt, humanCurated: p.humanCurated })) });
-    } catch {
-      const stale = getStalePersonas();
-      res.json({ stalePersonas: stale.map((p) => ({ id: p.id, label: p.label, domain: p.domain, lastResearchedAt: p.lastResearchedAt })) });
-    }
-  });
-
-  // ── Persona version history (archival) ──
-  app.get("/api/personas/:personaId/versions", async (req, res) => {
-    try {
-      const versions = await storage.getPersonaVersions(req.params.personaId);
-      res.json({ versions });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch persona versions" });
-    }
-  });
-
   // ── Admin: Persona override management ──
 
   // List all DB overrides with lock status
@@ -1353,50 +1250,6 @@ Output only valid JSON, no markdown.`;
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch persona overrides" });
-    }
-  });
-
-  // Save persona override (admin-only)
-  app.put("/api/admin/personas/:personaId", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const { personaId } = req.params;
-      const { definition, humanCurated } = req.body;
-
-      // Validate the persona definition
-      const parsed = personaSchema.safeParse(definition);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid persona definition", details: parsed.error.issues });
-      }
-
-      // Ensure ID matches
-      if (parsed.data.id !== personaId) {
-        return res.status(400).json({ error: "Persona ID in definition must match URL parameter" });
-      }
-
-      const override = await storage.upsertPersonaOverride({
-        personaId,
-        definition: JSON.stringify(parsed.data),
-        humanCurated: humanCurated ?? false,
-        curatedBy: auth.userId,
-      });
-
-      // Archive version for audit trail
-      await storage.savePersonaVersion(personaId, JSON.stringify(parsed.data));
-
-      res.json({
-        personaId: override.personaId,
-        humanCurated: override.humanCurated,
-        curatedBy: override.curatedBy,
-        curatedAt: override.curatedAt?.toISOString() ?? null,
-        updatedAt: override.updatedAt.toISOString(),
-      });
-    } catch (error) {
-      console.error("Save persona override error:", error);
-      res.status(500).json({ error: "Failed to save persona override" });
     }
   });
 
@@ -1438,162 +1291,9 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // Delete override — revert to code default (admin-only)
-  app.delete("/api/admin/personas/:personaId/override", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      await storage.deletePersonaOverride(req.params.personaId);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to delete persona override" });
-    }
-  });
 
-  // Export all effective personas as JSON (for deployment sync pipeline)
-  app.get("/api/admin/personas/export", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const all = await getEffectivePersonas();
-      res.json({ personas: all });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to export personas" });
-    }
-  });
 
-  // ── Agent definition CRUD (user-owned) ──
 
-  // Create new agent definition
-  app.post("/api/agents", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
-
-      const parsed = agentDefinitionSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid agent definition", details: parsed.error.issues });
-
-      const result = await storage.createAgentDefinition({
-        agentId: parsed.data.agentId,
-        userId: auth.userId,
-        name: parsed.data.name,
-        description: parsed.data.description,
-        persona: parsed.data.persona,
-        steps: JSON.stringify(parsed.data.steps),
-      });
-      res.json(result);
-    } catch (error: any) {
-      if (error.code === "23505") return res.status(409).json({ error: "Agent ID already exists" });
-      console.error("Create agent error:", error);
-      res.status(500).json({ error: "Failed to create agent" });
-    }
-  });
-
-  // List user's agent definitions
-  app.get("/api/agents", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
-
-      const agents = await storage.listAgentDefinitions(auth.userId);
-      res.json({
-        agents: agents.map((a) => ({
-          ...a,
-          steps: JSON.parse(a.steps),
-        })),
-      });
-    } catch (error) {
-      console.error("List agents error:", error);
-      res.status(500).json({ error: "Failed to list agents" });
-    }
-  });
-
-  // Get single agent definition
-  app.get("/api/agents/:agentId", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
-
-      const agent = await storage.getAgentDefinition(req.params.agentId);
-      if (!agent) return res.status(404).json({ error: "Agent not found" });
-      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
-
-      res.json({ ...agent, steps: JSON.parse(agent.steps) });
-    } catch (error) {
-      console.error("Get agent error:", error);
-      res.status(500).json({ error: "Failed to get agent" });
-    }
-  });
-
-  // Update agent definition
-  app.put("/api/agents/:agentId", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
-
-      const agent = await storage.getAgentDefinition(req.params.agentId);
-      if (!agent) return res.status(404).json({ error: "Agent not found" });
-      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
-
-      const { name, description, persona, steps } = req.body;
-      const result = await storage.updateAgentDefinition(req.params.agentId, {
-        name,
-        description,
-        persona,
-        steps: steps ? JSON.stringify(steps) : undefined,
-      });
-      res.json(result);
-    } catch (error) {
-      console.error("Update agent error:", error);
-      res.status(500).json({ error: "Failed to update agent" });
-    }
-  });
-
-  // Delete agent definition
-  app.delete("/api/agents/:agentId", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
-
-      const agent = await storage.getAgentDefinition(req.params.agentId);
-      if (!agent) return res.status(404).json({ error: "Agent not found" });
-      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
-
-      await storage.deleteAgentDefinition(req.params.agentId);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Delete agent error:", error);
-      res.status(500).json({ error: "Failed to delete agent" });
-    }
-  });
-
-  // ── Agent execution ──
-
-  // Execute a saved agent (non-streaming)
-  app.post("/api/agents/:agentId/execute", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId) return res.status(401).json({ error: "Not authenticated" });
-
-      const agent = await storage.getAgentDefinition(req.params.agentId);
-      if (!agent) return res.status(404).json({ error: "Agent not found" });
-      if (agent.userId !== auth.userId) return res.status(403).json({ error: "Access denied" });
-
-      const { input } = req.body;
-      if (!input || typeof input !== "string") return res.status(400).json({ error: "Input is required" });
-
-      const steps = JSON.parse(agent.steps);
-      const result = await executeAgent(steps, input, agent.persona || "");
-      res.json(result);
-    } catch (error) {
-      console.error("Execute agent error:", error);
-      res.status(500).json({ error: "Failed to execute agent" });
-    }
-  });
 
   // Execute a saved agent (streaming via SSE)
   app.post("/api/agents/:agentId/execute/stream", async (req, res) => {
@@ -1706,56 +1406,7 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // List all agent prompt overrides with lock status
-  app.get("/api/admin/agent-overrides", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
 
-      const overrides = await storage.getAllAgentPromptOverrides();
-      res.json({ overrides: overrides.map((o) => ({
-        taskType: o.taskType,
-        humanCurated: o.humanCurated,
-        curatedAt: o.curatedAt,
-      })) });
-    } catch (error) {
-      console.error("List agent overrides error:", error);
-      res.status(500).json({ error: "Failed to list agent overrides" });
-    }
-  });
-
-  // Save system prompt override for a task type
-  app.put("/api/admin/agent-overrides/:taskType", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
-      const { taskType } = req.params;
-      if (!TASK_TYPES.includes(taskType as TaskType)) {
-        return res.status(400).json({ error: `Invalid task type: ${taskType}` });
-      }
-
-      const { systemPrompt } = req.body;
-      if (!systemPrompt || typeof systemPrompt !== "string") {
-        return res.status(400).json({ error: "systemPrompt is required" });
-      }
-
-      const result = await storage.upsertAgentPromptOverride({
-        taskType,
-        systemPrompt,
-        humanCurated: req.body.humanCurated ?? false,
-        curatedBy: auth.userId,
-      });
-      res.json(result);
-    } catch (error) {
-      console.error("Save agent override error:", error);
-      res.status(500).json({ error: "Failed to save agent override" });
-    }
-  });
 
   // Toggle lock on an agent prompt override
   app.patch("/api/admin/agent-overrides/:taskType/lock", async (req, res) => {
@@ -1798,21 +1449,6 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // Delete agent prompt override — revert to code default
-  app.delete("/api/admin/agent-overrides/:taskType", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      if (!auth?.userId || !(await isAdminUser(auth.userId))) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
-      await storage.deleteAgentPromptOverride(req.params.taskType);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Delete agent override error:", error);
-      res.status(500).json({ error: "Failed to delete agent override" });
-    }
-  });
 
   // ── Tracking event ingestion ──
   // Records a single tracking event. No user-inputted text is stored.
@@ -1847,42 +1483,6 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // ── Batch tracking events ──
-  app.post("/api/tracking/events", async (req, res) => {
-    try {
-      const auth = getAuth(req);
-      const userId = auth?.userId;
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const events = req.body.events;
-      if (!Array.isArray(events)) {
-        return res.status(400).json({ error: "Expected events array" });
-      }
-
-      const sessionId = (req.headers["x-session-id"] as string) || "unknown";
-
-      await Promise.all(
-        events.map((evt: any) => {
-          const parsed = trackingEventSchema.safeParse(evt);
-          if (!parsed.success) return Promise.resolve();
-          return storage.recordTrackingEvent({
-            userId,
-            sessionId,
-            eventType: parsed.data.eventType,
-            personaId: parsed.data.personaId,
-            templateId: parsed.data.templateId,
-            appSection: parsed.data.appSection,
-            metadata: parsed.data.metadata,
-          });
-        })
-      );
-
-      res.json({ ok: true });
-    } catch (error) {
-      console.error("Batch tracking error:", error);
-      res.json({ ok: false });
-    }
-  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // ERROR LOGS — global error tracking visible to admins + originating user
@@ -1985,33 +1585,7 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // ── Admin: persona usage stats (protected) ──
-  app.get("/api/admin/persona-usage", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
 
-      const stats = await storage.getPersonaUsageStats();
-      res.json({ stats });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to load persona usage stats" });
-    }
-  });
-
-  // ── Admin: event breakdown (protected) ──
-  app.get("/api/admin/event-breakdown", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
-
-      const stats = await storage.getEventBreakdown();
-      res.json({ stats });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to load event breakdown" });
-    }
-  });
 
   // ── Admin: categorized event report (protected) ──
   app.get("/api/admin/event-report", async (req, res) => {
@@ -2028,49 +1602,7 @@ Output only valid JSON, no markdown.`;
     }
   });
 
-  // ── Admin: LLM call logs (protected) ──
-  app.get("/api/admin/llm-logs", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
 
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-      const offset = parseInt(req.query.offset as string) || 0;
-      const filterUserId = req.query.userId as string | undefined;
-
-      const [logs, total] = await Promise.all([
-        storage.listLlmCallLogs({ userId: filterUserId, limit, offset }),
-        storage.countLlmCallLogs({ userId: filterUserId }),
-      ]);
-
-      res.json({ logs, total, limit, offset });
-    } catch (error) {
-      console.error("Admin LLM logs error:", error);
-      res.status(500).json({ error: "Failed to load LLM logs" });
-    }
-  });
-
-  // ── User: own LLM call logs (for verbose mode display) ──
-  app.get("/api/llm-logs", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-      const offset = parseInt(req.query.offset as string) || 0;
-
-      const [logs, total] = await Promise.all([
-        storage.listLlmCallLogs({ userId, limit, offset }),
-        storage.countLlmCallLogs({ userId }),
-      ]);
-
-      res.json({ logs, total, limit, offset });
-    } catch (error) {
-      console.error("LLM logs error:", error);
-      res.status(500).json({ error: "Failed to load LLM logs" });
-    }
-  });
 
   // ── Admin: LLM usage aggregates (protected) ──
   app.get("/api/admin/llm-usage", async (req, res) => {
@@ -2245,36 +1777,7 @@ Output only valid JSON, no markdown.`;
     persistIntervalMs: 15_000,
   };
 
-  app.get("/api/admin/voice-capture-config", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
-      res.json(voiceCaptureConfig);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to get config" });
-    }
-  });
 
-  app.put("/api/admin/voice-capture-config", async (req, res) => {
-    try {
-      const { userId } = getAuth(req);
-      if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      if (!(await isAdminUser(userId))) return res.status(403).json({ error: "Forbidden" });
-
-      const { summarySchedule, persistIntervalMs } = req.body;
-      if (summarySchedule && Array.isArray(summarySchedule)) {
-        voiceCaptureConfig.summarySchedule = summarySchedule;
-      }
-      if (typeof persistIntervalMs === "number" && persistIntervalMs >= 5000) {
-        voiceCaptureConfig.persistIntervalMs = persistIntervalMs;
-      }
-      console.log("[admin] Voice capture config updated:", voiceCaptureConfig);
-      res.json(voiceCaptureConfig);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update config" });
-    }
-  });
 
   // Public endpoint — clients fetch the config to use at runtime
   app.get("/api/voice-capture-config", (_req, res) => {
@@ -2580,7 +2083,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // IMAGE GENERATION — generates an image from a textual description
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-image", llmLimiter, async (req, res) => {
+  app.post("/api/generate-image", llmLimiter, requireUsage("image_gen"), async (req, res) => {
     try {
       const { description } = req.body;
       if (!description || typeof description !== "string" || !description.trim()) {
@@ -2635,7 +2138,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // GEMINI IMAGEN — generates images using Google's Imagen via @google/genai
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-imagen", llmLimiter, async (req, res) => {
+  app.post("/api/generate-imagen", llmLimiter, requireUsage("image_gen"), async (req, res) => {
     try {
       const {
         prompt, aspectRatio, negativePrompt, style, numberOfImages,
@@ -2841,7 +2344,7 @@ Output only valid JSON, no markdown.`;
   });
 
   // Unified write endpoint - single interface to the AI writer
-  app.post("/api/write", llmLimiter, async (req, res) => {
+  app.post("/api/write", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = writeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3208,7 +2711,7 @@ INSTRUCTION APPLIED: ${instruction}`
   });
 
   // Streaming write endpoint for long documents
-  app.post("/api/write/stream", llmLimiter, async (req, res) => {
+  app.post("/api/write/stream", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = writeRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3685,7 +3188,7 @@ Return ONLY a JSON array of objects with "question" (string) and "category" (one
   });
 
   // Generate next interview question based on context
-  app.post("/api/interview/question", llmLimiter, async (req, res) => {
+  app.post("/api/interview/question", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = interviewQuestionRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -3983,7 +3486,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
 
   // Streaming interview question with interleaved TTS audio (SSE)
   // Same prompt logic as /api/interview/question but streams text + audio chunks.
-  app.post("/api/interview/question/stream", llmLimiter, async (req, res) => {
+  app.post("/api/interview/question/stream", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const body = req.body;
       const parsed = interviewQuestionRequestSchema.safeParse(body);
@@ -4322,7 +3825,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
   // ── Brainstorm streaming endpoint (multi-context TTS with interruption) ──
   // Similar to /api/interview/question/stream but uses multi-context WS for
   // interrupt support and a more conversational brainstorm-style system prompt.
-  app.post("/api/interview/brainstorm/stream", llmLimiter, async (req, res) => {
+  app.post("/api/interview/brainstorm/stream", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const body = req.body;
       const parsed = interviewQuestionRequestSchema.safeParse(body);
@@ -4532,7 +4035,7 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
   });
 
   // Summarize interview entries into a coherent instruction for the writer
-  app.post("/api/interview/summary", llmLimiter, async (req, res) => {
+  app.post("/api/interview/summary", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = interviewSummaryRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -4585,7 +4088,7 @@ Output only the instruction text. No meta-commentary.`,
   // ── Generate podcast from interview Q&A ──
   // Creates a two-host conversational podcast script via LLM, then converts
   // each speaker turn to audio using TTS with distinct voices.
-  app.post("/api/interview/podcast", llmLimiter, async (req, res) => {
+  app.post("/api/interview/podcast", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = podcastRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -4717,7 +4220,7 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&
   // ── Text-to-Speech endpoint ──
   // Converts a short text to speech audio (MP3) for interview question read-aloud.
   // Prefers ElevenLabs when available, falls back to OpenAI TTS.
-  app.post("/api/tts", async (req, res) => {
+  app.post("/api/tts", requireUsage("tts_minute"), async (req, res) => {
     try {
       const { text, voice, provider, elevenlabsVoiceId } = req.body as {
         text?: string;
@@ -5284,7 +4787,7 @@ ${sections.join("\n\n")}`;
   // stored document context.
   // ==========================================
 
-  app.post("/api/chat", async (req, res) => {
+  app.post("/api/chat", requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = chatRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -5327,7 +4830,7 @@ ${sections.join("\n\n")}`;
   });
 
   // Generate research plan for Deep Research mode
-  app.post("/api/chat/research-plan", async (req, res) => {
+  app.post("/api/chat/research-plan", requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = chatRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -5382,7 +4885,7 @@ Rules:
   });
 
   // Streaming chat endpoint (SSE)
-  app.post("/api/chat/stream", llmLimiter, async (req, res) => {
+  app.post("/api/chat/stream", llmLimiter, requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = chatRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -5487,7 +4990,7 @@ Rules:
   });
 
   // Summarize a research session — generates/updates a dynamic summary
-  app.post("/api/chat/summarize", async (req, res) => {
+  app.post("/api/chat/summarize", requireUsage("llm_call"), async (req, res) => {
     try {
       const parsed = summarizeSessionRequestSchema.safeParse(req.body);
       if (!parsed.success) {
