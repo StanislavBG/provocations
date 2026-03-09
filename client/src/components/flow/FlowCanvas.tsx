@@ -418,6 +418,7 @@ export function FlowCanvas({
       role="application"
       aria-label="Flow Canvas"
       className={`absolute inset-0 overflow-hidden ${transparentBg ? "bg-transparent" : "bg-background"} ${cursorClass}`}
+      style={{ contain: "layout style paint" }}
       onMouseDown={frozen ? undefined : handleMouseDown}
       onMouseMove={frozen ? undefined : handleMouseMove}
       onMouseUp={frozen ? undefined : handleMouseUp}

@@ -31,12 +31,32 @@
     <style>
       /* Isolate #root so canvas transforms don't affect fixed-position siblings */
       #root { contain: layout; }
-      /* Force AIQA widget to stay viewport-fixed regardless of canvas transforms */
+      /* Force ALL AIQA elements to stay viewport-fixed regardless of canvas transforms.
+         The canvas uses CSS transform for pan/zoom which creates a new containing block,
+         pulling any position:fixed/absolute children along with it. We counter this by
+         forcing fixed positioning, resetting transforms, and using !important on every
+         AIQA element so they remain anchored to the viewport. */
+      [data-aiqa-root],
+      [data-aiqa-root] *,
+      #aiqa-root,
+      #aiqa-root *,
+      #aiqa-overlay,
+      #aiqa-overlay *,
+      [aria-label="Open AIQA QA panel"] {
+        transform: none !important;
+        contain: none !important;
+        will-change: auto !important;
+      }
+      [data-aiqa-root],
+      #aiqa-root,
+      #aiqa-overlay,
       [aria-label="Open AIQA QA panel"] {
         position: fixed !important;
+        z-index: 999999 !important;
+      }
+      [aria-label="Open AIQA QA panel"] {
         bottom: 16px !important;
         right: 16px !important;
-        z-index: 999999 !important;
       }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -63,7 +83,11 @@
        *     z-45-50:   Expanded overlays, fullscreen node views
        *   z-999999:  AIQA — always on top
        */
-      [data-aiqa-root], #aiqa-root, #aiqa-overlay { z-index: 999999 !important; position: relative; }
+      [data-aiqa-root], #aiqa-root, #aiqa-overlay {
+        z-index: 999999 !important;
+        position: fixed !important;
+        transform: none !important;
+      }
     </style>
   </body>
 </html>
