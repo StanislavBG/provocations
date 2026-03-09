@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor, RotateCcw, AlertTriangle, Ban } from "lucide-react";
+import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor, RotateCcw, AlertTriangle, Ban, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";

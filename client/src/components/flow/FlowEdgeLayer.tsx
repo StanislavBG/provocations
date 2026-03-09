@@ -117,7 +117,7 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
   useMemo(() => {
     const cache = edgePathCacheRef.current;
     const activeIds = new Set(edges.map((e) => e.id));
-    for (const key of cache.keys()) {
+    for (const key of Array.from(cache.keys())) {
       if (!activeIds.has(key)) cache.delete(key);
     }
   }, [edges]);
