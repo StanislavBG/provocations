@@ -25,7 +25,7 @@ export interface ChainExecutorCallbacks {
   /** Get current nodes/edges (from stateRef) */
   getState: () => { nodes: FlowNode[]; edges: FlowEdge[] };
   /** Execute a single node. Returns the output text or null on failure. */
-  executeNode: (nodeId: string) => Promise<string | null>;
+  executeNode: (nodeId: string) => Promise<string | null | void>;
   /** Called when a node status changes */
   onStatusChange?: (nodeId: string, status: ChainNodeStatus) => void;
   /** Called when a node's chain metadata changes (chainStatus, chainErrorMessage) */
@@ -249,12 +249,12 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
 
       // No timeout for approval nodes (user interaction required)
       if (timeout === 0) {
-        return executeNode(nodeId);
+        return executeNode(nodeId).then((r) => r ?? null);
       }
 
       // Race execution against timeout
       return Promise.race([
-        executeNode(nodeId),
+        executeNode(nodeId).then((r) => r ?? null),
         new Promise<null>((_, reject) =>
           setTimeout(
             () => reject(new Error(`Node execution timed out after ${Math.round(timeout / 1000)}s`)),
@@ -437,7 +437,7 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
 
     // Mark all active nodes as cancelled
     const { nodes } = getState();
-    for (const nodeId of activeNodesRef.current) {
+    for (const nodeId of Array.from(activeNodesRef.current)) {
       onChainStatusChange?.(nodeId, "cancelled");
     }
 

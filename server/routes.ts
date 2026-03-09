@@ -6791,11 +6791,28 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
 
         // ── Subscription helper functions ──
 
-        async function activateSubscription(
+        const resolveUserIdFromCustomer = (customerId: string): Promise<string | null> => {
+          return storage.getSubscriptionByStripeCustomerId(customerId).then((s) => s?.userId ?? null);
+        };
+
+        const mapPriceToTier = (priceId?: string): string => {
+          // Map Stripe price IDs to plan tiers via env vars
+          const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
+          const teamPriceId = process.env.STRIPE_TEAM_PRICE_ID;
+          const proAnnualPriceId = process.env.STRIPE_PRO_ANNUAL_PRICE_ID;
+          const teamAnnualPriceId = process.env.STRIPE_TEAM_ANNUAL_PRICE_ID;
+
+          if (!priceId) return "free";
+          if (priceId === proPriceId || priceId === proAnnualPriceId) return "pro";
+          if (priceId === teamPriceId || priceId === teamAnnualPriceId) return "team";
+          return "pro"; // Default subscription to pro if unrecognized
+        };
+
+        const activateSubscription = async (
           stripeSubscription: Stripe.Subscription,
           customerId: string,
           userId?: string,
-        ) {
+        ) => {
           const resolvedUserId = userId || (await resolveUserIdFromCustomer(customerId));
           if (!resolvedUserId) {
             console.warn(`Cannot activate subscription — no userId for customer ${customerId}`);
@@ -6806,21 +6823,23 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
           const priceId = stripeSubscription.items.data[0]?.price?.id;
           const planTier = mapPriceToTier(priceId);
 
+          const sub = stripeSubscription as any;
           await storage.upsertSubscription({
             userId: resolvedUserId,
             stripeCustomerId: customerId,
             stripeSubscriptionId: stripeSubscription.id,
             planTier,
             status: "active",
-            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+            currentPeriodStart: new Date(sub.current_period_start * 1000),
+            currentPeriodEnd: new Date(sub.current_period_end * 1000),
           });
           console.log(`Subscription activated: user=${resolvedUserId} plan=${planTier}`);
-        }
+        };
 
-        async function renewSubscription(invoice: Stripe.Invoice) {
+        const renewSubscription = async (invoice: Stripe.Invoice) => {
           const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.toString() ?? "";
-          const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.toString() ?? "";
+          const inv = invoice as any;
+          const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.toString() ?? "";
           if (!subId) return;
 
           const sub = await storage.getSubscriptionByStripeSubscriptionId(subId);
@@ -6831,7 +6850,7 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
 
           // Fetch latest subscription to get updated period dates
           try {
-            const stripeSub = await stripe.subscriptions.retrieve(subId);
+            const stripeSub = await stripe.subscriptions.retrieve(subId) as any;
             await storage.upsertSubscription({
               userId: sub.userId,
               stripeCustomerId: customerId,
@@ -6845,10 +6864,11 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
           } catch (err) {
             console.error("Failed to fetch subscription for renewal:", err);
           }
-        }
+        };
 
-        async function flagPaymentFailed(invoice: Stripe.Invoice) {
-          const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.toString() ?? "";
+        const flagPaymentFailed = async (invoice: Stripe.Invoice) => {
+          const inv = invoice as any;
+          const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.toString() ?? "";
           if (!subId) return;
 
           const sub = await storage.getSubscriptionByStripeSubscriptionId(subId);
@@ -6856,32 +6876,15 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
             await storage.updateSubscriptionStatus(sub.userId, "past_due");
             console.log(`Subscription flagged past_due: user=${sub.userId}`);
           }
-        }
+        };
 
-        async function downgradeToFree(stripeSubscription: Stripe.Subscription) {
+        const downgradeToFree = async (stripeSubscription: Stripe.Subscription) => {
           const sub = await storage.getSubscriptionByStripeSubscriptionId(stripeSubscription.id);
           if (sub) {
             await storage.updateSubscriptionStatus(sub.userId, "cancelled", "free");
             console.log(`Subscription cancelled, downgraded to free: user=${sub.userId}`);
           }
-        }
-
-        function resolveUserIdFromCustomer(customerId: string): Promise<string | null> {
-          return storage.getSubscriptionByStripeCustomerId(customerId).then((s) => s?.userId ?? null);
-        }
-
-        function mapPriceToTier(priceId?: string): string {
-          // Map Stripe price IDs to plan tiers via env vars
-          const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
-          const teamPriceId = process.env.STRIPE_TEAM_PRICE_ID;
-          const proAnnualPriceId = process.env.STRIPE_PRO_ANNUAL_PRICE_ID;
-          const teamAnnualPriceId = process.env.STRIPE_TEAM_ANNUAL_PRICE_ID;
-
-          if (!priceId) return "free";
-          if (priceId === proPriceId || priceId === proAnnualPriceId) return "pro";
-          if (priceId === teamPriceId || priceId === teamAnnualPriceId) return "team";
-          return "pro"; // Default subscription to pro if unrecognized
-        }
+        };
 
         // ── Event handling ──
 
