@@ -360,7 +360,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
         {blueprintsSlot}
-        <DebugButton />
+        <DebugButton dropUp={isBottom} />
         {/* Mail / Notifications bell */}
         {onOpenMailbox && (
           <Tooltip>
