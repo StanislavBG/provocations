@@ -31,6 +31,7 @@ import {
   UserCheck,
   CircuitBoard,
   BrainCircuit,
+  Globe,
 } from "lucide-react";
 import type { FlowNodeType, PortDef, EdgeRole } from "./useFlowCanvas";
 
@@ -51,7 +52,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification" | "approval" | "llm-base";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification" | "approval" | "llm-base" | "webpage";
 
 // ── Registry definition ──
 
@@ -745,6 +746,33 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     inputDescription: "Accepts context edges (background material injected into system prompt) and user-prompt edges (become the user message). Full model configuration with temperature, top-p, top-k, safety, and search grounding.",
     outputDescription: "Raw LLM output text. Supports any model (Gemini, OpenAI, Anthropic) with unrestricted defaults for maximum flexibility.",
   },
+  "webpage": {
+    type: "webpage",
+    style: {
+      border: "border-blue-500/60",
+      bg: "bg-card",
+      headerBg: "bg-blue-500/15",
+      headerBorder: "border-blue-500/40",
+      iconClass: "text-blue-500",
+      badgeBg: "bg-blue-500/25",
+      badgeText: "text-blue-600 dark:text-blue-400",
+      badge: "Webpage",
+      accent: "blue",
+    },
+    icon: Globe,
+    defaultWidth: 240,
+    defaultHeight: 160,
+    ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+    expandMode: "overlay",
+    playable: true,
+    supportsChainExecution: true,
+    lifecyclePreset: "webpage",
+    minWidth: 160,
+    minHeight: 120,
+    acceptedRoles: ["context", "user-prompt"],
+    inputDescription: "Content to be laid out as a webpage. Context edges provide the material; user-prompt edges provide layout instructions.",
+    outputDescription: "Self-contained HTML page with inline CSS. Can be previewed, downloaded, or saved to the Context Store.",
+  },
 };
 
 // ── Derived convenience accessors (backward-compatible) ──
@@ -851,4 +879,5 @@ export const DOCK_TOOL_CATALOG: DockToolCatalogEntry[] = [
   { toolId: "notification", label: "Notify", icon: Bell, iconName: "Bell", group: "build", description: "Get notified when a chain of tools finishes processing your content" },
   { toolId: "approval", label: "Approval", icon: UserCheck, iconName: "UserCheck", group: "build", description: "Add a checkpoint that pauses the chain until you review and approve the output" },
   { toolId: "llm-base", label: "LLM", icon: BrainCircuit, iconName: "BrainCircuit", group: "build", description: "Direct AI prompt — write your own instructions with full control over model and settings" },
+  { toolId: "webpage", label: "Webpage", icon: Globe, iconName: "Globe", group: "build", description: "Turn content into a styled, self-contained HTML page with auto-layout — preview, download, or save" },
 ];
