@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.22.3";
+export const APP_VERSION = "0.22.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.22.4",
+    date: "2026-03-09",
+    changes: [
+      "Remove 23 unused API endpoints (persona CRUD, agent CRUD, admin analytics) — ~500 lines of dead code",
+      "Delete 10 dead replit_integrations route files (chat, image, batch dirs; audio/routes + audio/index)",
+      "Wire usage metering into 15 LLM/TTS/image endpoints — requireUsage middleware enforces plan limits with pre-decrement recording",
+      "Update development guide: testing, CI/CD, and structured logging are now implemented (v0.22.0+)",
+    ],
+  },
   {
     version: "0.22.3",
     date: "2026-03-09",
