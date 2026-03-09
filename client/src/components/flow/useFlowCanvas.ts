@@ -85,6 +85,10 @@ export interface FlowNode {
   llmBaseStatus?: "idle" | "running" | "done" | "error";
   /** LLM Base node: error message */
   llmBaseError?: string;
+  /** LLM Base node: objective/purpose (guides AI tools) */
+  llmBaseObjective?: string;
+  /** LLM Base node: version history for undo/revert */
+  llmBaseVersions?: Array<{ content: string; label: string; timestamp: string }>;
   /** Research node: persisted conversation messages */
   researchMessages?: Array<{ role: string; content: string }>;
   /** Research node: the initial query for display on the card */
