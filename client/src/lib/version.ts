@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.23.1";
+export const APP_VERSION = "0.23.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.23.2",
+    date: "2026-03-09",
+    changes: [
+      "Fix @ context autocomplete not triggering in PromptEditor — add fallback input-based detection for keyboards/input methods where e.key !== '@' in keyDown (AltGr combos, dead keys, mobile keyboards)",
+    ],
+  },
   {
     version: "0.23.1",
     date: "2026-03-09",
