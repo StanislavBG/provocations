@@ -23,8 +23,8 @@ export function createLlmHandlers(): NodeLifecycleHandlers {
 
     onProcess: async (ctx: NodeProcessContext) => {
       const preset = getPreset(ctx.node.llmPresetId);
-      const objective = ctx.node.llmObjective || preset.defaultObjective || "Process this content";
-      const inputText = ctx.combinedInputContent || ctx.node.content || "";
+      const objective = ctx.objectiveText || ctx.node.llmObjective || preset.defaultObjective || "Process this content";
+      const inputText = ctx.contextText || ctx.combinedInputContent || ctx.node.content || "";
 
       const body = preset.buildRequest(inputText, objective);
       const res = await apiRequest("POST", preset.endpoint, body);

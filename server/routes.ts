@@ -8784,6 +8784,33 @@ Return ONLY valid JSON, no markdown fences.`;
     res.json(blueprint);
   });
 
+  // ══════════════════════════════════════════════════════════════════
+  // Webhook API — Canvas CRUD for external agents (API key auth)
+  // ══════════════════════════════════════════════════════════════════
+
+  const { requireApiKey } = await import("./api-key-auth");
+  const webhookHandlers = await import("./webhook-handlers");
+
+  app.get("/api/webhook/canvas/:canvasId", requireApiKey, webhookHandlers.getCanvas);
+  app.get("/api/webhook/canvas/:canvasId/nodes", requireApiKey, webhookHandlers.listNodes);
+  app.get("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, webhookHandlers.getNode);
+  app.post("/api/webhook/canvas/:canvasId/nodes", requireApiKey, webhookHandlers.createNode);
+  app.patch("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, webhookHandlers.updateNode);
+  app.delete("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, webhookHandlers.deleteNode);
+  app.get("/api/webhook/canvas/:canvasId/edges", requireApiKey, webhookHandlers.listEdges);
+  app.post("/api/webhook/canvas/:canvasId/edges", requireApiKey, webhookHandlers.createEdge);
+  app.delete("/api/webhook/canvas/:canvasId/edges/:edgeId", requireApiKey, webhookHandlers.deleteEdge);
+  app.post("/api/webhook/outbound", requireApiKey, webhookHandlers.outboundWebhook);
+
+  // Document Store webhook endpoints
+  app.get("/api/webhook/documents", requireApiKey, webhookHandlers.listDocuments);
+  app.get("/api/webhook/documents/:docId", requireApiKey, webhookHandlers.getDocument);
+  app.post("/api/webhook/documents", requireApiKey, webhookHandlers.createDocument);
+  app.put("/api/webhook/documents/:docId", requireApiKey, webhookHandlers.updateDocument);
+  app.get("/api/webhook/folders", requireApiKey, webhookHandlers.listFolders);
+
+  console.log("Webhook canvas + document store API endpoints registered.");
+
   // ── Message purge scheduler (runs every hour) ──
   setInterval(async () => {
     try {

@@ -157,7 +157,7 @@ app.get("/api/clerk-config", (_req, res) => {
 });
 
 app.use("/api", (req, _res, next) => {
-  if (req.path === "/clerk-config" || req.path === "/stripe/webhook" || req.path === "/health") {
+  if (req.path === "/clerk-config" || req.path === "/stripe/webhook" || req.path === "/health" || req.path.startsWith("/webhook/")) {
     return next();
   }
   return requireAuth()(req, _res, next);
