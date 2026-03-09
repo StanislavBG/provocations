@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { edgeHasRole } from "../useFlowCanvas";
+import { PromptEditor, expandContextRefs, getReferencedLabels } from "../PromptEditor";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -110,15 +111,32 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   );
 
   const handleRun = useCallback(async () => {
+    // Expand @[label] references to actual block content
+    const allBlocks = [...contextInputs, ...userPromptInputs];
+    const expandedSystem = expandContextRefs(systemPrompt, allBlocks);
+    const expandedUser = expandContextRefs(userPrompt, allBlocks);
+
+    // Only auto-inject blocks NOT explicitly referenced via @[label]
+    const referencedLabels = new Set([
+      ...getReferencedLabels(systemPrompt),
+      ...getReferencedLabels(userPrompt),
+    ]);
+    const unreferencedContext = contextInputs.filter(
+      (c) => !referencedLabels.has(c.label.trim().toLowerCase()),
+    );
+    const unreferencedUserPrompts = userPromptInputs.filter(
+      (u) => !referencedLabels.has(u.label.trim().toLowerCase()),
+    );
+
     const systemParts = [
-      ...contextInputs.map((c) => c.content),
-      ...(systemPrompt.trim() ? [systemPrompt.trim()] : []),
+      ...unreferencedContext.map((c) => c.content),
+      ...(expandedSystem.trim() ? [expandedSystem.trim()] : []),
     ];
     const system = systemParts.join("\n\n---\n\n") || "You are a helpful assistant.";
 
     const userParts = [
-      ...userPromptInputs.map((u) => u.content),
-      ...(userPrompt.trim() ? [userPrompt.trim()] : []),
+      ...unreferencedUserPrompts.map((u) => u.content),
+      ...(expandedUser.trim() ? [expandedUser.trim()] : []),
     ];
     const userMessage = userParts.join("\n\n") || "Hello";
 
@@ -455,14 +473,11 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
                   System Prompt
                 </span>
               </div>
-              <ProvokeText
+              <PromptEditor
                 value={systemPrompt}
                 onChange={(v) => patch({ llmBaseSystemPrompt: v })}
-                chrome="bare"
-                variant="textarea"
-                placeholder="Persona, instructions, or constraints — shapes every response..."
-                showCopy
-                showClear
+                contextBlocks={[...contextInputs, ...userPromptInputs]}
+                placeholder="Persona, instructions, or constraints — shapes every response... Use @ to reference context blocks"
                 readOnly={isRunning}
               />
             </div>
@@ -474,16 +489,13 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
 
             {/* User prompt — the main input */}
             <div className="relative">
-              <ProvokeText
+              <PromptEditor
                 value={userPrompt}
                 onChange={(v) => patch({ llmBaseUserPrompt: v })}
-                chrome="bare"
-                variant="editor"
+                contextBlocks={[...contextInputs, ...userPromptInputs]}
                 placeholder={userPromptInputs.length > 0
-                  ? "Additional instructions..."
-                  : "What would you like to explore?"}
-                showCopy
-                showClear={false}
+                  ? "Additional instructions... Use @ to reference context blocks"
+                  : "What would you like to explore? Use @ to reference context blocks"}
                 readOnly={isRunning}
               />
             </div>

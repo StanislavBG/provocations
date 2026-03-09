@@ -27,7 +27,8 @@ export type FlowNodeType =
   | "notification"
   | "upload"
   | "approval"
-  | "llm-base";
+  | "llm-base"
+  | "webpage";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -316,6 +317,16 @@ export interface FlowNode {
   approvalResponderName?: string;
   /** Approval node: timestamp of approval/rejection */
   approvalRespondedAt?: string;
+  /** Webpage node: generated HTML output */
+  htmlOutput?: string;
+  /** Webpage node: style preference */
+  webpageStylePreference?: "modern-minimal" | "corporate" | "creative" | "technical-docs";
+  /** Webpage node: custom styling instructions */
+  webpageInstructions?: string;
+  /** Webpage node: execution status */
+  webpageStatus?: "idle" | "running" | "done" | "error";
+  /** Webpage node: error message */
+  webpageError?: string;
   /** Chain execution: status of this node within a chain run */
   chainStatus?: "idle" | "running" | "completed" | "error" | "blocked" | "cancelled";
   /** Chain execution: error message when chainStatus is 'error' */

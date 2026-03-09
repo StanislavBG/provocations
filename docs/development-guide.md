@@ -134,8 +134,8 @@ Keep `replit.md` accurate so the Replit environment works immediately after Git 
 - Keep "Recent Changes" chronological (newest first), concise
 - Match `.replit` config for ports, build commands, deployment targets
 
-## Not Yet Implemented
+## Implementation Status (v0.22.0+)
 
-- Testing framework (Jest/Vitest)
-- CI/CD pipeline
-- Structured logging
+- **Testing framework** — Vitest configured with 146+ tests across crypto, schema, LLM routing, and context builder (`npm test`)
+- **CI/CD pipeline** — GitHub Actions CI runs lint, type-check, and tests on push/PR
+- **Structured logging** — Request logger middleware with method/path/status/duration; see `server/middleware/requestLogger.ts`

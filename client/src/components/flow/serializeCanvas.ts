@@ -123,6 +123,11 @@ export function serializeNodeForSave(node: FlowNode): Partial<FlowNode> {
       })),
     }),
     approval: () => ({ approvalMessage: node.approvalMessage, approvalUserIds: node.approvalUserIds, approvalStatus: node.approvalStatus }),
+    webpage: () => ({
+      htmlOutput: node.htmlOutput,
+      webpageStylePreference: node.webpageStylePreference,
+      webpageInstructions: node.webpageInstructions,
+    }),
     store: () => ({
       storeFolderId: node.storeFolderId,
       storeFolderName: node.storeFolderName,
