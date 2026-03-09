@@ -379,7 +379,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs z-[60]">
+            <TooltipContent side={tooltipSide} className="text-xs z-[60]">
               {mailboxUnreadCount > 0 ? `${mailboxUnreadCount} unread notification${mailboxUnreadCount === 1 ? "" : "s"}` : "Mailbox"}
             </TooltipContent>
           </Tooltip>
