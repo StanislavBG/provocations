@@ -117,10 +117,9 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
     const expandedUser = expandContextRefs(userPrompt, allBlocks);
 
     // Only auto-inject blocks NOT explicitly referenced via @[label]
-    const referencedLabels = new Set([
-      ...getReferencedLabels(systemPrompt),
-      ...getReferencedLabels(userPrompt),
-    ]);
+    const referencedLabels = new Set(
+      Array.from(getReferencedLabels(systemPrompt)).concat(Array.from(getReferencedLabels(userPrompt))),
+    );
     const unreferencedContext = contextInputs.filter(
       (c) => !referencedLabels.has(c.label.trim().toLowerCase()),
     );
