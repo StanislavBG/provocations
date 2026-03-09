@@ -7,10 +7,14 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X } from "lucide-react";
+import { X, Save, FolderOpen, ChevronRight, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { FLOW_NODE_REGISTRY, ACCENT_BG } from "./FlowNodeRegistry";
 import { FlowChainNavBar } from "./FlowChainNavBar";
@@ -66,6 +70,7 @@ export function FlowExpandedOverlay({
   const { statusBarPosition } = useFtuxShell();
   const sbHeight = "var(--ftux-status-bar-height, 44px)";
 
+  const { toast } = useToast();
   const overlayRef = useRef<HTMLDivElement>(null);
   const renameLabelRef = useRef<HTMLInputElement>(null);
   const [renamingLabel, setRenamingLabel] = useState(false);
@@ -74,6 +79,64 @@ export function FlowExpandedOverlay({
     sourceRect ? "expanding" : "open",
   );
   const [contentVisible, setContentVisible] = useState(!sourceRect);
+
+  // ── Save to Context Store ──
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveFolderId, setSaveFolderId] = useState<number | null>(null);
+  const [saveTitle, setSaveTitle] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set());
+
+  const { data: foldersRaw } = useQuery({
+    queryKey: ["/api/folders"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/folders");
+      const data = await res.json();
+      return (Array.isArray(data) ? data : data?.folders ?? data?.data ?? []) as Array<{
+        id: number;
+        name: string;
+        parentId?: number | null;
+      }>;
+    },
+    enabled: saveDialogOpen,
+  });
+  const folders = foldersRaw ?? [];
+
+  const getNodeSaveContent = useCallback((): string => {
+    return node.documentContent || node.content || node.snippet || node.llmOutput || "";
+  }, [node]);
+
+  const handleOpenSaveDialog = useCallback(() => {
+    const content = getNodeSaveContent();
+    if (!content.trim()) {
+      toast({ title: "Nothing to save", description: "This node has no content." });
+      return;
+    }
+    setSaveTitle(node.label || style.badge || "Untitled");
+    setSaveFolderId(null);
+    setSaveDialogOpen(true);
+  }, [getNodeSaveContent, node.label, style.badge, toast]);
+
+  const handleSaveToStore = useCallback(async () => {
+    const content = getNodeSaveContent();
+    if (!content.trim()) return;
+
+    setIsSaving(true);
+    try {
+      await apiRequest("POST", "/api/documents", {
+        title: saveTitle || node.label || "Untitled",
+        content,
+        folderId: saveFolderId,
+        docType: "document",
+      });
+      toast({ title: "Saved to Context Store", description: saveTitle });
+      setSaveDialogOpen(false);
+    } catch {
+      toast({ title: "Save failed", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [getNodeSaveContent, saveTitle, saveFolderId, node.label, toast]);
 
   // ── Expand animation ──
   useEffect(() => {
@@ -247,6 +310,15 @@ export function FlowExpandedOverlay({
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20"
+            onClick={handleOpenSaveDialog}
+            title="Save to Context Store"
+          >
+            <Save className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20"
             onClick={handleClose}
           >
             <X className="w-4 h-4" />
@@ -274,6 +346,111 @@ export function FlowExpandedOverlay({
           onNavigate={onNavigate}
         />
       )}
+
+      {/* Save to Context Store dialog */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Save className="w-4 h-4" />
+              Save to Context Store
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            {/* Document title */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Title</label>
+              <input
+                className="w-full px-3 py-2 rounded-md border border-border bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                value={saveTitle}
+                onChange={(e) => setSaveTitle(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            {/* Folder picker */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                <FolderOpen className="w-3 h-3" />
+                Destination Folder
+              </label>
+              <div className="max-h-[200px] overflow-auto rounded-md border border-border bg-card p-1.5">
+                <button
+                  className={cn(
+                    "w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted/50 flex items-center gap-1.5",
+                    saveFolderId === null && "bg-primary/10 text-primary font-medium",
+                  )}
+                  onClick={() => setSaveFolderId(null)}
+                >
+                  <FolderOpen className="w-3 h-3" />
+                  Root (no folder)
+                </button>
+                {folders
+                  .filter((f) => !f.parentId)
+                  .map((f) => renderFolderItem(f, 0))}
+              </div>
+            </div>
+
+            {/* Save button */}
+            <Button
+              className="w-full"
+              onClick={handleSaveToStore}
+              disabled={isSaving || !saveTitle.trim()}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Save
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
+
+  function renderFolderItem(folder: { id: number; name: string; parentId?: number | null }, depth: number): React.ReactNode {
+    const children = folders.filter((f) => f.parentId === folder.id);
+    const isExpanded = expandedFolders.has(folder.id);
+    const isSelected = saveFolderId === folder.id;
+
+    return (
+      <div key={folder.id}>
+        <button
+          className={cn(
+            "w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted/50 flex items-center gap-1",
+            isSelected && "bg-primary/10 text-primary font-medium",
+          )}
+          style={{ paddingLeft: `${8 + depth * 14}px` }}
+          onClick={() => setSaveFolderId(folder.id)}
+        >
+          {children.length > 0 && (
+            <ChevronRight
+              className={cn("w-3 h-3 transition-transform shrink-0", isExpanded && "rotate-90")}
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedFolders((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(folder.id)) next.delete(folder.id);
+                  else next.add(folder.id);
+                  return next;
+                });
+              }}
+            />
+          )}
+          {children.length === 0 && <span className="w-3" />}
+          <FolderOpen className="w-3 h-3 shrink-0" />
+          <span className="truncate">{folder.name}</span>
+        </button>
+        {isExpanded && children.map((child) => renderFolderItem(child, depth + 1))}
+      </div>
+    );
+  }
 }

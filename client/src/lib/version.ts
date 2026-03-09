@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.24.0";
+export const APP_VERSION = "0.24.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.24.1",
+    date: "2026-03-09",
+    changes: [
+      "Ownership enforcement — webhook/MCP API key bound to Clerk user ID, all canvas and document operations verify document ownership",
+      "MCP tools no longer require explicit userId — identity resolved from API key binding",
+    ],
+  },
   {
     version: "0.24.0",
     date: "2026-03-09",

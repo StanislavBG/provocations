@@ -266,6 +266,28 @@ export function setupCanvasWebSocket(server: HTTPServer) {
   return wss;
 }
 
+// ── External broadcast (for webhook-triggered updates) ──
+
+/**
+ * Broadcast a canvas operation to all connected WebSocket clients in a room.
+ * Called from webhook handlers when canvas state is mutated via HTTP API.
+ */
+export function broadcastToCanvasRoom(
+  canvasId: number,
+  operationType: CanvasOperation["type"],
+  payload: Record<string, unknown>,
+) {
+  const room = rooms.get(canvasId);
+  if (!room || room.members.size === 0) return;
+
+  broadcastToRoom(room, {
+    type: operationType,
+    payload,
+    senderId: "webhook-api",
+    timestamp: Date.now(),
+  });
+}
+
 // ── Stats ──
 
 export function getCollabStats() {
