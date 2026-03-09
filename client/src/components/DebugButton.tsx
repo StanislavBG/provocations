@@ -130,7 +130,7 @@ function ServerErrorRow({ entry }: { entry: ServerErrorEntry }) {
   );
 }
 
-export function DebugButton() {
+export function DebugButton({ dropUp = false }: { dropUp?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"local" | "server">("local");
   const { entries, clear } = useErrorLog();
@@ -208,7 +208,7 @@ export function DebugButton() {
 
       {/* Error log dropdown panel */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 z-50 w-[460px] max-h-[70vh] bg-card border rounded-xl shadow-2xl flex flex-col animate-in slide-in-from-top-2 duration-200">
+        <div className={`absolute right-0 z-50 w-[460px] max-h-[70vh] bg-card border rounded-xl shadow-2xl flex flex-col animate-in duration-200 ${dropUp ? "bottom-full mb-1 slide-in-from-bottom-2" : "top-full mt-1 slide-in-from-top-2"}`}>
           {/* Header */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0">
             <Bug className="w-4 h-4 text-muted-foreground" />

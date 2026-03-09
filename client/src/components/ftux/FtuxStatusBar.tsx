@@ -360,7 +360,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
       <div className="flex items-center gap-1.5 shrink-0">
         {headerActions}
         {blueprintsSlot}
-        <DebugButton />
+        <DebugButton dropUp={isBottom} />
         {/* Mail / Notifications bell */}
         {onOpenMailbox && (
           <Tooltip>
@@ -379,7 +379,7 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs z-[60]">
+            <TooltipContent side={tooltipSide} className="text-xs z-[60]">
               {mailboxUnreadCount > 0 ? `${mailboxUnreadCount} unread notification${mailboxUnreadCount === 1 ? "" : "s"}` : "Mailbox"}
             </TooltipContent>
           </Tooltip>

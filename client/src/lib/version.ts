@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.24.1";
+export const APP_VERSION = "0.24.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,27 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.24.4",
+    date: "2026-03-09",
+    changes: [
+      "Fix mailbox tooltip direction when status bar is at bottom — use dynamic tooltipSide instead of hardcoded bottom",
+    ],
+  },
+  {
+    version: "0.24.3",
+    date: "2026-03-09",
+    changes: [
+      "Fix bug panel opening off-screen when status bar is at the bottom — dropdown now opens upward",
+    ],
+  },
+  {
+    version: "0.24.2",
+    date: "2026-03-09",
+    changes: [
+      "Redirect provocations.replit.app to provocations.app with 301 permanent redirect",
+    ],
+  },
   {
     version: "0.24.1",
     date: "2026-03-09",
