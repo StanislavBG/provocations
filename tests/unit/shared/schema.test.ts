@@ -306,15 +306,15 @@ describe("saveDocumentRequestSchema", () => {
     expect(saveDocumentRequestSchema.safeParse({ title: "", content: "Hello" }).success).toBe(false);
   });
 
-  it("rejects title exceeding 200 chars", () => {
+  it("rejects title exceeding 500 chars", () => {
     expect(
-      saveDocumentRequestSchema.safeParse({ title: "A".repeat(201), content: "Hello" }).success
+      saveDocumentRequestSchema.safeParse({ title: "A".repeat(501), content: "Hello" }).success
     ).toBe(false);
   });
 
-  it("accepts title at exactly 200 chars", () => {
+  it("accepts title at exactly 500 chars", () => {
     expect(
-      saveDocumentRequestSchema.safeParse({ title: "A".repeat(200), content: "Hello" }).success
+      saveDocumentRequestSchema.safeParse({ title: "A".repeat(500), content: "Hello" }).success
     ).toBe(true);
   });
 
