@@ -306,6 +306,16 @@ export function FlowExpandedOverlay({
           <span className="text-[10px] uppercase tracking-wider opacity-75 font-semibold">
             {style.badge}
           </span>
+          <button
+            className="text-[10px] font-mono opacity-50 hover:opacity-90 transition-opacity cursor-pointer bg-transparent border-none text-white px-1 py-0.5 rounded hover:bg-white/10"
+            onClick={() => {
+              navigator.clipboard.writeText(nodeId);
+              toast({ title: "Node ID copied", description: nodeId });
+            }}
+            title={`Node ID: ${nodeId} — click to copy`}
+          >
+            {nodeId.length > 8 ? `${nodeId.slice(0, 8)}…` : nodeId}
+          </button>
           <Button
             variant="ghost"
             size="icon"

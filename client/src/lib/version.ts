@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.25.5";
+export const APP_VERSION = "0.25.6";
 
 export interface ReleaseNote {
   version: string;
@@ -19,12 +19,13 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.25.5",
+    version: "0.25.6",
     date: "2026-03-09",
     changes: [
       "Node deep-linking — each node gets a unique URL (/canvas/:id/node/:nodeId) when opened in full mode",
       "Node ID displayed in overlay header as copyable badge (click to copy)",
       "Sharing a node URL auto-opens that node's expanded view on page load",
+      "Agency office canvas fills entire area — no dark bars, pixel art stretches edge-to-edge",
     ],
   },
   {
