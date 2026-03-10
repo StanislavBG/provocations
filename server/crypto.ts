@@ -226,7 +226,8 @@ export async function decryptFieldAsync(
   if (ciphertext && salt && iv) {
     try {
       return await decryptAsync({ ciphertext, salt, iv }, passphrase);
-    } catch {
+    } catch (err) {
+      console.warn("[crypto] decryptFieldAsync failed, falling back to legacy:", err instanceof Error ? err.message : err);
       return legacyPlaintext;
     }
   }

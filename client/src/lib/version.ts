@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.24.4";
+export const APP_VERSION = "0.24.5";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.24.5",
+    date: "2026-03-09",
+    changes: [
+      "Fix shared canvas navigation — 'Open Canvas' button in mailbox notifications after accepting a share",
+      "Fix canvas load error overlay — non-blocking toast-style banner with dismiss button instead of full-screen blocker",
+      "Fix encrypted titles in Load Canvas dialog — show 'Canvas #ID' fallback instead of '[encrypted]'",
+      "Add decryption failure logging for easier diagnosis of encryption key issues",
+    ],
+  },
   {
     version: "0.24.4",
     date: "2026-03-09",

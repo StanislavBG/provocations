@@ -935,6 +935,7 @@ function FlowWorkspaceInner() {
         loadCanvas(parsed);
         setLoadProgress(100);
         setCanvasTitle(data.title || canvasTitle);
+        setCanvasLoadError(null);
         // Sync URL if loaded from localStorage (not already on /canvas/:id)
         if (!urlCanvasId) {
           setLocation(`/canvas/${canvasDocumentId}`, { replace: true });
@@ -3337,29 +3338,28 @@ function FlowWorkspaceInner() {
           ...(canvasFontSize && canvasFontSize !== 14 ? { fontSize: `${canvasFontSize}px` } : {}),
         }}
       >
-        {/* Error banner when a canvas fails to load */}
+        {/* Error banner when a canvas fails to load — non-blocking toast-style */}
         {canvasLoadError && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
-            <div className="pointer-events-auto bg-card/95 backdrop-blur-sm border border-border rounded-lg p-6 max-w-md text-center shadow-lg space-y-4">
-              <p className="text-sm text-muted-foreground">{canvasLoadError}</p>
-              <div className="flex gap-2 justify-center">
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    setCanvasLoadError(null);
-                    setLocation("/", { replace: true });
-                  }}
-                >
-                  New Canvas
-                </Button>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
+            <div className="bg-card/95 backdrop-blur-sm border border-border rounded-lg px-4 py-3 max-w-md text-center shadow-lg flex items-center gap-3">
+              <p className="text-sm text-muted-foreground flex-1">{canvasLoadError}</p>
+              <div className="flex gap-2 shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-7 text-xs"
                   onClick={() => setOpenCanvasDialogOpen(true)}
                 >
-                  <FolderOpen className="w-4 h-4 mr-1" />
-                  Open Canvas
+                  <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                  Open
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setCanvasLoadError(null)}
+                >
+                  <X className="w-3.5 h-3.5" />
                 </Button>
               </div>
             </div>
@@ -3721,7 +3721,7 @@ function FlowWorkspaceInner() {
                           >
                             <ScanLine className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <span className="text-xs truncate block">{doc.title}</span>
+                              <span className="text-xs truncate block">{doc.title === "[encrypted]" ? `Canvas #${doc.id}` : doc.title}</span>
                               <span className="text-[10px] text-muted-foreground">
                                 #{doc.id}
                                 {doc.updatedAt && (<> &middot; {new Date(doc.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</>)}
