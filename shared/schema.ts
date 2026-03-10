@@ -1547,6 +1547,9 @@ export const notificationTypes = [
   "item_shared",           // someone shared a doc/folder with you
   "share_accepted",        // recipient accepted your share
   "chain_notification",    // flow chain notification node triggered
+  "office_task_complete",  // Office: a task/session finished
+  "office_alert",          // Office: alert from a VP or room
+  "office_vp_update",      // Office: VP response or status update
 ] as const;
 export type NotificationType = typeof notificationTypes[number];
 
@@ -1601,6 +1604,10 @@ export const agencyEventTypeValues = [
   "search_x", "search_reddit", "search_facebook",
   "craft_reply", "craft_post",
   "review_cycle", "full_cycle",
+  "office_command",        // CTO → Office: route message to VP/Sam
+  "office_status_request", // CTO → Office: request Big Board / room / VP status
+  "office_alert",          // Office → CTO: high-priority notification
+  "office_task_complete",  // Office → CTO: a task finished
 ] as const;
 export type AgencyEventType = typeof agencyEventTypeValues[number];
 

@@ -8030,14 +8030,16 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
   // ── Chain Notification: Send notifications from flow canvas notification nodes ──
   app.post("/api/notifications/send", async (req, res) => {
     try {
-      const { userId } = getAuth(req);
+      // Support both Clerk session auth and X-Agency-Key (for Office backend)
+      const userId = getAgencyUserId(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const { message, recipientIds, channels, sourceNodeLabel, contentPreview } = req.body;
+      const { message, recipientIds, channels, sourceNodeLabel, contentPreview, type } = req.body;
       if (!message || typeof message !== "string") {
         return res.status(400).json({ error: "Message is required" });
       }
 
+      const notificationType = type || "chain_notification";
       const targets: string[] = Array.isArray(recipientIds) ? recipientIds : [];
       let sent = 0;
       let failed = 0;
@@ -8046,7 +8048,7 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
         try {
           await storage.createNotification({
             userId: recipientId,
-            notificationType: "chain_notification",
+            notificationType,
             fromUserId: userId,
             metadata: JSON.stringify({
               message,
@@ -8065,7 +8067,7 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
       if (targets.length === 0) {
         await storage.createNotification({
           userId,
-          notificationType: "chain_notification",
+          notificationType,
           fromUserId: userId,
           metadata: JSON.stringify({
             message,
@@ -8078,7 +8080,7 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
 
       res.json({ sent, failed });
     } catch (error) {
-      console.error("Send chain notification error:", error);
+      console.error("Send notification error:", error);
       res.status(500).json({ error: "Failed to send notifications" });
     }
   });
