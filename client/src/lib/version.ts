@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.0";
+export const APP_VERSION = "0.26.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.26.1",
+    date: "2026-03-10",
+    changes: [
+      "Add .mcp.json to .gitignore to protect API keys from being committed",
+      "Commit local Claude Code permissions settings",
+    ],
+  },
   {
     version: "0.26.0",
     date: "2026-03-10",
