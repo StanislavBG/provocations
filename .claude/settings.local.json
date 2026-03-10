@@ -29,9 +29,27 @@
       "Bash(grep -l \"queryKey.*documents\" /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/*.tsx | xargs -I {} bash -c \"echo '=== {} ===' && grep -A 20 'queryKey.*documents' {}\" | head -150)",
       "Bash(for file in /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/InfographicStudioWorkspace.tsx /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/ContextCapturePanel.tsx /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src/components/notebook/MobileCapture.tsx; do echo \"=== $\\(basename $file\\) ===\"; grep -n \"useMemo\" \"$file\" | head -5; done)",
       "Bash(find /Users/sgeorgiev/My\\\\ Applications/Provocations/provocations/client/src -name \"*scroll*\" -type f 2>/dev/null | head -10)",
-      "Bash(cd \"/Users/sgeorgiev/My Applications/Provocations/provocations\" && timeout 10 npx tsx server/index.ts 2>&1 || true)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cp:*)",
       "mcp__aiqa__list_bugs",
-      "mcp__aiqa__update_bug_status"
+      "Bash(npx:*)",
+      "mcp__aiqa__update_bug_status",
+      "Bash(npm:*)",
+      "Bash(openssl rand:*)",
+      "mcp__provocations__get_canvas",
+      "Bash(PROVOCATIONS_API_KEY=f533ff1bf31d55b6056279f59598d23065fdfffdde96dd0594b808a7dcfc9e3b PROVOCATIONS_URL=https://provocations.app npx tsx:*)",
+      "Bash(npx npm@latest:*)",
+      "Bash(chmod +x:*)",
+      "Bash(sqlite3:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(pip3 install:*)",
+      "Bash(apt list:*)",
+      "Bash(sudo apt-get:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "aiqa"
+  ]
 }
