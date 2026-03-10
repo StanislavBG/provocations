@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.5";
+export const APP_VERSION = "0.26.6";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.26.6",
+    date: "2026-03-10",
+    changes: [
+      "Label nodes: settings gear button now appears on hover (font size, bold/italic, color)",
+    ],
+  },
   {
     version: "0.26.5",
     date: "2026-03-10",

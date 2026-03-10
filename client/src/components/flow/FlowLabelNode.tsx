@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import { Settings } from "lucide-react";
 import { NodeHoverActions } from "./NodeHoverActions";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
@@ -122,7 +123,26 @@ export const FlowLabelNode = React.memo(function FlowLabelNode({
         </p>
       )}
 
-      <NodeHoverActions nodeId={node.id} lockMode={lm} onToggleLock={onToggleLock} onDelete={onDelete} hidden={editing} />
+      <NodeHoverActions
+        nodeId={node.id}
+        lockMode={lm}
+        onToggleLock={onToggleLock}
+        onDelete={onDelete}
+        hidden={editing}
+        before={
+          <button
+            className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent("flow:open-label-settings", { detail: { nodeId: node.id } }));
+            }}
+            title="Label formatting"
+          >
+            <Settings className="w-2.5 h-2.5" />
+          </button>
+        }
+      />
 
       {/* Resize handles — shared component */}
       {!editing && (
