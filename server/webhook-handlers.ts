@@ -24,7 +24,7 @@ export const webhookCreateNodeSchema = z.object({
   y: z.number().default(200),
   content: z.string().optional(),
   documentContent: z.string().optional(),
-});
+}).passthrough();
 
 export const webhookUpdateNodeSchema = z.object({
   patch: z.record(z.unknown()),
@@ -139,16 +139,20 @@ export async function createNode(req: Request, res: Response) {
   if (!result) return res.status(404).json({ error: "Canvas not found or access denied" });
 
   const nodeId = generateId();
+  // Spread extra properties (e.g. eventBusMode, eventBusChannel) from passthrough schema
+  const { type: _t, label: _l, x: _x, y: _y, content: _c, documentContent: _dc, ...extraProps } = parsed.data;
   const newNode: Record<string, unknown> = {
     id: nodeId,
     type: parsed.data.type,
     label: parsed.data.label,
     x: parsed.data.x,
     y: parsed.data.y,
-    w: 260,
-    h: 160,
+    width: 260,
+    height: 160,
+    zIndex: result.state.nodes.length,
     content: parsed.data.content || "",
     documentContent: parsed.data.documentContent || "",
+    ...extraProps,
   };
 
   result.state.nodes.push(newNode);

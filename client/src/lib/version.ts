@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.25.2";
+export const APP_VERSION = "0.25.5";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,35 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.25.5",
+    date: "2026-03-09",
+    changes: [
+      "Node deep-linking — each node gets a unique URL (/canvas/:id/node/:nodeId) when opened in full mode",
+      "Node ID displayed in overlay header as copyable badge (click to copy)",
+      "Sharing a node URL auto-opens that node's expanded view on page load",
+    ],
+  },
+  {
+    version: "0.25.4",
+    date: "2026-03-09",
+    changes: [
+      "Fix webhook node ID preservation — remote add-node now keeps original ID instead of generating a new one",
+      "Fix webhook createNode dimensions — use width/height (not w/h) matching canvas client format",
+      "Webhook createNode supports passthrough properties (eventBusMode, eventBusChannel, etc.) at creation time",
+      "MCP create_node tool gains 'properties' parameter for type-specific config (e.g., event-bus mode/channel)",
+    ],
+  },
+  {
+    version: "0.25.3",
+    date: "2026-03-09",
+    changes: [
+      "Tool groups: overflow items show '+N more' button that expands into a popover away from status bar",
+      "Max 6 visible tools per group inline; max 10 tools per group total",
+      "Renamed 'Dock' to 'Tool Palette' across settings and UI labels",
+      "Group rename persistence fix — no more double-fire from Enter+blur",
+    ],
+  },
   {
     version: "0.25.2",
     date: "2026-03-10",

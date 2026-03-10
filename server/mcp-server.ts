@@ -101,17 +101,18 @@ server.tool(
 // Tool: create_node
 server.tool(
   "create_node",
-  "Create a new node on the canvas. Available types: context-doc, research, interview, llm, painter, timeline, social-post, api-connection, notification, approval, llm-base, document, timer, logic, store, coherence, youtube, media",
+  "Create a new node on the canvas. Available types: context-doc, research, interview, llm, painter, timeline, social-post, api-connection, notification, approval, llm-base, document, timer, logic, store, coherence, youtube, media, event-bus, label, zone",
   {
     canvasId: z.number().describe("Document ID of the canvas"),
-    type: z.string().describe("Node type (e.g., 'llm', 'document', 'research', 'context-doc')"),
+    type: z.string().describe("Node type (e.g., 'llm', 'document', 'research', 'context-doc', 'event-bus')"),
     label: z.string().describe("Display label for the node"),
     content: z.string().optional().describe("Text content or snippet for the node"),
     documentContent: z.string().optional().describe("Full document content (for document-type nodes)"),
     x: z.number().optional().describe("X position on canvas (default: 200)"),
     y: z.number().optional().describe("Y position on canvas (default: 200)"),
+    properties: z.record(z.unknown()).optional().describe("Extra type-specific properties (e.g., { eventBusMode: 'publish', eventBusChannel: 'default' } for event-bus nodes)"),
   },
-  async ({ canvasId, type, label, content, documentContent, x, y }) => {
+  async ({ canvasId, type, label, content, documentContent, x, y, properties }) => {
     const data = await apiCall("POST", `/api/webhook/canvas/${canvasId}/nodes`, {
       type,
       label,
@@ -119,6 +120,7 @@ server.tool(
       documentContent,
       x,
       y,
+      ...properties,
     });
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
   },

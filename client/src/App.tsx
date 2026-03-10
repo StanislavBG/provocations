@@ -70,6 +70,7 @@ function Router() {
         <Route path="/project-component-compare" component={ComponentCompare} />
         <Route path="/components/:componentId" component={ComponentShowcase} />
         <Route path="/components" component={ComponentLibrary} />
+        <Route path="/canvas/:canvasId/node/:nodeId">{() => <FlowWorkspace />}</Route>
         <Route path="/canvas/:canvasId">{() => <FlowWorkspace />}</Route>
         <Route path="/flow">{() => <FlowWorkspace />}</Route>
         <Route path="/old" component={NotebookWorkspace} />

@@ -124,6 +124,10 @@ export function FtuxDock() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gatewayOpen, setGatewayOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; toolId: string; label: string } | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+
+  /** Max visible items per group inline; overflow shows in a popover */
+  const MAX_VISIBLE_PER_GROUP = 6;
   // (blueprintMenuOpen state removed — blueprints now in top menu bar)
   const hideTimeout = useRef<ReturnType<typeof setTimeout>>();
 
@@ -287,7 +291,7 @@ export function FtuxDock() {
 
       <div
         role="toolbar"
-        aria-label="Tool Dock"
+        aria-label="Tool Palette"
         className={cn(
           positionClasses[dockPosition],
           "flex gap-1.5 p-2 transition-all duration-300",
@@ -331,75 +335,127 @@ export function FtuxDock() {
             }
             groupedItems[g].push({ item, globalIndex: i });
           });
+          const renderToolItem = (item: DockItem, globalIndex: number) => {
+            const IconComponent = ICON_MAP[item.icon] || Sparkles;
+            const isActive = activeTool === item.toolId;
+            return (
+              <div
+                key={item.toolId}
+                className={cn(
+                  "relative flex flex-col items-center justify-center rounded-lg transition-all",
+                  sz.slot,
+                  sz.slotH,
+                )}
+                draggable
+                onDragStart={(e) => handleSlotDragStart(globalIndex, e)}
+                onDragEnd={handleDragEnd}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({ x: e.clientX, y: e.clientY, toolId: item.toolId, label: item.label });
+                }}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Add ${item.label} node`}
+                      className={cn(
+                        sz.btn, "rounded-lg transition-transform duration-150 hover:scale-110",
+                        isActive && "bg-primary/15 text-primary",
+                        !isActive && "text-muted-foreground hover:text-foreground",
+                      )}
+                      onClick={() => setActiveTool(item.toolId)}
+                    >
+                      <IconComponent className={sz.icon} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs max-w-[220px]">
+                    <div className="font-medium">{item.label}</div>
+                    {item.description && (
+                      <p className="text-muted-foreground mt-0.5 font-normal">{item.description}</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+                {dockShowLabels && (
+                  <span className={cn(sz.label, "text-muted-foreground/70 leading-none truncate text-center mt-0.5", sz.labelMax)}>
+                    {item.label}
+                  </span>
+                )}
+                {isActive && (
+                  <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                )}
+              </div>
+            );
+          };
+
           return (
             <div className={cn("flex", isHorizontal ? "flex-row gap-2" : "flex-col gap-2")}>
-              {groupOrder.map((groupName, groupIdx) => (
-                <div key={groupName} className={cn(
-                  "flex flex-col items-center",
-                  groupIdx > 0 && isHorizontal && "border-l border-border/20 pl-2",
-                  groupIdx > 0 && !isHorizontal && "border-t border-border/20 pt-2",
-                )}>
-                  <span className="text-[8px] uppercase tracking-wider text-muted-foreground/50 font-semibold mb-0.5 select-none">
-                    {groupName}
-                  </span>
-                  <div className={cn("flex gap-0.5", isHorizontal ? "flex-row" : "flex-col")}>
-                    {groupedItems[groupName].map(({ item, globalIndex }) => {
-                      const IconComponent = ICON_MAP[item.icon] || Sparkles;
-                      const isActive = activeTool === item.toolId;
-                      return (
-                        <div
-                          key={item.toolId}
-                          className={cn(
-                            "relative flex flex-col items-center justify-center rounded-lg transition-all",
-                            sz.slot,
-                            sz.slotH,
-                          )}
-                          draggable
-                          onDragStart={(e) => handleSlotDragStart(globalIndex, e)}
-                          onDragEnd={handleDragEnd}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setContextMenu({ x: e.clientX, y: e.clientY, toolId: item.toolId, label: item.label });
-                          }}
-                        >
+              {groupOrder.map((groupName, groupIdx) => {
+                const allItems = groupedItems[groupName];
+                const visibleItems = allItems.slice(0, MAX_VISIBLE_PER_GROUP);
+                const overflowItems = allItems.slice(MAX_VISIBLE_PER_GROUP);
+                const isExpanded = expandedGroup === groupName;
+
+                return (
+                  <div key={groupName} className={cn(
+                    "relative flex flex-col items-center",
+                    groupIdx > 0 && isHorizontal && "border-l border-border/20 pl-2",
+                    groupIdx > 0 && !isHorizontal && "border-t border-border/20 pt-2",
+                  )}>
+                    <span className="text-[8px] uppercase tracking-wider text-muted-foreground/50 font-semibold mb-0.5 select-none">
+                      {groupName}
+                    </span>
+                    <div className={cn("flex gap-0.5", isHorizontal ? "flex-row" : "flex-col")}>
+                      {visibleItems.map(({ item, globalIndex }) => renderToolItem(item, globalIndex))}
+                      {overflowItems.length > 0 && (
+                        <div className="relative flex flex-col items-center justify-center">
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label={`Add ${item.label} node`}
                                 className={cn(
-                                  sz.btn, "rounded-lg transition-transform duration-150 hover:scale-110",
-                                  isActive && "bg-primary/15 text-primary",
-                                  !isActive && "text-muted-foreground hover:text-foreground",
+                                  sz.btn, "rounded-lg text-muted-foreground/60 hover:text-muted-foreground text-[10px] font-semibold",
                                 )}
-                                onClick={() => setActiveTool(item.toolId)}
+                                onClick={() => setExpandedGroup(isExpanded ? null : groupName)}
                               >
-                                <IconComponent className={sz.icon} />
+                                +{overflowItems.length}
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs max-w-[220px]">
-                              <div className="font-medium">{item.label}</div>
-                              {item.description && (
-                                <p className="text-muted-foreground mt-0.5 font-normal">{item.description}</p>
-                              )}
+                            <TooltipContent side={isHorizontal ? "top" : "right"} className="text-xs">
+                              {overflowItems.length} more tool{overflowItems.length > 1 ? "s" : ""}
                             </TooltipContent>
                           </Tooltip>
-                          {dockShowLabels && (
-                            <span className={cn(sz.label, "text-muted-foreground/70 leading-none truncate text-center mt-0.5", sz.labelMax)}>
-                              {item.label}
-                            </span>
-                          )}
-                          {isActive && (
-                            <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
-                          )}
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
+
+                    {/* Overflow popover — opens away from status bar */}
+                    {isExpanded && overflowItems.length > 0 && (
+                      <>
+                        <div className="fixed inset-0 z-49" onClick={() => setExpandedGroup(null)} />
+                        <div
+                          className={cn(
+                            "absolute z-50 flex gap-0.5 p-2 rounded-xl border border-border/40 shadow-xl animate-in fade-in zoom-in-95 duration-150",
+                            isHorizontal ? "flex-row" : "flex-col",
+                            // Position away from status bar
+                            statusBarAtBottom ? "bottom-full mb-2" : "top-full mt-2",
+                            "left-1/2 -translate-x-1/2",
+                          )}
+                          style={{
+                            background: bgColor,
+                            backdropFilter: `blur(${blur}px)`,
+                          }}
+                        >
+                          {overflowItems.map(({ item, globalIndex }) => renderToolItem(item, globalIndex))}
+                        </div>
+                      </>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           );
         })() : (
@@ -514,7 +570,7 @@ export function FtuxDock() {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={dockLocked ? "Unlock dock reordering" : "Lock dock reordering"}
+                aria-label={dockLocked ? "Unlock tool reordering" : "Lock tool positions"}
                 className={cn(
                   "w-8 h-8 rounded-lg transition-colors",
                   dockLocked
@@ -568,7 +624,7 @@ export function FtuxDock() {
 
       {/* Blueprint menu removed — blueprints are now in the top Blueprints menu */}
 
-      {/* Dock item context menu */}
+      {/* Tool item context menu */}
       {contextMenu && (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />

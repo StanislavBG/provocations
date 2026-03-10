@@ -460,12 +460,12 @@ export function useFlowCanvas() {
       type: FlowNodeType,
       x: number,
       y: number,
-      data: Partial<Omit<FlowNode, "id" | "type" | "x" | "y" | "width" | "height" | "zIndex">> & { label: string },
+      data: Partial<Omit<FlowNode, "type" | "x" | "y" | "width" | "height" | "zIndex">> & { label: string },
     ) => {
       pushHistory();
       const dims = _DEFAULT_DIMENSIONS[type];
       const node: FlowNode = {
-        id: generateId("flow"),
+        id: data.id || generateId("flow"),
         type,
         x: x - dims.width / 2,
         y: y - dims.height / 2,

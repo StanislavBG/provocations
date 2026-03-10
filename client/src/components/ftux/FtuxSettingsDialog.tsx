@@ -88,18 +88,18 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
 
         <Tabs defaultValue="dock" className="mt-2">
           <TabsList className="w-full flex-wrap h-auto gap-0.5 p-0.5">
-            <TabsTrigger value="dock" className="flex-1 text-[11px] sm:text-xs min-w-[60px]">Dock</TabsTrigger>
+            <TabsTrigger value="dock" className="flex-1 text-[11px] sm:text-xs min-w-[60px]">Tools</TabsTrigger>
             <TabsTrigger value="statusbar" className="flex-1 text-[11px] sm:text-xs min-w-[70px]">Status Bar</TabsTrigger>
             <TabsTrigger value="tips" className="flex-1 text-[11px] sm:text-xs min-w-[40px]">Tips</TabsTrigger>
             <TabsTrigger value="appearance" className="flex-1 text-[11px] sm:text-xs min-w-[50px]">Theme</TabsTrigger>
             <TabsTrigger value="keybinds" className="flex-1 text-[11px] sm:text-xs min-w-[70px]">Key Binds</TabsTrigger>
           </TabsList>
 
-          {/* Dock settings */}
+          {/* Tool Palette settings */}
           <TabsContent value="dock" className="space-y-4 mt-4">
-            {/* Show/hide dock */}
+            {/* Show/hide tool palette */}
             <div className="flex items-center justify-between">
-              <Label className="text-xs">Show Dock</Label>
+              <Label className="text-xs">Show Tool Palette</Label>
               <Switch
                 checked={!shell.dockHidden}
                 onCheckedChange={(val) => shell.setDockHidden(!val)}
@@ -128,7 +128,7 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
                     icon={<ArrowLeft className="w-3 h-3" />}
                   />
                   <div className="flex items-center justify-center rounded bg-muted/50 text-[9px] text-muted-foreground">
-                    Dock
+                    Tools
                   </div>
                   <PositionButton
                     position="right"
@@ -260,7 +260,7 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
               onClick={shell.resetDock}
             >
               <RotateCcw className="w-3 h-3 mr-1.5" />
-              Reset Dock
+              Reset Tool Palette
             </Button>
           </TabsContent>
 
@@ -518,8 +518,8 @@ export function FtuxSettingsDialog({ open, onOpenChange }: FtuxSettingsDialogPro
                 <KeybindRow keys={["Shift", "Drag"]} description="Marquee select" />
                 <KeybindRow keys={["Shift", "Click"]} description="Toggle select node" />
               </KeybindGroup>
-              <KeybindGroup title="Dock">
-                <KeybindRow keys={["1-9"]} description="Place dock item at cursor" />
+              <KeybindGroup title="Tools">
+                <KeybindRow keys={["1-9"]} description="Place tool at cursor" />
               </KeybindGroup>
 
               <Separator />

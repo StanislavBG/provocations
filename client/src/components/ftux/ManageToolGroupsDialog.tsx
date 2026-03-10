@@ -124,9 +124,21 @@ export function ManageToolGroupsDialog({ open, onOpenChange }: ManageToolGroupsD
     setDragOverGroup(groupName);
   }, []);
 
+  const MAX_GROUP_SIZE = 10;
+
   const handleDrop = useCallback((targetGroup: string, e: React.DragEvent) => {
     e.preventDefault();
     if (!dragToolId) return;
+
+    // Enforce max group size
+    const currentGroupItems = dockItems.filter(
+      (item) => (item.group || "other") === targetGroup && item.toolId !== dragToolId,
+    );
+    if (currentGroupItems.length >= MAX_GROUP_SIZE) {
+      setDragToolId(null);
+      setDragOverGroup(null);
+      return;
+    }
 
     setDockItems(
       dockItems.map((item) =>
@@ -142,14 +154,18 @@ export function ManageToolGroupsDialog({ open, onOpenChange }: ManageToolGroupsD
     setDragOverGroup(null);
   }, []);
 
-  // Rename group
+  // Rename group — guard against double-fire from Enter + blur
+  const renameCommitted = useRef(false);
+
   const startRename = useCallback((groupName: string) => {
+    renameCommitted.current = false;
     setEditingGroup(groupName);
     setEditValue(groupName);
     setTimeout(() => editInputRef.current?.select(), 0);
   }, []);
 
   const commitRename = useCallback(() => {
+    if (renameCommitted.current) return;
     if (!editingGroup || !editValue.trim()) {
       setEditingGroup(null);
       return;
@@ -165,6 +181,11 @@ export function ManageToolGroupsDialog({ open, onOpenChange }: ManageToolGroupsD
       setEditingGroup(null);
       return;
     }
+    renameCommitted.current = true;
+    // Also rename empty groups
+    setEmptyGroups((prev) =>
+      prev.map((n) => (n === editingGroup ? newName : n)),
+    );
     setDockItems(
       dockItems.map((item) =>
         item.group === editingGroup ? { ...item, group: newName } : item,
@@ -340,6 +361,11 @@ export function ManageToolGroupsDialog({ open, onOpenChange }: ManageToolGroupsD
 
                 {/* Tools */}
                 <div className="flex flex-wrap gap-1.5 p-2 min-h-[36px]">
+                  {group.items.length >= MAX_GROUP_SIZE && (
+                    <span className="w-full text-[9px] text-amber-500/60 px-1 mb-0.5">
+                      Group full ({MAX_GROUP_SIZE}/{MAX_GROUP_SIZE})
+                    </span>
+                  )}
                   {group.items.length === 0 ? (
                     <span className="text-[10px] text-muted-foreground/50 italic px-1">
                       Drag tools here

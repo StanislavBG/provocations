@@ -241,8 +241,12 @@ function FlowWorkspaceInner() {
   const { user } = useUser();
   const minimapState = useMinimapState();
   const [routeMatch, routeParams] = useRoute("/canvas/:canvasId");
+  const [nodeRouteMatch, nodeRouteParams] = useRoute("/canvas/:canvasId/node/:nodeId");
   const [, setLocation] = useLocation();
-  const urlCanvasId = routeMatch && routeParams?.canvasId ? parseInt(routeParams.canvasId, 10) : null;
+  const urlCanvasId = (nodeRouteMatch && nodeRouteParams?.canvasId)
+    ? parseInt(nodeRouteParams.canvasId, 10)
+    : (routeMatch && routeParams?.canvasId ? parseInt(routeParams.canvasId, 10) : null);
+  const urlNodeId = nodeRouteMatch && nodeRouteParams?.nodeId ? nodeRouteParams.nodeId : null;
 
   // Fit all nodes into the viewport
   const fitToView = useCallback(() => {
@@ -315,6 +319,31 @@ function FlowWorkspaceInner() {
   const activeExpandedNodeIdRef = useRef(activeExpandedNodeId);
   activeExpandedNodeIdRef.current = activeExpandedNodeId;
   const [expandSourceRect, setExpandSourceRect] = useState<DOMRect | null>(null);
+
+  // ── URL sync helpers for node overlay deep-linking ──
+  // Extract canvas ID from current URL path to avoid dependency ordering issues
+  const getCanvasIdFromUrl = useCallback(() => {
+    const match = window.location.pathname.match(/^\/canvas\/(\d+)/);
+    return match ? match[1] : null;
+  }, []);
+
+  const openExpandedNode = useCallback((nodeId: string) => {
+    setExpandSourceRect(null);
+    setActiveExpandedNodeId(nodeId);
+    const cid = getCanvasIdFromUrl();
+    if (cid) {
+      window.history.replaceState(null, "", `/canvas/${cid}/node/${nodeId}`);
+    }
+  }, [getCanvasIdFromUrl]);
+
+  const closeExpandedNode = useCallback(() => {
+    setActiveExpandedNodeId(null);
+    const cid = getCanvasIdFromUrl();
+    if (cid) {
+      window.history.replaceState(null, "", `/canvas/${cid}`);
+    }
+  }, [getCanvasIdFromUrl]);
+
   // Legacy overlay states kept for dialog-based overlays (not full-screen)
   const [activeLabelNodeId, setActiveLabelNodeId] = useState<string | null>(null);
   const [pendingLogicAction, setPendingLogicAction] = useState<{ x: number; y: number; screenX: number; screenY: number } | null>(null);
@@ -497,13 +526,11 @@ function FlowWorkspaceInner() {
       if (op.senderId === user?.id) return; // ignore own echoes
       if (op.type === "add-node" && op.payload.node) {
         const node = op.payload.node as FlowNode;
+        // Spread all node properties to preserve ID, event-bus config, etc.
+        const { type: _t, x: _x, y: _y, width: _w, height: _h, zIndex: _z, ...rest } = node;
         addNode(node.type, node.x, node.y, {
-          label: node.label,
-          snippet: node.snippet,
-          content: node.content,
-          documentContent: node.documentContent,
-          zoneLabel: node.zoneLabel,
-          zoneColor: node.zoneColor,
+          ...rest,
+          label: node.label || "Node",
         });
       } else if (op.type === "move-node" && op.payload.nodeId) {
         moveNode(op.payload.nodeId as string, op.payload.x as number, op.payload.y as number);
@@ -1416,10 +1443,9 @@ function FlowWorkspaceInner() {
 
       // Open unified overlay (sourceRect = null for now — FLIP animation
       // requires DOM refs which will be wired in FlowNodeContainer)
-      setExpandSourceRect(null);
-      setActiveExpandedNodeId(nodeId);
+      openExpandedNode(nodeId);
     },
-    [state.nodes],
+    [state.nodes, openExpandedNode],
   );
 
   // ── Chain navigation: navigate between connected nodes in overlay ──
@@ -1454,10 +1480,9 @@ function FlowWorkspaceInner() {
       }
 
       // Switch overlay (no FLIP animation for chain nav)
-      setExpandSourceRect(null);
-      setActiveExpandedNodeId(nodeId);
+      openExpandedNode(nodeId);
     },
-    [activeExpandedNodeId, docEditorContent, updateNode, state.nodes],
+    [activeExpandedNodeId, docEditorContent, updateNode, state.nodes, openExpandedNode],
   );
 
   // ── Store node: select save folder ──
@@ -3083,6 +3108,18 @@ function FlowWorkspaceInner() {
     ? state.nodes.find((n) => n.id === activeExpandedNodeId)
     : null;
 
+  // ── Auto-open node from URL deep-link ──
+  const urlNodeOpenedRef = useRef(false);
+  useEffect(() => {
+    if (urlNodeId && state.nodes.length > 0 && !urlNodeOpenedRef.current) {
+      const target = state.nodes.find((n) => n.id === urlNodeId);
+      if (target) {
+        urlNodeOpenedRef.current = true;
+        openExpandedNode(urlNodeId);
+      }
+    }
+  }, [urlNodeId, state.nodes, openExpandedNode]);
+
   const activeResearchNode = activeResearchNodeId
     ? state.nodes.find((n) => n.id === activeResearchNodeId)
     : null;
@@ -4056,7 +4093,7 @@ function FlowWorkspaceInner() {
           if (activeExpandedNode.type === "document" && !activeExpandedNode.imageUrl) {
             handleCloseDocumentEditor();
           }
-          setActiveExpandedNodeId(null);
+          closeExpandedNode();
         };
 
         // Render type-specific expanded content
