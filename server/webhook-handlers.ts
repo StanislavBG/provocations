@@ -183,7 +183,7 @@ export async function updateNode(req: Request, res: Response) {
 
   broadcastToCanvasRoom(canvasId, "update-node", {
     nodeId,
-    patch: safePatch,
+    ...safePatch,
   });
 
   res.json({ node: result.state.nodes[nodeIndex] });
@@ -246,7 +246,7 @@ export async function createEdge(req: Request, res: Response) {
   result.state.edges.push(newEdge);
   await saveCanvasState(canvasId, result.state, result.doc);
 
-  broadcastToCanvasRoom(canvasId, "add-edge", { edge: newEdge });
+  broadcastToCanvasRoom(canvasId, "add-edge", { fromNodeId: newEdge.fromNodeId, toNodeId: newEdge.toNodeId, role: newEdge.role });
 
   res.status(201).json({ edge: newEdge });
 }
