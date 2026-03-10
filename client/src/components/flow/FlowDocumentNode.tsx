@@ -1,6 +1,7 @@
 import React from "react";
-import { FileEdit, Image as ImageIcon, Lock, Unlock, Trash2 } from "lucide-react";
+import { FileEdit, Image as ImageIcon, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NodeHoverActions } from "./NodeHoverActions";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
@@ -107,34 +108,7 @@ export const FlowDocumentNode = React.memo(function FlowDocumentNode({
         accentColor={isImage ? "rose" : "indigo"}
       />
 
-      {/* Lock + Delete buttons — above the node to avoid resize handle overlap */}
-      <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-        {onToggleLock && (
-          <button
-            className={cn(
-              "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-              lockMode !== "none"
-                ? "bg-yellow-500 text-white"
-                : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-            )}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
-            title={lockMode === "none" ? "Lock position" : "Unlock"}
-          >
-            {lockMode === "none" ? <Unlock className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
-          </button>
-        )}
-        {lockMode === "none" && (
-          <button
-            className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-            title="Delete node"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        )}
-      </div>
+      <NodeHoverActions nodeId={node.id} lockMode={lockMode} onToggleLock={onToggleLock} onDelete={onDelete} position="above" />
 
       {/* Lock indicator */}
       {lockMode === "canvas" && (

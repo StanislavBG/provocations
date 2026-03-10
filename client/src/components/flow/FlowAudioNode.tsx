@@ -1,9 +1,10 @@
 import React, { useCallback, useRef, useEffect, useState } from "react";
-import { Mic, Square, Trash2, Lock, Unlock, Monitor } from "lucide-react";
+import { Mic, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
 import { FlowPortDots } from "./FlowPortDots";
+import { NodeHoverActions } from "./NodeHoverActions";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 
 interface FlowAudioNodeProps {
@@ -218,41 +219,13 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
         accentColor="red"
       />
 
-      {/* Lock + Delete buttons */}
-      {(() => {
-        const lm = getEffectiveLockMode(node);
-        return (
-          <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            {onToggleLock && (
-              <button
-                className={cn(
-                  "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                  lm === "canvas" ? "bg-yellow-500 text-white"
-                    : lm === "screen" ? "bg-blue-500 text-white"
-                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-                )}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
-                title={lm === "none" ? "Lock to canvas" : lm === "canvas" ? "Lock to screen" : "Unlock"}
-              >
-                {lm === "none" && <Unlock className="w-2.5 h-2.5" />}
-                {lm === "canvas" && <Lock className="w-2.5 h-2.5" />}
-                {lm === "screen" && <Monitor className="w-2.5 h-2.5" />}
-              </button>
-            )}
-            {lm === "none" && (
-              <button
-                className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); if (isRecording) stopRecording(); onDelete(node.id); }}
-                title="Delete node"
-              >
-                <Trash2 className="w-2.5 h-2.5" />
-              </button>
-            )}
-          </div>
-        );
-      })()}
+      <NodeHoverActions
+        nodeId={node.id}
+        lockMode={getEffectiveLockMode(node)}
+        onToggleLock={onToggleLock}
+        onDelete={onDelete}
+        onCustomDelete={(id) => { if (isRecording) stopRecording(); onDelete(id); }}
+      />
 
       {/* Recording pulse indicator */}
       {isRecording && (

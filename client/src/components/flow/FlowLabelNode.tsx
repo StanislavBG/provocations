@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Trash2, Lock, Unlock, Monitor } from "lucide-react";
+import { NodeHoverActions } from "./NodeHoverActions";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -122,38 +122,7 @@ export const FlowLabelNode = React.memo(function FlowLabelNode({
         </p>
       )}
 
-      {/* Lock + Delete buttons on hover */}
-      {!editing && (
-        <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          {onToggleLock && (
-            <button
-              className={cn(
-                "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                lm === "canvas" ? "bg-yellow-500 text-white"
-                  : lm === "screen" ? "bg-blue-500 text-white"
-                  : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-              )}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
-              title={lm === "none" ? "Lock to canvas" : lm === "canvas" ? "Lock to screen" : "Unlock"}
-            >
-              {lm === "none" && <Unlock className="w-2.5 h-2.5" />}
-              {lm === "canvas" && <Lock className="w-2.5 h-2.5" />}
-              {lm === "screen" && <Monitor className="w-2.5 h-2.5" />}
-            </button>
-          )}
-          {lm === "none" && (
-            <button
-              className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-              title="Delete label"
-            >
-              <Trash2 className="w-2.5 h-2.5" />
-            </button>
-          )}
-        </div>
-      )}
+      <NodeHoverActions nodeId={node.id} lockMode={lm} onToggleLock={onToggleLock} onDelete={onDelete} hidden={editing} />
 
       {/* Resize handles — shared component */}
       {!editing && (

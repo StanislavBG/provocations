@@ -7,7 +7,8 @@
  */
 
 import React, { useCallback, useState, useRef, useEffect } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Settings, AlertTriangle, Ban, X, RotateCcw, Copy, Check } from "lucide-react";
+import { Pause, Lock, Play, Loader2, Settings, AlertTriangle, Ban, X, RotateCcw } from "lucide-react";
+import { NodeHoverActions } from "./NodeHoverActions";
 import { InputModeToggle } from "./InputModeToggle";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
@@ -219,16 +220,7 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
           accentColor={style.accent}
         />
 
-        {/* Copy ID + Lock + Delete buttons on hover */}
-        <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-          <CopyIdButton nodeId={node.id} />
-          {onToggleLock && (
-            <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
-          )}
-          {lockMode === "none" && (
-            <DeleteButton nodeId={node.id} onDelete={onDelete} />
-          )}
-        </div>
+        <NodeHoverActions nodeId={node.id} lockMode={lockMode} onToggleLock={onToggleLock} onDelete={onDelete} position="above" />
 
         {/* Play button on hover */}
         {onPlayNode && (
@@ -471,16 +463,7 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
         </div>
       )}
 
-      {/* Copy ID + Lock + Delete buttons — above the node to avoid resize handle overlap */}
-      <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-        <CopyIdButton nodeId={node.id} />
-        {onToggleLock && (
-          <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
-        )}
-        {lockMode === "none" && (
-          <DeleteButton nodeId={node.id} onDelete={onDelete} />
-        )}
-      </div>
+      <NodeHoverActions nodeId={node.id} lockMode={lockMode} onToggleLock={onToggleLock} onDelete={onDelete} position="above" />
 
       {/* Resize handles — hidden when locked */}
       {lockMode === "none" && onUpdateNode && (
@@ -502,80 +485,6 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
     </div>
   );
 });
-
-// ── Shared button sub-components ──
-
-function LockButton({
-  lockMode,
-  nodeId,
-  onToggleLock,
-}: {
-  lockMode: "none" | "canvas" | "screen";
-  nodeId: string;
-  onToggleLock: (nodeId: string) => void;
-}) {
-  return (
-    <button
-      className={cn(
-        "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-        lockMode !== "none"
-          ? "bg-yellow-500 text-white"
-          : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-      )}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggleLock(nodeId);
-      }}
-      title={lockMode === "none" ? "Lock position" : "Unlock"}
-    >
-      {lockMode === "none" ? <Unlock className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
-    </button>
-  );
-}
-
-function DeleteButton({
-  nodeId,
-  onDelete,
-  title = "Delete node",
-}: {
-  nodeId: string;
-  onDelete: (nodeId: string) => void;
-  title?: string;
-}) {
-  return (
-    <button
-      className="w-5 h-5 rounded-full bg-destructive/90 text-destructive-foreground flex items-center justify-center shadow-sm hover:bg-destructive transition-colors"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        onDelete(nodeId);
-      }}
-      title={title}
-    >
-      <Trash2 className="w-2.5 h-2.5" />
-    </button>
-  );
-}
-
-function CopyIdButton({ nodeId }: { nodeId: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(nodeId);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      title={copied ? "Copied!" : "Copy node ID"}
-    >
-      {copied ? <Check className="w-2.5 h-2.5 text-green-500" /> : <Copy className="w-2.5 h-2.5" />}
-    </button>
-  );
-}
 
 // ── Label node with inline editing ──
 
@@ -671,10 +580,13 @@ function LabelNode({
         {node.label || "Label"}
       </div>
 
-      {/* Copy ID + Settings + Lock + Delete buttons on hover */}
-      <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-        <CopyIdButton nodeId={node.id} />
-        {onOpenSettings && (
+      <NodeHoverActions
+        nodeId={node.id}
+        lockMode={lockMode}
+        onToggleLock={onToggleLock}
+        onDelete={onDelete}
+        position="above"
+        before={onOpenSettings && (
           <button
             className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"
             onMouseDown={(e) => e.stopPropagation()}
@@ -684,13 +596,7 @@ function LabelNode({
             <Settings className="w-2.5 h-2.5" />
           </button>
         )}
-        {onToggleLock && (
-          <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
-        )}
-        {lockMode === "none" && (
-          <DeleteButton nodeId={node.id} onDelete={onDelete} />
-        )}
-      </div>
+      />
     </div>
   );
 }

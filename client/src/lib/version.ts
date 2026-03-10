@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.3";
+export const APP_VERSION = "0.26.4";
 
 export interface ReleaseNote {
   version: string;
@@ -19,10 +19,12 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.26.3",
+    version: "0.26.4",
     date: "2026-03-10",
     changes: [
-      "Canvas: Copy Node ID button on hover (all node types) for easy MCP/API reference",
+      "Architecture: shared NodeHoverActions component — Copy ID, Lock, Delete on every node type",
+      "Eliminated ~300 lines of duplicated toolbar code across 10 specialized node components",
+      "Copy Node ID button now appears on ALL node types (LLM, Research, Audio, YouTube, Timer, Store, Webpage, Document, Label, Zone, Container)",
     ],
   },
   {
