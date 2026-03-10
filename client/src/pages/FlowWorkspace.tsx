@@ -537,13 +537,15 @@ function FlowWorkspaceInner() {
       } else if (op.type === "delete-node" && op.payload.nodeId) {
         deleteNode(op.payload.nodeId as string);
       } else if (op.type === "add-edge" && op.payload.fromNodeId && op.payload.toNodeId) {
-        addEdge(op.payload.fromNodeId as string, op.payload.toNodeId as string);
+        addEdge(op.payload.fromNodeId as string, op.payload.toNodeId as string, op.payload.role as EdgeRole | EdgeRole[] | undefined);
+      } else if (op.type === "delete-edge" && op.payload.edgeId) {
+        deleteEdge(op.payload.edgeId as string);
       } else if (op.type === "update-node" && op.payload.nodeId) {
         const { nodeId, ...updates } = op.payload;
         updateNode(nodeId as string, updates as Partial<FlowNode>);
       }
     },
-    [user?.id, addNode, moveNode, deleteNode, addEdge, updateNode],
+    [user?.id, addNode, moveNode, deleteNode, addEdge, deleteEdge, updateNode],
   );
 
   const handleFullSync = useCallback(

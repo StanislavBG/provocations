@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.1";
+export const APP_VERSION = "0.26.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.26.2",
+    date: "2026-03-10",
+    changes: [
+      "Fix: WebSocket add-edge broadcast payload flattened so browser receives API-created edges in real-time",
+      "Fix: WebSocket update-node broadcast payload flattened so API-driven node updates apply correctly",
+      "Fix: Browser auto-save no longer overwrites API-created edges (root cause: WebSocket event was silently dropped)",
+      "Add: delete-edge WebSocket handler — API edge deletions now sync to open browsers",
+      "Add: edge role passthrough on WebSocket add-edge events",
+    ],
+  },
   {
     version: "0.26.1",
     date: "2026-03-10",
