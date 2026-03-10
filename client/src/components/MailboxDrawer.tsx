@@ -23,7 +23,9 @@ import {
   FolderOpen,
   CheckCheck,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import type { NotificationItem, SharedItemDisplay } from "@shared/schema";
 
 interface MailboxDrawerProps {
@@ -71,6 +73,7 @@ function timeAgo(dateStr: string): string {
 export function MailboxDrawer({ open, onOpenChange }: MailboxDrawerProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
 
   const { data: notifications = [], isLoading } = useQuery<NotificationItem[]>({
     queryKey: ["/api/mailbox"],
@@ -305,6 +308,40 @@ export function MailboxDrawer({ open, onOpenChange }: MailboxDrawerProps) {
                           )}
                           <span>{n.metadata.itemType === "folder" ? "Shared folder" : "Shared document"}</span>
                         </div>
+                      )}
+
+                      {/* Open shared document — visible once share is accepted (no longer pending) */}
+                      {isShareNotification && n.metadata?.itemId && !hasPendingShare && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-3 mt-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenChange(false);
+                            setLocation(`/canvas/${n.metadata!.itemId}`);
+                          }}
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Open {n.metadata.itemType === "folder" ? "Folder" : "Canvas"}
+                        </Button>
+                      )}
+
+                      {/* Also allow opening from share_accepted notifications */}
+                      {n.notificationType === "share_accepted" && n.metadata?.itemId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-3 mt-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenChange(false);
+                            setLocation(`/canvas/${n.metadata!.itemId}`);
+                          }}
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Open Canvas
+                        </Button>
                       )}
                     </div>
                   </div>
