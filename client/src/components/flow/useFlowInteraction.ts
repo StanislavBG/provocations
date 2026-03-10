@@ -118,6 +118,13 @@ export function useFlowInteraction({
   disableKeys,
 }: UseFlowInteractionProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
+  // Synchronous ref mirror — callbacks always read the latest drag state
+  // even when React defers the re-render after setDragState.
+  const dragStateRef = useRef<DragState | null>(null);
+  const setDrag = useCallback((next: DragState | null) => {
+    dragStateRef.current = next;
+    setDragState(next);
+  }, []);
   const canvasRef = useRef<HTMLDivElement>(null);
   const spaceHeld = useRef(false);
 
@@ -266,7 +273,7 @@ export function useFlowInteraction({
       // Middle mouse, Space+left, or plain left on background → pan
       if (e.button === 1 || (e.button === 0 && (spaceHeld.current || !e.shiftKey))) {
         e.preventDefault();
-        setDragState({
+        setDrag({
           type: "pan",
           startX: e.clientX - viewport.x,
           startY: e.clientY - viewport.y,
@@ -280,7 +287,7 @@ export function useFlowInteraction({
 
       // Shift + left click on background → start marquee selection
       const pos = screenToCanvas(e.clientX, e.clientY);
-      setDragState({
+      setDrag({
         type: "marquee",
         startCanvasX: pos.x,
         startCanvasY: pos.y,
@@ -288,70 +295,70 @@ export function useFlowInteraction({
         currentCanvasY: pos.y,
       });
     },
-    [viewport, screenToCanvas, onSelectNode],
+    [viewport, screenToCanvas, onSelectNode, setDrag],
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!dragState) return;
+      const ds = dragStateRef.current;
+      if (!ds) return;
 
-      if (dragState.type === "pan") {
+      if (ds.type === "pan") {
         onViewportChange(
-          e.clientX - dragState.startX,
-          e.clientY - dragState.startY,
+          e.clientX - ds.startX,
+          e.clientY - ds.startY,
           viewport.zoom,
         );
         return;
       }
 
-      if (dragState.type === "marquee") {
+      if (ds.type === "marquee") {
         const pos = screenToCanvas(e.clientX, e.clientY);
-        setDragState((prev) => {
-          if (!prev || prev.type !== "marquee") return prev;
-          return { ...prev, currentCanvasX: pos.x, currentCanvasY: pos.y };
-        });
+        const next = { ...ds, currentCanvasX: pos.x, currentCanvasY: pos.y };
+        dragStateRef.current = next;
+        setDragState(next);
         return;
       }
 
-      if (dragState.type === "move-node") {
+      if (ds.type === "move-node") {
         const pos = screenToCanvas(e.clientX, e.clientY);
-        const newX = pos.x - dragState.offsetX;
-        const newY = pos.y - dragState.offsetY;
-        onNodeMove(dragState.nodeId, newX, newY);
+        const newX = pos.x - ds.offsetX;
+        const newY = pos.y - ds.offsetY;
+        onNodeMove(ds.nodeId, newX, newY);
 
         // Move group children (zone drag)
-        if (dragState.groupIds && dragState.groupIds.length > 0 && onNodesMove) {
-          const dx = pos.x - (dragState.lastCanvasX ?? dragState.startX);
-          const dy = pos.y - (dragState.lastCanvasY ?? dragState.startY);
+        if (ds.groupIds && ds.groupIds.length > 0 && onNodesMove) {
+          const dx = pos.x - (ds.lastCanvasX ?? ds.startX);
+          const dy = pos.y - (ds.lastCanvasY ?? ds.startY);
           if (dx !== 0 || dy !== 0) {
-            onNodesMove(dragState.groupIds, dx, dy);
+            onNodesMove(ds.groupIds, dx, dy);
           }
         }
 
         // Update last position for next delta
-        setDragState((prev) => {
-          if (!prev || prev.type !== "move-node") return prev;
-          return { ...prev, lastCanvasX: pos.x, lastCanvasY: pos.y };
-        });
+        const next = { ...ds, lastCanvasX: pos.x, lastCanvasY: pos.y };
+        dragStateRef.current = next;
+        setDragState(next);
         return;
       }
 
-      if (dragState.type === "draw-edge") {
+      if (ds.type === "draw-edge") {
         const pos = screenToCanvas(e.clientX, e.clientY);
-        setDragState((prev) => {
-          if (!prev || prev.type !== "draw-edge") return prev;
-          return { ...prev, cursorX: pos.x, cursorY: pos.y };
-        });
+        const next = { ...ds, cursorX: pos.x, cursorY: pos.y };
+        dragStateRef.current = next;
+        setDragState(next);
       }
     },
-    [dragState, viewport.zoom, screenToCanvas, onViewportChange, onNodeMove, onNodesMove],
+    [viewport.zoom, screenToCanvas, onViewportChange, onNodeMove, onNodesMove],
   );
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
-      if (dragState?.type === "marquee" && onSelectNodes) {
+      const ds = dragStateRef.current;
+
+      if (ds?.type === "marquee" && onSelectNodes) {
         // Select all nodes whose bounds overlap the marquee rectangle
-        const { startCanvasX, startCanvasY, currentCanvasX, currentCanvasY } = dragState;
+        const { startCanvasX, startCanvasY, currentCanvasX, currentCanvasY } = ds;
         const left = Math.min(startCanvasX, currentCanvasX);
         const top = Math.min(startCanvasY, currentCanvasY);
         const right = Math.max(startCanvasX, currentCanvasX);
@@ -371,11 +378,11 @@ export function useFlowInteraction({
         }
       }
 
-      if (dragState?.type === "draw-edge" && onEdgeCreate) {
+      if (ds?.type === "draw-edge" && onEdgeCreate) {
         // Find target node under cursor
         const pos = screenToCanvas(e.clientX, e.clientY);
         const target = nodes.find((n) => {
-          if (n.id === dragState.sourceNodeId) return false;
+          if (n.id === ds.sourceNodeId) return false;
           return (
             pos.x >= n.x &&
             pos.x <= n.x + n.width &&
@@ -384,12 +391,12 @@ export function useFlowInteraction({
           );
         });
         if (target) {
-          onEdgeCreate(dragState.sourceNodeId, target.id);
+          onEdgeCreate(ds.sourceNodeId, target.id);
         }
       }
-      setDragState(null);
+      setDrag(null);
     },
-    [dragState, nodes, screenToCanvas, onEdgeCreate, onSelectNodes],
+    [nodes, screenToCanvas, onEdgeCreate, onSelectNodes, setDrag],
   );
 
   // Called from node components
@@ -436,7 +443,7 @@ export function useFlowInteraction({
       const allDragIds = groupIds ? [nodeId, ...groupIds] : [nodeId];
       onBringToFront?.(allDragIds);
 
-      setDragState({
+      setDrag({
         type: "move-node",
         startX: pos.x,
         startY: pos.y,
@@ -448,7 +455,7 @@ export function useFlowInteraction({
         lastCanvasY: pos.y,
       });
     },
-    [nodes, screenToCanvas, onSelectNode, onToggleSelectNode, selectedNodeIds, onBringToFront],
+    [nodes, screenToCanvas, onSelectNode, onToggleSelectNode, selectedNodeIds, onBringToFront, setDrag],
   );
 
   const handleNodeDoubleClick = useCallback(
@@ -464,7 +471,7 @@ export function useFlowInteraction({
     (e: React.MouseEvent, nodeId: string, portType: "input" | "output") => {
       e.stopPropagation();
       const pos = screenToCanvas(e.clientX, e.clientY);
-      setDragState({
+      setDrag({
         type: "draw-edge",
         sourceNodeId: nodeId,
         sourcePortType: portType,
@@ -472,7 +479,7 @@ export function useFlowInteraction({
         cursorY: pos.y,
       });
     },
-    [screenToCanvas],
+    [screenToCanvas, setDrag],
   );
 
   // Build preview edge for rendering
