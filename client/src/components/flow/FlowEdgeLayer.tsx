@@ -122,7 +122,22 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
     }
   }, [edges]);
 
-  const hasContent = edges.length > 0 || previewEdge;
+  // ── Auto-detect event-bus channel pairs (publish → listen on same channel) ──
+  const channelPairs = useMemo(() => {
+    const publishers = nodes.filter((n) => n.type === "event-bus" && n.eventBusMode === "publish" && n.eventBusChannel);
+    const listeners = nodes.filter((n) => n.type === "event-bus" && n.eventBusMode === "listen" && n.eventBusChannel);
+    const pairs: Array<{ pub: FlowNode; sub: FlowNode; channel: string }> = [];
+    for (const pub of publishers) {
+      for (const sub of listeners) {
+        if (pub.eventBusChannel === sub.eventBusChannel) {
+          pairs.push({ pub, sub, channel: pub.eventBusChannel! });
+        }
+      }
+    }
+    return pairs;
+  }, [nodes]);
+
+  const hasContent = edges.length > 0 || previewEdge || channelPairs.length > 0;
   if (!hasContent) return null;
 
   return (
@@ -156,6 +171,10 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         <marker id="flow-arrow-timer" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0,0 8,3 0,6" fill="hsl(var(--node-timer-event))" opacity={0.7} />
         </marker>
+        {/* Event-bus channel arrow — amber */}
+        <marker id="flow-arrow-eventbus" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0,0 8,3 0,6" fill="rgba(217,119,6,0.7)" />
+        </marker>
       </defs>
 
       {/* Edge animation keyframes */}
@@ -180,6 +199,20 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         }
         .conveyor-glow {
           animation: conveyor-glow 1.5s ease-in-out infinite;
+        }
+        @keyframes eventbus-flow {
+          0% { stroke-dashoffset: 20; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes eventbus-pulse {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.8; }
+        }
+        .eventbus-edge {
+          animation: eventbus-flow 1.0s linear infinite;
+        }
+        .eventbus-badge {
+          animation: eventbus-pulse 2s ease-in-out infinite;
         }
       `}</style>
 
@@ -366,6 +399,100 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
                 />
               </g>
             )}
+          </g>
+        );
+      })}
+
+      {/* ── Event-bus channel connections (virtual — not stored as edges) ── */}
+      {channelPairs.map(({ pub, sub, channel }) => {
+        // Compute endpoints: right side of publisher → left side of listener
+        const x1 = pub.x + pub.width;
+        const y1 = pub.y + pub.height / 2;
+        const x2 = sub.x;
+        const y2 = sub.y + sub.height / 2;
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+
+        // Two-segment path with gap in the middle for the "LOCAL" badge
+        const gapHalf = 40;
+        // Left segment: publisher → gap start
+        const lx2 = mx - gapHalf;
+        const ly2 = my;
+        const lmx = (x1 + lx2) / 2;
+        const pathLeft = `M ${x1},${y1} Q ${lmx},${y1} ${lx2},${ly2}`;
+
+        // Right segment: gap end → listener
+        const rx1 = mx + gapHalf;
+        const ry1 = my;
+        const rmx = (rx1 + x2) / 2;
+        const pathRight = `M ${rx1},${ry1} Q ${rmx},${y2} ${x2},${y2}`;
+
+        // Full path for traveling blobs (continuous)
+        const fullPath = `M ${x1},${y1} Q ${mx},${y1} ${x2},${y2}`;
+
+        const pairKey = `eventbus-${pub.id}-${sub.id}`;
+
+        return (
+          <g key={pairKey}>
+            {/* Left segment — publisher side */}
+            <path
+              d={pathLeft}
+              fill="none"
+              stroke="rgba(217,119,6,0.35)"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              className="eventbus-edge"
+              markerEnd="url(#flow-arrow-eventbus)"
+            />
+
+            {/* Right segment — listener side */}
+            <path
+              d={pathRight}
+              fill="none"
+              stroke="rgba(217,119,6,0.35)"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              className="eventbus-edge"
+              markerEnd="url(#flow-arrow-eventbus)"
+            />
+
+            {/* Traveling message blobs along full path */}
+            {[0, 1, 2].map((i) => (
+              <circle key={i} r={2.5 - i * 0.3} fill="rgba(217,119,6,0.7)" opacity={0.7 - i * 0.15}>
+                <animateMotion
+                  dur="2s"
+                  repeatCount="indefinite"
+                  path={fullPath}
+                  begin={`${(i * 2) / 3}s`}
+                />
+              </circle>
+            ))}
+
+            {/* Center badge — ⚡ LOCAL ⚡ */}
+            <g className="eventbus-badge">
+              <rect
+                x={mx - 32}
+                y={my - 10}
+                width={64}
+                height={20}
+                rx={10}
+                fill="rgba(217,119,6,0.15)"
+                stroke="rgba(217,119,6,0.4)"
+                strokeWidth={1}
+              />
+              <text
+                x={mx}
+                y={my + 4}
+                textAnchor="middle"
+                fontSize="8"
+                fontWeight="bold"
+                fontFamily="monospace"
+                fill="rgba(217,119,6,0.8)"
+                style={{ pointerEvents: "none" }}
+              >
+                ⚡ {channel.toUpperCase()} ⚡
+              </text>
+            </g>
           </g>
         );
       })}
