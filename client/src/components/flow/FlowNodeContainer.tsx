@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useState, useRef, useEffect } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Settings, AlertTriangle, Ban, X, RotateCcw } from "lucide-react";
+import { Pause, Trash2, Lock, Unlock, Play, Loader2, Settings, AlertTriangle, Ban, X, RotateCcw, Copy, Check } from "lucide-react";
 import { InputModeToggle } from "./InputModeToggle";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
@@ -219,32 +219,14 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
           accentColor={style.accent}
         />
 
-        {/* Lock + Delete buttons on hover */}
+        {/* Copy ID + Lock + Delete buttons on hover */}
         <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+          <CopyIdButton nodeId={node.id} />
           {onToggleLock && (
-            <button
-              className={cn(
-                "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                lockMode !== "none"
-                  ? "bg-yellow-500 text-white"
-                  : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
-              )}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onToggleLock!(node.id); }}
-              title={lockMode === "none" ? "Lock position" : "Unlock"}
-            >
-              {lockMode === "none" ? <Unlock className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
-            </button>
+            <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
           )}
           {lockMode === "none" && (
-            <button
-              className="w-5 h-5 rounded-full bg-destructive/80 flex items-center justify-center text-white hover:bg-destructive transition-colors shadow-sm"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-              title="Delete"
-            >
-              <Trash2 className="w-2.5 h-2.5" />
-            </button>
+            <DeleteButton nodeId={node.id} onDelete={onDelete} />
           )}
         </div>
 
@@ -489,8 +471,9 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
         </div>
       )}
 
-      {/* Lock + Delete buttons — above the node to avoid resize handle overlap */}
+      {/* Copy ID + Lock + Delete buttons — above the node to avoid resize handle overlap */}
       <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+        <CopyIdButton nodeId={node.id} />
         {onToggleLock && (
           <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
         )}
@@ -571,6 +554,25 @@ function DeleteButton({
       title={title}
     >
       <Trash2 className="w-2.5 h-2.5" />
+    </button>
+  );
+}
+
+function CopyIdButton({ nodeId }: { nodeId: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(nodeId);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title={copied ? "Copied!" : "Copy node ID"}
+    >
+      {copied ? <Check className="w-2.5 h-2.5 text-green-500" /> : <Copy className="w-2.5 h-2.5" />}
     </button>
   );
 }
@@ -669,8 +671,9 @@ function LabelNode({
         {node.label || "Label"}
       </div>
 
-      {/* Settings + Lock + Delete buttons on hover */}
+      {/* Copy ID + Settings + Lock + Delete buttons on hover */}
       <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+        <CopyIdButton nodeId={node.id} />
         {onOpenSettings && (
           <button
             className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"

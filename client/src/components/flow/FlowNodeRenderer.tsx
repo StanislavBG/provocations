@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor, RotateCcw, AlertTriangle, Ban, X } from "lucide-react";
+import { Pause, Trash2, Lock, Unlock, Play, Loader2, Monitor, RotateCcw, AlertTriangle, Ban, X, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowNodeType } from "./useFlowCanvas";
 import { getEffectiveLockMode } from "./useFlowCanvas";
@@ -111,6 +111,25 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
   const chainCancelled = node.chainStatus === "cancelled";
   const hasChainIssue = chainError || chainBlocked || chainCancelled;
 
+  // ── Shared inline Copy ID button ──
+  const [copiedId, setCopiedId] = useState(false);
+  const copyIdButton = (
+    <button
+      className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(node.id);
+        setCopiedId(true);
+        setTimeout(() => setCopiedId(false), 1500);
+      }}
+      title={copiedId ? "Copied!" : "Copy node ID"}
+      aria-label="Copy node ID"
+    >
+      {copiedId ? <Check className="w-2.5 h-2.5 text-green-500" /> : <Copy className="w-2.5 h-2.5" />}
+    </button>
+  );
+
   // ── Shared inline Lock button ──
   const lockButton = onToggleLock && (
     <button
@@ -202,6 +221,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
 
         {/* Action bar on hover — inline below the label */}
         <div className="flex items-center justify-end gap-0.5 px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {copyIdButton}
           {lockButton}
           {deleteButton}
         </div>
@@ -239,7 +259,8 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
         <Icon className={cn("w-3.5 h-3.5 shrink-0", style.iconClass)} />
         <span className="text-[11px] font-medium truncate flex-1">{node.label}</span>
 
-        {/* Lock button */}
+        {/* Copy ID + Lock buttons */}
+        {copyIdButton}
         {lockButton}
 
         {/* Play button for executable nodes */}
