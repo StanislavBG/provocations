@@ -11,12 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProvokeText } from "@/components/ProvokeText";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { LLM_PRESETS, getPreset } from "../llm-presets";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import { ExpandedViewLayout } from "./ExpandedViewLayout";
+import { FileText, Crosshair, Layers } from "lucide-react";
 
 interface LlmExpandedViewProps {
   node: FlowNode;
@@ -90,6 +92,19 @@ export function LlmExpandedView({ node, nodes, edges, onUpdateNode }: LlmExpande
 
   const status = node.llmStatus ?? "idle";
 
+  // ── LlmHoverButton context blocks ──
+  const objectiveText = node.llmObjective || preset.defaultObjective;
+  const previewBlocks = useMemo<ContextBlock[]>(() => [
+    { label: "Input Content", chars: inputContent.length, color: "text-amber-400" },
+    { label: "Objective", chars: objectiveText.length, color: "text-blue-400" },
+  ], [inputContent.length, objectiveText.length]);
+
+  const previewSummary = useMemo<SummaryItem[]>(() => [
+    { icon: <Layers className="w-3 h-3 text-amber-400" />, label: "Input Content", count: inputContent ? 1 : 0, detail: `${inputContent.length.toLocaleString()} chars` },
+    { icon: <Crosshair className="w-3 h-3 text-blue-400" />, label: "Preset", count: 1, detail: preset.label },
+    { icon: <FileText className="w-3 h-3 text-emerald-400" />, label: "Objective", count: objectiveText.length > 0 ? 1 : 0, detail: objectiveText.slice(0, 60) },
+  ], [inputContent, objectiveText, preset.label]);
+
   return (
     <ExpandedViewLayout
       defaultLeftSize={35}
@@ -137,24 +152,31 @@ export function LlmExpandedView({ node, nodes, edges, onUpdateNode }: LlmExpande
               </p>
             </div>
 
-            {/* Run button */}
-            <Button
-              size="sm"
-              className="w-full gap-1.5"
-              onClick={handleRun}
-              disabled={isRunning || !inputContent.trim()}
+            {/* Run button — wrapped with LlmHoverButton for ADR #2 pre-call transparency */}
+            <LlmHoverButton
+              previewTitle={`Run ${preset.label}`}
+              previewBlocks={previewBlocks}
+              previewSummary={previewSummary}
+              side="right"
             >
-              {isRunning ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : status === "done" ? (
-                <Check className="w-3.5 h-3.5" />
-              ) : status === "error" ? (
-                <AlertCircle className="w-3.5 h-3.5" />
-              ) : (
-                <Play className="w-3.5 h-3.5" />
-              )}
-              {isRunning ? "Running..." : status === "done" ? "Run Again" : "Run"}
-            </Button>
+              <Button
+                size="sm"
+                className="w-full gap-1.5"
+                onClick={handleRun}
+                disabled={isRunning || !inputContent.trim()}
+              >
+                {isRunning ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : status === "done" ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : status === "error" ? (
+                  <AlertCircle className="w-3.5 h-3.5" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+                {isRunning ? "Running..." : status === "done" ? "Run Again" : "Run"}
+              </Button>
+            </LlmHoverButton>
           </div>
         </ScrollArea>
         </div>

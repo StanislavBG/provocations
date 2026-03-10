@@ -11,7 +11,7 @@ import { X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import type { ChainProgress } from "./useChainExecutor";
-import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { useFtuxConfig } from "@/lib/ftux-shell-context";
 
 interface ChainProgressBarProps {
   progress: ChainProgress;
@@ -19,7 +19,7 @@ interface ChainProgressBarProps {
 }
 
 export function ChainProgressBar({ progress, onCancel }: ChainProgressBarProps) {
-  const { statusBarPosition } = useFtuxShell();
+  const { statusBarPosition } = useFtuxConfig();
 
   if (!progress.isRunning) return null;
 

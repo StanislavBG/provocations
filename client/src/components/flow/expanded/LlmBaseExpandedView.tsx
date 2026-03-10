@@ -13,7 +13,7 @@ import {
   Play, Loader2, Square, Copy, BrainCircuit, Search, Shield,
   Thermometer, Zap, ChevronDown, ChevronRight, FileText,
   PanelLeftClose, PanelLeft, Settings2, Wrench, Swords,
-  PenLine, Type, Send, X, Crosshair,
+  PenLine, Type, Send, X, Crosshair, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { ProvoThread } from "@/components/notebook/ProvoThread";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { edgeHasRole } from "../useFlowCanvas";
 import { PromptEditor, expandContextRefs, getReferencedLabels } from "../PromptEditor";
@@ -511,6 +512,23 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   }, [streamingOutput, isRunning]);
 
   const modelLabel = models.find((m) => m.id === model)?.label || model;
+
+  // ── LlmHoverButton context preview data ──
+  const contextChars = contextInputs.reduce((s, c) => s + c.content.length, 0);
+  const userPromptChars = userPromptInputs.reduce((s, u) => s + u.content.length, 0);
+  const runPreviewBlocks = useMemo<ContextBlock[]>(() => [
+    { label: "System Prompt", chars: systemPrompt.length, color: "text-blue-400" },
+    { label: "Context Inputs", chars: contextChars, color: "text-amber-400" },
+    { label: "User Prompt (typed)", chars: userPrompt.length, color: "text-emerald-400" },
+    { label: "User Prompt (wired)", chars: userPromptChars, color: "text-purple-400" },
+  ], [systemPrompt.length, contextChars, userPrompt.length, userPromptChars]);
+
+  const runPreviewSummary = useMemo<SummaryItem[]>(() => [
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "System Prompt", count: systemPrompt.trim() ? 1 : 0, detail: `${systemPrompt.length.toLocaleString()} chars` },
+    { icon: <Layers className="w-3 h-3 text-amber-400" />, label: "Context Inputs", count: contextInputs.length, detail: `${contextChars.toLocaleString()} chars` },
+    { icon: <Send className="w-3 h-3 text-emerald-400" />, label: "User Prompt", count: userPrompt.trim() ? 1 : 0, detail: `${userPrompt.length.toLocaleString()} chars` },
+    { icon: <Settings2 className="w-3 h-3 text-muted-foreground" />, label: "Model", count: 1, detail: `${modelLabel} · temp ${temperature}` },
+  ], [systemPrompt, contextInputs.length, contextChars, userPrompt, modelLabel, temperature]);
 
   return (
   <>
@@ -1336,6 +1354,8 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
       model={modelLabel}
       streaming={streaming}
       maxTokens={maxTokens}
+      previewBlocks={runPreviewBlocks}
+      previewSummary={runPreviewSummary}
     />
   </>
   );
@@ -1351,6 +1371,8 @@ function HeaderRunButton({
   model,
   streaming,
   maxTokens,
+  previewBlocks,
+  previewSummary,
 }: {
   isRunning: boolean;
   onRun: () => void;
@@ -1359,6 +1381,8 @@ function HeaderRunButton({
   model: string;
   streaming: boolean;
   maxTokens: number;
+  previewBlocks: ContextBlock[];
+  previewSummary: SummaryItem[];
 }) {
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
@@ -1382,16 +1406,24 @@ function HeaderRunButton({
           Stop
         </Button>
       ) : (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onRun}
-          disabled={disabled}
-          className="h-7 gap-1.5 text-white bg-white/20 hover:bg-white/30 hover:text-white text-xs disabled:opacity-40"
+        <LlmHoverButton
+          previewTitle="Run LLM Base"
+          previewBlocks={previewBlocks}
+          previewSummary={previewSummary}
+          side="bottom"
+          align="end"
         >
-          <Play className="w-3 h-3" />
-          Run
-        </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onRun}
+            disabled={disabled}
+            className="h-7 gap-1.5 text-white bg-white/20 hover:bg-white/30 hover:text-white text-xs disabled:opacity-40"
+          >
+            <Play className="w-3 h-3" />
+            Run
+          </Button>
+        </LlmHoverButton>
       )}
       <span className="text-[10px] text-white/60 hidden sm:inline">
         {model} · {streaming ? "stream" : "batch"} · {maxTokens.toLocaleString()}

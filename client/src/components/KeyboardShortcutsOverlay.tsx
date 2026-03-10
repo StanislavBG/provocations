@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { useFtuxConfig } from "@/lib/ftux-shell-context";
 import {
   KEYBIND_ACTIONS,
   getEffectiveKeys,
@@ -34,7 +34,7 @@ function groupActions(actions: KeyBindAction[]): Record<string, KeyBindAction[]>
 
 export function KeyboardShortcutsOverlay() {
   const [open, setOpen] = useState(false);
-  const { keyBinds } = useFtuxShell();
+  const { keyBinds } = useFtuxConfig();
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Don't trigger in inputs/textareas/contenteditable

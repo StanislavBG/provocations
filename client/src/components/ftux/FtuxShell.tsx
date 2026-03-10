@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { useFtuxConfig } from "@/lib/ftux-shell-context";
 
 interface FtuxShellProps {
   children: ReactNode;
@@ -11,7 +11,7 @@ interface FtuxShellProps {
  * Reads positions from shell context to arrange the layout dynamically.
  */
 export function FtuxShell({ children }: FtuxShellProps) {
-  const { statusBarPosition } = useFtuxShell();
+  const { statusBarPosition } = useFtuxConfig();
 
   return (
     <div

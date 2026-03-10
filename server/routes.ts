@@ -662,7 +662,9 @@ export async function registerRoutes(
     let verboseEnabled = false;
     try {
       verboseEnabled = await isVerboseEnabled(userId);
-    } catch { /* default to false */ }
+    } catch (err) {
+      console.error("[api-middleware] verbose check error:", err instanceof Error ? err.message : err);
+    }
 
     // Infer task type and app type from the URL and body
     const endpoint = `/api${req.path}`;
@@ -1825,7 +1827,9 @@ Output only valid JSON, no markdown.`;
       if (f.nameCiphertext && f.nameSalt && f.nameIv) {
         try {
           name = decrypt({ ciphertext: f.nameCiphertext, salt: f.nameSalt, iv: f.nameIv }, encryptionKey);
-        } catch { /* fall through to legacy name */ }
+        } catch (err) {
+          console.error("[find-or-create-folder] decrypt error:", err instanceof Error ? err.message : err);
+        }
       }
       if (name === folderName) {
         return f.id;
@@ -1892,7 +1896,9 @@ Output only valid JSON, no markdown.`;
           if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
             try {
               title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key);
-            } catch { /* fall through */ }
+            } catch (err) {
+              console.error("[seed-app-guides] title decrypt error:", err instanceof Error ? err.message : err);
+            }
           }
           if (title === docTitle) {
             existingDocId = doc.id;
@@ -2040,7 +2046,9 @@ Output only valid JSON, no markdown.`;
             if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
               try {
                 title = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key);
-              } catch { /* fall through */ }
+              } catch (err) {
+                console.error("[seed-personas] title decrypt error:", err instanceof Error ? err.message : err);
+              }
             }
             if (title === docTitle) {
               existingDocId = doc.id;
@@ -2280,6 +2288,8 @@ Output only valid JSON, no markdown.`;
   // TEXT TO VISUAL — summarize text into an image prompt, then generate
   // ═══════════════════════════════════════════════════════════════════════
   app.post("/api/text-to-visual", async (req, res) => {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
     try {
       const { text } = req.body;
       if (!text || typeof text !== "string" || !text.trim()) {
@@ -2883,6 +2893,8 @@ Output only the evolved markdown document. No explanations.`;
 
   /** Accept base64-encoded audio, transcribe via gpt-4o-mini-transcribe */
   app.post("/api/transcribe", async (req, res) => {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
     try {
       const { audio, mimeType } = req.body;
       if (!audio || typeof audio !== "string") {
@@ -2926,6 +2938,8 @@ Output only the evolved markdown document. No explanations.`;
    * so the client can render progressive results in real time.
    */
   app.post("/api/transcribe/stream", async (req, res) => {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
     try {
       const { audio, mimeType } = req.body;
       if (!audio || typeof audio !== "string") {
@@ -2989,6 +3003,8 @@ Output only the evolved markdown document. No explanations.`;
 
   // Generate a fun sample objective for an app template
   app.post("/api/generate-sample-objective", async (req, res) => {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
     try {
       const { appTitle } = req.body;
       if (!appTitle || typeof appTitle !== "string") {
@@ -3819,7 +3835,9 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
           topic = parsedJson.topic || "";
           reasoning = parsedJson.reasoning || "";
         }
-      } catch {}
+      } catch (err) {
+        console.error("[interview-stream] JSON parse error:", err instanceof Error ? err.message : err);
+      }
 
       // Fallback topic using active personas
       if (activePersonaLabels.length > 0 && (!topic || topic === "General")) {
@@ -3836,7 +3854,9 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no backticks):
         try {
           const el = await import("./elevenlabs.js");
           el.prewarmConnection(voiceId);
-        } catch {}
+        } catch (err) {
+          console.error("[interview-stream] elevenlabs prewarm error:", err instanceof Error ? err.message : err);
+        }
       }
 
       res.end();
@@ -3970,8 +3990,12 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
       res.on("close", () => {
         aborted = true;
         if (ttsSession) {
-          try { ttsSession.closeContext(contextId); } catch {}
-          try { ttsSession.close(); } catch {}
+          try { ttsSession.closeContext(contextId); } catch (err) {
+            console.error("[brainstorm-stream] tts closeContext error:", err instanceof Error ? err.message : err);
+          }
+          try { ttsSession.close(); } catch (err) {
+            console.error("[brainstorm-stream] tts close error:", err instanceof Error ? err.message : err);
+          }
         }
       });
 
@@ -4047,7 +4071,9 @@ Respond naturally — no JSON, no formatting, no markdown. Just speak like a hum
       // Clean up TTS session after audio finishes (give it time to drain)
       if (ttsSession && !aborted) {
         setTimeout(() => {
-          try { ttsSession.close(); } catch {}
+          try { ttsSession.close(); } catch (err) {
+            console.error("[brainstorm-stream] tts close error:", err instanceof Error ? err.message : err);
+          }
         }, 10000);
       }
 
@@ -4335,6 +4361,8 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&
   // The user asks a question and the system identifies the 3 most relevant
   // personas, then composes a multi-perspective response.
   app.post("/api/discussion/ask", async (req, res) => {
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
     try {
       const parsed = askQuestionRequestSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -7427,11 +7455,15 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
         let contextRef: string | undefined;
         try {
           content = decrypt({ ciphertext: m.ciphertext, salt: m.salt, iv: m.iv }, key);
-        } catch { /* decryption failed */ }
+        } catch (err) {
+          console.error("[messages] content decrypt error:", err instanceof Error ? err.message : err);
+        }
         if (m.refCiphertext && m.refSalt && m.refIv) {
           try {
             contextRef = decrypt({ ciphertext: m.refCiphertext, salt: m.refSalt, iv: m.refIv }, key);
-          } catch { /* ignore */ }
+          } catch (err) {
+            console.error("[messages] contextRef decrypt error:", err instanceof Error ? err.message : err);
+          }
         }
         return {
           id: m.id,
@@ -7546,7 +7578,9 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
           avatar: u.imageUrl ?? null,
         });
       }
-    } catch { /* Clerk unavailable — return empty map */ }
+    } catch (err) {
+      console.error("[batchResolveClerkUsers] error:", err instanceof Error ? err.message : err);
+    }
     return map;
   }
 
@@ -7921,7 +7955,9 @@ Generate ${existingQuestions.length} tailored questions specific to this objecti
         const sender = userMap.get(row.fromUserId);
         let metadata: Record<string, any> | undefined;
         if (row.metadata) {
-          try { metadata = JSON.parse(row.metadata); } catch { /* ignore */ }
+          try { metadata = JSON.parse(row.metadata); } catch (err) {
+            console.error("[notifications] metadata parse error:", err instanceof Error ? err.message : err);
+          }
         }
         return {
           id: row.id,
@@ -8614,7 +8650,9 @@ Return ONLY valid JSON, no markdown fences.`;
           // Decrypt title
           let label = d.title || "Untitled Blueprint";
           if (d.titleCiphertext && d.titleSalt && d.titleIv) {
-            try { label = decrypt({ ciphertext: d.titleCiphertext, salt: d.titleSalt, iv: d.titleIv }, key); } catch { /* fallback */ }
+            try { label = decrypt({ ciphertext: d.titleCiphertext, salt: d.titleSalt, iv: d.titleIv }, key); } catch (err) {
+              console.error("[list-blueprints] title decrypt error:", err instanceof Error ? err.message : err);
+            }
           }
           // Fetch full doc to decrypt content for metadata
           let meta: any = {};
@@ -8625,7 +8663,9 @@ Return ONLY valid JSON, no markdown fences.`;
               const parsed = JSON.parse(raw);
               meta = parsed.meta || {};
             }
-          } catch { /* ignore */ }
+          } catch (err) {
+            console.error("[list-blueprints] content decrypt error:", err instanceof Error ? err.message : err);
+          }
           userBlueprints.push({
             id: `user:${d.id}`,
             label,
@@ -8652,7 +8692,9 @@ Return ONLY valid JSON, no markdown fences.`;
               if (doc && (doc as any).docType === "blueprint") {
                 let label = "Shared Blueprint";
                 if ((doc as any).titleCiphertext && (doc as any).titleSalt && (doc as any).titleIv) {
-                  try { label = decrypt({ ciphertext: (doc as any).titleCiphertext, salt: (doc as any).titleSalt, iv: (doc as any).titleIv }, key); } catch { /* fallback */ }
+                  try { label = decrypt({ ciphertext: (doc as any).titleCiphertext, salt: (doc as any).titleSalt, iv: (doc as any).titleIv }, key); } catch (err) {
+                    console.error("[list-blueprints] shared title decrypt error:", err instanceof Error ? err.message : err);
+                  }
                 }
                 let meta: any = {};
                 if ((doc as any).ciphertext && (doc as any).salt && (doc as any).iv) {
@@ -8660,7 +8702,9 @@ Return ONLY valid JSON, no markdown fences.`;
                     const content = decrypt({ ciphertext: (doc as any).ciphertext, salt: (doc as any).salt, iv: (doc as any).iv }, key);
                     const parsed = JSON.parse(content);
                     meta = parsed.meta || {};
-                  } catch { /* ignore */ }
+                  } catch (err) {
+                    console.error("[list-blueprints] shared content decrypt error:", err instanceof Error ? err.message : err);
+                  }
                 }
                 sharedBlueprints.push({
                   id: `shared:${doc.id}`,
@@ -8675,9 +8719,13 @@ Return ONLY valid JSON, no markdown fences.`;
                   ownerId: si.ownerId,
                 });
               }
-            } catch { /* skip inaccessible shared items */ }
+            } catch (err) {
+              console.error("[list-blueprints] shared item access error:", err instanceof Error ? err.message : err);
+            }
           }
-        } catch { /* shared items not available */ }
+        } catch (err) {
+          console.error("[list-blueprints] shared items error:", err instanceof Error ? err.message : err);
+        }
       }
 
       res.json([...builtIn, ...userBlueprints, ...sharedBlueprints]);
@@ -8711,7 +8759,9 @@ Return ONLY valid JSON, no markdown fences.`;
         // Decrypt title
         let label = "Untitled Blueprint";
         if (doc.titleCiphertext && doc.titleSalt && doc.titleIv) {
-          try { label = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch { /* fallback */ }
+          try { label = decrypt({ ciphertext: doc.titleCiphertext, salt: doc.titleSalt, iv: doc.titleIv }, key); } catch (err) {
+            console.error("[get-blueprint] title decrypt error:", err instanceof Error ? err.message : err);
+          }
         }
         // Decrypt content
         let blueprintData: any = { nodes: [], edges: [] };
@@ -8719,7 +8769,9 @@ Return ONLY valid JSON, no markdown fences.`;
           try {
             const content = decrypt({ ciphertext: doc.ciphertext, salt: doc.salt, iv: doc.iv }, key);
             blueprintData = JSON.parse(content);
-          } catch { /* fallback */ }
+          } catch (err) {
+            console.error("[get-blueprint] content decrypt error:", err instanceof Error ? err.message : err);
+          }
         }
         return res.json({
           id: bpId,

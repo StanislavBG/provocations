@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.25.6";
+export const APP_VERSION = "0.26.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,20 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.26.0",
+    date: "2026-03-10",
+    changes: [
+      "Security: auth checks added to 5 unprotected endpoints (text-to-visual, discussion, transcribe, generate-sample-objective)",
+      "Accessibility: WCAG AA contrast fix for amber/yellow accent headers, aria-labels on all icon buttons",
+      "Performance: lazy-load recharts + html2canvas (~10MB bundle reduction), chain executor O(1) adjacency maps",
+      "Performance: FtuxShellProvider split into 3 focused contexts (config/tool/actions) reducing re-renders",
+      "Robustness: 22 silent catch blocks replaced with error logging across routes.ts + invoke.ts",
+      "LlmHoverButton added to 7 LLM-triggering buttons in flow canvas expanded views (ADR #2 compliance)",
+      "Integration tests: 19 new tests for auth protection + document/folder CRUD",
+      "Agency server: scheduler race condition fix, 10min process timeout, SSE heartbeat, ticker cap, DB indexes",
+    ],
+  },
   {
     version: "0.25.6",
     date: "2026-03-09",

@@ -11,12 +11,12 @@ import { X, Save, FolderOpen, ChevronRight, Loader2, Check } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { useFtuxConfig } from "@/lib/ftux-shell-context";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
-import { FLOW_NODE_REGISTRY, ACCENT_BG } from "./FlowNodeRegistry";
+import { FLOW_NODE_REGISTRY, ACCENT_BG, ACCENT_TEXT } from "./FlowNodeRegistry";
 import { FlowChainNavBar } from "./FlowChainNavBar";
 
 // ── Types ──
@@ -67,7 +67,8 @@ export function FlowExpandedOverlay({
   const style = def.style;
   const Icon = def.icon;
   const accentBg = ACCENT_BG[style.accent] || "bg-primary";
-  const { statusBarPosition } = useFtuxShell();
+  const accentText = ACCENT_TEXT[style.accent] || "text-white";
+  const { statusBarPosition } = useFtuxConfig();
   const sbHeight = "var(--ftux-status-bar-height, 44px)";
 
   const { toast } = useToast();
@@ -253,8 +254,9 @@ export function FlowExpandedOverlay({
         {/* Accent header bar */}
         <div
           className={cn(
-            "flex items-center gap-2 px-4 py-2 text-white shrink-0 transition-opacity",
+            "flex items-center gap-2 px-4 py-2 shrink-0 transition-opacity",
             accentBg,
+            accentText,
             contentVisible ? "opacity-100" : "opacity-0",
           )}
         >
@@ -262,7 +264,7 @@ export function FlowExpandedOverlay({
           {renamingLabel ? (
             <input
               ref={renameLabelRef}
-              className="text-sm font-semibold flex-1 bg-white/20 border border-white/40 rounded px-1.5 py-0 h-6 text-white outline-none placeholder:text-white/50"
+              className={cn("text-sm font-semibold flex-1 bg-white/20 border border-white/40 rounded px-1.5 py-0 h-6 outline-none placeholder:text-white/50", accentText)}
               value={editLabel}
               onChange={(e) => setEditLabel(e.target.value)}
               autoFocus
@@ -307,7 +309,7 @@ export function FlowExpandedOverlay({
             {style.badge}
           </span>
           <button
-            className="text-[10px] font-mono opacity-50 hover:opacity-90 transition-opacity cursor-pointer bg-transparent border-none text-white px-1 py-0.5 rounded hover:bg-white/10"
+            className={cn("text-[10px] font-mono opacity-50 hover:opacity-90 transition-opacity cursor-pointer bg-transparent border-none px-1 py-0.5 rounded hover:bg-white/10", accentText)}
             onClick={() => {
               navigator.clipboard.writeText(nodeId);
               toast({ title: "Node ID copied", description: nodeId });
@@ -319,17 +321,19 @@ export function FlowExpandedOverlay({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20"
+            className="h-7 w-7 opacity-80 hover:opacity-100 hover:bg-white/20"
             onClick={handleOpenSaveDialog}
             title="Save to Context Store"
+            aria-label="Save to Context Store"
           >
             <Save className="w-4 h-4" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20"
+            className="h-7 w-7 opacity-80 hover:opacity-100 hover:bg-white/20"
             onClick={handleClose}
+            aria-label="Close overlay"
           >
             <X className="w-4 h-4" />
           </Button>

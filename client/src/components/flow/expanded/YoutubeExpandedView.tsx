@@ -10,7 +10,7 @@
  * thumbnail preview, search within transcript, embedded player.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   Youtube, Loader2, Search, List, Link2, Play, ChevronDown, ChevronRight,
   Clock, Eye, User, Calendar, CheckSquare, Square, Hash, Scissors,
@@ -19,10 +19,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProvokeText } from "@/components/ProvokeText";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { useToast } from "@/hooks/use-toast";
 import type { FlowNode } from "../useFlowCanvas";
 import { lifecycleLogStore } from "@/lib/lifecycleLog";
 import { ExpandedViewLayout } from "./ExpandedViewLayout";
+import { FileText } from "lucide-react";
 
 type InputMode = "url" | "search" | "playlist";
 
@@ -338,6 +340,15 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
     : transcript;
 
   const videoId = url ? extractVideoId(url) : null;
+
+  // ── LlmHoverButton preview data for Detect Chapters ──
+  const chapterPreviewBlocks = useMemo<ContextBlock[]>(() => [
+    { label: "Transcript (first 8K)", chars: Math.min(transcript.length, 8000), color: "text-red-400" },
+  ], [transcript.length]);
+
+  const chapterPreviewSummary = useMemo<SummaryItem[]>(() => [
+    { icon: <FileText className="w-3 h-3 text-red-400" />, label: "Transcript", count: transcript ? 1 : 0, detail: `${transcript.length.toLocaleString()} chars (8K sent)` },
+  ], [transcript]);
 
   return (
     <ExpandedViewLayout
@@ -718,17 +729,24 @@ export function YoutubeExpandedView({ node, onUpdateNode }: YoutubeExpandedViewP
               </div>
             )}
 
-            {/* Chapter detection button */}
+            {/* Chapter detection button — wrapped with LlmHoverButton for ADR #2 */}
             {transcript && chapters.length === 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full gap-1.5 text-xs"
-                onClick={() => detectChapters(transcript)}
+              <LlmHoverButton
+                previewTitle="Detect Chapters"
+                previewBlocks={chapterPreviewBlocks}
+                previewSummary={chapterPreviewSummary}
+                side="right"
               >
-                <Scissors className="w-3.5 h-3.5" />
-                Detect Chapters
-              </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full gap-1.5 text-xs"
+                  onClick={() => detectChapters(transcript)}
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  Detect Chapters
+                </Button>
+              </LlmHoverButton>
             )}
 
             {/* Error */}
