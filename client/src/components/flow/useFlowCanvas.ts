@@ -28,7 +28,8 @@ export type FlowNodeType =
   | "upload"
   | "approval"
   | "llm-base"
-  | "webpage";
+  | "webpage"
+  | "event-bus";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -335,6 +336,14 @@ export interface FlowNode {
   chainStatus?: "idle" | "running" | "completed" | "error" | "blocked" | "cancelled";
   /** Chain execution: error message when chainStatus is 'error' */
   chainErrorMessage?: string;
+  /** Event Bus: mode — "publish" sends events for agents; "listen" receives results */
+  eventBusMode?: "publish" | "listen";
+  /** Event Bus: channel name (default: "default") */
+  eventBusChannel?: string;
+  /** Event Bus: execution status */
+  eventBusStatus?: "idle" | "publishing" | "listening" | "done" | "error";
+  /** Event Bus: log of recent events */
+  eventBusLog?: Array<{ id: string; type: string; timestamp: string; summary: string }>;
 }
 
 /** Named edge roles — how source data is used by the target node */

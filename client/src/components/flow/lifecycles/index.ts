@@ -21,6 +21,7 @@ import { createNotificationHandlers } from "./notification";
 import { createApprovalHandlers } from "./approval";
 import { createLlmBaseHandlers } from "./llm-base";
 import { createWebpageHandlers } from "./webpage";
+import { createEventBusHandlers } from "./event-bus";
 
 /** No-op handlers for passive nodes (document, context-doc, store, audio, label, zone) */
 function createPassiveHandlers(): NodeLifecycleHandlers {
@@ -45,6 +46,7 @@ const LIFECYCLE_FACTORIES: Record<LifecyclePreset, () => NodeLifecycleHandlers> 
   approval: createApprovalHandlers,
   "llm-base": createLlmBaseHandlers,
   webpage: createWebpageHandlers,
+  "event-bus": createEventBusHandlers,
 };
 
 /** Get lifecycle handlers for a given lifecycle preset */
@@ -67,3 +69,4 @@ export { createNotificationHandlers } from "./notification";
 export { createApprovalHandlers } from "./approval";
 export { createLlmBaseHandlers } from "./llm-base";
 export { createWebpageHandlers } from "./webpage";
+export { createEventBusHandlers } from "./event-bus";

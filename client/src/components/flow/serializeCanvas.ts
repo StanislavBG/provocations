@@ -128,6 +128,10 @@ export function serializeNodeForSave(node: FlowNode): Partial<FlowNode> {
       webpageStylePreference: node.webpageStylePreference,
       webpageInstructions: node.webpageInstructions,
     }),
+    "event-bus": () => ({
+      eventBusMode: node.eventBusMode,
+      eventBusChannel: node.eventBusChannel,
+    }),
     store: () => ({
       storeFolderId: node.storeFolderId,
       storeFolderName: node.storeFolderName,

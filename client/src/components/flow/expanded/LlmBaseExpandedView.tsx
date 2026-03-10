@@ -197,6 +197,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
           document: systemPrompt,
           instruction,
           appType: "write-a-prompt",
+          outputFormat: "plain-text",
           ...(objective.trim() ? { objective: objective.trim() } : {}),
           ...(connectedContext ? { sessionNotes: connectedContext } : {}),
         });
@@ -228,6 +229,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
           document: systemPrompt,
           instruction: `WRITER FEEDBACK:\nThe author has provided the following feedback to be remixed into the system prompt:\n\n${feedback}\n\nInterpret the author's intent and intelligently weave this feedback into the system prompt. This is not a literal transcription — it is editorial direction from the author.`,
           appType: "write-a-prompt",
+          outputFormat: "plain-text",
           ...(objective.trim() ? { objective: objective.trim() } : {}),
           ...(connectedContext ? { sessionNotes: connectedContext } : {}),
         });
@@ -268,6 +270,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
           selectedText,
           instruction: `WRITER FEEDBACK ON SELECTION:\nThe author has highlighted the following text and provided feedback to remix it:\n\nSELECTED TEXT: "${selectedText}"\n\nAUTHOR FEEDBACK: ${feedback}\n\nApply the author's feedback to improve the selected area while keeping the rest of the system prompt intact.`,
           appType: "write-a-prompt",
+          outputFormat: "plain-text",
           ...(objective.trim() ? { objective: objective.trim() } : {}),
           ...(connectedContext ? { sessionNotes: connectedContext } : {}),
         });
@@ -334,6 +337,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
           document: systemPrompt,
           instruction,
           appType: "write-a-prompt",
+          outputFormat: "plain-text",
           ...(objective.trim() ? { objective: objective.trim() } : {}),
           ...(connectedContext ? { sessionNotes: connectedContext } : {}),
         });
@@ -1231,20 +1235,19 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
               />
             </div>
 
-            {/* Connected user prompts — collapsible */}
-            {userPromptInputs.length > 0 && (
-              <ConnectedInputBlocks inputs={userPromptInputs} sectionLabel="User Prompt Inputs" accent="emerald" />
-            )}
-
-            {/* User prompt — PromptEditor with @ context refs */}
+            {/* User Message */}
             <div className="relative">
+              <div className="flex items-center gap-2 mb-2">
+                <Send className="w-3.5 h-3.5 text-emerald-500/60" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500/60">
+                  User Message
+                </span>
+              </div>
               <PromptEditor
                 value={userPrompt}
                 onChange={(v) => setUserPrompt(v)}
                 contextBlocks={[...contextInputs, ...userPromptInputs]}
-                placeholder={userPromptInputs.length > 0
-                  ? "Additional instructions... Use @ to reference context blocks"
-                  : "What would you like to explore? Use @ to reference context blocks"}
+                placeholder="What would you like to explore? Use @ to reference context blocks"
                 readOnly={isRunning}
               />
             </div>

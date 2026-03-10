@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.24.9";
+export const APP_VERSION = "0.25.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,27 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.25.1",
+    date: "2026-03-09",
+    changes: [
+      "LLM node tools now output plain text — no more markdown syntax appearing as raw text in system prompts",
+      "Server /api/write gains outputFormat option: 'plain-text' for system prompts, 'markdown' (default) for documents",
+      "Clean up LLM expanded view layout — Objective, System Prompt, User Message with clear section labels",
+    ],
+  },
+  {
+    version: "0.25.0",
+    date: "2026-03-09",
+    changes: [
+      "Event Bus node — bidirectional bridge between canvas and local AI agents (Claude Code / Bilko)",
+      "Publish mode: sends upstream content as task events via SSE for agents to pick up",
+      "Listen mode: receives agent results as document nodes created on the canvas",
+      "Server-side event queue with SSE streaming, polling fallback, and event acknowledgement",
+      "MCP tools: poll_events, post_result, ack_events for Claude Code integration",
+      "Agent auth via existing API key + user ID binding for secure canvas access",
+    ],
+  },
   {
     version: "0.24.9",
     date: "2026-03-09",
