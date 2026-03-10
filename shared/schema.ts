@@ -325,7 +325,7 @@ export type EditHistoryEntry = z.infer<typeof editHistoryEntrySchema>;
 
 export const writeRequestSchema = z.object({
   // Foundation
-  document: z.string().min(1, "Document is required").max(500_000),
+  document: z.string().max(500_000),
   objective: z.string().max(2_000).optional(),
 
   // Application type — tells the LLM what kind of document this is (e.g. "query-editor")

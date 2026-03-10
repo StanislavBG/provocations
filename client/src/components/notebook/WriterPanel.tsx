@@ -230,7 +230,7 @@ export function WriterPanel({
   }, [selectedConfigs]);
 
   const handleEvolve = useCallback(() => {
-    if (!documentText.trim()) return;
+    if (!documentText.trim() && !objective.trim()) return;
     const configs = buildConfigs();
     if (configs.length === 0) {
       onEvolve([{ category: "general", option: "general", categoryLabel: "General", optionLabel: "Improve" }]);
@@ -238,7 +238,7 @@ export function WriterPanel({
       onEvolve(configs);
     }
     clearSelections();
-  }, [documentText, buildConfigs, onEvolve, clearSelections]);
+  }, [documentText, objective, buildConfigs, onEvolve, clearSelections]);
 
   // Compute current labels for summary display
   const currentLabels = useMemo(() => {
@@ -404,7 +404,7 @@ export function WriterPanel({
           <HoverCardTrigger asChild>
             <Button
               onClick={handleEvolve}
-              disabled={isEvolving || !documentText.trim()}
+              disabled={isEvolving || (!documentText.trim() && !objective.trim())}
               className={`w-full gap-1.5 text-xs ${
                 totalSelected > 0
                   ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"

@@ -1725,14 +1725,17 @@ function FlowWorkspaceInner() {
       const { immediateContext, fullChainContext } =
         gatherStructuredChainContext(nodeId, stateRef.current.nodes, stateRef.current.edges);
 
-      if (inputNodes.length === 0) {
+      // ── Get lifecycle handlers from registry ──
+      const handlers = getLifecycleHandlers(preset);
+
+      // If the node type has its own onPreProcess validator, let it decide
+      // whether it can run without input edges (e.g. LLM Base with manual prompts).
+      // Only block for node types that rely purely on the generic pipeline.
+      if (inputNodes.length === 0 && !handlers.onPreProcess) {
         lcLog(node, "pre-process", "error", "No inputs connected", { error: "No upstream nodes" });
         toast({ title: "No inputs connected", description: "Connect document nodes first" });
         return;
       }
-
-      // ── Get lifecycle handlers from registry ──
-      const handlers = getLifecycleHandlers(preset);
       const abortController = new AbortController();
 
       const ctx: NodeProcessContext = {

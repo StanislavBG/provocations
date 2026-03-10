@@ -13,10 +13,11 @@ import { expandContextRefs, getReferencedLabels } from "../PromptEditor";
 export function createLlmBaseHandlers(): NodeLifecycleHandlers {
   return {
     onPreProcess: async (ctx: NodeProcessContext) => {
-      // Need either a user prompt or input content
+      // Can run with any of: manual user prompt, manual system prompt, or connected inputs
       const hasUserPrompt = (ctx.node.llmBaseUserPrompt?.trim()?.length ?? 0) > 0;
+      const hasSystemPrompt = (ctx.node.llmBaseSystemPrompt?.trim()?.length ?? 0) > 0;
       const hasInput = ctx.combinedInputContent.trim().length > 0;
-      return hasUserPrompt || hasInput;
+      return hasUserPrompt || hasSystemPrompt || hasInput;
     },
 
     onProcess: async (ctx: NodeProcessContext) => {

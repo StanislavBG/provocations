@@ -7,6 +7,7 @@
  */
 
 import { useRef, useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import { Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PromptEditorAutocomplete } from "./PromptEditorAutocomplete";
 
@@ -22,6 +23,12 @@ interface PromptEditorProps {
   placeholder?: string;
   className?: string;
   readOnly?: boolean;
+  /** Called on mouseup when text is selected (for selection popovers) */
+  onSelect?: () => void;
+  /** Additional label shown above the editor */
+  label?: string;
+  /** Show copy button */
+  showCopy?: boolean;
 }
 
 // ── Marker format: @[Label Text] ──
@@ -52,7 +59,7 @@ function markersToHtml(text: string, knownLabels: Set<string>): string {
   const segments = parseMarkers(text);
   return segments
     .map((seg) => {
-      if (seg.type === "text") return escapeHtml(seg.value);
+      if (seg.type === "text") return escapeHtml(seg.value).replace(/\n/g, "<br>");
       const isValid = knownLabels.has(seg.label.trim().toLowerCase());
       const cls = isValid
         ? "prompt-pill"
@@ -65,7 +72,9 @@ function markersToHtml(text: string, knownLabels: Set<string>): string {
 /** Extract marker-format string from contentEditable DOM */
 function htmlToMarkers(container: HTMLElement): string {
   let result = "";
-  for (const node of Array.from(container.childNodes)) {
+  const children = Array.from(container.childNodes);
+  for (let i = 0; i < children.length; i++) {
+    const node = children[i];
     if (node.nodeType === Node.TEXT_NODE) {
       result += node.textContent || "";
     } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -75,6 +84,10 @@ function htmlToMarkers(container: HTMLElement): string {
         result += `@[${ref}]`;
       } else if (el.tagName === "BR") {
         result += "\n";
+      } else if (el.tagName === "DIV") {
+        // ContentEditable wraps new lines in <div> blocks
+        if (i > 0) result += "\n";
+        result += htmlToMarkers(el);
       } else {
         // Recurse for nested elements (e.g. from paste)
         result += htmlToMarkers(el);
@@ -120,6 +133,8 @@ export function PromptEditor({
   placeholder,
   className,
   readOnly = false,
+  onSelect,
+  showCopy = false,
 }: PromptEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const isComposing = useRef(false);
@@ -381,9 +396,32 @@ export function PromptEditor({
   );
 
   const isEmpty = !value.trim();
+  const [copied, setCopied] = useState(false);
+
+  const handleMouseUp = useCallback(() => {
+    if (onSelect) onSelect();
+  }, [onSelect]);
+
+  const handleCopy = useCallback(() => {
+    // Copy plain text (with markers expanded to labels for readability)
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [value]);
 
   return (
     <div className="relative">
+      {showCopy && value.trim() && (
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="absolute top-1 right-1 z-10 p-1 rounded text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+          title="Copy"
+        >
+          {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+        </button>
+      )}
       <div
         ref={editorRef}
         contentEditable={!readOnly}
@@ -391,6 +429,7 @@ export function PromptEditor({
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
+        onMouseUp={handleMouseUp}
         onCompositionStart={() => { isComposing.current = true; }}
         onCompositionEnd={() => { isComposing.current = false; handleInput(); }}
         className={cn(
