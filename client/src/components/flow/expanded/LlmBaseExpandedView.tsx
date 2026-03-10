@@ -11,7 +11,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   Play, Loader2, Square, Copy, BrainCircuit, Search, Shield,
-  Thermometer, Zap, ChevronDown, ChevronRight,
+  Thermometer, Zap, ChevronDown, ChevronRight, FileText,
   PanelLeftClose, PanelLeft, Settings2, Wrench, Swords,
   PenLine, Type, Send, X, Crosshair,
 } from "lucide-react";
@@ -88,7 +88,6 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
   const [provoEvolving, setProvoEvolving] = useState(false);
 
   // ── Refs ──
-  const systemPromptRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const writerTextInputRef = useRef<HTMLInputElement>(null);
   const directTextInputRef = useRef<HTMLInputElement>(null);
@@ -246,16 +245,12 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
     [systemPrompt, objective, toast, snapshotVersion, getConnectedContext],
   );
 
-  // ── Direct insert at cursor (no AI) ──
+  // ── Direct insert at end (no AI) ──
   const handleDirectInsert = useCallback(
     (text: string) => {
       if (!text.trim()) return;
-      const el = systemPromptRef.current as HTMLTextAreaElement | null;
-      const cursor = el?.selectionStart ?? systemPrompt.length;
-      const before = systemPrompt.slice(0, cursor);
-      const after = systemPrompt.slice(cursor);
-      const spacer = before.length > 0 && !before.endsWith("\n") && !before.endsWith(" ") ? " " : "";
-      setSystemPrompt(before + spacer + text.trim() + after);
+      const spacer = systemPrompt.length > 0 && !systemPrompt.endsWith("\n") && !systemPrompt.endsWith(" ") ? " " : "";
+      setSystemPrompt(systemPrompt + spacer + text.trim());
     },
     [systemPrompt],
   );
@@ -588,7 +583,7 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
                 {/* Connected inputs summary */}
                 {(contextInputs.length > 0 || userPromptInputs.length > 0) && (
                   <div className="p-3">
-                    <ConnectedInputTabs
+                    <ConnectedInputBlocks
                       inputs={[...contextInputs, ...userPromptInputs]}
                       sectionLabel="Context"
                       accent="amber"
@@ -1064,6 +1059,11 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-500/60">
                   System Prompt
                 </span>
+                {contextInputs.length > 0 && (
+                  <span className="text-[10px] text-amber-500/50">
+                    {contextInputs.length} context block{contextInputs.length > 1 ? "s" : ""} — type @ to insert
+                  </span>
+                )}
                 {toolRunning && toolRunning !== "writer-feedback" && toolRunning !== "sel-remix" && (
                   <span className="text-[10px] text-fuchsia-500 animate-pulse flex items-center gap-1">
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -1219,22 +1219,21 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
                 </div>
               )}
 
-              <ProvokeText
-                ref={systemPromptRef}
+              <PromptEditor
                 value={systemPrompt}
                 onChange={setSystemPrompt}
+                contextBlocks={[...contextInputs, ...userPromptInputs]}
                 onSelect={handleTextSelect}
-                chrome="bare"
-                variant="editor"
                 showCopy
-                showClear={false}
-                placeholder="Write your system prompt here — persona, instructions, constraints, output format..."
+                placeholder="Write your system prompt here — use @ to reference connected context blocks..."
+                className="min-h-[200px]"
+                readOnly={isRunning}
               />
             </div>
 
             {/* Connected user prompts — collapsible */}
             {userPromptInputs.length > 0 && (
-              <ConnectedInputTabs inputs={userPromptInputs} sectionLabel="User Prompt Inputs" accent="emerald" />
+              <ConnectedInputBlocks inputs={userPromptInputs} sectionLabel="User Prompt Inputs" accent="emerald" />
             )}
 
             {/* User prompt — PromptEditor with @ context refs */}
@@ -1399,9 +1398,9 @@ function HeaderRunButton({
   );
 }
 
-// ── Collapsible tabbed connected inputs (reusable for Context + User Prompt) ──
+// ── Visual blocks for connected inputs — each input as a separate card ──
 
-function ConnectedInputTabs({
+function ConnectedInputBlocks({
   inputs,
   sectionLabel,
   accent = "amber",
@@ -1410,56 +1409,69 @@ function ConnectedInputTabs({
   sectionLabel: string;
   accent?: "amber" | "emerald";
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [expandedBlocks, setExpandedBlocks] = useState<Set<number>>(new Set());
+
+  const toggle = (i: number) =>
+    setExpandedBlocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   const colors = accent === "emerald"
-    ? { border: "border-emerald-500/30", bg: "bg-emerald-500/5", hover: "hover:bg-emerald-500/10", text: "text-emerald-500", borderActive: "border-emerald-500", borderInner: "border-emerald-500/20" }
-    : { border: "border-amber-500/30", bg: "bg-amber-500/5", hover: "hover:bg-amber-500/10", text: "text-amber-500", borderActive: "border-amber-500", borderInner: "border-amber-500/20" };
+    ? { border: "border-emerald-500/30", bg: "bg-emerald-500/5", title: "text-emerald-400", icon: "text-emerald-500/60", hover: "hover:border-emerald-500/50" }
+    : { border: "border-amber-500/30", bg: "bg-amber-500/5", title: "text-amber-400", icon: "text-amber-500/60", hover: "hover:border-amber-500/50" };
 
   return (
-    <div className={`rounded-md border ${colors.border} ${colors.bg} overflow-hidden`}>
-      <button
-        className={`w-full flex items-center gap-1.5 px-3 py-1.5 text-left ${colors.hover} transition-colors`}
-        onClick={() => setExpanded((v) => !v)}
-      >
-        {expanded ? (
-          <ChevronDown className={`w-3 h-3 ${colors.text} shrink-0`} />
-        ) : (
-          <ChevronRight className={`w-3 h-3 ${colors.text} shrink-0`} />
-        )}
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <FileText className={`w-3 h-3 ${colors.icon}`} />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
           {sectionLabel}
         </span>
-        <span className={`text-[9px] font-normal ${colors.text}`}>
-          ({inputs.length} connected)
+        <span className={`text-[9px] ${colors.title}`}>
+          ({inputs.length})
         </span>
-      </button>
-
-      {expanded && (
-        <div className={`border-t ${colors.borderInner}`}>
-          <div className={`flex border-b ${colors.borderInner} overflow-x-auto`}>
-            {inputs.map((input, i) => (
-              <button
-                key={i}
-                className={`shrink-0 px-3 py-1.5 text-[10px] font-medium transition-colors border-b-2 ${
-                  activeTab === i
-                    ? `${colors.borderActive} ${colors.text}`
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab(i)}
-              >
-                {input.label.length > 20 ? input.label.slice(0, 20) + "…" : input.label}
-              </button>
-            ))}
-          </div>
-          <div className="p-3 max-h-32 overflow-y-auto">
-            <p className="text-xs text-foreground/80 whitespace-pre-wrap">
-              {inputs[activeTab]?.content || ""}
-            </p>
-          </div>
-        </div>
-      )}
+      </div>
+      {inputs.map((input, i) => {
+        const isExpanded = expandedBlocks.has(i);
+        const preview = input.content.slice(0, 120).replace(/\n/g, " ");
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => toggle(i)}
+            className={cn(
+              "w-full text-left rounded-lg border p-3 transition-all",
+              colors.border, colors.bg, colors.hover,
+              isExpanded && "ring-1 ring-inset ring-white/5",
+            )}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              {isExpanded ? (
+                <ChevronDown className={`w-3 h-3 ${colors.icon} shrink-0`} />
+              ) : (
+                <ChevronRight className={`w-3 h-3 ${colors.icon} shrink-0`} />
+              )}
+              <span className={`text-xs font-semibold ${colors.title} truncate`}>
+                {input.label}
+              </span>
+            </div>
+            {isExpanded ? (
+              <div className="mt-2 pl-5 max-h-48 overflow-y-auto">
+                <p className="text-xs text-foreground/70 whitespace-pre-wrap leading-relaxed">
+                  {input.content}
+                </p>
+              </div>
+            ) : (
+              <p className="pl-5 text-[11px] text-muted-foreground/50 truncate">
+                {preview}{input.content.length > 120 ? "…" : ""}
+              </p>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -47,7 +47,7 @@ export const FlowPortDots = React.memo(function FlowPortDots({
         return (
           <div
             key={`${port.side}-${port.type}`}
-            className="absolute z-10"
+            className="absolute z-20"
             style={style}
           >
             {/* Invisible larger hit area for easier grabbing */}

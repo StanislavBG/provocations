@@ -219,17 +219,34 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
           accentColor={style.accent}
         />
 
-        {/* Delete button on hover */}
-        {lockMode === "none" && (
-          <button
-            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive/80 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
-            title="Delete"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        )}
+        {/* Lock + Delete buttons on hover */}
+        <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+          {onToggleLock && (
+            <button
+              className={cn(
+                "w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-colors",
+                lockMode !== "none"
+                  ? "bg-yellow-500 text-white"
+                  : "bg-muted text-muted-foreground hover:bg-muted-foreground/20",
+              )}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onToggleLock!(node.id); }}
+              title={lockMode === "none" ? "Lock position" : "Unlock"}
+            >
+              {lockMode === "none" ? <Unlock className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
+            </button>
+          )}
+          {lockMode === "none" && (
+            <button
+              className="w-5 h-5 rounded-full bg-destructive/80 flex items-center justify-center text-white hover:bg-destructive transition-colors shadow-sm"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
+              title="Delete"
+            >
+              <Trash2 className="w-2.5 h-2.5" />
+            </button>
+          )}
+        </div>
 
         {/* Play button on hover */}
         {onPlayNode && (
@@ -472,8 +489,8 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
         </div>
       )}
 
-      {/* Lock + Delete buttons — visible on hover */}
-      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Lock + Delete buttons — above the node to avoid resize handle overlap */}
+      <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         {onToggleLock && (
           <LockButton lockMode={lockMode} nodeId={node.id} onToggleLock={onToggleLock} />
         )}
@@ -653,7 +670,7 @@ function LabelNode({
       </div>
 
       {/* Settings + Lock + Delete buttons on hover */}
-      <div className="absolute -top-2.5 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute -top-7 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         {onOpenSettings && (
           <button
             className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"

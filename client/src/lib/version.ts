@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.24.5";
+export const APP_VERSION = "0.24.9";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,33 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.24.9",
+    date: "2026-03-09",
+    changes: [
+      "Fix LLM Base Play button — nodes with manual system prompt or user prompt can now execute without requiring input edges",
+      "Defer input-check to node lifecycle handler so each node type decides its own validation rules",
+    ],
+  },
+  {
+    version: "0.24.8",
+    date: "2026-03-09",
+    changes: [
+      "Writer works with objective only — Expand and other modes can now generate a document from scratch when the objective is set but the document is empty",
+      "Empty document triggers creation mode — LLM generates a comprehensive first draft based on the objective and instruction",
+    ],
+  },
+  {
+    version: "0.24.7",
+    date: "2026-03-09",
+    changes: [
+      "System Prompt @-mentions — type @ to insert connected context as inline pill chips; fixes newline handling in PromptEditor",
+      "Replace tabbed context display with visual blocks — each connected input shown as an expandable card with Title + Content",
+      "Document nodes now have Lock/Pin support (matching all other node types)",
+      "Move Lock/Delete buttons above nodes to eliminate overlap with resize handles",
+      "Raise port dot z-index above resize handles to fix connection-drag vs resize conflict",
+    ],
+  },
   {
     version: "0.24.5",
     date: "2026-03-09",

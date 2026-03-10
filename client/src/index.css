@@ -961,18 +961,32 @@ html.canvas-aurora select {
 .prompt-editor .prompt-pill {
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
-  margin: 0 2px;
-  border-radius: 4px;
-  background: hsl(var(--amber-pill-bg, 45 100% 51%) / 0.15);
+  gap: 4px;
+  padding: 3px 10px;
+  margin: 2px 3px;
+  border-radius: 6px;
+  background: hsl(45 100% 51% / 0.12);
   color: hsl(45 90% 55%);
-  border: 1px solid hsl(45 100% 51% / 0.25);
+  border: 1px solid hsl(45 100% 51% / 0.30);
   font-size: 0.8125rem;
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 1.5;
   vertical-align: baseline;
-  cursor: default;
+  cursor: grab;
   user-select: none;
   white-space: nowrap;
+  box-shadow: 0 1px 3px hsl(45 100% 51% / 0.08);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.prompt-editor .prompt-pill:hover {
+  background: hsl(45 100% 51% / 0.20);
+  border-color: hsl(45 100% 51% / 0.45);
+  box-shadow: 0 2px 6px hsl(45 100% 51% / 0.15);
+}
+
+.prompt-editor .prompt-pill:active {
+  cursor: grabbing;
 }
 
 .prompt-editor .prompt-pill--broken {

@@ -2581,6 +2581,7 @@ The user's response should be integrated thoughtfully - don't just append it, we
 
       // Two-step process: 1) Generate evolved document, 2) Analyze changes
       // Build objective section — when missing, instruct LLM to infer from content
+      const isEmptyDocument = !document.trim();
       const objectiveSection = objective
         ? `DOCUMENT OBJECTIVE: ${objective}`
         : `DOCUMENT OBJECTIVE: Not explicitly provided by the user. Infer the document's purpose, audience, and goals from its content and the user's instruction. Shape your edits to strengthen what the document is clearly trying to achieve.`;
@@ -2591,14 +2592,22 @@ The user's response should be integrated thoughtfully - don't just append it, we
 
 ${objectiveSection}
 
-Your role is to evolve the document based on the user's instruction while always keeping the objective in mind. The document should get better with each iteration - clearer, more compelling, better structured.
+${isEmptyDocument
+  ? `Your role is to CREATE a new document from scratch based on the objective and the user's instruction. Generate a comprehensive, well-structured first draft.
+
+APPROACH:
+1. Read the objective and instruction carefully to understand what document the user wants
+2. Create a complete, well-organized document that addresses the objective thoroughly
+3. Use appropriate structure (headings, sections, lists) for the content type
+4. Be substantive and detailed — this is the user's starting point, give them something rich to work with`
+  : `Your role is to evolve the document based on the user's instruction while always keeping the objective in mind. The document should get better with each iteration - clearer, more compelling, better structured.
 
 APPROACH:
 1. Read the FULL instruction to understand the user's complete intent before making any changes
 2. When multiple configurations are given, synthesize them into a unified editorial vision — do NOT apply them as isolated sequential steps
 3. Identify the changes needed and their interactions (e.g., expanding one section while condensing another)
 4. Execute changes precisely and verify you haven't made unintended alterations
-5. The output must be the COMPLETE evolved document — always match or exceed the quality of the input
+5. The output must be the COMPLETE evolved document — always match or exceed the quality of the input`}
 
 OUTPUT FORMAT: The document MUST be valid Markdown. Use:
 - # / ## / ### for headings (use heading hierarchy consistently)
@@ -2624,8 +2633,7 @@ Output only the evolved markdown document text. No explanations or meta-commenta
         messages: [
           {
             role: "user",
-            content: `CURRENT DOCUMENT:
-${document}
+            content: `${isEmptyDocument ? "CURRENT DOCUMENT: (empty — create from scratch)" : `CURRENT DOCUMENT:\n${document}`}
 ${selectedText ? `\nSELECTED TEXT (focus area):\n"${selectedText}"` : ""}
 
 INSTRUCTION: ${instruction}
