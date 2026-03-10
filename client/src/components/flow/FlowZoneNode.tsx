@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { X } from "lucide-react";
+import { X, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlowNode } from "./useFlowCanvas";
 import { useNodeResize } from "./useNodeResize";
@@ -24,6 +24,25 @@ interface FlowZoneNodeProps {
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void;
   onDelete: (nodeId: string) => void;
   onUpdateNode: (nodeId: string, patch: Partial<FlowNode>) => void;
+}
+
+function ZoneCopyIdButton({ nodeId }: { nodeId: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="w-5 h-5 rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 flex items-center justify-center shadow-sm transition-colors"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(nodeId);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title={copied ? "Copied!" : "Copy node ID"}
+    >
+      {copied ? <Check className="w-2.5 h-2.5 text-green-500" /> : <Copy className="w-2.5 h-2.5" />}
+    </button>
+  );
 }
 
 export const FlowZoneNode = React.memo(function FlowZoneNode({
@@ -170,7 +189,7 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
         </div>
       )}
 
-      {/* Resize handles + delete — via shared component */}
+      {/* Resize handles + copy ID + delete — via shared component */}
       {showControls && (
         <>
           <ResizeHandles
@@ -178,16 +197,19 @@ export const FlowZoneNode = React.memo(function FlowZoneNode({
             onResizeMouseDown={handleResizeMouseDown}
             size="md"
           />
-          <button
-            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(node.id);
-            }}
-          >
-            <X className="w-3 h-3" />
-          </button>
+          <div className="absolute -top-2 -right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <ZoneCopyIdButton nodeId={node.id} />
+            <button
+              className="w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(node.id);
+              }}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
         </>
       )}
     </div>
