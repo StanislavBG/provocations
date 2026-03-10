@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.25.1";
+export const APP_VERSION = "0.25.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.25.2",
+    date: "2026-03-10",
+    changes: [
+      "Fix CI test failure: align saveDocumentRequestSchema title max-length test with schema (500 chars, was 200)",
+    ],
+  },
   {
     version: "0.25.1",
     date: "2026-03-09",
