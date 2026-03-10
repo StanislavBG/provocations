@@ -454,7 +454,9 @@ Output only the evolved markdown. No explanations.`;
     if (Array.isArray(parsed.suggestions)) {
       suggestions = parsed.suggestions.filter((s: unknown) => typeof s === "string").slice(0, 2);
     }
-  } catch { /* use defaults */ }
+  } catch (err) {
+    console.error("[handleWrite] change analysis error:", err instanceof Error ? err.message : err);
+  }
 
   return {
     document: evolvedDocument,

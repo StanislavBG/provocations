@@ -8,12 +8,13 @@ import {
   NODE_STYLES,
   NODE_ICONS,
   ACCENT_BG,
+  ACCENT_TEXT,
   PLAYABLE_TYPES,
   FLOW_NODE_REGISTRY,
 } from "./FlowNodeRegistry";
 
 // Re-export from registry for backward compatibility with external consumers
-export { NODE_STYLES, NODE_ICONS, ACCENT_BG };
+export { NODE_STYLES, NODE_ICONS, ACCENT_BG, ACCENT_TEXT };
 
 interface FlowNodeRendererProps {
   node: FlowNode;
@@ -122,6 +123,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); onToggleLock(node.id); }}
       title={lockMode === "none" ? "Lock to canvas" : lockMode === "canvas" ? "Lock to screen" : "Unlock"}
+      aria-label="Toggle lock"
     >
       {lockMode === "none" && <Unlock className="w-2.5 h-2.5" />}
       {lockMode === "canvas" && <Lock className="w-2.5 h-2.5" />}
@@ -136,6 +138,7 @@ export const FlowNodeRenderer = React.memo(function FlowNodeRenderer({
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); onDelete(node.id); }}
       title="Delete"
+      aria-label="Delete node"
     >
       <Trash2 className="w-2.5 h-2.5" />
     </button>

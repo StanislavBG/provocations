@@ -1,9 +1,9 @@
 import { Fragment, useMemo, useEffect, useCallback } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { useFtuxConfig } from "@/lib/ftux-shell-context";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
-import { NODE_STYLES, NODE_ICONS, ACCENT_BG } from "./FlowNodeRenderer";
+import { NODE_STYLES, NODE_ICONS, ACCENT_BG, ACCENT_TEXT } from "./FlowNodeRegistry";
 
 /**
  * Compute the direct workflow chain through a given node.
@@ -79,7 +79,7 @@ export function FlowChainNavBar({
   edges,
   onNavigate,
 }: FlowChainNavBarProps) {
-  const { statusBarPosition } = useFtuxShell();
+  const { statusBarPosition } = useFtuxConfig();
   const chain = useMemo(
     () => computeChain(activeNodeId, nodes, edges),
     [activeNodeId, nodes, edges],
@@ -121,6 +121,8 @@ export function FlowChainNavBar({
       className="fixed left-0 right-0 z-[46] flex items-center gap-1 px-4 py-2
                  bg-card/90 backdrop-blur-sm border-t border-border/50 overflow-x-auto"
       style={{ bottom: statusBarPosition === "bottom" ? "var(--ftux-status-bar-height, 44px)" : 0 }}
+      role="navigation"
+      aria-label="Node chain navigation"
     >
       <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mr-2 shrink-0">
         Chain
@@ -143,17 +145,20 @@ export function FlowChainNavBar({
                 isActive
                   ? cn(
                       ACCENT_BG[style.accent] || "bg-primary",
-                      "text-white border-transparent shadow-sm",
+                      ACCENT_TEXT[style.accent] || "text-white",
+                      "border-transparent shadow-sm",
                     )
                   : "bg-card border-border/50 hover:bg-muted/50 text-foreground",
               )}
               onClick={() => !isActive && onNavigate(node.id)}
               title={node.label || style.badge}
+              aria-label={`Navigate to ${node.label || style.badge}${isActive ? " (current)" : ""}`}
+              aria-current={isActive ? "step" : undefined}
             >
               <Icon
                 className={cn(
                   "w-3.5 h-3.5 shrink-0",
-                  isActive ? "text-white" : style.iconClass,
+                  isActive ? (ACCENT_TEXT[style.accent] || "text-white") : style.iconClass,
                 )}
               />
               <span className="truncate">

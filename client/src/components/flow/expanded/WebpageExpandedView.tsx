@@ -14,11 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { ProvokeText } from "@/components/ProvokeText";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "../useFlowCanvas";
 import { edgeHasRole } from "../useFlowCanvas";
 import { apiRequest } from "@/lib/queryClient";
+import { FileText, Layers, Settings2 } from "lucide-react";
 
 interface WebpageExpandedViewProps {
   node: FlowNode;
@@ -173,6 +175,20 @@ export function WebpageExpandedView({ node, nodes, edges, onUpdateNode }: Webpag
     toast({ title: "Copied", description: "HTML copied to clipboard." });
   }, [htmlOutput, toast]);
 
+  // ── LlmHoverButton preview data ──
+  const contextChars = contextInputs.reduce((s, c) => s + c.content.length, 0);
+  const webpagePreviewBlocks = useMemo<ContextBlock[]>(() => [
+    { label: "System Prompt", chars: SYSTEM_PROMPT.length + (STYLE_PROMPTS[stylePreference]?.length ?? 0), color: "text-blue-400" },
+    { label: "Context Inputs", chars: contextChars, color: "text-amber-400" },
+    { label: "Custom Instructions", chars: customInstructions.length, color: "text-emerald-400" },
+  ], [stylePreference, contextChars, customInstructions.length]);
+
+  const webpagePreviewSummary = useMemo<SummaryItem[]>(() => [
+    { icon: <Layers className="w-3 h-3 text-amber-400" />, label: "Context Inputs", count: contextInputs.length, detail: `${contextChars.toLocaleString()} chars` },
+    { icon: <Settings2 className="w-3 h-3 text-blue-400" />, label: "Style", count: 1, detail: stylePreference },
+    { icon: <FileText className="w-3 h-3 text-emerald-400" />, label: "Custom Instructions", count: customInstructions.trim() ? 1 : 0, detail: customInstructions.slice(0, 60) || "none" },
+  ], [contextInputs.length, contextChars, stylePreference, customInstructions]);
+
   // ── Header actions portal ──
   const headerActions = document.getElementById("expanded-header-actions");
 
@@ -315,21 +331,29 @@ export function WebpageExpandedView({ node, nodes, edges, onUpdateNode }: Webpag
         </div>
       </div>
 
-      {/* Header actions portal: Run/Stop button */}
+      {/* Header actions portal: Run/Stop button — wrapped with LlmHoverButton for ADR #2 */}
       {headerActions && createPortal(
         isRunning ? (
           <Button variant="destructive" size="sm" className="h-7 text-xs gap-1" onClick={handleStop}>
             <Square className="w-3 h-3" /> Stop
           </Button>
         ) : (
-          <Button
-            size="sm"
-            className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700"
-            onClick={handleRun}
-            disabled={contextInputs.length === 0}
+          <LlmHoverButton
+            previewTitle="Generate Webpage"
+            previewBlocks={webpagePreviewBlocks}
+            previewSummary={webpagePreviewSummary}
+            side="bottom"
+            align="end"
           >
-            <Play className="w-3 h-3" /> Run
-          </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700"
+              onClick={handleRun}
+              disabled={contextInputs.length === 0}
+            >
+              <Play className="w-3 h-3" /> Run
+            </Button>
+          </LlmHoverButton>
         ),
         headerActions,
       )}

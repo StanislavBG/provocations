@@ -6,8 +6,9 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Play, Loader2, Check, RefreshCw, Share2, Settings2, X } from "lucide-react";
+import { Play, Loader2, Check, RefreshCw, Share2, Settings2, X, FileText, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LlmHoverButton, type ContextBlock, type SummaryItem } from "@/components/LlmHoverButton";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
@@ -195,6 +196,18 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
   const currentPost = activeTab ? generatedPosts[activeTab] : null;
   const currentPlatform = activeTab ? SOCIAL_PLATFORMS[activeTab] : null;
 
+  // ── LlmHoverButton preview data for Generate All ──
+  const socialPreviewBlocks = useMemo<ContextBlock[]>(() => [
+    { label: "Input Content", chars: inputContent.length, color: "text-amber-400" },
+    { label: "Platform Config", chars: (enabledPlatforms.join(", ") + intent + tone).length, color: "text-pink-400" },
+  ], [inputContent.length, enabledPlatforms, intent, tone]);
+
+  const socialPreviewSummary = useMemo<SummaryItem[]>(() => [
+    { icon: <Layers className="w-3 h-3 text-amber-400" />, label: "Input Content", count: inputContent.trim() ? 1 : 0, detail: `${inputContent.length.toLocaleString()} chars` },
+    { icon: <Share2 className="w-3 h-3 text-pink-400" />, label: "Platforms", count: enabledPlatforms.length, detail: enabledPlatforms.join(", ") || "none" },
+    { icon: <FileText className="w-3 h-3 text-blue-400" />, label: "Intent / Tone", count: 1, detail: `${intent} / ${tone}` },
+  ], [inputContent, enabledPlatforms, intent, tone]);
+
   return (
     <ExpandedViewLayout
       defaultLeftSize={35}
@@ -306,24 +319,31 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
               )}
             </div>
 
-            {/* Generate button */}
-            <Button
-              className="w-full gap-2"
-              disabled={isGenerating || enabledPlatforms.length === 0 || !inputContent.trim()}
-              onClick={handleGenerate}
+            {/* Generate button — wrapped with LlmHoverButton for ADR #2 */}
+            <LlmHoverButton
+              previewTitle="Generate Social Posts"
+              previewBlocks={socialPreviewBlocks}
+              previewSummary={socialPreviewSummary}
+              side="right"
             >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Share2 className="w-4 h-4" />
-                  Generate All
-                </>
-              )}
-            </Button>
+              <Button
+                className="w-full gap-2"
+                disabled={isGenerating || enabledPlatforms.length === 0 || !inputContent.trim()}
+                onClick={handleGenerate}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4" />
+                    Generate All
+                  </>
+                )}
+              </Button>
+            </LlmHoverButton>
           </div>
         </ScrollArea>
         </div>
@@ -455,16 +475,23 @@ export function SocialPostExpandedView({ node, nodes, edges, onUpdateNode, onPla
 
               {/* Actions */}
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={handleGenerate}
-                  disabled={isGenerating}
+                <LlmHoverButton
+                  previewTitle="Regenerate Social Posts"
+                  previewBlocks={socialPreviewBlocks}
+                  previewSummary={socialPreviewSummary}
+                  side="top"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Regenerate
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={handleGenerate}
+                    disabled={isGenerating}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Regenerate
+                  </Button>
+                </LlmHoverButton>
                 <Button
                   size="sm"
                   variant="outline"

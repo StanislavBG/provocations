@@ -1,9 +1,27 @@
 "use client"
 
 import * as React from "react"
-import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
+
+// Lazy-load recharts to avoid adding ~500KB to the initial bundle.
+// The module is fetched on first render of ChartContainer.
+type RechartsMod = typeof import("recharts")
+let _rechartsPromise: Promise<RechartsMod> | null = null
+function getRechartsModule(): Promise<RechartsMod> {
+  if (!_rechartsPromise) {
+    _rechartsPromise = import("recharts")
+  }
+  return _rechartsPromise
+}
+
+function useRecharts(): RechartsMod | null {
+  const [mod, setMod] = React.useState<RechartsMod | null>(null)
+  React.useEffect(() => {
+    getRechartsModule().then(setMod)
+  }, [])
+  return mod
+}
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
@@ -38,13 +56,25 @@ const ChartContainer = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
     config: ChartConfig
-    children: React.ComponentProps<
-      typeof RechartsPrimitive.ResponsiveContainer
-    >["children"]
+    children: React.ReactNode
   }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const recharts = useRecharts()
+
+  if (!recharts) {
+    return (
+      <div
+        data-chart={chartId}
+        ref={ref}
+        className={cn("flex aspect-video justify-center items-center text-xs", className)}
+        {...props}
+      >
+        <span className="text-muted-foreground">Loading chart...</span>
+      </div>
+    )
+  }
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -58,9 +88,9 @@ const ChartContainer = React.forwardRef<
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        <recharts.ResponsiveContainer>
+          {children as React.ReactElement}
+        </recharts.ResponsiveContainer>
       </div>
     </ChartContext.Provider>
   )
@@ -100,11 +130,22 @@ ${colorConfig
   )
 }
 
-const ChartTooltip = RechartsPrimitive.Tooltip
+// ChartTooltip and ChartLegend are lazy-resolved from the dynamically imported recharts module.
+// They are typed as `any` at the module level because the actual recharts component reference
+// is only available after the async import resolves. Consumers must render these inside a
+// <ChartContainer> which guarantees recharts is loaded before children render.
+let ChartTooltip: any = () => null
+let ChartLegend: any = () => null
+
+// Eagerly kick off the import so Tooltip/Legend are available by the time they render
+getRechartsModule().then((mod) => {
+  ChartTooltip = mod.Tooltip
+  ChartLegend = mod.Legend
+})
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+  Record<string, any> &
     React.ComponentProps<"div"> & {
       hideLabel?: boolean
       hideIndicator?: boolean
@@ -185,7 +226,7 @@ const ChartTooltipContent = React.forwardRef<
       >
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item, index) => {
+          {payload.map((item: any, index: number) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`
             const itemConfig = getPayloadConfigFromPayload(config, item, key)
             const indicatorColor = color || item.payload.fill || item.color
@@ -256,12 +297,11 @@ const ChartTooltipContent = React.forwardRef<
 )
 ChartTooltipContent.displayName = "ChartTooltip"
 
-const ChartLegend = RechartsPrimitive.Legend
-
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
+  React.ComponentProps<"div"> & {
+      payload?: Array<{ value?: string; dataKey?: string; color?: string }>
+      verticalAlign?: "top" | "bottom"
       hideIcon?: boolean
       nameKey?: string
     }

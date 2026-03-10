@@ -640,6 +640,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
             onClick={handleCopy}
             disabled={!hasContent}
             title="Copy as plain text"
+            aria-label="Copy text"
           >
             <Copy className={toolbarSize.icon} />
           </Button>
@@ -652,6 +653,7 @@ export const ProvokeText = forwardRef<HTMLTextAreaElement | HTMLInputElement, Pr
             onClick={handleClear}
             disabled={!hasContent}
             title="Clear all"
+            aria-label="Clear text"
           >
             <Eraser className={toolbarSize.icon} />
           </Button>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { type ThemePreference, type PaletteId, applyThemeToDOM, applyPaletteToDOM } from "./theme-utils";
 import type { KeyBindOverrides, KeyBindActionId } from "./keybind-actions";
 import { CANVAS_STYLES } from "@/lib/canvas-styles";
@@ -123,7 +123,79 @@ export const DEFAULT_SHELL_CONFIG: FtuxShellConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// Context value
+// Context 1: Config — static/infrequent config values (changes rarely)
+// ---------------------------------------------------------------------------
+
+export interface FtuxConfigContextValue extends FtuxShellConfig {}
+
+const FtuxConfigContext = createContext<FtuxConfigContextValue | null>(null);
+
+// ---------------------------------------------------------------------------
+// Context 2: Tool — active tool state (changes on every tool click)
+// ---------------------------------------------------------------------------
+
+export interface FtuxToolContextValue {
+  activeTool: ToolId | null;
+  previousTool: ToolId | null;
+  activeStep: number;
+  activeWorkflow: ActiveWorkflow | null;
+  setActiveTool: (tool: ToolId | null) => void;
+  setActiveStep: (step: number) => void;
+}
+
+const FtuxToolContext = createContext<FtuxToolContextValue | null>(null);
+
+// ---------------------------------------------------------------------------
+// Context 3: Actions — stable callback refs (rarely changes identity)
+// ---------------------------------------------------------------------------
+
+export interface FtuxActionsContextValue {
+  setDockPosition: (pos: DockPosition) => void;
+  setDockItems: (items: DockItem[]) => void;
+  reorderDockItems: (fromIndex: number, toIndex: number) => void;
+  setDockTranslucency: (val: number) => void;
+  setDockAutoHide: (val: boolean) => void;
+  setDockHidden: (val: boolean) => void;
+  setDockColor: (val: string | null) => void;
+  setDockShowLabels: (val: boolean) => void;
+  setDockShowGroupLabels: (val: boolean) => void;
+  setDockButtonSize: (val: DockButtonSize) => void;
+  setDockSnapped: (val: boolean) => void;
+  setDockLocked: (val: boolean) => void;
+  setCanvasFontSize: (val: number) => void;
+  setCanvasFontColor: (val: string | null) => void;
+  setCanvasBgColor: (val: string | null) => void;
+  setCanvasTheme: (val: string) => void;
+  setStatusBarPosition: (pos: StatusBarPosition) => void;
+  setStatusBarTranslucency: (val: number) => void;
+  setStatusBarColor: (val: string | null) => void;
+  addStatusBarPinnedItem: (toolId: string) => void;
+  removeStatusBarPinnedItem: (toolId: string) => void;
+  addDockItem: (item: DockItem) => void;
+  removeDockItem: (toolId: ToolId) => void;
+  setTipsEnabled: (val: boolean) => void;
+  setTipsTranslucency: (val: number) => void;
+  setTipsColor: (val: string | null) => void;
+  dismissTip: (tipId: string) => void;
+  resetTips: () => void;
+  resetDock: () => void;
+  setTourCompleted: (val: boolean) => void;
+  setTheme: (val: ThemePreference) => void;
+  setPalette: (val: PaletteId) => void;
+  setKeyBind: (actionId: KeyBindActionId, keys: string[]) => void;
+  resetKeyBind: (actionId: KeyBindActionId) => void;
+  resetAllKeyBinds: () => void;
+  startWorkflow: (outputType: OutputType, buildTool: ToolId) => void;
+  nextStep: () => void;
+  prevStep: () => void;
+  exitWorkflow: () => void;
+  persistConfig: (config: FtuxShellConfig) => void;
+}
+
+const FtuxActionsContext = createContext<FtuxActionsContextValue | null>(null);
+
+// ---------------------------------------------------------------------------
+// Combined type (backward compat)
 // ---------------------------------------------------------------------------
 
 export interface FtuxShellContextValue extends FtuxShellConfig {
@@ -183,8 +255,6 @@ export interface FtuxShellContextValue extends FtuxShellConfig {
   // Persistence callback
   persistConfig: (config: FtuxShellConfig) => void;
 }
-
-const FtuxShellContext = createContext<FtuxShellContextValue | null>(null);
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -539,65 +609,123 @@ export function FtuxShellProvider({ children, initialConfig, onConfigChange }: F
     setActiveToolState(null);
   }, []);
 
-  const value: FtuxShellContextValue = {
-    ...config,
-    activeTool,
-    previousTool,
-    activeStep,
-    activeWorkflow,
-    setActiveTool,
-    setActiveStep,
-    setDockPosition,
-    setDockItems,
-    reorderDockItems,
-    setDockTranslucency,
-    setDockAutoHide,
-    setDockHidden,
-    setDockColor,
-    setDockShowLabels,
-    setDockShowGroupLabels,
-    setDockButtonSize,
-    setDockSnapped,
-    setDockLocked,
-    setCanvasFontSize,
-    setCanvasFontColor,
-    setCanvasBgColor,
-    setCanvasTheme,
-    setStatusBarPosition,
-    setStatusBarTranslucency,
-    setStatusBarColor,
-    addStatusBarPinnedItem,
-    removeStatusBarPinnedItem,
-    addDockItem,
-    removeDockItem,
-    setTipsEnabled,
-    setTipsTranslucency,
-    setTipsColor,
-    dismissTip,
-    resetTips,
-    resetDock,
-    setTourCompleted,
-    setTheme,
-    setPalette,
-    setKeyBind,
-    resetKeyBind,
-    resetAllKeyBinds,
-    startWorkflow,
-    nextStep,
-    prevStep,
-    exitWorkflow,
-    persistConfig,
-  };
+  // ── Memoized context values ──
 
-  return <FtuxShellContext.Provider value={value}>{children}</FtuxShellContext.Provider>;
+  const configValue: FtuxConfigContextValue = useMemo(() => config, [config]);
+
+  const toolValue: FtuxToolContextValue = useMemo(
+    () => ({
+      activeTool,
+      previousTool,
+      activeStep,
+      activeWorkflow,
+      setActiveTool,
+      setActiveStep,
+    }),
+    [activeTool, previousTool, activeStep, activeWorkflow, setActiveTool],
+  );
+
+  const actionsValue: FtuxActionsContextValue = useMemo(
+    () => ({
+      setDockPosition,
+      setDockItems,
+      reorderDockItems,
+      setDockTranslucency,
+      setDockAutoHide,
+      setDockHidden,
+      setDockColor,
+      setDockShowLabels,
+      setDockShowGroupLabels,
+      setDockButtonSize,
+      setDockSnapped,
+      setDockLocked,
+      setCanvasFontSize,
+      setCanvasFontColor,
+      setCanvasBgColor,
+      setCanvasTheme,
+      setStatusBarPosition,
+      setStatusBarTranslucency,
+      setStatusBarColor,
+      addStatusBarPinnedItem,
+      removeStatusBarPinnedItem,
+      addDockItem,
+      removeDockItem,
+      setTipsEnabled,
+      setTipsTranslucency,
+      setTipsColor,
+      dismissTip,
+      resetTips,
+      resetDock,
+      setTourCompleted,
+      setTheme,
+      setPalette,
+      setKeyBind,
+      resetKeyBind,
+      resetAllKeyBinds,
+      startWorkflow,
+      nextStep,
+      prevStep,
+      exitWorkflow,
+      persistConfig,
+    }),
+    [
+      setDockPosition, setDockItems, reorderDockItems, setDockTranslucency,
+      setDockAutoHide, setDockHidden, setDockColor, setDockShowLabels,
+      setDockShowGroupLabels, setDockButtonSize, setDockSnapped, setDockLocked,
+      setCanvasFontSize, setCanvasFontColor, setCanvasBgColor, setCanvasTheme,
+      setStatusBarPosition, setStatusBarTranslucency, setStatusBarColor,
+      addStatusBarPinnedItem, removeStatusBarPinnedItem, addDockItem, removeDockItem,
+      setTipsEnabled, setTipsTranslucency, setTipsColor, dismissTip,
+      resetTips, resetDock, setTourCompleted, setTheme, setPalette,
+      setKeyBind, resetKeyBind, resetAllKeyBinds,
+      startWorkflow, nextStep, prevStep, exitWorkflow, persistConfig,
+    ],
+  );
+
+  return (
+    <FtuxConfigContext.Provider value={configValue}>
+      <FtuxToolContext.Provider value={toolValue}>
+        <FtuxActionsContext.Provider value={actionsValue}>
+          {children}
+        </FtuxActionsContext.Provider>
+      </FtuxToolContext.Provider>
+    </FtuxConfigContext.Provider>
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Hook
+// Granular hooks
 // ---------------------------------------------------------------------------
 
-export function useFtuxShell(): FtuxShellContextValue {
-  const ctx = useContext(FtuxShellContext);
-  if (!ctx) throw new Error("useFtuxShell must be used within a FtuxShellProvider");
+/** Config values only — re-renders only when config changes (not on tool clicks). */
+export function useFtuxConfig(): FtuxConfigContextValue {
+  const ctx = useContext(FtuxConfigContext);
+  if (!ctx) throw new Error("useFtuxConfig must be used within a FtuxShellProvider");
   return ctx;
+}
+
+/** Active tool state — re-renders only when active tool / workflow changes. */
+export function useFtuxTool(): FtuxToolContextValue {
+  const ctx = useContext(FtuxToolContext);
+  if (!ctx) throw new Error("useFtuxTool must be used within a FtuxShellProvider");
+  return ctx;
+}
+
+/** Action callbacks only — stable refs, almost never triggers re-renders. */
+export function useFtuxActions(): FtuxActionsContextValue {
+  const ctx = useContext(FtuxActionsContext);
+  if (!ctx) throw new Error("useFtuxActions must be used within a FtuxShellProvider");
+  return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Backward-compatible combined hook
+// ---------------------------------------------------------------------------
+
+/** Combined hook — merges all 3 contexts. Use granular hooks for better perf. */
+export function useFtuxShell(): FtuxShellContextValue {
+  const config = useFtuxConfig();
+  const tool = useFtuxTool();
+  const actions = useFtuxActions();
+  return { ...config, ...tool, ...actions };
 }

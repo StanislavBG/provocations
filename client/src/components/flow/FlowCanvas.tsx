@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, useEffect, useContext, useLayoutEffect } from "react";
-import { useFtuxShell } from "@/lib/ftux-shell-context";
+import { useFtuxConfig } from "@/lib/ftux-shell-context";
 import { getEffectiveKeys } from "@/lib/keybind-actions";
 import { BookOpen, Sparkles, AlignStartVertical, AlignEndVertical, AlignCenterVertical, AlignStartHorizontal, AlignEndHorizontal, AlignCenterHorizontal, GripHorizontal, GripVertical, Monitor } from "lucide-react";
 import type { FlowCanvasState, FlowNode, FlowEdge, FlowViewport } from "./useFlowCanvas";
@@ -109,13 +109,13 @@ export function FlowCanvas({
   onFitToView,
 }: FlowCanvasProps) {
   // Resolve customizable glide-camera keys from shell preferences
-  const shellCtx = useFtuxShell();
+  const shellConfig = useFtuxConfig();
   const resolvedGlideKeys = useMemo(() => ({
-    up: (getEffectiveKeys("canvas.glideUp", shellCtx.keyBinds)[0] ?? "w").toLowerCase(),
-    down: (getEffectiveKeys("canvas.glideDown", shellCtx.keyBinds)[0] ?? "s").toLowerCase(),
-    left: (getEffectiveKeys("canvas.glideLeft", shellCtx.keyBinds)[0] ?? "a").toLowerCase(),
-    right: (getEffectiveKeys("canvas.glideRight", shellCtx.keyBinds)[0] ?? "d").toLowerCase(),
-  }), [shellCtx.keyBinds]);
+    up: (getEffectiveKeys("canvas.glideUp", shellConfig.keyBinds)[0] ?? "w").toLowerCase(),
+    down: (getEffectiveKeys("canvas.glideDown", shellConfig.keyBinds)[0] ?? "s").toLowerCase(),
+    left: (getEffectiveKeys("canvas.glideLeft", shellConfig.keyBinds)[0] ?? "a").toLowerCase(),
+    right: (getEffectiveKeys("canvas.glideRight", shellConfig.keyBinds)[0] ?? "d").toLowerCase(),
+  }), [shellConfig.keyBinds]);
 
   // ── CSS-based viewport transform (E1 optimization) ──
   // The transform layer ref is updated directly via style.transform to bypass

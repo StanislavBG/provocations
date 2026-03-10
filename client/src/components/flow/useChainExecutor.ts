@@ -17,6 +17,32 @@ import { useCallback, useRef, useState } from "react";
 import type { FlowNode, FlowEdge } from "./useFlowCanvas";
 import { FLOW_NODE_REGISTRY } from "./FlowNodeRegistry";
 
+// ── Graph lookup helpers ──
+
+interface GraphMaps {
+  edgesBySource: Map<string, FlowEdge[]>;
+  edgesByTarget: Map<string, FlowEdge[]>;
+  nodeMap: Map<string, FlowNode>;
+}
+
+/** Build O(1) lookup maps from a state snapshot. Called once per operation. */
+function buildGraphMaps(nodes: FlowNode[], edges: FlowEdge[]): GraphMaps {
+  const edgesBySource = new Map<string, FlowEdge[]>();
+  const edgesByTarget = new Map<string, FlowEdge[]>();
+  for (const edge of edges) {
+    const srcList = edgesBySource.get(edge.fromNodeId);
+    if (srcList) srcList.push(edge);
+    else edgesBySource.set(edge.fromNodeId, [edge]);
+
+    const tgtList = edgesByTarget.get(edge.toNodeId);
+    if (tgtList) tgtList.push(edge);
+    else edgesByTarget.set(edge.toNodeId, [edge]);
+  }
+  const nodeMap = new Map<string, FlowNode>();
+  for (const node of nodes) nodeMap.set(node.id, node);
+  return { edgesBySource, edgesByTarget, nodeMap };
+}
+
 // ── Types ──
 
 export type ChainNodeStatus = "idle" | "running" | "done" | "error";
@@ -115,15 +141,16 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
   const collectDownstreamChain = useCallback(
     (startNodeId: string): string[] => {
       const { nodes, edges } = getState();
+      const { edgesBySource, nodeMap } = buildGraphMaps(nodes, edges);
       const visited = new Set<string>([startNodeId]);
       const queue = [startNodeId];
       const result: string[] = [startNodeId];
 
       while (queue.length > 0) {
         const current = queue.shift()!;
-        const downstream = edges.filter((e) => e.fromNodeId === current);
+        const downstream = edgesBySource.get(current) ?? [];
         for (const edge of downstream) {
-          if (!visited.has(edge.toNodeId) && nodes.find((n) => n.id === edge.toNodeId)) {
+          if (!visited.has(edge.toNodeId) && nodeMap.has(edge.toNodeId)) {
             visited.add(edge.toNodeId);
             queue.push(edge.toNodeId);
             result.push(edge.toNodeId);
@@ -143,11 +170,12 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
   const propagateErrorDownstream = useCallback(
     (failedNodeId: string, errorMessage: string) => {
       const { nodes, edges } = getState();
+      const { edgesBySource, nodeMap } = buildGraphMaps(nodes, edges);
       const visited = new Set<string>([failedNodeId]);
       const queue: string[] = [];
 
       // Find direct downstream
-      const downEdges = edges.filter((e) => e.fromNodeId === failedNodeId);
+      const downEdges = edgesBySource.get(failedNodeId) ?? [];
       for (const e of downEdges) {
         if (!visited.has(e.toNodeId)) {
           visited.add(e.toNodeId);
@@ -158,12 +186,12 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
       // BFS to mark all downstream as blocked
       while (queue.length > 0) {
         const current = queue.shift()!;
-        const node = nodes.find((n) => n.id === current);
+        const node = nodeMap.get(current);
         if (!node) continue;
 
         onChainStatusChange?.(current, "blocked", `Blocked: upstream node failed — ${errorMessage}`);
 
-        const nextEdges = edges.filter((e) => e.fromNodeId === current);
+        const nextEdges = edgesBySource.get(current) ?? [];
         for (const e of nextEdges) {
           if (!visited.has(e.toNodeId)) {
             visited.add(e.toNodeId);
@@ -205,11 +233,12 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
   const getExecutableDownstream = useCallback(
     (nodeId: string): string[] => {
       const { nodes, edges } = getState();
-      const downstreamEdges = edges.filter((e) => e.fromNodeId === nodeId);
+      const { edgesBySource, edgesByTarget, nodeMap } = buildGraphMaps(nodes, edges);
+      const downstreamEdges = edgesBySource.get(nodeId) ?? [];
       const candidates: string[] = [];
 
       for (const edge of downstreamEdges) {
-        const downstream = nodes.find((n) => n.id === edge.toNodeId);
+        const downstream = nodeMap.get(edge.toNodeId);
         if (!downstream) continue;
 
         const def = FLOW_NODE_REGISTRY[downstream.type];
@@ -222,9 +251,9 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
           candidates.push(downstream.id);
         } else {
           // Wait-all: check if ALL inputs to this downstream node are satisfied
-          const allInputEdges = edges.filter((e) => e.toNodeId === downstream.id);
+          const allInputEdges = edgesByTarget.get(downstream.id) ?? [];
           const allInputsSatisfied = allInputEdges.every((ie) => {
-            const inputNode = nodes.find((n) => n.id === ie.fromNodeId);
+            const inputNode = nodeMap.get(ie.fromNodeId);
             return inputNode && (inputNode.llmStatus === "done" || !FLOW_NODE_REGISTRY[inputNode.type]?.playable);
           });
 
@@ -242,8 +271,9 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
   /** I5: Execute a node with per-type timeout */
   const executeWithTimeout = useCallback(
     async (nodeId: string): Promise<string | null> => {
-      const { nodes } = getState();
-      const node = nodes.find((n) => n.id === nodeId);
+      const { nodes, edges } = getState();
+      const { nodeMap } = buildGraphMaps(nodes, edges);
+      const node = nodeMap.get(nodeId);
       const nodeType = node?.type ?? "default";
       const timeout = NODE_TIMEOUTS[nodeType] ?? NODE_TIMEOUTS.default;
 
@@ -284,8 +314,9 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
         onChainStatusChange?.(nodeId, "running");
 
         // Update progress: set current node
-        const { nodes } = getState();
-        const currentNode = nodes.find((n) => n.id === nodeId);
+        const { nodes, edges } = getState();
+        const { nodeMap } = buildGraphMaps(nodes, edges);
+        const currentNode = nodeMap.get(nodeId);
         updateProgress({
           currentNodeId: nodeId,
           currentNodeLabel: currentNode?.label ?? nodeId,
@@ -320,7 +351,8 @@ export function useChainExecutor(callbacks: ChainExecutorCallbacks): ChainExecut
 
           // Check if this node allows auto-propagation (default: true)
           const latestState = getState();
-          const latestNode = latestState.nodes.find((n) => n.id === nodeId);
+          const { nodeMap: latestNodeMap } = buildGraphMaps(latestState.nodes, latestState.edges);
+          const latestNode = latestNodeMap.get(nodeId);
           const autoTrigger = latestNode?.autoTriggerNext !== false; // default true
 
           // Block chain propagation at approval nodes that are pending or rejected

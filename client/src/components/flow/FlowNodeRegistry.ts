@@ -828,6 +828,29 @@ export const ACCENT_BG: Record<string, string> = {
   fuchsia: "bg-fuchsia-500",
 };
 
+/** Accent color → Tailwind text class for WCAG AA contrast on accent backgrounds */
+export const ACCENT_TEXT: Record<string, string> = {
+  amber: "text-gray-900",
+  yellow: "text-gray-900",
+  lime: "text-gray-900",
+  blue: "text-white",
+  violet: "text-white",
+  primary: "text-white",
+  rose: "text-white",
+  cyan: "text-white",
+  orange: "text-white",
+  indigo: "text-white",
+  red: "text-white",
+  emerald: "text-white",
+  teal: "text-white",
+  purple: "text-white",
+  sky: "text-white",
+  stone: "text-white",
+  pink: "text-white",
+  green: "text-white",
+  fuchsia: "text-white",
+};
+
 /** Node types that benefit from role-typed input edges (derived from acceptedRoles) */
 export const ROLE_AWARE_TARGETS = new Set<FlowNodeType>(
   Object.values(FLOW_NODE_REGISTRY)
