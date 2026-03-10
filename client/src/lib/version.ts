@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.6";
+export const APP_VERSION = "0.26.7";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.26.7",
+    date: "2026-03-10",
+    changes: [
+      "Event-bus channel visual: auto-detected publish/listen pairs render as amber dashed connection",
+      "Two-segment path with ⚡ CHANNEL ⚡ badge in the middle indicating local processing",
+      "Animated message blobs travel the full path, distinct from regular node-to-node edges",
+    ],
+  },
   {
     version: "0.26.6",
     date: "2026-03-10",
