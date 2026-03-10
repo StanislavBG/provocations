@@ -304,6 +304,58 @@ server.tool(
   },
 );
 
+// ── Event Bus tools ──
+
+// Tool: poll_events
+server.tool(
+  "poll_events",
+  "Poll for pending task events from a canvas event bus channel. Returns unconsumed events that were published by canvas nodes for agents to process.",
+  {
+    canvasId: z.number().describe("Document ID of the canvas"),
+    channel: z.string().optional().describe("Event channel name (default: 'default')"),
+  },
+  async ({ canvasId, channel }) => {
+    const data = await apiCall("GET", `/api/webhook/events/${canvasId}?channel=${channel || "default"}`);
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+// Tool: post_result
+server.tool(
+  "post_result",
+  "Post a completed result back to the canvas event bus. Creates a document node on the canvas connected to the listen-mode event bus node as proof of work.",
+  {
+    canvasId: z.number().describe("Document ID of the canvas"),
+    channel: z.string().optional().describe("Event channel name (default: 'default')"),
+    label: z.string().describe("Title for the result document node"),
+    content: z.string().describe("Full content/body of the result"),
+    sourceEventId: z.string().optional().describe("ID of the original task event this result responds to"),
+  },
+  async ({ canvasId, channel, label, content, sourceEventId }) => {
+    const data = await apiCall("POST", `/api/webhook/events/${canvasId}/result`, {
+      channel: channel || "default",
+      label,
+      content,
+      sourceEventId,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+// Tool: ack_events
+server.tool(
+  "ack_events",
+  "Acknowledge events that have been processed. Marks them as consumed so they won't appear in future polls.",
+  {
+    canvasId: z.number().describe("Document ID of the canvas"),
+    eventIds: z.array(z.string()).describe("Array of event IDs to acknowledge"),
+  },
+  async ({ canvasId, eventIds }) => {
+    const data = await apiCall("POST", `/api/webhook/events/${canvasId}/ack`, { eventIds });
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
 // ── Start ──
 
 async function main() {

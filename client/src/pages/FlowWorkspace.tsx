@@ -68,6 +68,7 @@ const ApprovalExpandedView = lazyExpandedViews["approval"];
 const StoreExpandedView = lazyExpandedViews["store"];
 const UploadExpandedView = lazyExpandedViews["upload"];
 const WebpageExpandedView = lazyExpandedViews["webpage"];
+const EventBusExpandedView = lazyExpandedViews["event-bus"];
 import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
 import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { serializeCanvas, serializeNodeForSave } from "@/components/flow/serializeCanvas";
@@ -4829,6 +4830,15 @@ function FlowWorkspaceInner() {
                   nodes={state.nodes}
                   edges={state.edges}
                   onUpdateNode={updateNode}
+                />
+              );
+
+            case "event-bus":
+              return (
+                <EventBusExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
                 />
               );
 

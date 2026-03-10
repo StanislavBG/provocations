@@ -95,6 +95,10 @@ async function saveCanvasState(canvasId: number, state: CanvasState, doc: NonNul
   });
 }
 
+/** Exported for use by event-bus result endpoint */
+export const loadCanvasStateExported = loadCanvasState;
+export const saveCanvasStateExported = saveCanvasState;
+
 /** Extract a route param as string (Express 5 params can be string | string[]) */
 function param(req: Request, name: string): string {
   const v = req.params[name];

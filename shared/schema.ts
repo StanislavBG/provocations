@@ -355,6 +355,9 @@ export const writeRequestSchema = z.object({
 
   // Edit history for coherent iteration
   editHistory: z.array(editHistoryEntrySchema).optional(),
+
+  // Output format — "markdown" (default) or "plain-text" (for system prompts, instructions)
+  outputFormat: z.enum(["markdown", "plain-text"]).optional(),
 });
 
 export type WriteRequest = z.infer<typeof writeRequestSchema>;

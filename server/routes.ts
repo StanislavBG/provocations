@@ -7,6 +7,7 @@ import { storage } from "./storage";
 import { encrypt, decrypt, encryptAsync, decryptAsync, decryptFieldAsync, decryptFieldsBatch } from "./crypto";
 import { llm } from "./llm";
 import { BLUEPRINTS, getBlueprint } from "./blueprints";
+import { broadcastToCanvasRoom } from "./canvas-collab";
 import {
   writeRequestSchema,
   generateChallengeRequestSchema,
@@ -622,6 +623,12 @@ function inferTaskType(path: string, body?: any): string {
     "/invoke": "invoke",
   };
   return pathMap[path] || "unknown";
+}
+
+/** Extract a route param as string (Express 5 params can be string | string[]) */
+function param(req: import("express").Request, name: string): string {
+  const v = req.params[name];
+  return Array.isArray(v) ? v[0] : v;
 }
 
 export async function registerRoutes(
@@ -2363,6 +2370,7 @@ Output only valid JSON, no markdown.`;
         capturedContext,
         sessionNotes,
         editHistory,
+        outputFormat,
       } = parsed.data;
 
       // When no objective is provided, let the LLM infer purpose from the document
@@ -2586,30 +2594,17 @@ The user's response should be integrated thoughtfully - don't just append it, we
         ? `DOCUMENT OBJECTIVE: ${objective}`
         : `DOCUMENT OBJECTIVE: Not explicitly provided by the user. Infer the document's purpose, audience, and goals from its content and the user's instruction. Shape your edits to strengthen what the document is clearly trying to achieve.`;
 
-      const documentResponse = await llm.generate({
-        maxTokens: 8192,
-        system: `You are an expert document editor helping a user iteratively shape their document. The document format is MARKDOWN.
+      const isPlainText = outputFormat === "plain-text";
 
-${objectiveSection}
-
-${isEmptyDocument
-  ? `Your role is to CREATE a new document from scratch based on the objective and the user's instruction. Generate a comprehensive, well-structured first draft.
-
-APPROACH:
-1. Read the objective and instruction carefully to understand what document the user wants
-2. Create a complete, well-organized document that addresses the objective thoroughly
-3. Use appropriate structure (headings, sections, lists) for the content type
-4. Be substantive and detailed — this is the user's starting point, give them something rich to work with`
-  : `Your role is to evolve the document based on the user's instruction while always keeping the objective in mind. The document should get better with each iteration - clearer, more compelling, better structured.
-
-APPROACH:
-1. Read the FULL instruction to understand the user's complete intent before making any changes
-2. When multiple configurations are given, synthesize them into a unified editorial vision — do NOT apply them as isolated sequential steps
-3. Identify the changes needed and their interactions (e.g., expanding one section while condensing another)
-4. Execute changes precisely and verify you haven't made unintended alterations
-5. The output must be the COMPLETE evolved document — always match or exceed the quality of the input`}
-
-OUTPUT FORMAT: The document MUST be valid Markdown. Use:
+      const formatSection = isPlainText
+        ? `OUTPUT FORMAT: Plain text only. This is a SYSTEM PROMPT / INSTRUCTION document, not a prose document.
+- Do NOT use markdown headings (#), bold (**), italic (*), or any markdown syntax
+- Use simple line breaks and indentation for structure
+- Use plain numbered lists (1. 2. 3.) or dashes (- item) for lists
+- Keep the output as clean, readable plain text instructions
+- Do NOT add sections like "Research", "Agent Experience", "Background", or other meta-commentary
+- Output ONLY the evolved instruction text — nothing else`
+        : `OUTPUT FORMAT: The document MUST be valid Markdown. Use:
 - # / ## / ### for headings (use heading hierarchy consistently)
 - **bold** and *italic* for emphasis
 - - or * for unordered lists, 1. for ordered lists
@@ -2618,18 +2613,43 @@ OUTPUT FORMAT: The document MUST be valid Markdown. Use:
 - [text](url) for links
 - ![alt](url) for images (preserve any existing image embeds exactly as-is)
 - --- for horizontal rules / section breaks
-- | col | col | for tables when presenting structured data
+- | col | col | for tables when presenting structured data`;
+
+      const documentResponse = await llm.generate({
+        maxTokens: 8192,
+        system: `You are an expert ${isPlainText ? "system prompt engineer" : "document editor"} helping a user iteratively shape their ${isPlainText ? "system prompt" : "document"}. ${isPlainText ? "The output is PLAIN TEXT instructions." : "The document format is MARKDOWN."}
+
+${objectiveSection}
+
+${isEmptyDocument
+  ? `Your role is to CREATE ${isPlainText ? "a new system prompt" : "a new document"} from scratch based on the objective and the user's instruction. Generate a comprehensive, well-structured first draft.
+
+APPROACH:
+1. Read the objective and instruction carefully to understand what ${isPlainText ? "system prompt" : "document"} the user wants
+2. Create a complete, well-organized ${isPlainText ? "system prompt" : "document"} that addresses the objective thoroughly
+3. Use appropriate structure for the content type
+4. Be substantive and detailed — this is the user's starting point, give them something rich to work with`
+  : `Your role is to evolve the ${isPlainText ? "system prompt" : "document"} based on the user's instruction while always keeping the objective in mind. The ${isPlainText ? "prompt" : "document"} should get better with each iteration - clearer, more compelling, better structured.
+
+APPROACH:
+1. Read the FULL instruction to understand the user's complete intent before making any changes
+2. When multiple configurations are given, synthesize them into a unified editorial vision — do NOT apply them as isolated sequential steps
+3. Identify the changes needed and their interactions (e.g., expanding one section while condensing another)
+4. Execute changes precisely and verify you haven't made unintended alterations
+5. The output must be the COMPLETE evolved ${isPlainText ? "system prompt" : "document"} — always match or exceed the quality of the input`}
+
+${formatSection}
 
 Guidelines:
 1. ${focusInstruction}
-2. Preserve the document's voice and structure unless explicitly asked to change it
+2. Preserve the ${isPlainText ? "prompt's" : "document's"} voice and structure unless explicitly asked to change it
 3. Make targeted improvements, not wholesale rewrites
-4. The output should be the complete evolved document (not just the changed parts)
-5. ALL output must be valid markdown — never output raw HTML
-6. When the document contains embedded images (![...](data:...)), preserve them exactly without modification
+4. The output should be the complete evolved ${isPlainText ? "system prompt" : "document"} (not just the changed parts)
+${isPlainText ? "" : `5. ALL output must be valid markdown — never output raw HTML
+6. When the document contains embedded images (![...](data:...)), preserve them exactly without modification`}
 ${contextSection}${preservationSection}
 
-Output only the evolved markdown document text. No explanations or meta-commentary.`,
+Output only the evolved ${isPlainText ? "system prompt" : "markdown document"} text. No explanations or meta-commentary.`,
         messages: [
           {
             role: "user",
@@ -8817,7 +8837,209 @@ Return ONLY valid JSON, no markdown fences.`;
   app.put("/api/webhook/documents/:docId", requireApiKey, webhookHandlers.updateDocument);
   app.get("/api/webhook/folders", requireApiKey, webhookHandlers.listFolders);
 
-  console.log("Webhook canvas + document store API endpoints registered.");
+  // ══════════════════════════════════════════════════════════════════
+  // Event Bus — Canvas ↔ Agent bidirectional communication
+  // ══════════════════════════════════════════════════════════════════
+
+  const eventBus = await import("./event-bus");
+
+  // ── Clerk-authenticated: canvas UI publishes events ──
+  app.post("/api/events/publish", async (req, res) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { channel = "default", sourceNodeId, sourceNodeLabel, content } = req.body;
+      if (!sourceNodeId || !content) {
+        return res.status(400).json({ error: "sourceNodeId and content are required" });
+      }
+
+      // Find the canvas document ID from the request (sent by client)
+      const canvasId = req.body.canvasId;
+      if (!canvasId) {
+        return res.status(400).json({ error: "canvasId is required" });
+      }
+
+      // Verify ownership
+      const doc = await storage.getDocument(canvasId);
+      if (!doc || doc.userId !== userId) {
+        return res.status(404).json({ error: "Canvas not found or access denied" });
+      }
+
+      const event = eventBus.publishEvent(canvasId, channel, "task", {
+        sourceNodeId,
+        sourceNodeLabel: sourceNodeLabel || "Event Bus",
+        content,
+        metadata: req.body.metadata,
+      });
+
+      res.json({ event });
+    } catch (error) {
+      console.error("Event publish error:", error);
+      res.status(500).json({ error: "Failed to publish event" });
+    }
+  });
+
+  // ── API-key authenticated: agent endpoints ──
+
+  // Subscribe to events via SSE
+  app.get("/api/webhook/events/:canvasId/subscribe", requireApiKey, (req, res) => {
+    const canvasId = parseInt(param(req, "canvasId"), 10);
+    const channel = (req.query.channel as string) || "default";
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    eventBus.addSSESubscriber(canvasId, channel, res);
+  });
+
+  // Poll for unconsumed events
+  app.get("/api/webhook/events/:canvasId", requireApiKey, (req, res) => {
+    const canvasId = parseInt(param(req, "canvasId"), 10);
+    const channel = (req.query.channel as string) || "default";
+    const since = req.query.since as string | undefined;
+
+    const events = eventBus.consumeEvents(canvasId, channel, since);
+    res.json({ events });
+  });
+
+  // Acknowledge consumed events
+  app.post("/api/webhook/events/:canvasId/ack", requireApiKey, (req, res) => {
+    const canvasId = parseInt(param(req, "canvasId"), 10);
+    const { eventIds } = req.body;
+
+    if (!Array.isArray(eventIds)) {
+      return res.status(400).json({ error: "eventIds must be an array" });
+    }
+
+    const count = eventBus.acknowledgeEvents(canvasId, eventIds);
+    res.json({ acknowledged: count });
+  });
+
+  // Publish events from agent (same as canvas publish but API key auth)
+  app.post("/api/webhook/events/:canvasId/publish", requireApiKey, async (req, res) => {
+    try {
+      const canvasId = parseInt(param(req, "canvasId"), 10);
+      const { channel = "default", type = "status", sourceNodeId = "agent", sourceNodeLabel = "Agent", content, metadata } = req.body;
+
+      if (!content) {
+        return res.status(400).json({ error: "content is required" });
+      }
+
+      const event = eventBus.publishEvent(canvasId, channel, type, {
+        sourceNodeId,
+        sourceNodeLabel,
+        content,
+        metadata,
+      });
+
+      res.json({ event });
+    } catch (error) {
+      console.error("Agent event publish error:", error);
+      res.status(500).json({ error: "Failed to publish event" });
+    }
+  });
+
+  // Agent posts result back — creates document node on canvas
+  app.post("/api/webhook/events/:canvasId/result", requireApiKey, async (req, res) => {
+    try {
+      const canvasId = parseInt(param(req, "canvasId"), 10);
+      const { channel = "default", label, content, sourceEventId } = req.body;
+
+      if (!label || !content) {
+        return res.status(400).json({ error: "label and content are required" });
+      }
+
+      // Load canvas, create document node, connect to listen node
+      const result = await webhookHandlers.loadCanvasStateExported(canvasId, req.apiUserId);
+      if (!result) {
+        return res.status(404).json({ error: "Canvas not found or access denied" });
+      }
+
+      // Find listen-mode event-bus node on this channel
+      const listenNode = result.state.nodes.find(
+        (n) => n.type === "event-bus" && n.eventBusMode === "listen" && (n.eventBusChannel || "default") === channel,
+      );
+
+      // Position: to the right of listen node, or default position
+      const baseX = listenNode ? (listenNode.x as number) + (listenNode.width as number || 260) + 60 : 400;
+      const baseY = listenNode ? (listenNode.y as number) : 200;
+      // Offset vertically for each existing result (avoid stacking)
+      const existingResults = result.state.nodes.filter(
+        (n) => n.type === "document" && n._eventBusResult === true,
+      );
+      const offsetY = existingResults.length * 180;
+
+      const nodeId = `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const newNode: Record<string, unknown> = {
+        id: nodeId,
+        type: "document",
+        label,
+        x: baseX,
+        y: baseY + offsetY,
+        width: 260,
+        height: 160,
+        content: content.slice(0, 200),
+        documentContent: content,
+        _eventBusResult: true,
+        _eventBusChannel: channel,
+        _sourceEventId: sourceEventId,
+      };
+
+      result.state.nodes.push(newNode);
+
+      // Connect listen node → document node
+      let edgeId: string | undefined;
+      if (listenNode) {
+        edgeId = `edge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        result.state.edges.push({
+          id: edgeId,
+          fromNodeId: listenNode.id as string,
+          toNodeId: nodeId,
+        });
+      }
+
+      // Also publish a result event so SSE subscribers see it
+      eventBus.publishEvent(canvasId, channel, "result", {
+        sourceNodeId: nodeId,
+        sourceNodeLabel: label,
+        content: content.slice(0, 500),
+        metadata: { sourceEventId },
+      });
+
+      // Update listen node's event log
+      if (listenNode) {
+        const log = (listenNode.eventBusLog as Array<Record<string, unknown>>) || [];
+        log.push({
+          id: nodeId,
+          type: "result",
+          timestamp: new Date().toISOString(),
+          summary: label,
+        });
+        listenNode.eventBusLog = log.slice(-20); // keep last 20
+      }
+
+      await webhookHandlers.saveCanvasStateExported(canvasId, result.state, result.doc);
+
+      broadcastToCanvasRoom(canvasId, "add-node", { node: newNode });
+      if (edgeId && listenNode) {
+        broadcastToCanvasRoom(canvasId, "add-edge", {
+          edge: { id: edgeId, fromNodeId: listenNode.id, toNodeId: nodeId },
+        });
+      }
+
+      res.status(201).json({ node: newNode, edgeId });
+    } catch (error) {
+      console.error("Agent result post error:", error);
+      res.status(500).json({ error: "Failed to post result" });
+    }
+  });
+
+  console.log("Webhook canvas + document store + event bus API endpoints registered.");
 
   // ── Message purge scheduler (runs every hour) ──
   setInterval(async () => {
