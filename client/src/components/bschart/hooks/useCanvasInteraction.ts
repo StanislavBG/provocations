@@ -71,24 +71,33 @@ export function useCanvasInteraction({
     [viewport],
   );
 
-  // ── Mouse wheel → zoom ──
+  // ── Mouse wheel → zoom (pinch/ctrl) or pan (two-finger scroll) ──
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       e.preventDefault();
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+      if (e.ctrlKey || e.metaKey) {
+        // Pinch-to-zoom or Ctrl+wheel → zoom toward mouse position
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
 
-      const zoomFactor = e.deltaY < 0 ? ZOOM.STEP : 1 / ZOOM.STEP;
-      const newZoom = Math.max(ZOOM.MIN, Math.min(ZOOM.MAX, viewport.zoom * zoomFactor));
+        const zoomFactor = e.deltaY < 0 ? ZOOM.STEP : 1 / ZOOM.STEP;
+        const newZoom = Math.max(ZOOM.MIN, Math.min(ZOOM.MAX, viewport.zoom * zoomFactor));
 
-      // Zoom toward mouse position
-      const newX = mouseX - (mouseX - viewport.x) * (newZoom / viewport.zoom);
-      const newY = mouseY - (mouseY - viewport.y) * (newZoom / viewport.zoom);
+        const newX = mouseX - (mouseX - viewport.x) * (newZoom / viewport.zoom);
+        const newY = mouseY - (mouseY - viewport.y) * (newZoom / viewport.zoom);
 
-      onViewportChange(newX, newY, newZoom);
+        onViewportChange(newX, newY, newZoom);
+      } else {
+        // Two-finger scroll → pan the canvas
+        onViewportChange(
+          viewport.x - e.deltaX,
+          viewport.y - e.deltaY,
+          viewport.zoom,
+        );
+      }
     },
     [viewport, onViewportChange],
   );
