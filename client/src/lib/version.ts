@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.3";
+export const APP_VERSION = "0.27.4";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.4",
+    date: "2026-03-11",
+    changes: [
+      "Fix: canvas auto-save no longer overwrites user-set document titles",
+    ],
+  },
   {
     version: "0.27.3",
     date: "2026-03-11",
