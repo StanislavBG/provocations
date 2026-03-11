@@ -2413,6 +2413,16 @@ function FlowWorkspaceInner() {
         });
         return;
       }
+      if (toolId === "event-bus") {
+        addNode("event-bus", canvasX, canvasY, {
+          label: "Event Bus",
+          snippet: "Double-click to configure publish/listen mode",
+          eventBusMode: "publish",
+          eventBusChannel: "",
+          eventBusStatus: "idle",
+        });
+        return;
+      }
     },
     [addNode],
   );
