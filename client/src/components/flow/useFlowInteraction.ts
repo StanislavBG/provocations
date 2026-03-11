@@ -253,16 +253,29 @@ export function useFlowInteraction({
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+      // Pinch-to-zoom on trackpads sets ctrlKey; mouse wheel also has no ctrlKey
+      // but has integer deltaY. Treat ctrlKey OR mouse wheel (no deltaX) as zoom,
+      // and plain two-finger scroll (no ctrlKey) as pan.
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom centered on cursor
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
 
-      const zoomFactor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, viewport.zoom * zoomFactor));
+        const zoomFactor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+        const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, viewport.zoom * zoomFactor));
 
-      const newX = mouseX - (mouseX - viewport.x) * (newZoom / viewport.zoom);
-      const newY = mouseY - (mouseY - viewport.y) * (newZoom / viewport.zoom);
+        const newX = mouseX - (mouseX - viewport.x) * (newZoom / viewport.zoom);
+        const newY = mouseY - (mouseY - viewport.y) * (newZoom / viewport.zoom);
 
-      onViewportChange(newX, newY, newZoom);
+        onViewportChange(newX, newY, newZoom);
+      } else {
+        // Two-finger scroll → pan the canvas
+        onViewportChange(
+          viewport.x - e.deltaX,
+          viewport.y - e.deltaY,
+          viewport.zoom,
+        );
+      }
     },
     [viewport, onViewportChange],
   );
