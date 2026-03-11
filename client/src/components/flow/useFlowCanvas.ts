@@ -343,7 +343,9 @@ export interface FlowNode {
   /** Event Bus: execution status */
   eventBusStatus?: "idle" | "publishing" | "listening" | "done" | "error";
   /** Event Bus: log of recent events */
-  eventBusLog?: Array<{ id: string; type: string; timestamp: string; summary: string }>;
+  eventBusLog?: Array<{ type: string; timestamp: string; summary: string; content?: string; eventId?: string }>;
+  /** Event Bus (listen mode): overwrite a single linked document node instead of creating new ones */
+  eventBusOverwrite?: boolean;
 }
 
 /** Named edge roles — how source data is used by the target node */
