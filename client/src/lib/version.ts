@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.7";
+export const APP_VERSION = "0.26.8";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.26.8",
+    date: "2026-03-10",
+    changes: [
+      "Event-bus: submerge/emerge effect — blobs shrink into channel badge, new blobs grow out the other side",
+      "Event-bus: converging/diverging funnel lines at badge edges reinforce tunnel metaphor",
+    ],
+  },
   {
     version: "0.26.7",
     date: "2026-03-10",

@@ -413,62 +413,82 @@ export const FlowEdgeLayer = memo(function FlowEdgeLayer({
         const mx = (x1 + x2) / 2;
         const my = (y1 + y2) / 2;
 
-        // Two-segment path with gap in the middle for the "LOCAL" badge
+        // Two-segment path with gap in the middle for the channel badge
         const gapHalf = 40;
-        // Left segment: publisher → gap start
+        // Left segment: publisher → gap start (submerge into tunnel)
         const lx2 = mx - gapHalf;
         const ly2 = my;
         const lmx = (x1 + lx2) / 2;
         const pathLeft = `M ${x1},${y1} Q ${lmx},${y1} ${lx2},${ly2}`;
 
-        // Right segment: gap end → listener
+        // Right segment: gap end → listener (emerge from tunnel)
         const rx1 = mx + gapHalf;
         const ry1 = my;
         const rmx = (rx1 + x2) / 2;
         const pathRight = `M ${rx1},${ry1} Q ${rmx},${y2} ${x2},${y2}`;
 
-        // Full path for traveling blobs (continuous)
-        const fullPath = `M ${x1},${y1} Q ${mx},${y1} ${x2},${y2}`;
-
         const pairKey = `eventbus-${pub.id}-${sub.id}`;
+        const blobDur = "1.6s";
 
         return (
           <g key={pairKey}>
-            {/* Left segment — publisher side */}
+            {/* Left segment — publisher side (submerge) */}
             <path
               d={pathLeft}
               fill="none"
-              stroke="rgba(217,119,6,0.35)"
+              stroke="rgba(217,119,6,0.3)"
               strokeWidth={2}
               strokeDasharray="6 4"
               className="eventbus-edge"
               markerEnd="url(#flow-arrow-eventbus)"
             />
 
-            {/* Right segment — listener side */}
+            {/* Right segment — listener side (emerge) */}
             <path
               d={pathRight}
               fill="none"
-              stroke="rgba(217,119,6,0.35)"
+              stroke="rgba(217,119,6,0.3)"
               strokeWidth={2}
               strokeDasharray="6 4"
               className="eventbus-edge"
               markerEnd="url(#flow-arrow-eventbus)"
             />
 
-            {/* Traveling message blobs along full path */}
-            {[0, 1, 2].map((i) => (
-              <circle key={i} r={2.5 - i * 0.3} fill="rgba(217,119,6,0.7)" opacity={0.7 - i * 0.15}>
-                <animateMotion
-                  dur="2s"
-                  repeatCount="indefinite"
-                  path={fullPath}
-                  begin={`${(i * 2) / 3}s`}
-                />
+            {/* Submerge funnel — converging lines into badge */}
+            <path
+              d={`M ${lx2},${ly2 - 6} L ${mx - gapHalf + 12},${my} L ${lx2},${ly2 + 6}`}
+              fill="none"
+              stroke="rgba(217,119,6,0.2)"
+              strokeWidth={1}
+            />
+
+            {/* Emerge funnel — diverging lines from badge */}
+            <path
+              d={`M ${rx1},${ry1 - 6} L ${mx + gapHalf - 12},${my} L ${rx1},${ry1 + 6}`}
+              fill="none"
+              stroke="rgba(217,119,6,0.2)"
+              strokeWidth={1}
+            />
+
+            {/* Submerging blobs — travel left path, shrink + fade as they enter */}
+            {[0, 1].map((i) => (
+              <circle key={`sub-${i}`} fill="rgba(217,119,6,0.8)" opacity={0.8}>
+                <animateMotion dur={blobDur} repeatCount="indefinite" path={pathLeft} begin={`${i * 0.8}s`} />
+                <animate attributeName="r" values="3;3;1;0" keyTimes="0;0.5;0.85;1" dur={blobDur} repeatCount="indefinite" begin={`${i * 0.8}s`} />
+                <animate attributeName="opacity" values="0.8;0.8;0.4;0" keyTimes="0;0.5;0.85;1" dur={blobDur} repeatCount="indefinite" begin={`${i * 0.8}s`} />
               </circle>
             ))}
 
-            {/* Center badge — ⚡ LOCAL ⚡ */}
+            {/* Emerging blobs — travel right path, grow + brighten as they exit */}
+            {[0, 1].map((i) => (
+              <circle key={`emr-${i}`} fill="rgba(217,119,6,0.8)" opacity={0}>
+                <animateMotion dur={blobDur} repeatCount="indefinite" path={pathRight} begin={`${i * 0.8}s`} />
+                <animate attributeName="r" values="0;1;3;3" keyTimes="0;0.15;0.5;1" dur={blobDur} repeatCount="indefinite" begin={`${i * 0.8}s`} />
+                <animate attributeName="opacity" values="0;0.4;0.8;0.8" keyTimes="0;0.15;0.5;1" dur={blobDur} repeatCount="indefinite" begin={`${i * 0.8}s`} />
+              </circle>
+            ))}
+
+            {/* Center badge — ⚡ CHANNEL ⚡ */}
             <g className="eventbus-badge">
               <rect
                 x={mx - 32}
