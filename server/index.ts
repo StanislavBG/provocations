@@ -235,13 +235,32 @@ app.use((req, res, next) => {
     const { encrypt } = await import("./crypto");
     const secret = process.env.ENCRYPTION_SECRET || "provocations-dev-key-change-in-production";
     const encryptedContent = encrypt(content, secret);
-    // Keep existing title — just update the content
-    const encryptedTitle = encrypt("Flow Canvas (auto-saved)", secret);
+
+    // Preserve the user's existing title — never overwrite it on auto-save
+    const doc = await storage.getDocument(canvasId);
+    let titleFields: { title: string; titleCiphertext: string; titleSalt: string; titleIv: string };
+
+    if (doc?.titleCiphertext) {
+      // Title already encrypted — pass it through unchanged
+      titleFields = {
+        title: "[encrypted]",
+        titleCiphertext: doc.titleCiphertext,
+        titleSalt: doc.titleSalt!,
+        titleIv: doc.titleIv!,
+      };
+    } else {
+      // Legacy plaintext or missing — re-encrypt whatever exists
+      const encryptedTitle = encrypt(doc?.title || "Canvas", secret);
+      titleFields = {
+        title: "[encrypted]",
+        titleCiphertext: encryptedTitle.ciphertext,
+        titleSalt: encryptedTitle.salt,
+        titleIv: encryptedTitle.iv,
+      };
+    }
+
     await storage.updateDocument(canvasId, {
-      title: "[encrypted]",
-      titleCiphertext: encryptedTitle.ciphertext,
-      titleSalt: encryptedTitle.salt,
-      titleIv: encryptedTitle.iv,
+      ...titleFields,
       ciphertext: encryptedContent.ciphertext,
       salt: encryptedContent.salt,
       iv: encryptedContent.iv,
