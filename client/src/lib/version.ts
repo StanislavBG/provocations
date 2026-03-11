@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.0";
+export const APP_VERSION = "0.27.1";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.1",
+    date: "2026-03-11",
+    changes: [
+      "Event-bus listen: overwrite mode — updates a single linked document node instead of creating new ones each time",
+      "Event-bus listen: fix edge broadcast so document nodes are properly linked to the listener in real-time",
+      "Event-bus publish: log of all items pushed to the channel, viewable in expanded overlay",
+      "Event-bus listen: full message history in log with expandable content preview",
+      "Event-bus logs increased from 20 to 50 entries, now store content snippets",
+    ],
+  },
   {
     version: "0.27.0",
     date: "2026-03-11",
