@@ -218,6 +218,14 @@ app.use((req, res, next) => {
     console.warn("Continuing without database.");
   }
 
+  // Replay unconsumed events from DB into in-memory event bus
+  try {
+    const { initEventBus } = await import("./event-bus");
+    await initEventBus();
+  } catch (err) {
+    console.warn("Event bus init failed:", err instanceof Error ? err.message : err);
+  }
+
   // Discover available models from OpenAI / Gemini APIs (non-blocking fallback on error)
   await discoverModels().catch((err) => {
     console.warn("[llm] Model discovery failed, using static fallback:", err instanceof Error ? err.message : err);

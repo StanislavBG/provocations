@@ -659,3 +659,51 @@ export const usageRecords = pgTable("usage_records", {
 
 export type StoredUsageRecord = typeof usageRecords.$inferSelect;
 
+// ══════════════════════════════════════════════════════════════════
+// Canvas Events — persistent event bus for Flow Canvas ↔ Agent communication.
+// In-memory queue is the hot path; rows are written asynchronously for durability.
+// ══════════════════════════════════════════════════════════════════
+
+export const canvasEvents = pgTable("canvas_events", {
+  id: serial("id").primaryKey(),
+  eventId: varchar("event_id", { length: 64 }).notNull().unique(),
+  canvasId: integer("canvas_id").notNull(),
+  channel: varchar("channel", { length: 128 }).notNull(),
+  eventType: varchar("event_type", { length: 16 }).notNull(), // 'task' | 'result' | 'status'
+  payload: text("payload").notNull(), // JSON: { sourceNodeId, sourceNodeLabel, content, metadata? }
+  consumedAt: timestamp("consumed_at"),
+  ttlMs: integer("ttl_ms").notNull().default(300000),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  uniqueIndex("idx_canvas_events_event_id").on(table.eventId),
+  index("idx_canvas_events_canvas_channel").on(table.canvasId, table.channel),
+  index("idx_canvas_events_created").on(table.createdAt),
+]);
+
+export type StoredCanvasEvent = typeof canvasEvents.$inferSelect;
+
+// ══════════════════════════════════════════════════════════════════
+// API Keys — multi-key authentication for webhook/MCP access.
+// Keys are hashed (SHA-256); plaintext is shown once on creation.
+// ══════════════════════════════════════════════════════════════════
+
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  keyHash: varchar("key_hash", { length: 128 }).notNull().unique(),
+  keyPrefix: varchar("key_prefix", { length: 12 }).notNull(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  label: varchar("label", { length: 200 }).notNull(),
+  scopes: text("scopes"), // JSON array of scope strings, null = full access
+  canvasIds: text("canvas_ids"), // JSON array of canvas IDs, null = all canvases
+  canvasAccessMode: varchar("canvas_access_mode", { length: 20 }).default("all"), // 'all' | 'shared' | 'specific'
+  lastUsedAt: timestamp("last_used_at"),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  uniqueIndex("idx_api_keys_key_hash").on(table.keyHash),
+  index("idx_api_keys_user_id").on(table.userId),
+]);
+
+export type StoredApiKey = typeof apiKeys.$inferSelect;
+

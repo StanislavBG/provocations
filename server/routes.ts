@@ -9170,7 +9170,144 @@ Return ONLY valid JSON, no markdown fences.`;
     }
   });
 
-  console.log("Webhook canvas + document store + event bus API endpoints registered.");
+  // ══════════════════════════════════════════════════════════════════
+  // API Key Management — Clerk-authenticated endpoints for users to
+  // create, list, update, and revoke their own API keys.
+  // ══════════════════════════════════════════════════════════════════
+
+  app.post("/api/settings/api-keys", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { label, scopes, canvasIds, canvasAccessMode, expiresAt } = req.body;
+      if (!label || typeof label !== "string") {
+        return res.status(400).json({ error: "label is required" });
+      }
+
+      // Generate a random key: prov_ + 32 hex chars
+      const { randomBytes, createHash } = await import("crypto");
+      const plaintext = `prov_${randomBytes(16).toString("hex")}`;
+      const keyHash = createHash("sha256").update(plaintext).digest("hex");
+      const keyPrefix = plaintext.slice(0, 9); // "prov_" + first 4 hex
+
+      const row = await storage.createApiKey({
+        keyHash,
+        keyPrefix,
+        userId: auth.userId,
+        label,
+        scopes: scopes ? JSON.stringify(scopes) : null,
+        canvasIds: canvasIds ? JSON.stringify(canvasIds) : null,
+        canvasAccessMode: canvasAccessMode || "all",
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      });
+
+      // Return the plaintext key exactly once
+      res.status(201).json({
+        id: row.id,
+        key: plaintext,
+        keyPrefix,
+        label: row.label,
+        scopes: scopes || null,
+        canvasIds: canvasIds || null,
+        canvasAccessMode: row.canvasAccessMode,
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+      });
+    } catch (err) {
+      console.error("Create API key error:", err);
+      res.status(500).json({ error: "Failed to create API key" });
+    }
+  });
+
+  app.get("/api/settings/api-keys", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const keys = await storage.listApiKeys(auth.userId);
+      res.json({
+        keys: keys.map((k) => ({
+          id: k.id,
+          keyPrefix: k.keyPrefix,
+          label: k.label,
+          scopes: k.scopes ? JSON.parse(k.scopes) : null,
+          canvasIds: k.canvasIds ? JSON.parse(k.canvasIds) : null,
+          canvasAccessMode: k.canvasAccessMode || "all",
+          lastUsedAt: k.lastUsedAt,
+          expiresAt: k.expiresAt,
+          revokedAt: k.revokedAt,
+          createdAt: k.createdAt,
+        })),
+      });
+    } catch (err) {
+      console.error("List API keys error:", err);
+      res.status(500).json({ error: "Failed to list API keys" });
+    }
+  });
+
+  app.patch("/api/settings/api-keys/:id", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const id = parseInt(req.params.id as string, 10);
+      const { label, scopes, canvasIds, expiresAt } = req.body;
+
+      const data: Record<string, unknown> = {};
+      if (label !== undefined) data.label = label;
+      if (scopes !== undefined) data.scopes = scopes ? JSON.stringify(scopes) : null;
+      if (canvasIds !== undefined) data.canvasIds = canvasIds ? JSON.stringify(canvasIds) : null;
+      if (expiresAt !== undefined) data.expiresAt = expiresAt ? new Date(expiresAt) : null;
+
+      const row = await storage.updateApiKey(id, auth.userId, data as any);
+      if (!row) return res.status(404).json({ error: "API key not found" });
+
+      // Invalidate cache for this key
+      const { invalidateKeyCache } = await import("./api-key-auth");
+      invalidateKeyCache(row.keyHash);
+
+      res.json({
+        id: row.id,
+        keyPrefix: row.keyPrefix,
+        label: row.label,
+        scopes: row.scopes ? JSON.parse(row.scopes) : null,
+        canvasIds: row.canvasIds ? JSON.parse(row.canvasIds) : null,
+        expiresAt: row.expiresAt,
+      });
+    } catch (err) {
+      console.error("Update API key error:", err);
+      res.status(500).json({ error: "Failed to update API key" });
+    }
+  });
+
+  app.delete("/api/settings/api-keys/:id", async (req, res) => {
+    try {
+      const auth = getAuth(req);
+      if (!auth.userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const id = parseInt(req.params.id as string, 10);
+
+      // Get the key first to invalidate cache
+      const keys = await storage.listApiKeys(auth.userId);
+      const target = keys.find((k) => k.id === id);
+
+      const revoked = await storage.revokeApiKey(id, auth.userId);
+      if (!revoked) return res.status(404).json({ error: "API key not found or already revoked" });
+
+      if (target) {
+        const { invalidateKeyCache } = await import("./api-key-auth");
+        invalidateKeyCache(target.keyHash);
+      }
+
+      res.json({ revoked: true });
+    } catch (err) {
+      console.error("Revoke API key error:", err);
+      res.status(500).json({ error: "Failed to revoke API key" });
+    }
+  });
+
+  console.log("Webhook canvas + document store + event bus + API key management endpoints registered.");
 
   // ── Message purge scheduler (runs every hour) ──
   setInterval(async () => {

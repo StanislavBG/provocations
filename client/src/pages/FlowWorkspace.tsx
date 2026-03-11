@@ -73,6 +73,7 @@ import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
 import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { serializeCanvas, serializeNodeForSave } from "@/components/flow/serializeCanvas";
 import { PlatformIntegrations } from "@/components/PlatformIntegrations";
+import { ConnectedAppsDialog } from "@/components/ConnectedAppsDialog";
 import { ContextStoreManager } from "@/components/ContextStoreManager";
 import { WelcomeOverlay } from "@/components/WelcomeOverlay";
 import { KeyboardShortcutsOverlay } from "@/components/KeyboardShortcutsOverlay";
@@ -422,6 +423,7 @@ function FlowWorkspaceInner() {
   const [openCanvasDialogOpen, setOpenCanvasDialogOpen] = useState(false);
   const [connectionsDialogOpen, setConnectionsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
+  const [connectedAppsOpen, setConnectedAppsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [mailboxOpen, setMailboxOpen] = useState(false);
   // Track whether the currently open canvas is shared (not owned by us)
@@ -3268,6 +3270,7 @@ function FlowWorkspaceInner() {
         onOpenActivityLogs={() => setLifecycleConsoleOpen(true)}
         onOpenConnections={() => setConnectionsDialogOpen(true)}
         onOpenIntegrations={() => setIntegrationsDialogOpen(true)}
+        onOpenConnectedApps={() => setConnectedAppsOpen(true)}
         onOpenContextStore={() => setContextStoreOpen(true)}
         appVersion={APP_VERSION}
         onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
@@ -4967,6 +4970,7 @@ function FlowWorkspaceInner() {
 
       {/* Platform Integrations dialog */}
       <PlatformIntegrations open={integrationsDialogOpen} onOpenChange={setIntegrationsDialogOpen} />
+      <ConnectedAppsDialog open={connectedAppsOpen} onOpenChange={setConnectedAppsOpen} savedCanvases={canvasDocs.map((d: DocumentListItem) => ({ id: d.id, title: d.title }))} />
       <ContextStoreManager open={contextStoreOpen} onOpenChange={setContextStoreOpen} />
 
       {/* Share Canvas dialog */}
