@@ -2622,8 +2622,8 @@ The user's response should be integrated thoughtfully - don't just append it, we
 - \`code\` for inline code, \`\`\` for code blocks
 - [text](url) for links
 - ![alt](url) for images (preserve any existing image embeds exactly as-is)
-- --- for horizontal rules / section breaks
-- | col | col | for tables when presenting structured data`;
+- | col | col | for tables when presenting structured data
+- Do NOT insert --- horizontal rules unless they already exist in the source document`;
 
       const documentResponse = await llm.generate({
         maxTokens: 8192,
@@ -2831,7 +2831,7 @@ STRATEGY: ${strategy}`);
 
 ${contextSection}
 
-OUTPUT FORMAT: The document MUST be valid Markdown. Use headings (#/##/###), lists, bold/italic, blockquotes, code blocks, tables, and image embeds as appropriate. Preserve any existing embedded images (![...](data:...)) exactly.
+OUTPUT FORMAT: The document MUST be valid Markdown. Use headings (#/##/###), lists, bold/italic, blockquotes, code blocks, tables, and image embeds as appropriate. Preserve any existing embedded images (![...](data:...)) exactly. Do NOT insert --- horizontal rules unless they already exist in the source document.
 
 Guidelines:
 1. ${focusInstruction}

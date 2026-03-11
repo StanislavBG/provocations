@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.1";
+export const APP_VERSION = "0.27.2";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.2",
+    date: "2026-03-11",
+    changes: [
+      "Agency View: live PID display for Bilko and Scout sessions on the toolbar",
+      "Scout PID detection via process tree scanning when spawned as Bilko's child",
+      "Audit Trail: SSE-driven instant refresh on run events",
+      "Canvas poller: deduplicate events — no longer logs the same event every 2s",
+      "Write endpoint: prevent LLM from inserting spurious --- horizontal rules on Expand",
+    ],
+  },
   {
     version: "0.27.1",
     date: "2026-03-11",
