@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq, desc, isNull, and, sql, count } from "drizzle-orm";
 import { db } from "./db";
-import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications, platformCredentials, socialPostLogs, agencyEvents, agencyCampaigns, subscriptions, usageRecords } from "../shared/models/chat";
-import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification, StoredPlatformCredential, StoredSocialPostLog, StoredAgencyEvent, StoredAgencyCampaign, StoredSubscription, StoredUsageRecord } from "../shared/models/chat";
+import { documents, folders, userPreferences, trackingEvents, personaVersions, usageMetrics, personaOverrides, agentDefinitions, agentPromptOverrides, payments, llmCallLogs, connections, conversations, messages, chatPreferences, sharedItems, notifications, platformCredentials, socialPostLogs, agencyEvents, agencyCampaigns, subscriptions, usageRecords, canvasEvents, apiKeys } from "../shared/models/chat";
+import type { UserPreferences, StoredPersonaOverride, StoredAgentDefinition, StoredAgentPromptOverride, StoredPayment, InsertLlmCallLog, StoredLlmCallLog, StoredConnection, StoredConversation, StoredMessage, StoredChatPreferences, StoredSharedItem, StoredNotification, StoredPlatformCredential, StoredSocialPostLog, StoredAgencyEvent, StoredAgencyCampaign, StoredSubscription, StoredUsageRecord, StoredCanvasEvent, StoredApiKey } from "../shared/models/chat";
 import type {
   Document,
   DocumentListItem,
@@ -186,6 +186,18 @@ export interface IStorage {
   getAgencyCampaign(userId: string, campaignId: string): Promise<StoredAgencyCampaign | null>;
   updateAgencyCampaign(userId: string, campaignId: string, data: Partial<{ name: string; brandVoice: string | null; targetTopics: string | null; platforms: string | null; scheduleCron: string | null; active: boolean; stats: string | null }>): Promise<StoredAgencyCampaign | null>;
   deleteAgencyCampaign(userId: string, campaignId: string): Promise<boolean>;
+  // Canvas events (event bus persistence)
+  insertCanvasEvent(data: { eventId: string; canvasId: number; channel: string; eventType: string; payload: string; ttlMs: number }): Promise<StoredCanvasEvent>;
+  bulkAcknowledgeCanvasEvents(eventIds: string[]): Promise<number>;
+  loadUnconsumedCanvasEvents(): Promise<StoredCanvasEvent[]>;
+  purgeExpiredCanvasEvents(): Promise<number>;
+  // API keys (multi-key auth)
+  createApiKey(data: { keyHash: string; keyPrefix: string; userId: string; label: string; scopes?: string | null; canvasIds?: string | null; canvasAccessMode?: string | null; expiresAt?: Date | null }): Promise<StoredApiKey>;
+  getApiKeyByHash(keyHash: string): Promise<StoredApiKey | null>;
+  listApiKeys(userId: string): Promise<StoredApiKey[]>;
+  updateApiKey(id: number, userId: string, data: Partial<{ label: string; scopes: string | null; canvasIds: string | null; expiresAt: Date | null }>): Promise<StoredApiKey | null>;
+  revokeApiKey(id: number, userId: string): Promise<boolean>;
+  touchApiKeyLastUsed(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2158,6 +2170,150 @@ export class DatabaseStorage implements IStorage {
       count,
       date: today,
     });
+  }
+
+  // ── Canvas Events (Event Bus Persistence) ─────────────────────────
+
+  async insertCanvasEvent(data: {
+    eventId: string;
+    canvasId: number;
+    channel: string;
+    eventType: string;
+    payload: string;
+    ttlMs: number;
+  }): Promise<StoredCanvasEvent> {
+    const [row] = await db
+      .insert(canvasEvents)
+      .values({
+        eventId: data.eventId,
+        canvasId: data.canvasId,
+        channel: data.channel,
+        eventType: data.eventType,
+        payload: data.payload,
+        ttlMs: data.ttlMs,
+      })
+      .returning();
+    return row;
+  }
+
+  async bulkAcknowledgeCanvasEvents(eventIds: string[]): Promise<number> {
+    if (eventIds.length === 0) return 0;
+    const result = await db
+      .update(canvasEvents)
+      .set({ consumedAt: new Date() })
+      .where(
+        and(
+          sql`${canvasEvents.eventId} IN (${sql.join(eventIds.map((id) => sql`${id}`), sql`, `)})`,
+          isNull(canvasEvents.consumedAt),
+        ),
+      )
+      .returning();
+    return result.length;
+  }
+
+  async loadUnconsumedCanvasEvents(): Promise<StoredCanvasEvent[]> {
+    return db
+      .select()
+      .from(canvasEvents)
+      .where(
+        and(
+          isNull(canvasEvents.consumedAt),
+          sql`${canvasEvents.createdAt} + (${canvasEvents.ttlMs} || ' milliseconds')::interval > NOW()`,
+        ),
+      )
+      .orderBy(canvasEvents.createdAt);
+  }
+
+  async purgeExpiredCanvasEvents(): Promise<number> {
+    const result = await db
+      .delete(canvasEvents)
+      .where(
+        sql`${canvasEvents.createdAt} + (${canvasEvents.ttlMs} || ' milliseconds')::interval < NOW()`,
+      )
+      .returning();
+    return result.length;
+  }
+
+  // ── API Keys (Multi-Key Auth) ──────────────────────────────────────
+
+  async createApiKey(data: {
+    keyHash: string;
+    keyPrefix: string;
+    userId: string;
+    label: string;
+    scopes?: string | null;
+    canvasIds?: string | null;
+    canvasAccessMode?: string | null;
+    expiresAt?: Date | null;
+  }): Promise<StoredApiKey> {
+    const [row] = await db
+      .insert(apiKeys)
+      .values({
+        keyHash: data.keyHash,
+        keyPrefix: data.keyPrefix,
+        userId: data.userId,
+        label: data.label,
+        scopes: data.scopes ?? null,
+        canvasIds: data.canvasIds ?? null,
+        canvasAccessMode: data.canvasAccessMode ?? "all",
+        expiresAt: data.expiresAt ?? null,
+      })
+      .returning();
+    return row;
+  }
+
+  async getApiKeyByHash(keyHash: string): Promise<StoredApiKey | null> {
+    const [row] = await db
+      .select()
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.keyHash, keyHash),
+          isNull(apiKeys.revokedAt),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+    // Check expiry
+    if (row.expiresAt && row.expiresAt < new Date()) return null;
+    return row;
+  }
+
+  async listApiKeys(userId: string): Promise<StoredApiKey[]> {
+    return db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.userId, userId))
+      .orderBy(desc(apiKeys.createdAt));
+  }
+
+  async updateApiKey(
+    id: number,
+    userId: string,
+    data: Partial<{ label: string; scopes: string | null; canvasIds: string | null; expiresAt: Date | null }>,
+  ): Promise<StoredApiKey | null> {
+    const [row] = await db
+      .update(apiKeys)
+      .set(data)
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, userId)))
+      .returning();
+    return row ?? null;
+  }
+
+  async revokeApiKey(id: number, userId: string): Promise<boolean> {
+    const result = await db
+      .update(apiKeys)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, userId), isNull(apiKeys.revokedAt)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async touchApiKeyLastUsed(id: number): Promise<void> {
+    await db
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, id));
   }
 }
 

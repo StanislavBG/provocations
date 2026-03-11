@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.4";
+export const APP_VERSION = "0.27.5";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.5",
+    date: "2026-03-11",
+    changes: [
+      "Event bus persistence: events survive server restarts (async write-behind to canvas_events DB table, startup replay)",
+      "Multi-key API auth: create scoped API keys per app/project instead of a single shared env-var key",
+      "Connected Apps dialog: add external apps from the gear menu with permission presets and canvas access modes",
+      "API key management endpoints: POST/GET/PATCH/DELETE /api/settings/api-keys with scope and canvas restrictions",
+      "New docs/event-bus.md integration reference for external projects",
+    ],
+  },
   {
     version: "0.27.4",
     date: "2026-03-11",

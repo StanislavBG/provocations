@@ -35,6 +35,7 @@ import {
   Blocks,
   Layers,
   Bell,
+  Plug,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -112,6 +113,8 @@ interface FtuxStatusBarProps {
   onOpenConnections?: () => void;
   /** Callback to open the Platform Integrations dialog */
   onOpenIntegrations?: () => void;
+  /** Callback to open the Connected Apps dialog */
+  onOpenConnectedApps?: () => void;
   /** Current app version string (shown in gear menu) */
   appVersion?: string;
   /** Callback to open the Release Notes dialog */
@@ -130,7 +133,7 @@ interface FtuxStatusBarProps {
   sharedPermission?: "read" | "write";
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations, appVersion, onOpenReleaseNotes, onOpenContextStore, blueprintsSlot, mailboxUnreadCount = 0, onOpenMailbox, isSharedCanvas, sharedPermission }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations, onOpenConnectedApps, appVersion, onOpenReleaseNotes, onOpenContextStore, blueprintsSlot, mailboxUnreadCount = 0, onOpenMailbox, isSharedCanvas, sharedPermission }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -570,6 +573,21 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium">Platform Integrations</div>
                       <div className="text-[10px] text-muted-foreground">External services, APIs</div>
+                    </div>
+                  </button>
+                )}
+                {onOpenConnectedApps && (
+                  <button
+                    className="flex items-center gap-2.5 w-full px-3 py-1.5 text-left hover:bg-muted transition-colors"
+                    onClick={() => {
+                      setGearDropdownOpen(false);
+                      onOpenConnectedApps();
+                    }}
+                  >
+                    <Plug className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium">Connected Apps</div>
+                      <div className="text-[10px] text-muted-foreground">External app access & API keys</div>
                     </div>
                   </button>
                 )}

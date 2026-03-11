@@ -539,6 +539,49 @@ export async function ensureTables(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS idx_usage_records_user_date ON usage_records(user_id, date);
       CREATE INDEX IF NOT EXISTS idx_usage_records_resource ON usage_records(resource);
+
+      -- Canvas events — persistent event bus for Flow Canvas ↔ Agent communication
+      CREATE TABLE IF NOT EXISTS canvas_events (
+        id SERIAL PRIMARY KEY,
+        event_id VARCHAR(64) NOT NULL,
+        canvas_id INTEGER NOT NULL,
+        channel VARCHAR(128) NOT NULL,
+        event_type VARCHAR(16) NOT NULL,
+        payload TEXT NOT NULL,
+        consumed_at TIMESTAMP,
+        ttl_ms INTEGER NOT NULL DEFAULT 300000,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_canvas_events_event_id ON canvas_events(event_id);
+      CREATE INDEX IF NOT EXISTS idx_canvas_events_canvas_channel ON canvas_events(canvas_id, channel);
+      CREATE INDEX IF NOT EXISTS idx_canvas_events_created ON canvas_events(created_at);
+
+      -- API keys — multi-key authentication for webhook/MCP access
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id SERIAL PRIMARY KEY,
+        key_hash VARCHAR(128) NOT NULL,
+        key_prefix VARCHAR(12) NOT NULL,
+        user_id VARCHAR(128) NOT NULL,
+        label VARCHAR(200) NOT NULL,
+        scopes TEXT,
+        canvas_ids TEXT,
+        canvas_access_mode VARCHAR(20) DEFAULT 'all',
+        last_used_at TIMESTAMP,
+        expires_at TIMESTAMP,
+        revoked_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
+      CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+
+      DO $$ BEGIN
+        ALTER TABLE canvas_events ADD CONSTRAINT canvas_events_event_id_unique UNIQUE(event_id);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
+      DO $$ BEGIN
+        ALTER TABLE api_keys ADD CONSTRAINT api_keys_key_hash_unique UNIQUE(key_hash);
+      EXCEPTION WHEN duplicate_object THEN NULL; WHEN duplicate_table THEN NULL;
+      END $$;
     `);
     console.log("Database tables verified.");
   } catch (err) {
