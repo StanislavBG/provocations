@@ -9042,7 +9042,8 @@ Return ONLY valid JSON, no markdown fences.`;
         (n) => n.type === "event-bus" && n.eventBusMode === "listen" && (n.eventBusChannel || "default") === channel,
       );
 
-      const overwrite = listenNode?.eventBusOverwrite === true;
+      // Use existing outputReplaceMode: "replace" = update linked doc, "new" = create new each time
+      const replaceMode = (listenNode?.outputReplaceMode as string) ?? "replace";
 
       // Update listen node's event log (full history of all received messages)
       if (listenNode) {
@@ -9059,8 +9060,8 @@ Return ONLY valid JSON, no markdown fences.`;
       let nodeId: string;
       let isNewNode = false;
 
-      if (overwrite && listenNode) {
-        // Overwrite mode: find an existing linked result document, or create one
+      if (replaceMode === "replace" && listenNode) {
+        // Replace mode: find an existing linked result document, or create one
         const listenNodeId = listenNode.id as string;
         const linkedEdge = result.state.edges.find(
           (e) => e.fromNodeId === listenNodeId && result.state.nodes.some(
@@ -9100,8 +9101,8 @@ Return ONLY valid JSON, no markdown fences.`;
         // Position: to the right of listen node, or default position
         const baseX = listenNode ? (listenNode.x as number) + (listenNode.width as number || 260) + 60 : 400;
         const baseY = listenNode ? (listenNode.y as number) : 200;
-        // Offset vertically for each existing result (avoid stacking) — only in non-overwrite mode
-        const existingResults = overwrite ? [] : result.state.nodes.filter(
+        // Offset vertically for each existing result (avoid stacking)
+        const existingResults = result.state.nodes.filter(
           (n) => n.type === "document" && n._eventBusResult === true,
         );
         const offsetY = existingResults.length * 180;
@@ -9162,7 +9163,7 @@ Return ONLY valid JSON, no markdown fences.`;
 
       await webhookHandlers.saveCanvasStateExported(canvasId, result.state, result.doc);
 
-      res.status(201).json({ node: { id: nodeId }, overwritten: !isNewNode });
+      res.status(201).json({ node: { id: nodeId }, replaced: !isNewNode });
     } catch (error) {
       console.error("Agent result post error:", error);
       res.status(500).json({ error: "Failed to post result" });
