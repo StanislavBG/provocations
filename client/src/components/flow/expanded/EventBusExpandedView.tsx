@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import { Radio, Send, Headphones, Copy, Check, RefreshCw } from "lucide-react";
+import { Radio, Send, Headphones, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,7 +26,6 @@ export function EventBusExpandedView({
   const mode = node.eventBusMode || "publish";
   const channel = node.eventBusChannel || "default";
   const log = node.eventBusLog || [];
-  const overwrite = node.eventBusOverwrite ?? false;
   const [copied, setCopied] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
@@ -114,27 +113,11 @@ export function EventBusExpandedView({
               </p>
             </div>
 
-            {/* Overwrite toggle (listen mode only) */}
+            {/* Result handling hint (listen mode) — Replace/+New toggle is on the card */}
             {mode === "listen" && (
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-                  Result Handling
-                </label>
-                <Button
-                  variant={overwrite ? "default" : "outline"}
-                  size="sm"
-                  className="w-full gap-1.5"
-                  onClick={() => onUpdateNode(node.id, { eventBusOverwrite: !overwrite })}
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  {overwrite ? "Overwrite Mode (ON)" : "Overwrite Mode (OFF)"}
-                </Button>
-                <p className="text-[10px] text-muted-foreground mt-1.5">
-                  {overwrite
-                    ? "Updates a single linked document with the latest result. Full history is kept in the log below."
-                    : "Creates a new document node for each incoming result."}
-                </p>
-              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Use the <span className="font-semibold text-amber-400">Replace</span> / <span className="font-semibold text-amber-400">+New</span> toggle on the card to control whether results update one document or create new ones. Full history is always kept in the log.
+              </p>
             )}
           </div>
 
