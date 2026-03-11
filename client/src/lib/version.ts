@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.8";
+export const APP_VERSION = "0.26.9";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.26.9",
+    date: "2026-03-11",
+    changes: [
+      "Local agency: canvas event bus poller — monitors canvas 222 channel 'bilko' every 2s",
+      "Canvas-to-agent bridge: task events auto-dispatch Bilko, results posted back as document nodes",
+      "Feedback loop prevention: only 'task' type events trigger dispatch, 'result' events are auto-acked",
+      "Agent runner: allow spawning claude from within Claude Code sessions (unset CLAUDECODE env)",
+    ],
+  },
   {
     version: "0.26.8",
     date: "2026-03-10",
