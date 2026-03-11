@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.2";
+export const APP_VERSION = "0.27.3";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.3",
+    date: "2026-03-11",
+    changes: [
+      "Reely agent: short-form reel creator added to local marketing agency",
+      "Reely toolchain: FFmpeg (ffmpeg-static) + edge-tts (free neural TTS) + Unsplash Source (free images)",
+      "All local agency times displayed in PST (America/Los_Angeles)",
+      "Task content injection: canvas event bus payloads flow through to agent prompts via {{TASK}}",
+      "Bilko prompt restructured: incoming task is primary directive, standing order is fallback",
+    ],
+  },
   {
     version: "0.27.2",
     date: "2026-03-11",
