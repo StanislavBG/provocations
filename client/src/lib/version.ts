@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.26.9";
+export const APP_VERSION = "0.27.0";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.0",
+    date: "2026-03-11",
+    changes: [
+      "Canvas scroll-to-pan: two-finger trackpad scroll now pans the canvas instead of zooming",
+      "Pinch-to-zoom and Ctrl+scroll still zoom as before",
+      "Users can freely scroll around the canvas independent of which node is running",
+    ],
+  },
   {
     version: "0.26.9",
     date: "2026-03-11",
