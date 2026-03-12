@@ -11,11 +11,10 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
-  // Only manage tables that are declared in the schema.
-  // Prevents drizzle-kit push from dropping legacy tables that still hold data.
-  // ⚠️  EVERY pgTable() in shared/models/chat.ts MUST have a matching entry here.
-  //     If you add a new table to the schema, add it here too — otherwise
-  //     drizzle-kit push will try to CREATE it even if it already exists.
+  // ⚠️  CRITICAL: Every pgTable() in shared/models/chat.ts MUST have a matching entry here.
+  //     Missing a table causes drizzle-kit to generate DROP TABLE CASCADE on deploy,
+  //     which DESTROYS PRODUCTION DATA. See docs/adrs.md ADR 1 for full rules.
+  //     When adding a new table: 1) shared/models/chat.ts  2) server/db.ts  3) HERE
   tablesFilter: [
     "folders",
     "key_versions",
