@@ -550,11 +550,29 @@ export async function ensureTables(): Promise<void> {
         payload TEXT NOT NULL,
         consumed_at TIMESTAMP,
         ttl_ms INTEGER NOT NULL DEFAULT 300000,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'pending',
+        claimed_by VARCHAR(128),
+        claim_token VARCHAR(128),
+        result TEXT,
+        error_message TEXT,
+        priority INTEGER NOT NULL DEFAULT 0
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_canvas_events_event_id ON canvas_events(event_id);
       CREATE INDEX IF NOT EXISTS idx_canvas_events_canvas_channel ON canvas_events(canvas_id, channel);
       CREATE INDEX IF NOT EXISTS idx_canvas_events_created ON canvas_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_canvas_events_status ON canvas_events(status);
+
+      -- Migration: add claim/complete columns to canvas_events
+      DO $$ BEGIN
+        ALTER TABLE canvas_events ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'pending';
+        ALTER TABLE canvas_events ADD COLUMN IF NOT EXISTS claimed_by VARCHAR(128);
+        ALTER TABLE canvas_events ADD COLUMN IF NOT EXISTS claim_token VARCHAR(128);
+        ALTER TABLE canvas_events ADD COLUMN IF NOT EXISTS result TEXT;
+        ALTER TABLE canvas_events ADD COLUMN IF NOT EXISTS error_message TEXT;
+        ALTER TABLE canvas_events ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0;
+      EXCEPTION WHEN duplicate_column THEN NULL;
+      END $$;
 
       -- API keys — multi-key authentication for webhook/MCP access
       CREATE TABLE IF NOT EXISTS api_keys (

@@ -2234,6 +2234,24 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
+  async updateCanvasEventStatus(
+    eventId: string,
+    status: string,
+    fields: Record<string, string | undefined>,
+  ): Promise<void> {
+    const updates: Record<string, any> = { status };
+    if (fields.claimedBy !== undefined) updates.claimedBy = fields.claimedBy || null;
+    if (fields.claimToken !== undefined) updates.claimToken = fields.claimToken || null;
+    if (fields.result !== undefined) updates.result = fields.result || null;
+    if (fields.errorMessage !== undefined) updates.errorMessage = fields.errorMessage || null;
+    if (status === 'completed' || status === 'failed') updates.consumedAt = new Date();
+
+    await db
+      .update(canvasEvents)
+      .set(updates)
+      .where(eq(canvasEvents.eventId, eventId));
+  }
+
   // ── API Keys (Multi-Key Auth) ──────────────────────────────────────
 
   async createApiKey(data: {

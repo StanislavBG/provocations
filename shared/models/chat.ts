@@ -674,10 +674,17 @@ export const canvasEvents = pgTable("canvas_events", {
   consumedAt: timestamp("consumed_at"),
   ttlMs: integer("ttl_ms").notNull().default(300000),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  status: varchar("status", { length: 16 }).notNull().default('pending'),
+  claimedBy: varchar("claimed_by", { length: 128 }),
+  claimToken: varchar("claim_token", { length: 128 }),
+  result: text("result"),
+  errorMessage: text("error_message"),
+  priority: integer("priority").notNull().default(0),
 }, (table) => [
   uniqueIndex("idx_canvas_events_event_id").on(table.eventId),
   index("idx_canvas_events_canvas_channel").on(table.canvasId, table.channel),
   index("idx_canvas_events_created").on(table.createdAt),
+  index("idx_canvas_events_status").on(table.status),
 ]);
 
 export type StoredCanvasEvent = typeof canvasEvents.$inferSelect;

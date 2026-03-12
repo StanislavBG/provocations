@@ -31,6 +31,12 @@ export interface CanvasEvent {
   createdAt: string;
   consumedAt?: string;
   ttl: number; // ms
+  status: "pending" | "claimed" | "completed" | "failed";
+  claimedBy?: string;
+  claimToken?: string;
+  result?: string;
+  errorMessage?: string;
+  priority: number;
 }
 
 // ── In-memory stores ──
@@ -72,6 +78,41 @@ async function persistAcknowledge(eventIds: string[]): Promise<void> {
   }
 }
 
+/** Fire-and-forget DB status update. */
+async function persistStatusChange(
+  eventId: string,
+  status: string,
+  fields: Record<string, string | undefined>,
+): Promise<void> {
+  try {
+    const { storage } = await import("./storage");
+    await storage.updateCanvasEventStatus(eventId, status, fields);
+  } catch (err) {
+    console.error("[event-bus] Failed to persist status change:", eventId, err instanceof Error ? err.message : err);
+  }
+}
+
+/** Notify SSE subscribers of a status transition. */
+function notifyStatusTransition(canvasId: number, event: CanvasEvent): void {
+  const subs = sseSubscribers.get(canvasId);
+  if (subs) {
+    const transition = {
+      type: "status_transition",
+      eventId: event.id,
+      channel: event.channel,
+      status: event.status,
+      claimedBy: event.claimedBy,
+      result: event.result,
+      errorMessage: event.errorMessage,
+    };
+    Array.from(subs).forEach((sub) => {
+      if (sub.channel === event.channel || sub.channel === "*") {
+        sub.res.write(`data: ${JSON.stringify(transition)}\n\n`);
+      }
+    });
+  }
+}
+
 // ── Initialization (call after ensureTables) ──
 
 export async function initEventBus(): Promise<void> {
@@ -94,6 +135,12 @@ export async function initEventBus(): Promise<void> {
         payload,
         createdAt: row.createdAt.toISOString(),
         ttl: row.ttlMs,
+        status: (row as any).status || "pending",
+        claimedBy: (row as any).claimedBy || undefined,
+        claimToken: (row as any).claimToken || undefined,
+        result: (row as any).result || undefined,
+        errorMessage: (row as any).errorMessage || undefined,
+        priority: (row as any).priority || 0,
       };
       if (!eventQueues.has(row.canvasId)) {
         eventQueues.set(row.canvasId, []);
@@ -126,6 +173,8 @@ export function publishEvent(
     payload,
     createdAt: new Date().toISOString(),
     ttl,
+    status: "pending",
+    priority: 0,
   };
 
   if (!eventQueues.has(canvasId)) {
@@ -161,6 +210,7 @@ export function consumeEvents(
   const matching = queue.filter((e) => {
     if (e.channel !== channel && channel !== "*") return false;
     if (e.consumedAt) return false;
+    if (e.status !== "pending") return false;
     if (now - new Date(e.createdAt).getTime() > e.ttl) return false;
     if (since && e.id <= since) return false;
     return true;
@@ -194,6 +244,78 @@ export function acknowledgeEvents(canvasId: number, eventIds: string[]): number 
 
 export function getEvents(canvasId: number): CanvasEvent[] {
   return eventQueues.get(canvasId) || [];
+}
+
+/** Atomically claim an event. Returns true if successfully claimed. */
+export function claimEvent(
+  canvasId: number,
+  eventId: string,
+  claimedBy: string,
+  claimToken: string,
+): boolean {
+  const queue = eventQueues.get(canvasId);
+  if (!queue) return false;
+
+  const event = queue.find((e) => e.id === eventId);
+  if (!event || event.status !== "pending") return false;
+
+  event.status = "claimed";
+  event.claimedBy = claimedBy;
+  event.claimToken = claimToken;
+
+  // Persist status change
+  void persistStatusChange(eventId, "claimed", { claimedBy, claimToken });
+
+  // Notify SSE subscribers of status transition
+  notifyStatusTransition(canvasId, event);
+
+  return true;
+}
+
+/** Complete a claimed event with result data. */
+export function completeEvent(
+  canvasId: number,
+  eventId: string,
+  claimToken: string,
+  result: string,
+): boolean {
+  const queue = eventQueues.get(canvasId);
+  if (!queue) return false;
+
+  const event = queue.find((e) => e.id === eventId);
+  if (!event || event.status !== "claimed" || event.claimToken !== claimToken) return false;
+
+  event.status = "completed";
+  event.result = result;
+  event.consumedAt = new Date().toISOString();
+
+  void persistStatusChange(eventId, "completed", { result });
+  notifyStatusTransition(canvasId, event);
+
+  return true;
+}
+
+/** Fail a claimed event with an error message. */
+export function failEvent(
+  canvasId: number,
+  eventId: string,
+  claimToken: string,
+  errorMessage: string,
+): boolean {
+  const queue = eventQueues.get(canvasId);
+  if (!queue) return false;
+
+  const event = queue.find((e) => e.id === eventId);
+  if (!event || event.status !== "claimed" || event.claimToken !== claimToken) return false;
+
+  event.status = "failed";
+  event.errorMessage = errorMessage;
+  event.consumedAt = new Date().toISOString();
+
+  void persistStatusChange(eventId, "failed", { errorMessage });
+  notifyStatusTransition(canvasId, event);
+
+  return true;
 }
 
 export function addSSESubscriber(canvasId: number, channel: string, res: Response) {
