@@ -45,6 +45,16 @@ On Replit, deployment runs `drizzle-kit push` BEFORE the app starts. So `ensureT
 
 8. **Verify with `npm run db:push --dry-run`** — there should be ZERO pending migration items if both systems are in sync and the app has been started at least once.
 
+### Common Pitfalls
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Replit deploy shows `DROP TABLE x CASCADE` for tables that should exist | Table defined in `shared/models/chat.ts` but missing from `tablesFilter` in `drizzle.config.ts` | Add the table name to `tablesFilter` |
+| Replit deploy shows `CREATE TABLE` for a table that already exists | Table exists in DB (via `ensureTables()`) but missing from Drizzle schema | Add the `pgTable()` definition to `shared/models/chat.ts` and to `tablesFilter` |
+| Recurring `DROP CONSTRAINT` / `ADD CONSTRAINT` on every deploy | Constraint name mismatch between `ensureTables()` and Drizzle's naming convention (`{table}_{col}_unique` vs `{table}_{col}_key`) | Align constraint names to Drizzle's `{table}_{column}_unique` pattern |
+
+**The `tablesFilter` pitfall is the most dangerous** — Drizzle will silently generate `DROP TABLE CASCADE` for any table it finds in the database that is in the schema but not in the filter. This destroys production data. Always triple-check that every `pgTable()` in the schema has a corresponding entry in `tablesFilter`.
+
 ---
 
 ## ADR 2: Always Use ProvokeText for Text Display
