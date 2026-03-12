@@ -9021,6 +9021,57 @@ Return ONLY valid JSON, no markdown fences.`;
     }
   });
 
+  // Claim an event (atomic — prevents other consumers from picking it up)
+  app.post("/api/webhook/events/:canvasId/:eventId/claim", requireApiKey, (req, res) => {
+    const canvasId = parseInt(param(req, "canvasId"), 10);
+    const eventId = param(req, "eventId");
+    const { claimedBy, claimToken } = req.body;
+
+    if (!claimToken) {
+      return res.status(400).json({ error: "claimToken is required" });
+    }
+
+    const success = eventBus.claimEvent(canvasId, eventId, claimedBy || req.apiUserId || "unknown", claimToken);
+    if (!success) {
+      return res.status(409).json({ error: "Event not found or already claimed" });
+    }
+    res.json({ claimed: true, eventId });
+  });
+
+  // Complete an event with result data
+  app.post("/api/webhook/events/:canvasId/:eventId/complete", requireApiKey, (req, res) => {
+    const canvasId = parseInt(param(req, "canvasId"), 10);
+    const eventId = param(req, "eventId");
+    const { claimToken, result } = req.body;
+
+    if (!claimToken) {
+      return res.status(400).json({ error: "claimToken is required" });
+    }
+
+    const success = eventBus.completeEvent(canvasId, eventId, claimToken, typeof result === 'string' ? result : JSON.stringify(result));
+    if (!success) {
+      return res.status(409).json({ error: "Event not found, not claimed by you, or already completed" });
+    }
+    res.json({ completed: true, eventId });
+  });
+
+  // Fail an event with error message
+  app.post("/api/webhook/events/:canvasId/:eventId/fail", requireApiKey, (req, res) => {
+    const canvasId = parseInt(param(req, "canvasId"), 10);
+    const eventId = param(req, "eventId");
+    const { claimToken, errorMessage } = req.body;
+
+    if (!claimToken || !errorMessage) {
+      return res.status(400).json({ error: "claimToken and errorMessage are required" });
+    }
+
+    const success = eventBus.failEvent(canvasId, eventId, claimToken, errorMessage);
+    if (!success) {
+      return res.status(409).json({ error: "Event not found, not claimed by you, or already completed/failed" });
+    }
+    res.json({ failed: true, eventId });
+  });
+
   // Agent posts result back — creates/updates document node on canvas
   app.post("/api/webhook/events/:canvasId/result", requireApiKey, async (req, res) => {
     try {
