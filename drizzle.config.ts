@@ -43,5 +43,9 @@ export default defineConfig({
     "social_post_logs",
     "agency_events",
     "agency_campaigns",
+    "subscriptions",
+    "usage_records",
+    "canvas_events",
+    "api_keys",
   ],
 });
