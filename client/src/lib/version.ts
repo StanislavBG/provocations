@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.5";
+export const APP_VERSION = "0.27.6";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.6",
+    date: "2026-03-12",
+    changes: [
+      "Canvas CRUD webhook endpoints: list, create, update, delete canvases via API",
+      "Canvas access middleware: requireCanvasAccess enforces per-canvas permissions on all webhook routes",
+      "Fix: normalize node type underscores to hyphens in webhook createNode (e.g. event_bus → event-bus)",
+    ],
+  },
   {
     version: "0.27.5",
     date: "2026-03-11",
