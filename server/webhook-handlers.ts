@@ -105,7 +105,105 @@ function param(req: Request, name: string): string {
   return Array.isArray(v) ? v[0] : v;
 }
 
-// ── Route handlers ──
+// ── Canvas-level route handlers ──
+
+/** GET /api/webhook/canvas — List canvases for the authenticated user */
+export async function listCanvases(req: Request, res: Response) {
+  const userId = req.apiUserId || "";
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const secret = ENCRYPTION_SECRET();
+  try {
+    const docs = await storage.listDocuments(userId);
+    const canvases = docs
+      .filter((d) => d.docType === "chart")
+      .map((d) => {
+        let title = d.title;
+        try {
+          if (d.titleCiphertext) {
+            title = decrypt({ ciphertext: d.titleCiphertext, salt: d.titleSalt!, iv: d.titleIv! }, secret);
+          }
+        } catch { /* fallback */ }
+        return { id: d.id, title, createdAt: d.createdAt, updatedAt: d.updatedAt };
+      });
+    res.json({ canvases });
+  } catch {
+    res.status(500).json({ error: "Failed to list canvases" });
+  }
+}
+
+/** POST /api/webhook/canvas — Create a new canvas */
+export async function createCanvas(req: Request, res: Response) {
+  const userId = req.apiUserId || "";
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const { title } = req.body;
+  const canvasTitle = title || "Untitled Canvas";
+  const secret = ENCRYPTION_SECRET();
+  const initialState: CanvasState = { nodes: [], edges: [] };
+  const encryptedContent = encrypt(JSON.stringify(initialState), secret);
+  const encryptedTitle = encrypt(canvasTitle, secret);
+
+  try {
+    const doc = await storage.saveDocument({
+      userId,
+      title: "[encrypted]",
+      titleCiphertext: encryptedTitle.ciphertext,
+      titleSalt: encryptedTitle.salt,
+      titleIv: encryptedTitle.iv,
+      ciphertext: encryptedContent.ciphertext,
+      salt: encryptedContent.salt,
+      iv: encryptedContent.iv,
+      folderId: null,
+      docType: "chart",
+    });
+    res.status(201).json({ canvasId: doc.id, title: canvasTitle, createdAt: doc.createdAt });
+  } catch {
+    res.status(500).json({ error: "Failed to create canvas" });
+  }
+}
+
+/** PATCH /api/webhook/canvas/:canvasId — Update canvas title */
+export async function updateCanvas(req: Request, res: Response) {
+  const canvasId = parseInt(param(req, "canvasId"), 10);
+  const { title } = req.body;
+  if (!title) return res.status(400).json({ error: "title is required" });
+
+  const result = await loadCanvasState(canvasId, req.apiUserId);
+  if (!result) return res.status(404).json({ error: "Canvas not found or access denied" });
+
+  const secret = ENCRYPTION_SECRET();
+  const encryptedTitle = encrypt(title, secret);
+
+  // Re-encrypt existing content (updateDocument requires all encrypted fields)
+  const content = JSON.stringify(result.state);
+  const encryptedContent = encrypt(content, secret);
+
+  await storage.updateDocument(canvasId, {
+    title: "[encrypted]",
+    titleCiphertext: encryptedTitle.ciphertext,
+    titleSalt: encryptedTitle.salt,
+    titleIv: encryptedTitle.iv,
+    ciphertext: encryptedContent.ciphertext,
+    salt: encryptedContent.salt,
+    iv: encryptedContent.iv,
+  });
+
+  res.json({ canvasId, title });
+}
+
+/** DELETE /api/webhook/canvas/:canvasId — Delete a canvas */
+export async function deleteCanvas(req: Request, res: Response) {
+  const canvasId = parseInt(param(req, "canvasId"), 10);
+  const userId = req.apiUserId || "";
+
+  const deleted = await storage.deleteDocumentForUser(canvasId, userId);
+  if (!deleted) return res.status(404).json({ error: "Canvas not found or access denied" });
+
+  res.json({ deleted: true });
+}
+
+// ── Node/Edge route handlers ──
 
 /** GET /api/webhook/canvas/:canvasId/nodes — List all nodes */
 export async function listNodes(req: Request, res: Response) {
@@ -139,11 +237,14 @@ export async function createNode(req: Request, res: Response) {
   if (!result) return res.status(404).json({ error: "Canvas not found or access denied" });
 
   const nodeId = generateId();
+  // Normalize type: convert underscores to hyphens to match FlowNodeType format
+  // (e.g. "event_bus" → "event-bus", "timer_event" → "timer-event")
+  const normalizedType = parsed.data.type.replace(/_/g, "-");
   // Spread extra properties (e.g. eventBusMode, eventBusChannel) from passthrough schema
   const { type: _t, label: _l, x: _x, y: _y, content: _c, documentContent: _dc, ...extraProps } = parsed.data;
   const newNode: Record<string, unknown> = {
     id: nodeId,
-    type: parsed.data.type,
+    type: normalizedType,
     label: parsed.data.label,
     x: parsed.data.x,
     y: parsed.data.y,

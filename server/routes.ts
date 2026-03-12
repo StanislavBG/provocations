@@ -8870,18 +8870,30 @@ Return ONLY valid JSON, no markdown fences.`;
   // Webhook API — Canvas CRUD for external agents (API key auth)
   // ══════════════════════════════════════════════════════════════════
 
-  const { requireApiKey } = await import("./api-key-auth");
+  const { requireApiKey, requireCanvasAccess } = await import("./api-key-auth");
   const webhookHandlers = await import("./webhook-handlers");
 
-  app.get("/api/webhook/canvas/:canvasId", requireApiKey, webhookHandlers.getCanvas);
-  app.get("/api/webhook/canvas/:canvasId/nodes", requireApiKey, webhookHandlers.listNodes);
-  app.get("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, webhookHandlers.getNode);
-  app.post("/api/webhook/canvas/:canvasId/nodes", requireApiKey, webhookHandlers.createNode);
-  app.patch("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, webhookHandlers.updateNode);
-  app.delete("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, webhookHandlers.deleteNode);
-  app.get("/api/webhook/canvas/:canvasId/edges", requireApiKey, webhookHandlers.listEdges);
-  app.post("/api/webhook/canvas/:canvasId/edges", requireApiKey, webhookHandlers.createEdge);
-  app.delete("/api/webhook/canvas/:canvasId/edges/:edgeId", requireApiKey, webhookHandlers.deleteEdge);
+  // Canvas-level CRUD (no canvasId param — list & create)
+  app.get("/api/webhook/canvas", requireApiKey, webhookHandlers.listCanvases);
+  app.post("/api/webhook/canvas", requireApiKey, webhookHandlers.createCanvas);
+
+  // Canvas-level operations (with canvasId param — read, update, delete)
+  app.get("/api/webhook/canvas/:canvasId", requireApiKey, requireCanvasAccess, webhookHandlers.getCanvas);
+  app.patch("/api/webhook/canvas/:canvasId", requireApiKey, requireCanvasAccess, webhookHandlers.updateCanvas);
+  app.delete("/api/webhook/canvas/:canvasId", requireApiKey, requireCanvasAccess, webhookHandlers.deleteCanvas);
+
+  // Node CRUD
+  app.get("/api/webhook/canvas/:canvasId/nodes", requireApiKey, requireCanvasAccess, webhookHandlers.listNodes);
+  app.get("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, requireCanvasAccess, webhookHandlers.getNode);
+  app.post("/api/webhook/canvas/:canvasId/nodes", requireApiKey, requireCanvasAccess, webhookHandlers.createNode);
+  app.patch("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, requireCanvasAccess, webhookHandlers.updateNode);
+  app.delete("/api/webhook/canvas/:canvasId/nodes/:nodeId", requireApiKey, requireCanvasAccess, webhookHandlers.deleteNode);
+
+  // Edge CRUD
+  app.get("/api/webhook/canvas/:canvasId/edges", requireApiKey, requireCanvasAccess, webhookHandlers.listEdges);
+  app.post("/api/webhook/canvas/:canvasId/edges", requireApiKey, requireCanvasAccess, webhookHandlers.createEdge);
+  app.delete("/api/webhook/canvas/:canvasId/edges/:edgeId", requireApiKey, requireCanvasAccess, webhookHandlers.deleteEdge);
+
   app.post("/api/webhook/outbound", requireApiKey, webhookHandlers.outboundWebhook);
 
   // Document Store webhook endpoints
