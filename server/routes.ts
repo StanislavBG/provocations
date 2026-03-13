@@ -8951,6 +8951,8 @@ Return ONLY valid JSON, no markdown fences.`;
             summary: `→ ${channel}`,
             content: (content as string).slice(0, 1000),
             eventId: event.id,
+            // Carry media metadata through to log entries
+            ...(req.body.metadata?.media ? { media: req.body.metadata.media } : {}),
           });
           publishNode.eventBusLog = log.slice(-50); // keep last 50
           await webhookHandlers.saveCanvasStateExported(canvasId, canvasResult.state, canvasResult.doc);
@@ -9088,7 +9090,7 @@ Return ONLY valid JSON, no markdown fences.`;
   app.post("/api/webhook/events/:canvasId/result", requireApiKey, async (req, res) => {
     try {
       const canvasId = parseInt(param(req, "canvasId"), 10);
-      const { channel = "default", label, content, sourceEventId } = req.body;
+      const { channel = "default", label, content, sourceEventId, metadata } = req.body;
 
       if (!label || !content) {
         return res.status(400).json({ error: "label and content are required" });
@@ -9115,6 +9117,8 @@ Return ONLY valid JSON, no markdown fences.`;
           summary: label,
           content, // full content, not truncated
           sourceEventId,
+          // Pass through media metadata so log entries carry media references
+          ...(metadata?.media ? { media: metadata.media } : {}),
         });
         listenNode.eventBusLog = log.slice(-50); // keep last 50
 
@@ -9136,7 +9140,7 @@ Return ONLY valid JSON, no markdown fences.`;
         sourceNodeId: listenNode?.id as string,
         sourceNodeLabel: label,
         content: content.slice(0, 500),
-        metadata: { sourceEventId },
+        metadata: { sourceEventId, ...(metadata || {}) },
       });
 
       await webhookHandlers.saveCanvasStateExported(canvasId, result.state, result.doc);
@@ -9145,6 +9149,33 @@ Return ONLY valid JSON, no markdown fences.`;
     } catch (error) {
       console.error("Agent result post error:", error);
       res.status(500).json({ error: "Failed to post result" });
+    }
+  });
+
+  // Get document metadata by ID via API key (for external agents to reference media)
+  // Note: Document content is encrypted at rest — this returns metadata only.
+  // For media sharing across systems, use external URLs in event metadata.media[].
+  app.get("/api/webhook/documents/:docId", requireApiKey, async (req, res) => {
+    try {
+      const docId = parseInt(req.params.docId as string, 10);
+      if (isNaN(docId)) {
+        return res.status(400).json({ error: "Invalid document ID" });
+      }
+
+      const doc = await storage.getDocument(docId);
+      if (!doc) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      res.json({
+        id: doc.id,
+        title: doc.title,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+      });
+    } catch (error) {
+      console.error("Webhook document fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch document" });
     }
   });
 
