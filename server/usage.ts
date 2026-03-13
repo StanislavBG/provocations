@@ -26,7 +26,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
     llmCallsPerDay: 25,
     ttsMinsPerMonth: 0,
-    imagesPerDay: 5,
+    imagesPerDay: Infinity,
     storageMb: 100,
     canvases: 3,
     nodesPerCanvas: 15,
@@ -34,7 +34,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   pro: {
     llmCallsPerDay: 200,
     ttsMinsPerMonth: 50,
-    imagesPerDay: 50,
+    imagesPerDay: Infinity,
     storageMb: 5120,
     canvases: Infinity,
     nodesPerCanvas: Infinity,
@@ -42,7 +42,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   team: {
     llmCallsPerDay: 500,
     ttsMinsPerMonth: 200,
-    imagesPerDay: 200,
+    imagesPerDay: Infinity,
     storageMb: 25600,
     canvases: Infinity,
     nodesPerCanvas: Infinity,
