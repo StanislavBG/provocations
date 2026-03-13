@@ -96,6 +96,7 @@ export const NODE_TIMEOUTS: Record<string, number> = {
   "social-post": 60_000, // 1 minute
   "coherence-gate": 60_000, // 1 minute
   document: 60_000, // 1 minute
+  "event-bus": 15_000, // 15 seconds (single API POST)
   notification: 15_000, // 15 seconds
   store: 15_000, // 15 seconds
   approval: 0, // no timeout (user interaction)
