@@ -29,7 +29,9 @@ export type FlowNodeType =
   | "approval"
   | "llm-base"
   | "webpage"
-  | "event-bus";
+  | "event-bus"
+  | "json-processor"
+  | "queue";
 
 // Import from registry for local use and re-export for backward compatibility
 import { NODE_PORTS as _NODE_PORTS, DEFAULT_DIMENSIONS as _DEFAULT_DIMENSIONS } from "./FlowNodeRegistry";
@@ -344,6 +346,43 @@ export interface FlowNode {
   eventBusStatus?: "idle" | "publishing" | "listening" | "done" | "error";
   /** Event Bus: log of recent events */
   eventBusLog?: Array<{ type: string; timestamp: string; summary: string; content?: string; eventId?: string }>;
+  /** JSON Processor: configured output paths */
+  jsonOutputPaths?: Array<{
+    id: string;
+    name: string;
+    path: string;
+    flatten?: boolean;
+  }>;
+  /** JSON Processor: also output original JSON unchanged */
+  jsonPassThrough?: boolean;
+  /** JSON Processor: cached last input for preview */
+  jsonLastInput?: string;
+  /** JSON Processor: last processing error */
+  jsonLastError?: string;
+  /** JSON Processor: execution status */
+  jsonProcessingStatus?: "idle" | "running" | "done" | "error";
+  /** Queue: operating mode */
+  queueMode?: "flow_through" | "hold_until_triggered";
+  /** Queue: trigger release mode (only when hold_until_triggered) */
+  queueTriggerMode?: "one_per_trigger" | "process_all";
+  /** Queue: items in the queue */
+  queueItems?: Array<{
+    id: string;
+    content: string;
+    enqueuedAt: string;
+    status: "queued" | "released" | "processed";
+    releasedAt?: string;
+    sourceNodeId?: string;
+    sourceNodeLabel?: string;
+  }>;
+  /** Queue: aggregate stats */
+  queueStats?: {
+    totalEnqueued: number;
+    totalReleased: number;
+    totalProcessed: number;
+  };
+  /** Queue: auto-trigger downstream chain execution on release */
+  queueAutoChain?: boolean;
 }
 
 /** Named edge roles — how source data is used by the target node */
