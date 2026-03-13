@@ -1614,7 +1614,7 @@ function FlowWorkspaceInner() {
 
   // ── Chain propagation helper (uses handlePlayNodeRef to avoid circular dep) ──
 
-  const handlePlayNodeRef = useRef<(nodeId: string) => Promise<void>>(async () => {});
+  const handlePlayNodeRef = useRef<(nodeId: string) => Promise<string | void>>(async () => {});
 
   const propagateDownstream = useCallback(
     (nodeId: string, node: FlowNode) => {
@@ -1832,6 +1832,12 @@ function FlowWorkspaceInner() {
       }
 
       lcLog(node, "pre-process", "success", `${inputNodes.length} input(s), ${combinedContent.length} chars`);
+
+      // Ensure chain watcher will re-propagate when this node completes,
+      // even if React batches the "running" → "done" state updates into
+      // a single render (which would otherwise skip propagation because
+      // the watcher never sees the intermediate non-"done" state to clear tracking).
+      chainPropagatedRef.current.delete(nodeId);
 
       // Mark node as running
       scopedUpdate(nodeId, { llmStatus: "running", snippet: "Running..." });
@@ -2087,7 +2093,7 @@ function FlowWorkspaceInner() {
           });
           lcLog(node, "process", "success", "Event published", { durationMs: elapsed });
           toast({ title: "Event published" });
-          return;
+          return outputText;
         }
 
         // -- JSON Processor: create document nodes from extracted paths --

@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.13";
+export const APP_VERSION = "0.27.14";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,15 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.14",
+    date: "2026-03-13",
+    changes: [
+      "Fix: event-bus publish nodes now auto-trigger via chain propagation when upstream nodes complete",
+      "Fix: chain watcher tracking cleared synchronously on node re-execution to prevent React batching race",
+      "Event-bus node timeout added to chain executor (15s)",
+    ],
+  },
   {
     version: "0.27.13",
     date: "2026-03-13",
