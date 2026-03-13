@@ -4,7 +4,7 @@
  * Polls the Provocations canvas event bus for tasks dispatched to Bilko.
  * When events arrive, dispatches the agent and posts results back to the canvas.
  */
-import { dispatch, isAgentRunning } from "./scheduler.js";
+import { dispatch, isAgentRunning, getRunPromise } from "./scheduler.js";
 import { insertCanvasEvent } from "./store.js";
 import { bus } from "./events.js";
 
@@ -65,14 +65,48 @@ async function ackEvents(canvasId: string, eventIds: string[]): Promise<void> {
   }
 }
 
-async function postResult(canvasId: string, channel: string, label: string, content: string, sourceEventId?: string): Promise<void> {
+/**
+ * Validates Bilko's output against the task that triggered it.
+ * Strategy tasks get structural validation; other tasks pass through.
+ */
+function validateOutput(output: string, taskContent?: string): { valid: boolean; reason?: string } {
+  // Only apply strategy validation when the task asked for a strategy
+  const isStrategyTask = taskContent && /strategy|2.week|14\s*posts?|x\s*post\s*strategy/i.test(taskContent);
+
+  if (!isStrategyTask) {
+    // General task — minimal validation (non-empty output)
+    return output.length > 0 ? { valid: true } : { valid: false, reason: "Empty output" };
+  }
+
+  // Strategy-specific validation
+  if (output.length < 500) {
+    return { valid: false, reason: "Output too short to be a strategy document" };
+  }
+  const hasStrategySection = /strategy|narrative|overview/i.test(output);
+  const hasPostContent = /post\s*#?\s*\d|day\s*\d/i.test(output);
+
+  if (!hasStrategySection && !hasPostContent) {
+    return { valid: false, reason: "Missing strategy overview or post content" };
+  }
+  if (!hasPostContent) {
+    return { valid: false, reason: "Missing individual post entries" };
+  }
+  return { valid: true };
+}
+
+/**
+ * Post a result as a message into the listen node's eventBusLog.
+ * Uses the result endpoint which stores full content in the event-bus node — no document nodes created.
+ */
+async function postResultToListenNode(canvasId: string, label: string, content: string): Promise<void> {
   const { url, apiKey } = getConfig();
+  const channel = process.env.CANVAS_CHANNEL || "bilko";
   const endpoint = `${url}/api/webhook/events/${canvasId}/result`;
 
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ channel, label, content, sourceEventId }),
+    body: JSON.stringify({ channel, label, content }),
   });
 
   if (!res.ok) {
@@ -128,10 +162,14 @@ async function tick(): Promise<void> {
         continue;
       }
 
-      // Dispatch Bilko
+      // Dispatch Bilko with task content from the event payload
       try {
+        const taskContent = events
+          .map((e) => e.payload.content || "")
+          .filter(Boolean)
+          .join("\n\n---\n\n");
         console.log("[canvas-poller] Dispatching Bilko for canvas task...");
-        const runId = await dispatch("bilko", "canvas_task");
+        const runId = await dispatch("bilko", "canvas_task", taskContent || undefined);
         console.log(`[canvas-poller] Bilko dispatched, run #${runId}`);
 
         // Ack events immediately so they don't re-fire
@@ -139,16 +177,51 @@ async function tick(): Promise<void> {
         await ackEvents(canvasId, eventIds);
         console.log(`[canvas-poller] Acknowledged ${eventIds.length} events`);
 
-        // Post a quick acknowledgment result back to canvas
-        const taskContent = events.map((e) => e.payload.content || "task").join("; ");
-        await postResult(
-          canvasId,
-          "bilko",
-          `Bilko — Run #${runId}`,
-          `Bilko received task and is processing.\n\nTrigger: ${taskContent}\nRun ID: ${runId}\nStarted: ${new Date().toISOString()}`,
-          events[0].id,
-        );
-        console.log("[canvas-poller] Posted acknowledgment to canvas");
+        // Log acknowledgment to console + SSE only — don't post to canvas
+        // (keeps canvas output clean: only the final result appears)
+        console.log(`[canvas-poller] Bilko processing run #${runId} — acknowledgment sent via SSE only`);
+        bus.broadcast("agent:status", { agentId: "bilko", status: "processing", runId });
+
+        // When Bilko finishes, post the actual result back to canvas
+        const capturedCanvasId = canvasId;
+        const capturedRunId = runId;
+        const capturedTaskContent = taskContent;
+        const runPromise = getRunPromise("bilko");
+        if (runPromise) {
+          runPromise.then(async (result) => {
+            const output = result.stdout.trim();
+            if (output && result.exitCode === 0) {
+              // Validate output structure before posting
+              const validation = validateOutput(output, capturedTaskContent);
+              const resultLabel = validation.valid
+                ? `Bilko — Result (Run #${capturedRunId})`
+                : `Bilko — Result [VALIDATION WARNING] (Run #${capturedRunId})`;
+              const resultContent = validation.valid
+                ? output
+                : `> **Validation warning**: ${validation.reason}\n> Review the output below — it may not match the expected strategy format.\n\n${output}`;
+
+              if (!validation.valid) {
+                console.warn(`[canvas-poller] Output validation warning: ${validation.reason}`);
+              }
+
+              await postResultToListenNode(
+                capturedCanvasId,
+                resultLabel,
+                resultContent,
+              );
+              console.log(`[canvas-poller] Updated listen node with Bilko result (${output.length} chars, valid=${validation.valid})`);
+            } else if (result.exitCode !== 0) {
+              await postResultToListenNode(
+                capturedCanvasId,
+                `Bilko — Failed (Run #${capturedRunId})`,
+                `Run failed with exit code ${result.exitCode}.\n\n${result.stderr.slice(0, 500)}`,
+              );
+              console.log("[canvas-poller] Updated listen node with Bilko failure");
+            }
+          }).catch((err) => {
+            console.error("[canvas-poller] Error posting result:", (err as Error).message);
+          });
+        }
 
       } catch (err) {
         console.error("[canvas-poller] Dispatch error:", (err as Error).message);

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, useSSE } from "../api";
+import { apiFetch, useSSE, fmtDateTime } from "../api";
 import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
@@ -125,7 +125,7 @@ export default function AuditTrail() {
                   </td>
                   <td className="px-4 py-2 text-agency-muted">{run.trigger}</td>
                   <td className="px-4 py-2 text-agency-muted">
-                    {new Date(run.started_at).toLocaleString()}
+                    {fmtDateTime(run.started_at)}
                   </td>
                   <td className="px-4 py-2 text-agency-muted">
                     {run.duration_ms ? `${(run.duration_ms / 1000).toFixed(1)}s` : "—"}

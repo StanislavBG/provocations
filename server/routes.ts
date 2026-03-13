@@ -9105,128 +9105,43 @@ Return ONLY valid JSON, no markdown fences.`;
         (n) => n.type === "event-bus" && n.eventBusMode === "listen" && (n.eventBusChannel || "default") === channel,
       );
 
-      // Use existing outputReplaceMode: "replace" = update linked doc, "new" = create new each time
-      const replaceMode = (listenNode?.outputReplaceMode as string) ?? "replace";
-
-      // Update listen node's event log (full history of all received messages)
+      // Store full content as a message inside the listen node's eventBusLog
+      // No document nodes are created — all results live as messages in the event-bus node
       if (listenNode) {
         const log = (listenNode.eventBusLog as Array<Record<string, unknown>>) || [];
         log.push({
           type: "result",
           timestamp: new Date().toISOString(),
           summary: label,
-          content: content.slice(0, 1000),
+          content, // full content, not truncated
+          sourceEventId,
         });
         listenNode.eventBusLog = log.slice(-50); // keep last 50
-      }
 
-      let nodeId: string;
-      let isNewNode = false;
+        // Update the node's label and preview content to reflect the latest result
+        listenNode.label = label;
+        listenNode.content = content.slice(0, 200);
 
-      if (replaceMode === "replace" && listenNode) {
-        // Replace mode: find an existing linked result document, or create one
-        const listenNodeId = listenNode.id as string;
-        const linkedEdge = result.state.edges.find(
-          (e) => e.fromNodeId === listenNodeId && result.state.nodes.some(
-            (n) => n.id === e.toNodeId && n.type === "document" && n._eventBusResult === true,
-          ),
-        );
-        const existingDoc = linkedEdge
-          ? result.state.nodes.find((n) => n.id === linkedEdge.toNodeId)
-          : null;
-
-        if (existingDoc) {
-          // Update existing document node
-          nodeId = existingDoc.id as string;
-          existingDoc.label = label;
-          existingDoc.content = content.slice(0, 200);
-          existingDoc.documentContent = content;
-          existingDoc._sourceEventId = sourceEventId;
-
-          broadcastToCanvasRoom(canvasId, "update-node", {
-            nodeId,
-            label,
-            content: content.slice(0, 200),
-            documentContent: content,
-          });
-        } else {
-          // First result — create the document node
-          nodeId = `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          isNewNode = true;
-        }
-      } else {
-        // Normal mode: always create a new document node
-        nodeId = `node_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        isNewNode = true;
-      }
-
-      if (isNewNode) {
-        // Position: to the right of listen node, or default position
-        const baseX = listenNode ? (listenNode.x as number) + (listenNode.width as number || 260) + 60 : 400;
-        const baseY = listenNode ? (listenNode.y as number) : 200;
-        // Offset vertically for each existing result (avoid stacking)
-        const existingResults = result.state.nodes.filter(
-          (n) => n.type === "document" && n._eventBusResult === true,
-        );
-        const offsetY = existingResults.length * 180;
-
-        const newNode: Record<string, unknown> = {
-          id: nodeId,
-          type: "document",
+        // Broadcast the update to all connected clients
+        broadcastToCanvasRoom(canvasId, "update-node", {
+          nodeId: listenNode.id as string,
           label,
-          x: baseX,
-          y: baseY + offsetY,
-          width: 260,
-          height: 160,
           content: content.slice(0, 200),
-          documentContent: content,
-          _eventBusResult: true,
-          _eventBusChannel: channel,
-          _sourceEventId: sourceEventId,
-        };
-
-        result.state.nodes.push(newNode);
-
-        // Connect listen node → document node
-        let edgeId: string | undefined;
-        if (listenNode) {
-          edgeId = `edge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          result.state.edges.push({
-            id: edgeId,
-            fromNodeId: listenNode.id as string,
-            toNodeId: nodeId,
-          });
-        }
-
-        broadcastToCanvasRoom(canvasId, "add-node", { node: newNode });
-        if (edgeId && listenNode) {
-          // Flatten payload so client handler can read fromNodeId/toNodeId directly
-          broadcastToCanvasRoom(canvasId, "add-edge", {
-            fromNodeId: listenNode.id as string,
-            toNodeId: nodeId,
-          });
-        }
+          eventBusLog: listenNode.eventBusLog,
+        });
       }
 
       // Also publish a result event so SSE subscribers see it
       eventBus.publishEvent(canvasId, channel, "result", {
-        sourceNodeId: nodeId,
+        sourceNodeId: listenNode?.id as string,
         sourceNodeLabel: label,
         content: content.slice(0, 500),
         metadata: { sourceEventId },
       });
 
-      // Broadcast listen node log update
-      if (listenNode) {
-        broadcastToCanvasRoom(canvasId, "update-node", {
-          nodeId: listenNode.id as string,
-          eventBusLog: listenNode.eventBusLog,
-        });
-      }
-
       await webhookHandlers.saveCanvasStateExported(canvasId, result.state, result.doc);
 
-      res.status(201).json({ node: { id: nodeId }, replaced: !isNewNode });
+      res.status(201).json({ messageStored: true, logLength: (listenNode?.eventBusLog as unknown[])?.length ?? 0 });
     } catch (error) {
       console.error("Agent result post error:", error);
       res.status(500).json({ error: "Failed to post result" });

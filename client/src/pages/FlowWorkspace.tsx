@@ -2033,6 +2033,18 @@ function FlowWorkspaceInner() {
           return;
         }
 
+        // -- Event-bus publish: update self only, no output document --
+        if (node.type === "event-bus") {
+          scopedUpdate(nodeId, {
+            llmStatus: "done",
+            content: outputText,
+            snippet: outputText.slice(0, 200),
+          });
+          lcLog(node, "process", "success", "Event published", { durationMs: elapsed });
+          toast({ title: "Event published" });
+          return;
+        }
+
         // -- All other presets (stream, llm, logic, interview, generic): text output --
         if (!outputText?.trim()) {
           lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });

@@ -342,8 +342,8 @@ export const FlowNodeContainer = React.memo(function FlowNodeContainer({
           </button>
         )}
 
-        {/* Replace / +New output mode toggle for playable nodes */}
-        {isPlayable && onUpdateNode && (
+        {/* Replace / +New output mode toggle for playable nodes (not event-bus — those use messages) */}
+        {isPlayable && onUpdateNode && node.type !== "event-bus" && (
           <div className="flex items-center gap-0.5" onMouseDown={(e) => e.stopPropagation()}>
             <button
               className={cn(

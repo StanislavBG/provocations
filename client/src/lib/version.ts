@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.6";
+export const APP_VERSION = "0.27.8";
 
 export interface ReleaseNote {
   version: string;
@@ -19,12 +19,37 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.27.8",
+    date: "2026-03-12",
+    changes: [
+      "Event-bus: result endpoint stores full content as messages in eventBusLog — no document nodes created",
+      "Event-bus: expanded view shows full result content (60vh), updated listen mode text",
+      "Event-bus: hidden Replace/+New toggle for event-bus nodes (not applicable)",
+      "Canvas-poller: uses result endpoint to post messages into listen node eventBusLog",
+    ],
+  },
+  {
+    version: "0.27.7",
+    date: "2026-03-12",
+    changes: [
+      "Agency View: all 9 agents now visible (added Sable, Vox, Lurker, Wordsmith, Sentinel)",
+      "Agency View: avatar animation state tied to session — sleeping when inactive, working when running",
+      "Canvas noise: event-bus publish nodes no longer spawn output documents",
+      "Canvas-poller: results update listen node in-place instead of creating new nodes",
+      "Bilko prompt: removed create_node/post_result — stdout-only delivery",
+    ],
+  },
+  {
     version: "0.27.6",
     date: "2026-03-12",
     changes: [
       "Canvas CRUD webhook endpoints: list, create, update, delete canvases via API",
       "Canvas access middleware: requireCanvasAccess enforces per-canvas permissions on all webhook routes",
       "Fix: normalize node type underscores to hyphens in webhook createNode (e.g. event_bus → event-bus)",
+      "Canvas 222: replaced old AI News chain with BG Labs X Post Strategy pipeline",
+      "Canvas-poller: suppressed 'Processing' ack — only final result appears on canvas",
+      "Canvas-poller: added output validation (strategy-aware, warns on malformed output)",
+      "Bilko prompt: added strategy-document guidance, stdout-as-deliverable emphasis",
     ],
   },
   {
@@ -36,6 +61,14 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Connected Apps dialog: add external apps from the gear menu with permission presets and canvas access modes",
       "API key management endpoints: POST/GET/PATCH/DELETE /api/settings/api-keys with scope and canvas restrictions",
       "New docs/event-bus.md integration reference for external projects",
+      "Reddit Division: 3 new agents — Lurker (researcher), Wordsmith (drafter), Sentinel (compliance)",
+      "Compliance pipeline: Lurker → Wordsmith → Sentinel → queue → publish",
+      "Reddit store: 4 new tables (actions, drafts, queue, subreddit_rules)",
+      "Rate limiter: hard caps on actions/hr, posts/day, replies/day",
+      "Queue executor: 60s polling for approved drafts, Playwright-based publishing",
+      "Reddit browser module: optional Playwright automation behind REDDIT_AUTOMATION_ENABLED flag",
+      "Reddit Ops dashboard: Overview, Drafts, Queue, Actions tabs",
+      "Bilko prompt: Reddit Division dispatch chain integrated",
     ],
   },
   {
