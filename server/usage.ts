@@ -26,7 +26,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
     llmCallsPerDay: 25,
     ttsMinsPerMonth: 0,
-    imagesPerDay: 5,
+    imagesPerDay: Infinity,
     storageMb: 100,
     canvases: 3,
     nodesPerCanvas: 15,
@@ -34,7 +34,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   pro: {
     llmCallsPerDay: 200,
     ttsMinsPerMonth: 50,
-    imagesPerDay: 50,
+    imagesPerDay: Infinity,
     storageMb: 5120,
     canvases: Infinity,
     nodesPerCanvas: Infinity,
@@ -42,7 +42,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   team: {
     llmCallsPerDay: 500,
     ttsMinsPerMonth: 200,
-    imagesPerDay: 200,
+    imagesPerDay: Infinity,
     storageMb: 25600,
     canvases: Infinity,
     nodesPerCanvas: Infinity,
@@ -184,6 +184,45 @@ export function requireUsage(resource: UsageResource) {
 
       // Record usage pre-decrement (count the call even if downstream fails)
       await recordUsage(userId, resource);
+
+      next();
+    } catch (err) {
+      console.error("Usage check failed:", err);
+      // Fail open — don't block requests if usage check errors
+      next();
+    }
+  };
+}
+
+/**
+ * Express middleware that checks usage quota WITHOUT recording it.
+ * Use this for endpoints where usage should only be recorded after a successful
+ * result (post-decrement pattern). Call recordUsage() manually in the handler.
+ *
+ * Usage: app.post("/api/generate-imagen", requireUsageCheck("image_gen"), handler);
+ */
+export function requireUsageCheck(resource: UsageResource) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const allowed = await checkUsage(userId, resource);
+      if (!allowed) {
+        const plan = await getUserPlan(userId);
+        const limit = getLimit(plan, resource);
+        const current = await getCurrentUsage(userId, resource);
+        return res.status(429).json({
+          error: "Usage limit exceeded",
+          resource,
+          current,
+          limit,
+          plan,
+          upgradeUrl: "/pricing",
+        });
+      }
 
       next();
     } catch (err) {

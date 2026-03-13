@@ -2098,7 +2098,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // IMAGE GENERATION — generates an image from a textual description
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-image", llmLimiter, requireUsage("image_gen"), async (req, res) => {
+  app.post("/api/generate-image", llmLimiter, async (req, res) => {
     try {
       const { description } = req.body;
       if (!description || typeof description !== "string" || !description.trim()) {
@@ -2153,7 +2153,7 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // GEMINI IMAGEN — generates images using Google's Imagen via @google/genai
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-imagen", llmLimiter, requireUsage("image_gen"), async (req, res) => {
+  app.post("/api/generate-imagen", llmLimiter, async (req, res) => {
     try {
       const {
         prompt, aspectRatio, negativePrompt, style, numberOfImages,

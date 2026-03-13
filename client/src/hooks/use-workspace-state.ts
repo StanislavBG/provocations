@@ -771,7 +771,15 @@ export function useWorkspaceState(initialTemplateId: string | null): WorkspaceSt
         trackEvent("painter_generated", { metadata: { configs: painterConfigs.length.toString(), aspectRatio, mode: painterMode } });
       } catch (error) {
         console.error("[painter] generation error:", error);
-        toast({ title: "Painting failed", description: "Could not generate image.", variant: "destructive" });
+        const errMsg = error instanceof Error ? error.message : "Could not generate image.";
+        const is429 = errMsg.startsWith("429");
+        toast({
+          title: is429 ? "Daily image limit reached" : "Painting failed",
+          description: is429
+            ? "You've used all your image generations for today. Upgrade your plan for more."
+            : errMsg,
+          variant: "destructive",
+        });
         setImageTabData((prev) => {
           const next = new Map(prev);
           next.set(tabId, { imageUrl: null, prompt, isGenerating: false });
