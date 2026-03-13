@@ -170,3 +170,61 @@ These are the core design decisions that shape the codebase. Each is documented 
 | `query-editor` | Query Editor | analyze | external | — |
 
 Per-app documentation: `apps/<templateId>/CLAUDE.md`. See `docs/architecture.md` for the three-layer pattern.
+
+<!-- BSOffice Integration -->
+## BSOffice Integration
+
+This project is registered as room `stan-provo` in the BSOffice management platform.
+
+### Requesting Tool Permissions
+
+If you need a tool permission you don't have (e.g., `WebFetch`, `Bash(curl:*)`, MCP tools), you can request it from Sam (SVP of Engineering) via the BSOffice API. **Do NOT ask the user to approve permissions manually.**
+
+```
+POST http://localhost:3000/api/security/permission-requests
+Content-Type: application/json
+
+{
+  "roomId": "stan-provo",
+  "projectPath": "/home/derrickellis/stan-provo",
+  "tools": ["ToolName1", "ToolName2"],
+  "reason": "Brief explanation of why you need these tools",
+  "requestedBy": "stan-provo"
+}
+```
+
+### SME Consult — Request Expert Analysis
+
+You can request expert analysis from BSOffice's SME (Subject Matter Expert) system. SME sessions are independent Claude instances with domain-specific prompts that analyze your question and deliver a structured report to `tasks/stan-provo/`.
+
+```
+POST http://localhost:3000/api/rooms/stan-provo/sme
+Content-Type: application/json
+
+{
+  "domain": "ux-research",
+  "prompt": "Evaluate the Flow Canvas dual-view interaction pattern for usability",
+  "context": "Optional additional context"
+}
+```
+
+**Available domains:** `security-audit`, `performance-analysis`, `architecture-review`, `code-review`, `documentation`, `cost-analysis`, `ux-research`, `market-research`
+
+**Check result status:**
+```
+GET http://localhost:3000/api/sme/requests/{request-id}
+```
+
+**List available domains:**
+```
+GET http://localhost:3000/api/sme/domains
+```
+
+Results are delivered as markdown files in `tasks/stan-provo/` and can also be retrieved via the status endpoint.
+
+### Other BSOffice APIs
+
+- **Room status:** `GET http://localhost:3000/api/rooms/stan-provo`
+- **Chat history:** `GET http://localhost:3000/api/chat/history/stan-provo`
+- **Voice status:** `GET http://localhost:3000/api/voice/status`
+<!-- BSOffice Integration -->

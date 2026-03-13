@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ProvokeText } from "@/components/ProvokeText";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import {
   HardDrive,
   Folder,
@@ -784,10 +785,12 @@ export function ContextStoreManager({
           </div>
         </div>
 
-        {/* Document content area */}
-        <div className="flex-1 min-h-0 p-4">
+        {/* Document content area — type-specific rendering */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+
+          {/* ── Image ── */}
           {docType === "image" && selectedDoc.content && (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full p-4">
               <img
                 src={selectedDoc.content}
                 alt={selectedDoc.title}
@@ -796,8 +799,9 @@ export function ContextStoreManager({
             </div>
           )}
 
+          {/* ── Video ── */}
           {docType === "video" && selectedDoc.content && (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full p-4">
               <video
                 src={selectedDoc.content}
                 controls
@@ -806,41 +810,58 @@ export function ContextStoreManager({
             </div>
           )}
 
-          {docType === "pdf" && (
-            <div className="flex flex-col items-center justify-center h-full gap-3">
-              <FileType className="w-16 h-16 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground">
-                {selectedDoc.title}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={() => {
-                  if (selectedDoc.content) {
-                    const blob = new Blob([selectedDoc.content], {
-                      type: "application/pdf",
-                    });
-                    const url = URL.createObjectURL(blob);
+          {/* ── PDF — inline viewer with download fallback ── */}
+          {docType === "pdf" && selectedDoc.content && (
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-end px-3 py-1.5 border-b border-border/20 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1.5"
+                  onClick={() => {
                     const a = document.createElement("a");
-                    a.href = url;
+                    a.href = selectedDoc.content!;
                     a.download = selectedDoc.title;
                     a.click();
-                    URL.revokeObjectURL(url);
-                  }
-                }}
-              >
-                <Download className="w-3.5 h-3.5" />
-                Download PDF
-              </Button>
+                  }}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download
+                </Button>
+              </div>
+              <iframe
+                src={selectedDoc.content}
+                className="flex-1 w-full border-0"
+                title={selectedDoc.title}
+              />
             </div>
           )}
 
-          {docType === "document" && (
+          {/* ── Webpage — sandboxed HTML render ── */}
+          {docType === "webpage" && selectedDoc.content && (
+            <iframe
+              srcDoc={selectedDoc.content}
+              sandbox="allow-scripts allow-same-origin"
+              className="w-full h-full border-0"
+              title={selectedDoc.title}
+            />
+          )}
+
+          {/* ── Canvas/chart — not directly renderable ── */}
+          {docType === "chart" && (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground p-6 text-center">
+              <LayoutGrid className="w-12 h-12 opacity-20" />
+              <p className="text-sm font-medium">Canvas document</p>
+              <p className="text-xs opacity-60">Open on the Flow Canvas to interact with it</p>
+            </div>
+          )}
+
+          {/* ── Text-based types: document, note, timeline, media, and unknown ── */}
+          {!["image", "video", "pdf", "webpage", "chart"].includes(docType) && (
             <div className="h-full flex flex-col">
               {editingContent ? (
                 <>
-                  <div className="flex items-center justify-end gap-2 mb-2 shrink-0">
+                  <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-b border-border/20 shrink-0">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -880,7 +901,7 @@ export function ContextStoreManager({
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-end mb-2 shrink-0">
+                  <div className="flex items-center justify-end px-3 py-1.5 border-b border-border/20 shrink-0">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -891,21 +912,11 @@ export function ContextStoreManager({
                       }}
                     >
                       <Pencil className="w-3 h-3" />
-                      Edit Content
+                      Edit
                     </Button>
                   </div>
-                  <div className="flex-1 min-h-0">
-                    <ProvokeText
-                      chrome="container"
-                      variant="editor"
-                      label="Document Content"
-                      labelIcon={FileText}
-                      value={selectedDoc.content || ""}
-                      onChange={() => {}}
-                      readOnly
-                      showCopy
-                      showClear={false}
-                    />
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <MarkdownRenderer content={selectedDoc.content || ""} />
                   </div>
                 </>
               )}
