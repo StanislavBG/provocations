@@ -88,7 +88,7 @@ import { postToPlatform } from "./social-poster";
 import { textToSpeech } from "./replit_integrations/audio/client";
 import { agentDefinitionSchema, agentStepSchema, createCheckoutSessionSchema } from "@shared/schema";
 import Stripe from "stripe";
-import { getUsageSummary, getUserPlan, PLAN_LIMITS, type PlanTier, requireUsage, recordUsage } from "./usage";
+import { getUsageSummary, getUserPlan, PLAN_LIMITS, type PlanTier, requireUsage, requireUsageCheck, recordUsage } from "./usage";
 import { createContextStoreRouter, ContextStoreStorage } from "../services/context-store";
 import { YoutubeTranscript } from "youtube-transcript";
 import { documents as documentsTable, folders as foldersTable, activeContext as activeContextTable, userPreferences as userPreferencesTable } from "../shared/models/chat";
@@ -2098,8 +2098,9 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // IMAGE GENERATION — generates an image from a textual description
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-image", llmLimiter, requireUsage("image_gen"), async (req, res) => {
+  app.post("/api/generate-image", llmLimiter, requireUsageCheck("image_gen"), async (req, res) => {
     try {
+      const { userId } = getAuth(req);
       const { description } = req.body;
       if (!description || typeof description !== "string" || !description.trim()) {
         return res.status(400).json({ error: "description is required" });
@@ -2127,6 +2128,8 @@ Output only valid JSON, no markdown.`;
         const imageUrl = `data:image/png;base64,${base64}`;
         const revisedPrompt = (imageData as { revised_prompt?: string })?.revised_prompt;
 
+        // Record usage only after successful generation
+        if (userId) await recordUsage(userId, "image_gen");
         return res.json({ imageUrl, revisedPrompt });
       }
 
@@ -2153,8 +2156,9 @@ Output only valid JSON, no markdown.`;
   // ═══════════════════════════════════════════════════════════════════════
   // GEMINI IMAGEN — generates images using Google's Imagen via @google/genai
   // ═══════════════════════════════════════════════════════════════════════
-  app.post("/api/generate-imagen", llmLimiter, requireUsage("image_gen"), async (req, res) => {
+  app.post("/api/generate-imagen", llmLimiter, requireUsageCheck("image_gen"), async (req, res) => {
     try {
+      const { userId } = getAuth(req);
       const {
         prompt, aspectRatio, negativePrompt, style, numberOfImages,
         // Advanced generation parameters
@@ -2275,6 +2279,9 @@ Output only valid JSON, no markdown.`;
           error: "No images were generated. The prompt may have been filtered by safety settings.",
         });
       }
+
+      // Record usage only after at least one image was successfully generated
+      if (userId) await recordUsage(userId, "image_gen");
 
       return res.json({ images });
     } catch (error) {

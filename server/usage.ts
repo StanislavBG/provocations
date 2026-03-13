@@ -193,3 +193,42 @@ export function requireUsage(resource: UsageResource) {
     }
   };
 }
+
+/**
+ * Express middleware that checks usage quota WITHOUT recording it.
+ * Use this for endpoints where usage should only be recorded after a successful
+ * result (post-decrement pattern). Call recordUsage() manually in the handler.
+ *
+ * Usage: app.post("/api/generate-imagen", requireUsageCheck("image_gen"), handler);
+ */
+export function requireUsageCheck(resource: UsageResource) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = getAuth(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const allowed = await checkUsage(userId, resource);
+      if (!allowed) {
+        const plan = await getUserPlan(userId);
+        const limit = getLimit(plan, resource);
+        const current = await getCurrentUsage(userId, resource);
+        return res.status(429).json({
+          error: "Usage limit exceeded",
+          resource,
+          current,
+          limit,
+          plan,
+          upgradeUrl: "/pricing",
+        });
+      }
+
+      next();
+    } catch (err) {
+      console.error("Usage check failed:", err);
+      // Fail open — don't block requests if usage check errors
+      next();
+    }
+  };
+}
