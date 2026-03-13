@@ -20,13 +20,26 @@ export default function FtuxWorkspace() {
   return (
     <FtuxShellProvider initialConfig={shellConfig} onConfigChange={setShellConfig}>
       <FtuxShell>
-        <FtuxStatusBar templateName={ws.selectedTemplateName ?? null} templateId={templateId} />
+        <FtuxStatusBar
+          templateName={ws.selectedTemplateName ?? null}
+          templateId={templateId}
+          mobileMenuSlot={
+            <FtuxHamburgerMenu
+              variant="inline"
+              currentTemplateId={templateId}
+              onSelectTemplate={(id) => ws.setSelectedTemplateId(id)}
+            />
+          }
+        />
 
         <div className="flex-1 relative overflow-hidden">
-          <FtuxHamburgerMenu
-            currentTemplateId={templateId}
-            onSelectTemplate={(id) => ws.setSelectedTemplateId(id)}
-          />
+          {/* Floating hamburger — desktop only */}
+          <div className="hidden md:block">
+            <FtuxHamburgerMenu
+              currentTemplateId={templateId}
+              onSelectTemplate={(id) => ws.setSelectedTemplateId(id)}
+            />
+          </div>
 
           <FtuxContentArea workspace={ws} />
 

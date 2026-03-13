@@ -82,9 +82,11 @@ const MENU_CATEGORIES: MenuCategory[] = [
 interface FtuxHamburgerMenuProps {
   currentTemplateId: string | null;
   onSelectTemplate: (id: string) => void;
+  /** "floating" (default) = fixed-position button below status bar; "inline" = plain button for use inside the status bar on mobile */
+  variant?: "floating" | "inline";
 }
 
-export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxHamburgerMenuProps) {
+export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate, variant = "floating" }: FtuxHamburgerMenuProps) {
   const [open, setOpen] = useState(false);
   const shell = useFtuxShell();
 
@@ -109,7 +111,11 @@ export function FtuxHamburgerMenu({ currentTemplateId, onSelectTemplate }: FtuxH
           variant="ghost"
           size="icon"
           aria-label="Open workspace tools menu"
-          className="fixed top-[calc(var(--ftux-status-bar-height,44px)+4px)] left-3 z-30 w-9 h-9 rounded-xl bg-card/75 backdrop-blur-md border border-border/30 shadow-sm hover:bg-card"
+          className={
+            variant === "inline"
+              ? "w-7 h-7 rounded text-muted-foreground hover:text-foreground"
+              : "fixed top-[calc(var(--ftux-status-bar-height,44px)+4px)] left-3 z-30 w-9 h-9 rounded-xl bg-card/75 backdrop-blur-md border border-border/30 shadow-sm hover:bg-card"
+          }
         >
           <Menu className="w-4 h-4" />
         </Button>

@@ -131,9 +131,11 @@ interface FtuxStatusBarProps {
   isSharedCanvas?: boolean;
   /** Permission level for the shared canvas */
   sharedPermission?: "read" | "write";
+  /** Mobile-only: hamburger menu trigger rendered inline at the left of the status bar */
+  mobileMenuSlot?: React.ReactNode;
 }
 
-export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations, onOpenConnectedApps, appVersion, onOpenReleaseNotes, onOpenContextStore, blueprintsSlot, mailboxUnreadCount = 0, onOpenMailbox, isSharedCanvas, sharedPermission }: FtuxStatusBarProps) {
+export function FtuxStatusBar({ templateName, templateId, headerActions, jobCount = 0, canvasTheme, onChangeCanvasTheme, canvasName, onRenameCanvas, savedCanvases, onOpenCanvas, onDeleteCanvas, canvasLoading, onOpenActivityLogs, onOpenConnections, onOpenIntegrations, onOpenConnectedApps, appVersion, onOpenReleaseNotes, onOpenContextStore, blueprintsSlot, mailboxUnreadCount = 0, onOpenMailbox, isSharedCanvas, sharedPermission, mobileMenuSlot }: FtuxStatusBarProps) {
   const [canvasDropdownOpen, setCanvasDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -192,8 +194,10 @@ export function FtuxStatusBar({ templateName, templateId, headerActions, jobCoun
     >
       {/* Left: Brand + Pinned Items */}
       <div className="flex items-center gap-2 min-w-0">
+        {/* Mobile: inline hamburger menu replaces the floating button */}
+        {mobileMenuSlot && <div className="md:hidden shrink-0">{mobileMenuSlot}</div>}
         <ProvoIcon className="w-4 h-4 text-primary shrink-0" />
-        <span className="text-xs font-serif font-bold tracking-tight text-foreground">Provocations</span>
+        <span className="hidden md:inline text-xs font-serif font-bold tracking-tight text-foreground">Provocations</span>
         {/* Canvas name — dropdown to switch, double-click to rename */}
         {onOpenCanvas ? (
           <div className="relative">
