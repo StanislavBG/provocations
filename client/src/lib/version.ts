@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.14";
+export const APP_VERSION = "0.27.15";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.15",
+    date: "2026-03-13",
+    changes: [
+      "Fix: audio nodes set llmStatus to 'running' on record start, enabling chain propagation on stop",
+    ],
+  },
   {
     version: "0.27.14",
     date: "2026-03-13",

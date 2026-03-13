@@ -95,6 +95,7 @@ export const FlowAudioNode = React.memo(function FlowAudioNode({
     setIsRecording(true);
     onUpdateNode(node.id, {
       audioRecording: true,
+      llmStatus: "running",
       snippet: "Recording...",
       label: node.label === "Capture Audio" ? `Recording — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : node.label,
     });
