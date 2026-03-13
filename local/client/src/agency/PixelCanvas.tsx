@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgencyEngine, type AuditEntry, type SSEPayload } from "./engine";
 import { CANVAS_W, CANVAS_H } from "./sprites";
-import { apiFetch, apiPost } from "../api";
+import { apiFetch, apiPost, fmtTime, fmtDateTime } from "../api";
 import {
   Play,
   Square,
@@ -110,6 +110,13 @@ export default function PixelCanvas() {
     return () => engine.stop();
   }, [onAudit]);
 
+  // Sync engine with actual server state when agents data loads
+  useEffect(() => {
+    if (engineRef.current && agents && agents.length > 0) {
+      engineRef.current.syncFromServer(agents);
+    }
+  }, [agents]);
+
   // SSE connection
   useEffect(() => {
     const source = new EventSource("/api/events");
@@ -173,10 +180,7 @@ export default function PixelCanvas() {
     engineRef.current?.triggerDemo();
   };
 
-  const formatTime = (ms: number) => {
-    const d = new Date(ms);
-    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
-  };
+  const formatTime = (ms: number) => fmtTime(ms);
 
   const auditLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -333,9 +337,7 @@ export default function PixelCanvas() {
                     </span>
                     <span
                       className={`flex-shrink-0 w-[48px] font-medium ${
-                        entry.agent === "bilko"
-                          ? "text-green-400"
-                          : "text-amber-400"
+                        ({bilko:"text-green-400",sable:"text-blue-400",scout:"text-amber-400",picca:"text-fuchsia-400",reely:"text-red-400",vox:"text-orange-400",lurker:"text-slate-400",wordsmith:"text-rose-400",sentinel:"text-yellow-400"} as Record<string,string>)[entry.agent] || "text-amber-400"
                       }`}
                     >
                       {entry.agent.toUpperCase()}
@@ -383,7 +385,7 @@ export default function PixelCanvas() {
                       </div>
                       <div className="text-[10px] text-agency-muted">
                         Started:{" "}
-                        {new Date(run.started_at).toLocaleTimeString()}
+                        {fmtTime(run.started_at)}
                         <br />
                         Trigger: {run.trigger}
                         <br />
@@ -413,9 +415,7 @@ export default function PixelCanvas() {
                         <span className="text-[10px] font-medium">
                           <span
                             className={
-                              run.agent_id === "bilko"
-                                ? "text-green-400"
-                                : "text-amber-400"
+                              ({bilko:"text-green-400",sable:"text-blue-400",scout:"text-amber-400",picca:"text-fuchsia-400",reely:"text-red-400",vox:"text-orange-400",lurker:"text-slate-400",wordsmith:"text-rose-400",sentinel:"text-yellow-400"} as Record<string,string>)[run.agent_id] || "text-amber-400"
                             }
                           >
                             {run.agent_id}
@@ -451,7 +451,7 @@ export default function PixelCanvas() {
                           ? `${(run.duration_ms / 1000).toFixed(1)}s`
                           : "running"}{" "}
                         · {run.trigger} ·{" "}
-                        {new Date(run.started_at).toLocaleTimeString()}
+                        {fmtTime(run.started_at)}
                       </div>
                     </div>
                   ))

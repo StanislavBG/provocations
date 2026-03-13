@@ -82,7 +82,7 @@ export function EventBusExpandedView({
               <p className="text-[10px] text-muted-foreground mt-1.5">
                 {mode === "publish"
                   ? "Sends upstream content as task events for local agents."
-                  : "Receives results from local agents as document nodes."}
+                  : "Receives results from local agents as messages in this node."}
               </p>
             </div>
 
@@ -113,10 +113,10 @@ export function EventBusExpandedView({
               </p>
             </div>
 
-            {/* Result handling hint (listen mode) — Replace/+New toggle is on the card */}
+            {/* Result handling hint (listen mode) */}
             {mode === "listen" && (
               <p className="text-[10px] text-muted-foreground">
-                Use the <span className="font-semibold text-amber-400">Replace</span> / <span className="font-semibold text-amber-400">+New</span> toggle on the card to control whether results update one document or create new ones. Full history is always kept in the log.
+                Agent results appear as messages in the log. The last 50 messages are kept. Click any entry to expand the full content.
               </p>
             )}
           </div>
@@ -216,7 +216,7 @@ export function EventBusExpandedView({
                         </button>
                         {isExpanded && entry.content && (
                           <div className="px-2 pb-2">
-                            <pre className="text-[10px] bg-background/50 rounded p-2 whitespace-pre-wrap break-words text-muted-foreground max-h-40 overflow-auto">
+                            <pre className="text-[10px] bg-background/50 rounded p-2 whitespace-pre-wrap break-words text-muted-foreground max-h-[60vh] overflow-auto">
                               {entry.content}
                             </pre>
                           </div>
@@ -232,7 +232,7 @@ export function EventBusExpandedView({
               <div className="text-center py-8 text-muted-foreground">
                 <Headphones className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">Waiting for agent results...</p>
-                <p className="text-[11px] mt-1">Results will appear as document nodes connected to this node.</p>
+                <p className="text-[11px] mt-1">Results will appear as messages in the log above.</p>
               </div>
             )}
 

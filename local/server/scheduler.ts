@@ -51,7 +51,7 @@ function registerAgent(agent: AgentConfig): void {
   scheduled.set(agent.id, entry);
 }
 
-export async function dispatch(agentId: string, trigger: "scheduled" | "manual" | "canvas_task"): Promise<number> {
+export async function dispatch(agentId: string, trigger: "scheduled" | "manual" | "canvas_task", taskContent?: string): Promise<number> {
   if (dispatchLocks.has(agentId)) {
     throw new Error(`Agent ${agentId} dispatch already in progress`);
   }
@@ -77,7 +77,7 @@ export async function dispatch(agentId: string, trigger: "scheduled" | "manual" 
 
     const runId = insertRun(agentId, trigger, `${trigger} run`);
 
-    const handle = spawnAgent(agent);
+    const handle = spawnAgent(agent, undefined, taskContent);
     if (entry) entry.handle = handle;
 
     bus.broadcast("run:started", { agentId, runId, trigger, pid: handle.pid });
@@ -159,6 +159,15 @@ export function getSchedulerStatus(): {
 
 export function isAgentRunning(agentId: string): boolean {
   return !!scheduled.get(agentId)?.handle;
+}
+
+/**
+ * Returns a promise that resolves when the agent's current run finishes.
+ * Returns null if the agent is not running.
+ */
+export function getRunPromise(agentId: string): Promise<import("./agent-runner.js").RunResult> | null {
+  const entry = scheduled.get(agentId);
+  return entry?.handle?.promise ?? null;
 }
 
 export function getAgentPid(agentId: string): number | null {
