@@ -222,6 +222,36 @@ function DocConnectedInputs({ nodeId, edges, nodes }: { nodeId: string; edges: F
 // DOC_TOOLS, splitOutputByDelimiters, splitOutputIntoSections, and quickHash
 // are now imported from ./flow-workspace/FlowToolHandlers.ts (E7 decomposition)
 
+// ── Remote image viewer for painter output nodes reloaded from context library ──
+// Lazy-fetches the document by ID so the canvas can show the image after a save/reload
+// cycle (when the in-memory base64 imageUrl has been stripped from serialization).
+
+function RemoteDocumentImageView({ documentId, label }: { documentId: number; label?: string }) {
+  const { data, isLoading } = useQuery<{ content: string }>({
+    queryKey: [`/api/documents/${documentId}`],
+    queryFn: () => apiRequest("GET", `/api/documents/${documentId}`).then((r) => r.json()),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+      <img
+        src={data?.content}
+        alt={label || "Image"}
+        className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+        draggable={false}
+      />
+    </div>
+  );
+}
+
 // ── Inner workspace (needs shell context) ──
 
 function FlowWorkspaceInner() {
@@ -1852,6 +1882,19 @@ function FlowWorkspaceInner() {
           lcLog(node, "process", "success", `Image generated`, { durationMs: elapsed });
           lcLog(node, "post-process", "success", "Output image node created");
           toast({ title: "Image generated" });
+
+          // Auto-save to context library so the image survives canvas reloads.
+          // Fire-and-forget — failure leaves the in-memory imageUrl still usable.
+          const words = prompt.replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+          const imgTitle = `${words.slice(0, 3).join(" ") || "Generated Image"} — ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+          apiRequest("POST", "/api/documents", { title: imgTitle, content: imageUrl, docType: "image" })
+            .then((r) => r.json())
+            .then((saved: { id: number }) => {
+              scopedUpdate(imgNodeId, { documentId: saved.id });
+              queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+            })
+            .catch(() => { /* silent — image still visible via in-memory imageUrl */ });
+
           return;
         }
 
@@ -2235,8 +2278,8 @@ function FlowWorkspaceInner() {
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Execution failed";
         lcLog(node, "process", "error", errMsg, { error: errMsg, durationMs: Math.round(performance.now() - t0) });
-        scopedUpdate(nodeId, { llmStatus: "error", snippet: "Execution failed" });
-        toast({ title: "Execution failed", variant: "destructive" });
+        scopedUpdate(nodeId, { llmStatus: "error", snippet: errMsg });
+        toast({ title: "Execution failed", description: errMsg, variant: "destructive" });
       }
       } finally {
         executingNodesRef.current.delete(nodeId);
@@ -4249,8 +4292,10 @@ function FlowWorkspaceInner() {
       {/* ── Unified expanded overlay (replaces 6 individual overlay blocks + chain nav) ── */}
       {activeExpandedNodeId && activeExpandedNode && (() => {
         const handleOverlayClose = () => {
-          // Save document editor content before closing if needed
-          if (activeExpandedNode.type === "document" && !activeExpandedNode.imageUrl) {
+          // Save document editor content before closing if needed.
+          // Skip for image nodes (imageUrl present or documentId pointing to an image doc).
+          const isImageNode = activeExpandedNode.imageUrl || activeExpandedNode.documentId;
+          if (activeExpandedNode.type === "document" && !isImageNode) {
             handleCloseDocumentEditor();
           }
           closeExpandedNode();
@@ -4274,7 +4319,7 @@ function FlowWorkspaceInner() {
 
             case "document":
               if (activeExpandedNode.imageUrl) {
-                // Image viewer
+                // In-memory image (just generated, before canvas save strips the base64)
                 return (
                   <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
                     <img
@@ -4284,6 +4329,15 @@ function FlowWorkspaceInner() {
                       draggable={false}
                     />
                   </div>
+                );
+              }
+              if (activeExpandedNode.documentId) {
+                // Remote image view — fetch from context library (post canvas save/reload)
+                return (
+                  <RemoteDocumentImageView
+                    documentId={activeExpandedNode.documentId}
+                    label={activeExpandedNode.label}
+                  />
                 );
               }
               // Document editor — premium notebook experience

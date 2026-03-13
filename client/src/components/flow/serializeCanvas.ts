@@ -70,7 +70,7 @@ export function serializeNodeForSave(node: FlowNode): Partial<FlowNode> {
       llmBaseOutput: node.llmBaseOutput,
       llmBaseStreaming: node.llmBaseStreaming,
     }),
-    document: () => ({ documentContent: node.documentContent, documentObjective: node.documentObjective, content: node.content }),
+    document: () => ({ documentContent: node.documentContent, documentObjective: node.documentObjective, content: node.content, documentId: node.documentId }),
     zone: () => ({ zoneColor: node.zoneColor, zoneLabel: node.zoneLabel }),
     label: () => ({ labelFontSize: node.labelFontSize, labelBold: node.labelBold, labelItalic: node.labelItalic, labelColor: node.labelColor }),
     audio: () => ({ audioTranscript: node.audioTranscript }),
@@ -91,7 +91,12 @@ export function serializeNodeForSave(node: FlowNode): Partial<FlowNode> {
     router: () => ({ routerOutputs: node.routerOutputs }),
     merge: () => ({}),
     interview: () => ({ interviewObjective: node.interviewObjective, interviewConfig: node.interviewConfig, interviewEntries: node.interviewEntries }),
-    painter: () => ({ content: node.content, imageUrl: node.imageUrl }),
+    painter: () => ({
+      // Strip base64 image data — images can be hundreds of KB and will blow the
+      // 500,000-character document limit.  The image is regenerated on next run.
+      content: node.content?.replace(/^IMAGE:data:[^\n]*/m, "IMAGE:") ?? node.content,
+      imageUrl: node.imageUrl?.startsWith("data:") ? "" : node.imageUrl,
+    }),
     timeline: () => ({ content: node.content }),
     "social-post": () => ({
       socialPlatforms: node.socialPlatforms,
