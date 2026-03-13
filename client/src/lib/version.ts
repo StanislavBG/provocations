@@ -22,8 +22,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: "0.27.10",
     date: "2026-03-13",
     changes: [
-      "Painter: fix daily image limit burning quota on failed generations — usage now recorded only after successful image output",
-      "Painter: show clear 'Daily image limit reached' message instead of generic error when 5/5 quota hit",
+      "Painter: remove artificial 5/day image generation limit — Gemini API key has no such restriction",
+      "Painter: show clear 'Daily image limit reached' message instead of generic error when quota is hit",
     ],
   },
   {
