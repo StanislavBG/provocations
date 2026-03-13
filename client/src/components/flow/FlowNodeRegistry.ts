@@ -33,6 +33,8 @@ import {
   BrainCircuit,
   Globe,
   Radio,
+  Braces,
+  ListOrdered,
 } from "lucide-react";
 import type { FlowNodeType, PortDef, EdgeRole } from "./useFlowCanvas";
 
@@ -53,7 +55,7 @@ export interface FlowNodeStyle {
 // ── Behavior types ──
 
 export type ExpandMode = "overlay" | "dialog" | "none";
-export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification" | "approval" | "llm-base" | "webpage" | "event-bus";
+export type LifecyclePreset = "llm" | "stream" | "media" | "timer" | "passive" | "social" | "api" | "logic" | "interview" | "coherence" | "youtube" | "notification" | "approval" | "llm-base" | "webpage" | "event-bus" | "json-processor" | "queue";
 
 // ── Registry definition ──
 
@@ -802,6 +804,62 @@ export const FLOW_NODE_REGISTRY: Record<FlowNodeType, FlowNodeDefinition> = {
     inputDescription: "In publish mode: upstream content is sent as a task event for local agents. In listen mode: receives results posted back by agents.",
     outputDescription: "In publish mode: event publication confirmation. In listen mode: agent results appear as connected document nodes.",
   },
+
+  "json-processor": {
+    type: "json-processor",
+    style: {
+      border: "border-indigo-500/60",
+      bg: "bg-card",
+      headerBg: "bg-indigo-500/15",
+      headerBorder: "border-indigo-500/40",
+      iconClass: "text-indigo-500",
+      badgeBg: "bg-indigo-500/25",
+      badgeText: "text-indigo-600 dark:text-indigo-400",
+      badge: "JSON",
+      accent: "indigo",
+    },
+    icon: Braces,
+    defaultWidth: 220,
+    defaultHeight: 160,
+    ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+    expandMode: "overlay",
+    playable: true,
+    supportsChainExecution: true,
+    lifecyclePreset: "json-processor",
+    minWidth: 160,
+    minHeight: 100,
+    acceptedRoles: [],
+    inputDescription: "JSON content from upstream nodes. Configure output paths to extract and route specific portions of the JSON structure.",
+    outputDescription: "Creates document nodes for each configured output path, containing the extracted JSON data.",
+  },
+
+  queue: {
+    type: "queue",
+    style: {
+      border: "border-emerald-500/60",
+      bg: "bg-card",
+      headerBg: "bg-emerald-500/15",
+      headerBorder: "border-emerald-500/40",
+      iconClass: "text-emerald-500",
+      badgeBg: "bg-emerald-500/25",
+      badgeText: "text-emerald-600 dark:text-emerald-400",
+      badge: "Queue",
+      accent: "emerald",
+    },
+    icon: ListOrdered,
+    defaultWidth: 220,
+    defaultHeight: 160,
+    ports: [{ side: "left", type: "input" }, { side: "right", type: "output" }],
+    expandMode: "overlay",
+    playable: true,
+    supportsChainExecution: true,
+    lifecyclePreset: "queue",
+    minWidth: 160,
+    minHeight: 100,
+    acceptedRoles: [],
+    inputDescription: "Items from upstream nodes. In flow-through mode items pass immediately. In hold mode items accumulate until triggered.",
+    outputDescription: "Released items as document nodes. Trigger mode controls whether one or all items are released per trigger.",
+  },
 };
 
 // ── Derived convenience accessors (backward-compatible) ──
@@ -933,4 +991,6 @@ export const DOCK_TOOL_CATALOG: DockToolCatalogEntry[] = [
   { toolId: "llm-base", label: "LLM", icon: BrainCircuit, iconName: "BrainCircuit", group: "build", description: "Direct AI prompt — write your own instructions with full control over model and settings" },
   { toolId: "webpage", label: "Webpage", icon: Globe, iconName: "Globe", group: "build", description: "Turn content into a styled, self-contained HTML page with auto-layout — preview, download, or save" },
   { toolId: "event-bus", label: "Event Bus", icon: Radio, iconName: "Radio", group: "build", description: "Bridge between canvas and local AI agents — publish tasks for agents to pick up, receive results back as documents" },
+  { toolId: "json-processor", label: "JSON Processor", icon: Braces, iconName: "Braces", group: "build", description: "Split complex JSON payloads into separate outputs using configurable JSONPath selectors" },
+  { toolId: "queue", label: "Queue", icon: ListOrdered, iconName: "ListOrdered", group: "build", description: "Accumulate items and control their release — flow through immediately or hold until triggered" },
 ];

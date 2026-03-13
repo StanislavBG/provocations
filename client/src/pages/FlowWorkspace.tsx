@@ -69,6 +69,8 @@ const StoreExpandedView = lazyExpandedViews["store"];
 const UploadExpandedView = lazyExpandedViews["upload"];
 const WebpageExpandedView = lazyExpandedViews["webpage"];
 const EventBusExpandedView = lazyExpandedViews["event-bus"];
+const JsonProcessorExpandedView = lazyExpandedViews["json-processor"];
+const QueueExpandedView = lazyExpandedViews["queue"];
 import { EdgeRolePickerDialog } from "@/components/flow/EdgeRolePickerDialog";
 import { BlueprintsMenu } from "@/components/flow/BlueprintsMenu";
 import { serializeCanvas, serializeNodeForSave } from "@/components/flow/serializeCanvas";
@@ -2045,6 +2047,115 @@ function FlowWorkspaceInner() {
           return;
         }
 
+        // -- JSON Processor: create document nodes from extracted paths --
+        if (preset === "json-processor") {
+          try {
+            const result = JSON.parse(outputText) as {
+              results: Array<{ id: string; name: string; path: string; flatten: boolean; value: unknown; items?: unknown[] }>;
+              passThrough: boolean;
+              originalInput?: string;
+            };
+            let docIdx = 0;
+            const docDims = DEFAULT_DIMENSIONS["document"] || { width: 200, height: 100 };
+            for (const r of result.results) {
+              if (r.flatten && r.items) {
+                // Create one doc per flattened item
+                for (let j = 0; j < r.items.length; j++) {
+                  const itemStr = typeof r.items[j] === "string" ? r.items[j] as string : JSON.stringify(r.items[j], null, 2);
+                  docIdx++;
+                  const slot = findOpenSlot(node.x + node.width + 60, node.y + docIdx * (docDims.height + 20), docDims.width, docDims.height);
+                  const docId = scopedAddNode("document", slot.x, slot.y, {
+                    label: `${r.name} [${j + 1}]`,
+                    documentContent: itemStr,
+                    snippet: (itemStr as string).slice(0, 200),
+                  });
+                  scopedAddEdge(nodeId, docId);
+                }
+              } else {
+                const valueStr = typeof r.value === "string" ? r.value : JSON.stringify(r.value, null, 2);
+                docIdx++;
+                const slot = findOpenSlot(node.x + node.width + 60, node.y + docIdx * (docDims.height + 20), docDims.width, docDims.height);
+                const docId = scopedAddNode("document", slot.x, slot.y, {
+                  label: r.name,
+                  documentContent: valueStr,
+                  snippet: valueStr.slice(0, 200),
+                });
+                scopedAddEdge(nodeId, docId);
+              }
+            }
+            if (result.passThrough && result.originalInput) {
+              docIdx++;
+              const slot = findOpenSlot(node.x + node.width + 60, node.y + docIdx * (docDims.height + 20), docDims.width, docDims.height);
+              const docId = scopedAddNode("document", slot.x, slot.y, {
+                label: `${node.label} (Original)`,
+                documentContent: result.originalInput,
+                snippet: result.originalInput.slice(0, 200),
+              });
+              scopedAddEdge(nodeId, docId);
+            }
+            scopedUpdate(nodeId, {
+              llmStatus: "done",
+              jsonProcessingStatus: "done",
+              jsonLastInput: combinedContent,
+              snippet: `Extracted ${result.results.length} path(s)`,
+            });
+            lcLog(node, "process", "success", `Extracted ${result.results.length} paths`, { durationMs: elapsed });
+            lcLog(node, "post-process", "success", `Created ${docIdx} output document(s)`);
+            toast({ title: "JSON processed", description: `Created ${docIdx} output documents` });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "JSON processing failed";
+            scopedUpdate(nodeId, { llmStatus: "error", jsonProcessingStatus: "error", jsonLastError: msg, snippet: "Processing failed" });
+            lcLog(node, "process", "error", msg, { error: msg, durationMs: elapsed });
+            toast({ title: "JSON processing failed", variant: "destructive" });
+          }
+          return;
+        }
+
+        // -- Queue: handle enqueue / release results --
+        if (preset === "queue") {
+          try {
+            const result = JSON.parse(outputText) as {
+              action: string;
+              released?: Array<{ id: string; content: string; enqueuedAt: string; status: string; releasedAt?: string; sourceNodeId?: string; sourceNodeLabel?: string }>;
+              items: typeof node.queueItems;
+              stats: typeof node.queueStats;
+              message?: string;
+            };
+            // Update queue state
+            scopedUpdate(nodeId, {
+              queueItems: result.items,
+              queueStats: result.stats,
+              llmStatus: "done",
+              snippet: `Queue: ${(result.items || []).filter((i) => i.status === "queued").length} queued`,
+            });
+            // Create document nodes for released items
+            if (result.released && result.released.length > 0) {
+              const docDims = DEFAULT_DIMENSIONS["document"] || { width: 200, height: 100 };
+              for (let i = 0; i < result.released.length; i++) {
+                const item = result.released[i];
+                const slot = findOpenSlot(node.x + node.width + 60, node.y + i * (docDims.height + 20), docDims.width, docDims.height);
+                const docId = scopedAddNode("document", slot.x, slot.y, {
+                  label: `Queue Item ${item.sourceNodeLabel ? `(${item.sourceNodeLabel})` : ""}`.trim(),
+                  documentContent: item.content,
+                  snippet: item.content.slice(0, 200),
+                });
+                scopedAddEdge(nodeId, docId);
+              }
+              lcLog(node, "post-process", "success", `Released ${result.released.length} item(s)`);
+              toast({ title: "Queue released", description: `${result.released.length} item(s) released` });
+            } else if (result.action === "enqueue") {
+              lcLog(node, "process", "success", result.message || "Item enqueued", { durationMs: elapsed });
+              toast({ title: "Item enqueued" });
+            } else {
+              lcLog(node, "process", "success", result.message || "Queue operation complete", { durationMs: elapsed });
+            }
+          } catch {
+            scopedUpdate(nodeId, { llmStatus: "error", snippet: "Queue operation failed" });
+            toast({ title: "Queue operation failed", variant: "destructive" });
+          }
+          return;
+        }
+
         // -- All other presets (stream, llm, logic, interview, generic): text output --
         if (!outputText?.trim()) {
           lcLog(node, "process", "error", "No output generated", { error: "Empty output", durationMs: elapsed });
@@ -2432,6 +2543,28 @@ function FlowWorkspaceInner() {
           eventBusMode: "publish",
           eventBusChannel: "",
           eventBusStatus: "idle",
+        });
+        return;
+      }
+      if (toolId === "json-processor") {
+        addNode("json-processor", canvasX, canvasY, {
+          label: "JSON Processor",
+          snippet: "Double-click to configure output paths",
+          jsonOutputPaths: [],
+          jsonPassThrough: false,
+          jsonProcessingStatus: "idle",
+        });
+        return;
+      }
+      if (toolId === "queue") {
+        addNode("queue", canvasX, canvasY, {
+          label: "Queue",
+          snippet: "Queue: 0 queued",
+          queueMode: "flow_through",
+          queueTriggerMode: "process_all",
+          queueItems: [],
+          queueStats: { totalEnqueued: 0, totalReleased: 0, totalProcessed: 0 },
+          queueAutoChain: false,
         });
         return;
       }
@@ -4900,6 +5033,24 @@ function FlowWorkspaceInner() {
             case "event-bus":
               return (
                 <EventBusExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
+                />
+              );
+
+            case "json-processor":
+              return (
+                <JsonProcessorExpandedView
+                  node={activeExpandedNode}
+                  onUpdateNode={updateNode}
+                  onPlayNode={handlePlayNode}
+                />
+              );
+
+            case "queue":
+              return (
+                <QueueExpandedView
                   node={activeExpandedNode}
                   onUpdateNode={updateNode}
                   onPlayNode={handlePlayNode}

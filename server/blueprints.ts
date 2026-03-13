@@ -449,6 +449,113 @@ const prdToRedditBlueprint: Blueprint = {
   ],
 };
 
+// ═══════════════════════════════════════════════════════════════
+// Blueprint E: Inter-Office Communication
+// ═══════════════════════════════════════════════════════════════
+
+const interOfficeBlueprint: Blueprint = {
+  id: "inter-office-comm",
+  label: "Inter-Office Communication",
+  description: "Pre-configured canvas for communication between two BSOffice installations with paired event buses and a bulletin board zone",
+  icon: "Radio",
+  category: "business",
+  nodes: [
+    // Zone for visual grouping
+    n({
+      id: "io-zone",
+      type: "zone",
+      label: "Inter-Office Channel",
+      col: 0,
+      row: 0,
+      width: 900,
+      height: 500,
+      zoneColor: "cyan",
+      zoneLabel: "Inter-Office Channel",
+    }),
+    // Office A publish
+    n({
+      id: "io-office-a-pub",
+      type: "event-bus",
+      label: "Office A (Publish)",
+      col: 0,
+      row: 0,
+      snippet: "Send messages to Office B",
+      eventBusMode: "publish",
+      eventBusChannel: "inter-office",
+      eventBusStatus: "idle",
+      width: 220,
+      height: 160,
+    }),
+    // Office A listen
+    n({
+      id: "io-office-a-listen",
+      type: "event-bus",
+      label: "Office A (Listen)",
+      col: 0,
+      row: 1,
+      snippet: "Receive messages from Office B",
+      eventBusMode: "listen",
+      eventBusChannel: "inter-office-reply",
+      eventBusStatus: "idle",
+      width: 220,
+      height: 160,
+    }),
+    // Office B publish
+    n({
+      id: "io-office-b-pub",
+      type: "event-bus",
+      label: "Office B (Publish)",
+      col: 2,
+      row: 0,
+      snippet: "Send messages to Office A",
+      eventBusMode: "publish",
+      eventBusChannel: "inter-office-reply",
+      eventBusStatus: "idle",
+      width: 220,
+      height: 160,
+    }),
+    // Office B listen
+    n({
+      id: "io-office-b-listen",
+      type: "event-bus",
+      label: "Office B (Listen)",
+      col: 2,
+      row: 1,
+      snippet: "Receive messages from Office A",
+      eventBusMode: "listen",
+      eventBusChannel: "inter-office",
+      eventBusStatus: "idle",
+      width: 220,
+      height: 160,
+    }),
+    // Bulletin board label
+    n({
+      id: "io-bulletin-label",
+      type: "label",
+      label: "Bulletin Board",
+      col: 1,
+      row: 0,
+      width: 200,
+      height: 40,
+      labelFontSize: 18,
+      labelBold: true,
+    }),
+    // Bulletin board document
+    n({
+      id: "io-bulletin-doc",
+      type: "document",
+      label: "Shared Bulletin",
+      col: 1,
+      row: 1,
+      snippet: "Post announcements and shared updates here",
+      documentContent: "# Inter-Office Bulletin Board\n\nPost shared announcements, updates, and notices between offices here.\n\n---\n",
+      width: 200,
+      height: 130,
+    }),
+  ],
+  edges: [],
+};
+
 // ── All blueprints ──
 
 export const BLUEPRINTS: Blueprint[] = [
@@ -456,6 +563,7 @@ export const BLUEPRINTS: Blueprint[] = [
   prdBlueprint,
   researchBlueprint,
   prdToRedditBlueprint,
+  interOfficeBlueprint,
 ];
 
 /**

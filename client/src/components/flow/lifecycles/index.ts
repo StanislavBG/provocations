@@ -22,6 +22,8 @@ import { createApprovalHandlers } from "./approval";
 import { createLlmBaseHandlers } from "./llm-base";
 import { createWebpageHandlers } from "./webpage";
 import { createEventBusHandlers } from "./event-bus";
+import { createJsonProcessorHandlers } from "./json-processor";
+import { createQueueHandlers } from "./queue";
 
 /** No-op handlers for passive nodes (document, context-doc, store, audio, label, zone) */
 function createPassiveHandlers(): NodeLifecycleHandlers {
@@ -47,6 +49,8 @@ const LIFECYCLE_FACTORIES: Record<LifecyclePreset, () => NodeLifecycleHandlers> 
   "llm-base": createLlmBaseHandlers,
   webpage: createWebpageHandlers,
   "event-bus": createEventBusHandlers,
+  "json-processor": createJsonProcessorHandlers,
+  "queue": createQueueHandlers,
 };
 
 /** Get lifecycle handlers for a given lifecycle preset */
@@ -70,3 +74,5 @@ export { createApprovalHandlers } from "./approval";
 export { createLlmBaseHandlers } from "./llm-base";
 export { createWebpageHandlers } from "./webpage";
 export { createEventBusHandlers } from "./event-bus";
+export { createJsonProcessorHandlers } from "./json-processor";
+export { createQueueHandlers } from "./queue";
