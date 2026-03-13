@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.12";
+export const APP_VERSION = "0.27.10";
 
 export interface ReleaseNote {
   version: string;
@@ -19,30 +19,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: "0.27.12",
-    date: "2026-03-13",
-    changes: [
-      "Context browser: document/note/timeline/media types now render as formatted markdown (not raw text)",
-      "Context browser: PDF files show inline iframe viewer with download button",
-      "Context browser: webpage documents render in a sandboxed iframe",
-      "Context browser: chart/canvas documents show a friendly 'open on canvas' message instead of blank",
-    ],
-  },
-  {
-    version: "0.27.11",
-    date: "2026-03-13",
-    changes: [
-      "Painter: generated images auto-saved to context library (docType: image) — survive canvas reloads",
-      "Painter output node: documentId persisted in canvas serialization for remote image view after reload",
-      "Painter output node expanded view: lazy-fetches image from context library when in-memory base64 is gone",
-    ],
-  },
-  {
     version: "0.27.10",
     date: "2026-03-13",
     changes: [
-      "Painter: strip base64 image data from canvas serialization — prevents 400 'content too large' on save",
-      "Execution errors: node snippet and toast now show the actual error message instead of 'Execution failed'",
+      "Painter: remove artificial 5/day image generation limit — Gemini API key has no such restriction",
+      "Painter: show clear 'Daily image limit reached' message instead of generic error when quota is hit",
     ],
   },
   {
