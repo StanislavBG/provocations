@@ -61,7 +61,7 @@ Read the VP's prompt file, replace {{DATE}} and {{TASK}}, and launch:
 
 **Sable** (VP of News):
 ```bash
-claude -p "SABLE_PROMPT" \
+unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT && claude -p "SABLE_PROMPT" \
   --model opus \
   --allowedTools "Read,Write,Bash" \
   --dangerously-skip-permissions
@@ -70,7 +70,7 @@ Prompt: `local/news/agents/sable.md`
 
 **Vox** (VP of Reddit):
 ```bash
-claude -p "VOX_PROMPT" \
+unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT && claude -p "VOX_PROMPT" \
   --model opus \
   --allowedTools "Read,Write,Bash" \
   --dangerously-skip-permissions

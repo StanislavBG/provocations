@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.8";
+export const APP_VERSION = "0.27.9";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,17 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.9",
+    date: "2026-03-13",
+    changes: [
+      "Agency: fix nested session blocking — unset CLAUDECODE env var in all agent dispatch commands",
+      "Agency: single-screen dashboard layout (no pan/zoom), delete dead PixelCanvas/sprites",
+      "Agency: fix sleeping animation pulsating whole card — breathe only on avatar opacity",
+      "Agency: fix syncFromServer stuck agents — force-clear any non-sleeping state when server says idle",
+      "Agency: run route accepts taskContent + trigger for canvas-task dispatch via API",
+    ],
+  },
   {
     version: "0.27.8",
     date: "2026-03-12",
