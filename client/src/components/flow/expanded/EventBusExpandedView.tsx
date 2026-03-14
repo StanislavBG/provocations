@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import { Radio, Send, Headphones, Copy, Check } from "lucide-react";
+import { Radio, Send, Headphones, Copy, Check, Image, FileAudio, FileVideo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -213,12 +213,51 @@ export function EventBusExpandedView({
                             {entry.type === "published" ? "sent" : entry.type}
                           </span>
                           <span className="truncate">{entry.summary}</span>
+                          {Array.isArray(entry.media) && entry.media.length > 0 && (
+                            <span className="shrink-0 text-purple-400 flex items-center gap-0.5">
+                              {entry.media.some((m: { type: string }) => m.type === "image") && <Image className="w-3 h-3" />}
+                              {entry.media.some((m: { type: string }) => m.type === "audio") && <FileAudio className="w-3 h-3" />}
+                              {entry.media.some((m: { type: string }) => m.type === "video") && <FileVideo className="w-3 h-3" />}
+                            </span>
+                          )}
                         </button>
-                        {isExpanded && entry.content && (
-                          <div className="px-2 pb-2">
-                            <pre className="text-[10px] bg-background/50 rounded p-2 whitespace-pre-wrap break-words text-muted-foreground max-h-[60vh] overflow-auto">
-                              {entry.content}
-                            </pre>
+                        {isExpanded && (entry.content || entry.media) && (
+                          <div className="px-2 pb-2 space-y-2">
+                            {entry.content && (
+                              <pre className="text-[10px] bg-background/50 rounded p-2 whitespace-pre-wrap break-words text-muted-foreground max-h-[60vh] overflow-auto">
+                                {entry.content}
+                              </pre>
+                            )}
+                            {Array.isArray(entry.media) && entry.media.length > 0 && (
+                              <div className="space-y-1.5">
+                                {entry.media.map((m: { type: string; url: string; label?: string }, mi: number) => (
+                                  <div key={mi} className="bg-background/50 rounded border border-border/50 overflow-hidden">
+                                    {m.label && (
+                                      <div className="text-[10px] font-medium text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+                                        {m.type === "image" && <Image className="w-3 h-3" />}
+                                        {m.type === "audio" && <FileAudio className="w-3 h-3" />}
+                                        {m.type === "video" && <FileVideo className="w-3 h-3" />}
+                                        {m.label}
+                                      </div>
+                                    )}
+                                    {m.type === "image" && (
+                                      <img
+                                        src={m.url}
+                                        alt={m.label || "Image"}
+                                        className="max-w-full max-h-48 cursor-pointer"
+                                        onClick={() => window.open(m.url, "_blank")}
+                                      />
+                                    )}
+                                    {m.type === "audio" && (
+                                      <audio controls src={m.url} className="w-full px-2 pb-1.5" />
+                                    )}
+                                    {m.type === "video" && (
+                                      <video controls src={m.url} className="max-w-full max-h-48" />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
