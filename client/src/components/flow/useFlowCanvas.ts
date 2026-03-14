@@ -345,7 +345,7 @@ export interface FlowNode {
   /** Event Bus: execution status */
   eventBusStatus?: "idle" | "publishing" | "listening" | "done" | "error";
   /** Event Bus: log of recent events */
-  eventBusLog?: Array<{ type: string; timestamp: string; summary: string; content?: string; eventId?: string }>;
+  eventBusLog?: Array<{ type: string; timestamp: string; summary: string; content?: string; eventId?: string; media?: Array<{ type: string; url: string; label?: string; mimeType?: string; duration?: number; source?: string }> }>;
   /** JSON Processor: configured output paths */
   jsonOutputPaths?: Array<{
     id: string;
