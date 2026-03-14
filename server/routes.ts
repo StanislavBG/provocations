@@ -100,20 +100,20 @@ function rateLimitKeyGenerator(req: Request): string {
   return auth?.userId || req.ip || "unknown";
 }
 
-/** General API rate limiter: 500 requests per 15 minutes per user */
+/** General API rate limiter: 2000 requests per 15 minutes per user */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: 2000,
   keyGenerator: rateLimitKeyGenerator,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
 });
 
-/** LLM endpoint rate limiter: 20 requests per minute per user */
+/** LLM endpoint rate limiter: 60 requests per minute per user */
 const llmLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 20,
+  max: 60,
   keyGenerator: rateLimitKeyGenerator,
   standardHeaders: true,
   legacyHeaders: false,

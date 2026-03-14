@@ -67,6 +67,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     changes: [
       "Painter: remove artificial 5/day image generation limit — Gemini API key has no such restriction",
       "Painter: show clear 'Daily image limit reached' message instead of generic error when quota is hit",
+      "Rate limits: raise general API limit from 500 to 2000 req/15min and LLM limit from 20 to 60 req/min to prevent 429 cascade",
     ],
   },
   {
