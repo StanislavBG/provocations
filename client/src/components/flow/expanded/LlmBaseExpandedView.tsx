@@ -225,7 +225,10 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
       snapshotVersion("Before writer feedback");
       setToolRunning("writer-feedback");
       try {
-        const connectedContext = getConnectedContext();
+        let connectedContext = getConnectedContext();
+        if (connectedContext.length > 90_000) {
+          connectedContext = connectedContext.slice(0, 90_000) + "\n\n[...context truncated]";
+        }
         const res = await apiRequest("POST", "/api/write", {
           document: systemPrompt,
           instruction: `WRITER FEEDBACK:\nThe author has provided the following feedback to be remixed into the system prompt:\n\n${feedback}\n\nInterpret the author's intent and intelligently weave this feedback into the system prompt. This is not a literal transcription — it is editorial direction from the author.`,
@@ -265,7 +268,10 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
       snapshotVersion("Before selection remix");
       setToolRunning("sel-remix");
       try {
-        const connectedContext = getConnectedContext();
+        let connectedContext = getConnectedContext();
+        if (connectedContext.length > 90_000) {
+          connectedContext = connectedContext.slice(0, 90_000) + "\n\n[...context truncated]";
+        }
         const res = await apiRequest("POST", "/api/write", {
           document: systemPrompt,
           selectedText,
@@ -333,7 +339,10 @@ export function LlmBaseExpandedView({ node, nodes, edges, onUpdateNode }: LlmBas
       snapshotVersion("Before provo evolve");
       setProvoEvolving(true);
       try {
-        const connectedContext = getConnectedContext();
+        let connectedContext = getConnectedContext();
+        if (connectedContext.length > 90_000) {
+          connectedContext = connectedContext.slice(0, 90_000) + "\n\n[...context truncated]";
+        }
         const res = await apiRequest("POST", "/api/write", {
           document: systemPrompt,
           instruction,
