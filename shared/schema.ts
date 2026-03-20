@@ -335,7 +335,7 @@ export const writeRequestSchema = z.object({
   selectedText: z.string().max(50_000).optional(),
 
   // Intent (required - what user wants)
-  instruction: z.string().min(1, "Instruction is required").max(5_000),
+  instruction: z.string().min(1, "Instruction is required").max(250_000),
 
   // Context (optional - additional grounding)
   provocation: provocationContextSchema.optional(),

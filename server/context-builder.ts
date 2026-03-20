@@ -45,10 +45,10 @@ export {
 
 /** Default truncation limits — one place to change them */
 export const LIMITS = {
-  document: 8000,
-  documentShort: 6000,
-  documentBrief: 2000,
-  documentFull: 50000,
+  document: 250_000,
+  documentShort: 100_000,
+  documentBrief: 20_000,
+  documentFull: 250_000,
   reference: 500,
   wireframe: 3000,
   historyEntries: 5,
