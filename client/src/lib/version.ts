@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.16";
+export const APP_VERSION = "0.27.17";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.17",
+    date: "2026-03-20",
+    changes: [
+      "Fix AI Remix buttons failing on large documents — add connected context truncation to writer feedback, selection remix, and provo evolve handlers",
+    ],
+  },
   {
     version: "0.27.16",
     date: "2026-03-20",

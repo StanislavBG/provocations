@@ -2985,7 +2985,10 @@ function FlowWorkspaceInner() {
       snapshotDocVersion("Before writer feedback");
       setDocToolRunning("writer-feedback");
       try {
-        const connectedContext = getDocConnectedContext();
+        let connectedContext = getDocConnectedContext();
+        if (connectedContext.length > 90_000) {
+          connectedContext = connectedContext.slice(0, 90_000) + "\n\n[...context truncated]";
+        }
         const res = await apiRequest("POST", "/api/write", {
           document: docEditorContent,
           instruction: `WRITER FEEDBACK:\nThe author has provided the following feedback to be remixed into the document:\n\n${feedback}\n\nInterpret the author's intent and intelligently weave this feedback into the document. This is not a literal transcription to append — it is editorial direction from the author.`,
@@ -3043,7 +3046,10 @@ function FlowWorkspaceInner() {
       snapshotDocVersion("Before selection remix");
       setDocToolRunning("sel-remix");
       try {
-        const connectedContext = getDocConnectedContext();
+        let connectedContext = getDocConnectedContext();
+        if (connectedContext.length > 90_000) {
+          connectedContext = connectedContext.slice(0, 90_000) + "\n\n[...context truncated]";
+        }
         const res = await apiRequest("POST", "/api/write", {
           document: docEditorContent,
           selectedText,
@@ -3127,7 +3133,10 @@ function FlowWorkspaceInner() {
       snapshotDocVersion("Before evolve");
       setDocProvoEvolving(true);
       try {
-        const connectedContext = getDocConnectedContext();
+        let connectedContext = getDocConnectedContext();
+        if (connectedContext.length > 90_000) {
+          connectedContext = connectedContext.slice(0, 90_000) + "\n\n[...context truncated]";
+        }
         const res = await apiRequest("POST", "/api/write", {
           document: docEditorContent,
           instruction,
