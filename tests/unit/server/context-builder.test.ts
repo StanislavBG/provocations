@@ -343,10 +343,10 @@ describe("buildContext", () => {
 // ---------------------------------------------------------------------------
 describe("LIMITS", () => {
   it("has expected defaults", () => {
-    expect(LIMITS.document).toBe(8000);
-    expect(LIMITS.documentShort).toBe(6000);
-    expect(LIMITS.documentBrief).toBe(2000);
-    expect(LIMITS.documentFull).toBe(50000);
+    expect(LIMITS.document).toBe(250_000);
+    expect(LIMITS.documentShort).toBe(100_000);
+    expect(LIMITS.documentBrief).toBe(20_000);
+    expect(LIMITS.documentFull).toBe(250_000);
     expect(LIMITS.reference).toBe(500);
     expect(LIMITS.wireframe).toBe(3000);
     expect(LIMITS.historyEntries).toBe(5);

@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.15";
+export const APP_VERSION = "0.27.16";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.16",
+    date: "2026-03-20",
+    changes: [
+      "Increase document limit to 250K characters — write instruction, context builder, and analysis endpoints all support much larger documents",
+    ],
+  },
   {
     version: "0.27.15",
     date: "2026-03-13",
