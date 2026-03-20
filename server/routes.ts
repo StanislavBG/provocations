@@ -953,7 +953,7 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no expl
       const challengeAppConfig = getAppTypeConfig(challengeAppType);
       const challengeAppContext = formatAppTypeContext(challengeAppType);
 
-      const MAX_ANALYSIS_LENGTH = 8000;
+      const MAX_ANALYSIS_LENGTH = 250_000;
       const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
 
       // Resolve personas — use effective (DB override + code default), fall back to built-in
@@ -1144,7 +1144,7 @@ Output only valid JSON, no markdown.`,
       const appConfig = getAppTypeConfig(appType);
       const appContext = formatAppTypeContext(appType);
 
-      const MAX_ANALYSIS_LENGTH = 6000;
+      const MAX_ANALYSIS_LENGTH = 250_000;
       const analysisText = docText.slice(0, MAX_ANALYSIS_LENGTH);
 
       // Build discussion history context if available
@@ -4374,7 +4374,7 @@ ${docText ? `CURRENT DOCUMENT:\n${docText.slice(0, 3000)}\n\n` : ""}INTERVIEW Q&
       const askAppConfig = getAppTypeConfig(askAppType);
       const askAppContext = formatAppTypeContext(askAppType);
 
-      const MAX_DOC_LENGTH = 6000;
+      const MAX_DOC_LENGTH = 250_000;
       const analysisText = docText.slice(0, MAX_DOC_LENGTH);
 
       // Build session context section from pinned documents / captured items
