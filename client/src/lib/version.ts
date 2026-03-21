@@ -9,7 +9,7 @@
  * Update this file with every code change / git commit.
  */
 
-export const APP_VERSION = "0.27.17";
+export const APP_VERSION = "0.27.18";
 
 export interface ReleaseNote {
   version: string;
@@ -18,6 +18,13 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: "0.27.18",
+    date: "2026-03-21",
+    changes: [
+      "Auto-purge hourly canvas auto-saves older than 3 days — named and manually-saved canvases are never removed",
+    ],
+  },
   {
     version: "0.27.17",
     date: "2026-03-20",
