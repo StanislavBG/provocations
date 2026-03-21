@@ -1023,7 +1023,8 @@ function FlowWorkspaceInner() {
 
   // ── Auto-save every 5 minutes ──
   // Saves canvas to a "Canvas Auto-saves" system folder in the Context Store.
-  // Hourly saves are kept permanently; 5-min saves are purged after 1 hour.
+  // 5-min saves are purged after 1 hour; hourly saves are purged after 3 days.
+  // Named/manually-saved canvases are never touched — only auto-save prefixed docs are purged.
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval>>();
   const lastHourlySaveRef = useRef(0);
@@ -1080,19 +1081,21 @@ function FlowWorkspaceInner() {
           });
           lastHourlySaveRef.current = now;
 
-          // Purge 5-min saves older than 1 hour from the folder
+          // Purge 5-min saves older than 1 hour and hourly saves older than 3 days
           try {
             const docsRes = await apiRequest("GET", "/api/documents");
             const raw = await docsRes.json();
             const allDocs = Array.isArray(raw) ? raw : (raw.documents ?? []);
             const oneHourAgo = now - 3600_000;
-            const old5Min = allDocs.filter(
+            const threeDaysAgo = now - 3 * 24 * 3600_000;
+            const staleAutoSaves = allDocs.filter(
               (d: { title: string; folderId: number | null; updatedAt: string }) =>
-                d.folderId === folderId &&
-                d.title?.startsWith("[5min]") &&
-                new Date(d.updatedAt).getTime() < oneHourAgo,
+                d.folderId === folderId && (
+                  (d.title?.startsWith("[5min]") && new Date(d.updatedAt).getTime() < oneHourAgo) ||
+                  (d.title?.startsWith("[Hourly]") && new Date(d.updatedAt).getTime() < threeDaysAgo)
+                ),
             );
-            for (const doc of old5Min) {
+            for (const doc of staleAutoSaves) {
               await apiRequest("DELETE", `/api/documents/${doc.id}`).catch(() => {});
             }
           } catch {
